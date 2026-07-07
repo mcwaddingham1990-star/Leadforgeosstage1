@@ -1,0 +1,6 @@
+{
+  "name": "LeadForge LOCAL OS Login",
+  "description": "Interactive LeadForge Local OS with live Team Terminal, Company Revenue graph, Leads CRM summary, interactive Daily Scheduling count, customizable daily view widgets, and Company Bulletins board.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

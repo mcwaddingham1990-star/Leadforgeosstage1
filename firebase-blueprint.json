@@ -1,0 +1,127 @@
+{
+  "collections": {
+    "business_profiles": {
+      "description": "Stores onboarding business profile details",
+      "fields": {
+        "ownerNames": {
+          "type": "array",
+          "description": "List of owner names"
+        },
+        "ownerPhones": {
+          "type": "array",
+          "description": "List of owner phone numbers"
+        },
+        "businessNames": {
+          "type": "array",
+          "description": "List of business names"
+        },
+        "businessPhones": {
+          "type": "array",
+          "description": "List of business phone numbers"
+        },
+        "businessAddresses": {
+          "type": "array",
+          "description": "List of business addresses"
+        },
+        "businessLogos": {
+          "type": "array",
+          "description": "List of business logo URLs"
+        },
+        "companyLocations": {
+          "type": "array",
+          "description": "List of company locations"
+        },
+        "billingMethods": {
+          "type": "array",
+          "description": "List of billing card methods with brand, cardholderName, cardNumber, expiry, cvv, and id"
+        },
+        "selectedBillingMethodId": {
+          "type": "string",
+          "description": "ID of currently selected billing method"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "Timestamp of the last update"
+        }
+      }
+    },
+    "employee_invites": {
+      "description": "Stores secure invite codes generated for employees",
+      "fields": {
+        "code": {
+          "type": "string",
+          "description": "Unique invite code string"
+        },
+        "role": {
+          "type": "string",
+          "description": "Target role name"
+        },
+        "businessEmail": {
+          "type": "string",
+          "description": "Owner's business email"
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Allowed navigation sidebar screens"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the invite (pending, completed)"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Creation date of the invite"
+        }
+      }
+    },
+    "employees": {
+      "description": "Stores employee profile details and role configurations",
+      "fields": {
+        "email": {
+          "type": "string",
+          "description": "Verified employee email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of employee"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of employee"
+        },
+        "address": {
+          "type": "string",
+          "description": "Home address"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number"
+        },
+        "photo": {
+          "type": "string",
+          "description": "Profile picture URL or empty"
+        },
+        "goals": {
+          "type": "string",
+          "description": "Employee professional or career goals"
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned employee role"
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Custom or default navigation sidebar screens"
+        },
+        "businessEmail": {
+          "type": "string",
+          "description": "Associated business account email"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Time of registration"
+        }
+      }
+    }
+  }
+}

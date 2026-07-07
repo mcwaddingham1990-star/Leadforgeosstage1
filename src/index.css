@@ -1,0 +1,282 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Space Grotesk", sans-serif;
+}
+
+/* ==========================================================================
+   WORKSPACE THEME OVERRIDES (EXCLUDING LOGIN)
+   This block perfectly implements the exact color specifications and design
+   rules requested by the user, without affecting the finalized Login page.
+   ========================================================================== */
+
+/* 1. Global Workspace Background and Font Colors */
+.workspace-theme {
+  background-color: #EAF5FF !important;
+  color: #1F3557 !important;
+}
+
+/* 2. All Primary Content Cards, Sub-Cards, and Containers forced to match exact user specifications (#EAF5FF) */
+.workspace-theme .bg-white,
+.workspace-theme .bg-slate-50,
+.workspace-theme .bg-slate-100,
+.workspace-theme .bg-slate-200,
+.workspace-theme .bg-slate-300,
+.workspace-theme .bg-slate-400,
+.workspace-theme .bg-gray-50,
+.workspace-theme .bg-gray-100,
+.workspace-theme .bg-gray-200,
+.workspace-theme .bg-zinc-50,
+.workspace-theme .bg-zinc-100,
+.workspace-theme .bg-[#F5FAFF],
+.workspace-theme .bg-[#EAF5FF],
+.workspace-theme .bg-[#E3F3FF],
+.workspace-theme .bg-[#A9CDEE],
+.workspace-theme .bg-[#A9CDEF],
+.workspace-theme .bg-[#E1EFFD],
+.workspace-theme .bg-[#BDDDF8],
+.workspace-theme .bg-[#BCD8F0],
+.workspace-theme .bg-blue-50,
+.workspace-theme .bg-blue-100,
+.workspace-theme .bg-blue-200,
+.workspace-theme .bg-blue-300,
+.workspace-theme .bg-indigo-50,
+.workspace-theme .bg-indigo-100,
+.workspace-theme [class*="bg-gradient-to-"]:not(button):not(.text-white),
+.workspace-theme [class*="from-"]:not(button):not(.text-white),
+.workspace-theme [class*="to-"]:not(button):not(.text-white) {
+  background-color: #EAF5FF !important;
+  background-image: none !important;
+}
+
+/* Ensure any ghost white transparencies become fully transparent or match the theme card blue */
+.workspace-theme .bg-white\/10,
+.workspace-theme .bg-white\/20,
+.workspace-theme .bg-white\/30,
+.workspace-theme .bg-white\/40,
+.workspace-theme .bg-white\/50,
+.workspace-theme .bg-white\/60,
+.workspace-theme .bg-white\/70,
+.workspace-theme .bg-white\/80,
+.workspace-theme .bg-white\/90,
+.workspace-theme .bg-slate-50\/50,
+.workspace-theme .bg-slate-100\/50,
+.workspace-theme .bg-blue-50\/50 {
+  background-color: transparent !important;
+}
+
+/* 3. Sub-Containers, Spacers, Inputs, and Inner Slots (Must NOT be white; must be #EAF5FF - lighter workspace bg) */
+/* Specific styling for inputs, textareas, and active filter containers to have the lighter workspace background (#EAF5FF) */
+.workspace-theme .search-container,
+.workspace-theme .input-container,
+.workspace-theme .filter-container,
+.workspace-theme .date-picker-button,
+.workspace-theme .filter-button-group {
+  background-color: #EAF5FF !important;
+}
+
+/* Nested lists or table items must be styled to match card/subcard rules */
+.workspace-theme tr.bg-white,
+.workspace-theme tr.bg-slate-50,
+.workspace-theme tr:nth-child(even) {
+  background-color: #EAF5FF !important; /* Alternating table row color using spacing/divider bg */
+}
+.workspace-theme tr:nth-child(odd) {
+  background-color: #EAF5FF !important; /* Main content card blue */
+}
+
+/* 4. Inputs, Textareas, Selects (EAF5FF Background, 1F3557 Text, 9EC8EF Border) */
+.workspace-theme input,
+.workspace-theme select,
+.workspace-theme textarea,
+.workspace-theme select option {
+  background-color: #EAF5FF !important;
+  color: #1F3557 !important;
+  border-color: #9EC8EF !important;
+}
+
+.workspace-theme input::placeholder,
+.workspace-theme textarea::placeholder {
+  color: #5E7393 !important;
+  opacity: 1;
+}
+
+/* 5. Precise Border Color Override System (#9EC8EF) */
+.workspace-theme,
+.workspace-theme *,
+.workspace-theme ::before,
+.workspace-theme ::after {
+  border-color: #9EC8EF !important;
+}
+
+/* 6. Typography & Text Colors */
+/* Primary Text (#1F3557) */
+.workspace-theme text,
+.workspace-theme h1,
+.workspace-theme h2,
+.workspace-theme h3,
+.workspace-theme h4,
+.workspace-theme h5,
+.workspace-theme h6,
+.workspace-theme th,
+.workspace-theme .text-slate-900,
+.workspace-theme .text-slate-800,
+.workspace-theme .text-slate-700,
+.workspace-theme .text-gray-900,
+.workspace-theme .text-[#342D7E],
+.workspace-theme .text-blue-900,
+.workspace-theme .text-indigo-900 {
+  color: #1F3557 !important;
+}
+
+/* Secondary Text (#5E7393) */
+.workspace-theme p,
+.workspace-theme span,
+.workspace-theme label,
+.workspace-theme td,
+.workspace-theme .text-slate-500,
+.workspace-theme .text-slate-400,
+.workspace-theme .text-slate-600,
+.workspace-theme .text-gray-500,
+.workspace-theme .text-gray-400,
+.workspace-theme .text-[#342D7E]/75,
+.workspace-theme .text-[#342D7E]/60,
+.workspace-theme .text-[#342D7E]/50 {
+  color: #5E7393 !important;
+}
+
+/* Exceptions: White text on dark buttons or badges */
+.workspace-theme .text-white,
+.workspace-theme .text-slate-50,
+.workspace-theme button.bg-[#4A9BFF] *,
+.workspace-theme button.bg-blue-600 *,
+.workspace-theme button.bg-indigo-600 *,
+.workspace-theme .bg-[#4A86F7] *,
+.workspace-theme .bg-[#3977EE] * {
+  color: #ffffff !important;
+}
+
+/* 7. Icon Colors (No longer forced to #315C9F, they now respect their parent colors or Tailwind text classes, defaulting to the deep slate #1F3557) */
+.workspace-theme .text-[#315C9F] {
+  color: #1F3557 !important;
+}
+
+/* 8. Primary Buttons (#4A86F7 with hover #3977EE) */
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent),
+.workspace-theme .bg-[#4A9BFF],
+.workspace-theme .bg-[#4A86F7],
+.workspace-theme .bg-blue-600,
+.workspace-theme .bg-indigo-600,
+.workspace-theme button.bg-[#4A9BFF] {
+  background-color: #4A86F7 !important;
+  color: #ffffff !important;
+  border-color: #4A86F7 !important;
+  background-image: none !important;
+}
+
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):hover,
+.workspace-theme .bg-[#4A9BFF]:hover,
+.workspace-theme .bg-[#4A86F7]:hover,
+.workspace-theme .bg-blue-600:hover,
+.workspace-theme .bg-indigo-600:hover,
+.workspace-theme button.bg-[#4A9BFF]:hover {
+  background-color: #3977EE !important;
+  border-color: #3977EE !important;
+  background-image: none !important;
+}
+
+/* Reset for transparent buttons or active tabs */
+.workspace-theme button.bg-transparent,
+.workspace-theme button.border-transparent {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: #5E7393 !important;
+}
+.workspace-theme button.bg-transparent:hover {
+  background-color: #BDDDF8 !important;
+  color: #1F3557 !important;
+}
+
+/* 9. Card Hovers (#BDDDF8) */
+.workspace-theme .hover\:bg-slate-50:hover,
+.workspace-theme .hover\:bg-slate-100:hover,
+.workspace-theme .hover\:bg-[#E3F3FF]/80:hover,
+.workspace-theme .hover\:bg-[#E3F3FF]/50:hover,
+.workspace-theme .hover\:bg-[#C7E3FA]:hover,
+.workspace-theme .group:hover {
+  background-color: #BDDDF8 !important;
+}
+
+/* Selected/Active Item (#A9CEF5) */
+.workspace-theme .bg-[#A9CEF5],
+.workspace-theme .bg-[#342D7E]/10 {
+  background-color: #A9CEF5 !important;
+}
+
+/* 10. Semantic Alert/State Colors */
+/* Success (#22C55E) */
+.workspace-theme .text-emerald-500,
+.workspace-theme .text-emerald-600,
+.workspace-theme .text-green-600,
+.workspace-theme .text-emerald-400 {
+  color: #22C55E !important;
+}
+.workspace-theme .bg-emerald-500,
+.workspace-theme .bg-emerald-600,
+.workspace-theme .bg-green-600 {
+  background-color: #22C55E !important;
+  background-image: none !important;
+}
+
+/* Warning (#F59E0B) */
+.workspace-theme .text-amber-500,
+.workspace-theme .text-amber-600,
+.workspace-theme .text-amber-800,
+.workspace-theme .text-amber-400 {
+  color: #F59E0B !important;
+}
+.workspace-theme .bg-amber-500,
+.workspace-theme .bg-amber-600 {
+  background-color: #F59E0B !important;
+  background-image: none !important;
+}
+
+/* Error (#EF4444) */
+.workspace-theme .text-rose-500,
+.workspace-theme .text-rose-600,
+.workspace-theme .text-red-500,
+.workspace-theme .text-red-600 {
+  color: #EF4444 !important;
+}
+.workspace-theme .bg-rose-500,
+.workspace-theme .bg-rose-600,
+.workspace-theme .bg-red-500,
+.workspace-theme .bg-red-600 {
+  background-color: #EF4444 !important;
+  background-image: none !important;
+}
+
+/* Chart customizations to prevent white/light backgrounds in tooltip */
+.workspace-theme .recharts-tooltip-wrapper,
+.workspace-theme .recharts-default-tooltip,
+.workspace-theme .recharts-tooltip-wrapper *,
+.workspace-theme .recharts-default-tooltip * {
+  background-color: #C7E3FA !important;
+  border-color: #9EC8EF !important;
+  color: #1F3557 !important;
+}
+
+/* Increase spacing between sections/panels inside workspace to match user rules */
+.workspace-theme .space-y-4 {
+  --spacing-y: 1.5rem !important;
+  margin-top: calc(var(--spacing-y) * calc(1 - var(--tw-space-y-reverse))) !important;
+}
+.workspace-theme .space-y-6 {
+  --spacing-y: 2.25rem !important;
+}
+.workspace-theme .space-y-8 {
+  --spacing-y: 2.75rem !important;
+}
