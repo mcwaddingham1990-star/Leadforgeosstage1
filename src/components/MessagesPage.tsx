@@ -43,6 +43,8 @@ import {
 } from "lucide-react";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
+import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 
 // Let's define the Types
 export interface MessageAttachment {
@@ -111,6 +113,278 @@ interface MessagesPageProps {
   customersList: Customer[];
 }
 
+const INITIAL_CONVERSATIONS: Conversation[] = [
+  {
+    id: "conv_1",
+    title: "Apex Plumb & Drain - Drainage Project",
+    type: "Customer Chat",
+    participants: ["Marcus Vance", "Sarah Jenkins", "Pete Rogers"],
+    unreadCount: 2,
+    lastMessage: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
+    lastMessageTime: "2026-07-06 14:15",
+    lastMessageSender: "Marcus Vance",
+    isRead: false,
+    isFavorite: true,
+    isArchived: false,
+    priority: "High",
+    onlineStatus: "Online",
+    customerId: "1",
+    customerName: "Apex Plumb & Drain",
+    jobId: "Job #1024",
+    jobName: "Main Facility Drainage",
+    estimateId: "E-1084",
+    routeId: "Route A-101",
+    routeName: "Seattle Central Drain Patrol",
+    documentIds: ["doc_1", "doc_2"],
+    revenueAmount: 12450,
+    createdDate: "2026-07-01",
+    messages: [
+      {
+        id: "m1_1",
+        sender: "Sarah Jenkins",
+        senderRole: "Office Manager",
+        content: "Hi Marcus, we've assigned Pete Rogers to inspect the drainage pipe layout today.",
+        timestamp: "2026-07-06 10:00"
+      },
+      {
+        id: "m1_2",
+        sender: "Pete Rogers",
+        senderRole: "Technician",
+        content: "Copy that. Heading out now. Checked the truck inventory and we have the ABS fittings.",
+        timestamp: "2026-07-06 10:30"
+      },
+      {
+        id: "m1_3",
+        sender: "Marcus Vance",
+        senderRole: "Customer",
+        content: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
+        timestamp: "2026-07-06 14:15",
+        attachments: [
+          {
+            id: "att_1",
+            type: "Photo",
+            name: "Junction_Excavation.jpg",
+            size: "1.2 MB",
+            meta: { url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=300" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: "conv_2",
+    title: "Pete Rogers (Field Updates)",
+    type: "Direct Message",
+    participants: ["Pete Rogers", "Sarah Jenkins"],
+    unreadCount: 0,
+    lastMessage: "I finished the pressure test. It is holding 80 PSI perfectly.",
+    lastMessageTime: "2026-07-06 12:45",
+    lastMessageSender: "Pete Rogers",
+    isRead: true,
+    isFavorite: false,
+    isArchived: false,
+    priority: "Normal",
+    onlineStatus: "Online",
+    customerId: "1",
+    customerName: "Apex Plumb & Drain",
+    jobId: "Job #1024",
+    createdDate: "2026-07-02",
+    messages: [
+      {
+        id: "m2_1",
+        sender: "Sarah Jenkins",
+        senderRole: "Office Manager",
+        content: "Pete, did you get the signed contract copy for Apex Plumb?",
+        timestamp: "2026-07-06 12:00"
+      },
+      {
+        id: "m2_2",
+        sender: "Pete Rogers",
+        senderRole: "Technician",
+        content: "Yes, fully signed. Uploaded it to the documents hub under 'Apex Plumb & Drain Contract.pdf'.",
+        timestamp: "2026-07-06 12:15"
+      },
+      {
+        id: "m2_3",
+        sender: "Pete Rogers",
+        senderRole: "Technician",
+        content: "I finished the pressure test. It is holding 80 PSI perfectly.",
+        timestamp: "2026-07-06 12:45"
+      }
+    ]
+  },
+  {
+    id: "conv_3",
+    title: "Seattle Field Crew",
+    type: "Crew Chat",
+    participants: ["Pete Rogers", "Theresa W.", "Sarah Jenkins", "Dave Miller"],
+    unreadCount: 0,
+    lastMessage: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
+    lastMessageTime: "2026-07-06 09:30",
+    lastMessageSender: "Sarah Jenkins",
+    isRead: true,
+    isFavorite: false,
+    isArchived: false,
+    priority: "Normal",
+    onlineStatus: "Away",
+    routeId: "Route B-204",
+    routeName: "North Seattle Sewer Maintenance",
+    createdDate: "2026-06-25",
+    messages: [
+      {
+        id: "m3_1",
+        sender: "Theresa W.",
+        senderRole: "Technician",
+        content: "Crew Alpha is ready. We have the sewer cameras and snake devices.",
+        timestamp: "2026-07-06 09:00"
+      },
+      {
+        id: "m3_2",
+        sender: "Sarah Jenkins",
+        senderRole: "Office Manager",
+        content: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
+        timestamp: "2026-07-06 09:30"
+      }
+    ]
+  },
+  {
+    id: "conv_4",
+    title: "LeadForge AI Assistant",
+    type: "AI Conversation",
+    participants: ["LeadForge AI", "Sarah Jenkins"],
+    unreadCount: 1,
+    lastMessage: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
+    lastMessageTime: "2026-07-06 15:30",
+    lastMessageSender: "LeadForge AI",
+    isRead: false,
+    isFavorite: true,
+    isArchived: false,
+    priority: "Normal",
+    onlineStatus: "Online",
+    createdDate: "2026-07-05",
+    messages: [
+      {
+        id: "m4_1",
+        sender: "Sarah Jenkins",
+        senderRole: "Office Manager",
+        content: "Can you analyze our financial performance for early July?",
+        timestamp: "2026-07-06 15:28"
+      },
+      {
+        id: "m4_2",
+        sender: "LeadForge AI",
+        senderRole: "AI Assistant",
+        content: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
+        timestamp: "2026-07-06 15:30"
+      }
+    ]
+  },
+  {
+    id: "conv_5",
+    title: "Fleet Dispatch Central",
+    type: "Dispatch Chat",
+    participants: ["Sarah Jenkins", "Dave Miller", "John Doe"],
+    unreadCount: 0,
+    lastMessage: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
+    lastMessageTime: "2026-07-05 16:20",
+    lastMessageSender: "John Doe",
+    isRead: true,
+    isFavorite: false,
+    isArchived: false,
+    priority: "Normal",
+    onlineStatus: "Offline",
+    routeId: "Route A-101",
+    routeName: "Seattle Central Drain Patrol",
+    createdDate: "2026-06-12",
+    messages: [
+      {
+        id: "m5_1",
+        sender: "Sarah Jenkins",
+        senderRole: "Dispatcher",
+        content: "All drivers: Check your active GPS dispatches.",
+        timestamp: "2026-07-05 16:00"
+      },
+      {
+        id: "m5_2",
+        sender: "John Doe",
+        senderRole: "Driver",
+        content: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
+        timestamp: "2026-07-05 16:20",
+        attachments: [
+          {
+            id: "att_gps1",
+            type: "GPS Location",
+            name: "Aurora Ave Detour",
+            meta: { lat: 47.6062, lng: -122.3321, address: "Aurora Ave N, Seattle, WA" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: "conv_6",
+    title: "[System Alert] Warehouse Inventory Low",
+    type: "System Notification",
+    participants: ["System Event Node"],
+    unreadCount: 0,
+    lastMessage: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
+    lastMessageTime: "2026-07-06 08:00",
+    lastMessageSender: "System Event Node",
+    isRead: true,
+    isArchived: false,
+    priority: "High",
+    onlineStatus: "Offline",
+    createdDate: "2026-07-06",
+    messages: [
+      {
+        id: "m6_1",
+        sender: "System Event Node",
+        senderRole: "System Notification",
+        content: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
+        timestamp: "2026-07-06 08:00",
+        attachments: [
+          {
+            id: "att_inv1",
+            type: "Inventory",
+            name: "2-inch PVC Coupler",
+            meta: { sku: "PVC-C-002", qty: 4, minQty: 10 }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: "conv_7",
+    title: "Archive - Q2 General Plan",
+    type: "Team Chat",
+    participants: ["Sarah Jenkins", "Dave Miller"],
+    unreadCount: 0,
+    lastMessage: "The Q2 targets have been locked.",
+    lastMessageTime: "2026-04-15 11:00",
+    lastMessageSender: "Dave Miller",
+    isRead: true,
+    isArchived: true,
+    priority: "Low",
+    createdDate: "2026-04-01",
+    messages: [
+      {
+        id: "m7_1",
+        sender: "Sarah Jenkins",
+        senderRole: "Office Manager",
+        content: "Here are the goals.",
+        timestamp: "2026-04-15 10:00"
+      },
+      {
+        id: "m7_2",
+        sender: "Dave Miller",
+        senderRole: "General Manager",
+        content: "The Q2 targets have been locked.",
+        timestamp: "2026-04-15 11:00"
+      }
+    ]
+  }
+];
+
 export const MessagesPage: React.FC<MessagesPageProps> = ({
   onOpenPlaceholder,
   onTakeSnapshot,
@@ -125,279 +399,77 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
 }) => {
   const currentUserName = loggedInUser?.name || "Sarah Jenkins";
   const currentUserEmail = loggedInUser?.email || "sarah@leadforge.com";
+  const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
 
-  // Initial rich data for conversations aligned with leadforge OS logic
-  const [conversations, setConversations] = useState<Conversation[]>([
-    {
-      id: "conv_1",
-      title: "Apex Plumb & Drain - Drainage Project",
-      type: "Customer Chat",
-      participants: ["Marcus Vance", "Sarah Jenkins", "Pete Rogers"],
-      unreadCount: 2,
-      lastMessage: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
-      lastMessageTime: "2026-07-06 14:15",
-      lastMessageSender: "Marcus Vance",
-      isRead: false,
-      isFavorite: true,
-      isArchived: false,
-      priority: "High",
-      onlineStatus: "Online",
-      customerId: "1",
-      customerName: "Apex Plumb & Drain",
-      jobId: "Job #1024",
-      jobName: "Main Facility Drainage",
-      estimateId: "E-1084",
-      routeId: "Route A-101",
-      routeName: "Seattle Central Drain Patrol",
-      documentIds: ["doc_1", "doc_2"],
-      revenueAmount: 12450,
-      createdDate: "2026-07-01",
-      messages: [
-        {
-          id: "m1_1",
-          sender: "Sarah Jenkins",
-          senderRole: "Office Manager",
-          content: "Hi Marcus, we've assigned Pete Rogers to inspect the drainage pipe layout today.",
-          timestamp: "2026-07-06 10:00"
-        },
-        {
-          id: "m1_2",
-          sender: "Pete Rogers",
-          senderRole: "Technician",
-          content: "Copy that. Heading out now. Checked the truck inventory and we have the ABS fittings.",
-          timestamp: "2026-07-06 10:30"
-        },
-        {
-          id: "m1_3",
-          sender: "Marcus Vance",
-          senderRole: "Customer",
-          content: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
-          timestamp: "2026-07-06 14:15",
-          attachments: [
-            {
-              id: "att_1",
-              type: "Photo",
-              name: "Junction_Excavation.jpg",
-              size: "1.2 MB",
-              meta: { url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=300" }
-            }
-          ]
+  const [conversations, _setConversations] = useState<Conversation[]>([]);
+
+  // Real-time synchronization helper for conversations
+  const syncConversationsToFirestore = async (oldArray: Conversation[], newArray: Conversation[], bid: string) => {
+    const oldMap = new Map(oldArray.map(item => [item.id, item]));
+    for (const item of newArray) {
+      const oldItem = oldMap.get(item.id);
+      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
+        try {
+          await setDoc(doc(db, "conversations", item.id), {
+            ...item,
+            businessId: bid,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Error saving conversation:", err);
         }
-      ]
-    },
-    {
-      id: "conv_2",
-      title: "Pete Rogers (Field Updates)",
-      type: "Direct Message",
-      participants: ["Pete Rogers", "Sarah Jenkins"],
-      unreadCount: 0,
-      lastMessage: "I finished the pressure test. It is holding 80 PSI perfectly.",
-      lastMessageTime: "2026-07-06 12:45",
-      lastMessageSender: "Pete Rogers",
-      isRead: true,
-      isFavorite: false,
-      isArchived: false,
-      priority: "Normal",
-      onlineStatus: "Online",
-      customerId: "1",
-      customerName: "Apex Plumb & Drain",
-      jobId: "Job #1024",
-      createdDate: "2026-07-02",
-      messages: [
-        {
-          id: "m2_1",
-          sender: "Sarah Jenkins",
-          senderRole: "Office Manager",
-          content: "Pete, did you get the signed contract copy for Apex Plumb?",
-          timestamp: "2026-07-06 12:00"
-        },
-        {
-          id: "m2_2",
-          sender: "Pete Rogers",
-          senderRole: "Technician",
-          content: "Yes, fully signed. Uploaded it to the documents hub under 'Apex Plumb & Drain Contract.pdf'.",
-          timestamp: "2026-07-06 12:15"
-        },
-        {
-          id: "m2_3",
-          sender: "Pete Rogers",
-          senderRole: "Technician",
-          content: "I finished the pressure test. It is holding 80 PSI perfectly.",
-          timestamp: "2026-07-06 12:45"
-        }
-      ]
-    },
-    {
-      id: "conv_3",
-      title: "Seattle Field Crew",
-      type: "Crew Chat",
-      participants: ["Pete Rogers", "Theresa W.", "Sarah Jenkins", "Dave Miller"],
-      unreadCount: 0,
-      lastMessage: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
-      lastMessageTime: "2026-07-06 09:30",
-      lastMessageSender: "Sarah Jenkins",
-      isRead: true,
-      isFavorite: false,
-      isArchived: false,
-      priority: "Normal",
-      onlineStatus: "Away",
-      routeId: "Route B-204",
-      routeName: "North Seattle Sewer Maintenance",
-      createdDate: "2026-06-25",
-      messages: [
-        {
-          id: "m3_1",
-          sender: "Theresa W.",
-          senderRole: "Technician",
-          content: "Crew Alpha is ready. We have the sewer cameras and snake devices.",
-          timestamp: "2026-07-06 09:00"
-        },
-        {
-          id: "m3_2",
-          sender: "Sarah Jenkins",
-          senderRole: "Office Manager",
-          content: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
-          timestamp: "2026-07-06 09:30"
-        }
-      ]
-    },
-    {
-      id: "conv_4",
-      title: "LeadForge AI Assistant",
-      type: "AI Conversation",
-      participants: ["LeadForge AI", "Sarah Jenkins"],
-      unreadCount: 1,
-      lastMessage: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
-      lastMessageTime: "2026-07-06 15:30",
-      lastMessageSender: "LeadForge AI",
-      isRead: false,
-      isFavorite: true,
-      isArchived: false,
-      priority: "Normal",
-      onlineStatus: "Online",
-      createdDate: "2026-07-05",
-      messages: [
-        {
-          id: "m4_1",
-          sender: "Sarah Jenkins",
-          senderRole: "Office Manager",
-          content: "Can you analyze our financial performance for early July?",
-          timestamp: "2026-07-06 15:28"
-        },
-        {
-          id: "m4_2",
-          sender: "LeadForge AI",
-          senderRole: "AI Assistant",
-          content: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
-          timestamp: "2026-07-06 15:30"
-        }
-      ]
-    },
-    {
-      id: "conv_5",
-      title: "Fleet Dispatch Central",
-      type: "Dispatch Chat",
-      participants: ["Sarah Jenkins", "Dave Miller", "John Doe"],
-      unreadCount: 0,
-      lastMessage: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
-      lastMessageTime: "2026-07-05 16:20",
-      lastMessageSender: "John Doe",
-      isRead: true,
-      isFavorite: false,
-      isArchived: false,
-      priority: "Normal",
-      onlineStatus: "Offline",
-      routeId: "Route A-101",
-      routeName: "Seattle Central Drain Patrol",
-      createdDate: "2026-06-12",
-      messages: [
-        {
-          id: "m5_1",
-          sender: "Sarah Jenkins",
-          senderRole: "Dispatcher",
-          content: "All drivers: Check your active GPS dispatches.",
-          timestamp: "2026-07-05 16:00"
-        },
-        {
-          id: "m5_2",
-          sender: "John Doe",
-          senderRole: "Driver",
-          content: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
-          timestamp: "2026-07-05 16:20",
-          attachments: [
-            {
-              id: "att_gps1",
-              type: "GPS Location",
-              name: "Aurora Ave Detour",
-              meta: { lat: 47.6062, lng: -122.3321, address: "Aurora Ave N, Seattle, WA" }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      id: "conv_6",
-      title: "[System Alert] Warehouse Inventory Low",
-      type: "System Notification",
-      participants: ["System Event Node"],
-      unreadCount: 0,
-      lastMessage: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
-      lastMessageTime: "2026-07-06 08:00",
-      lastMessageSender: "System Event Node",
-      isRead: true,
-      isArchived: false,
-      priority: "High",
-      onlineStatus: "Offline",
-      createdDate: "2026-07-06",
-      messages: [
-        {
-          id: "m6_1",
-          sender: "System Event Node",
-          senderRole: "System Notification",
-          content: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
-          timestamp: "2026-07-06 08:00",
-          attachments: [
-            {
-              id: "att_inv1",
-              type: "Inventory",
-              name: "2-inch PVC Coupler",
-              meta: { sku: "PVC-C-002", qty: 4, minQty: 10 }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      id: "conv_7",
-      title: "Archive - Q2 General Plan",
-      type: "Team Chat",
-      participants: ["Sarah Jenkins", "Dave Miller"],
-      unreadCount: 0,
-      lastMessage: "The Q2 targets have been locked.",
-      lastMessageTime: "2026-04-15 11:00",
-      lastMessageSender: "Dave Miller",
-      isRead: true,
-      isArchived: true,
-      priority: "Low",
-      createdDate: "2026-04-01",
-      messages: [
-        {
-          id: "m7_1",
-          sender: "Sarah Jenkins",
-          senderRole: "Office Manager",
-          content: "Here are the goals.",
-          timestamp: "2026-04-15 10:00"
-        },
-        {
-          id: "m7_2",
-          sender: "Dave Miller",
-          senderRole: "General Manager",
-          content: "The Q2 targets have been locked.",
-          timestamp: "2026-04-15 11:00"
-        }
-      ]
+      }
     }
-  ]);
+    const newSet = new Set(newArray.map(item => item.id));
+    for (const item of oldArray) {
+      if (!newSet.has(item.id)) {
+        try {
+          await deleteDoc(doc(db, "conversations", item.id));
+        } catch (err) {
+          console.error("Error deleting conversation:", err);
+        }
+      }
+    }
+  };
+
+  const setConversations = (value: React.SetStateAction<Conversation[]>) => {
+    _setConversations((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      if (businessId) {
+        syncConversationsToFirestore(prev, nextList, businessId);
+      }
+      return nextList;
+    });
+  };
+
+  // Subscribe and seed conversations from Firestore based on multi-tenant businessId
+  useEffect(() => {
+    if (!businessId) return;
+
+    const q = query(collection(db, "conversations"), where("businessId", "==", businessId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        // Seed initial conversations for this tenant
+        INITIAL_CONVERSATIONS.forEach(async (conv) => {
+          await setDoc(doc(db, "conversations", conv.id), {
+            ...conv,
+            businessId,
+            updatedAt: new Date().toISOString()
+          });
+        });
+      } else {
+        const items: Conversation[] = [];
+        snapshot.forEach((docSnap) => {
+          const { businessId: _, updatedAt: __, ...convData } = docSnap.data();
+          items.push(convData as Conversation);
+        });
+        _setConversations(items);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [businessId]);
+
 
   // Selected active conversation logic
   const [selectedConvId, setSelectedConvId] = useState<string>("conv_1");
@@ -1727,13 +1799,25 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
 
       {/* MODAL 1: NEW MESSAGE SECURE DIALOG */}
       {isNewMsgModalOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl p-6 w-full max-w-md text-left space-y-4 animate-scale-up">
+        <div 
+          onClick={() => setIsNewMsgModalOpen(false)}
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl p-6 w-full max-w-md text-left space-y-4 animate-scale-up cursor-default"
+          >
             <div className="flex items-center justify-between border-b pb-2">
               <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
                 <User className="w-4 h-4 text-[#315C9F]" /> Start Secure Chat
               </h4>
-              <button onClick={() => setIsNewMsgModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+              <button 
+                onClick={() => setIsNewMsgModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm p-1 cursor-pointer transition-colors"
+                title="Close"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -1756,11 +1840,11 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                     setNewConvRecipient(e.target.value);
                     if (!newConvTitle) setNewConvTitle(`Chat with ${e.target.value}`);
                   }}
-                  className="w-full text-xs bg-slate-50 border border-[#A9CDEE] rounded-xl px-2.5 py-2.5 cursor-pointer focus:outline-none"
+                  className="w-full text-xs bg-white text-[#1F3557] border border-[#A9CDEE] rounded-xl px-2.5 py-2.5 cursor-pointer focus:outline-none"
                 >
-                  <option value="">Select Recipient Staff...</option>
+                  <option className="bg-white text-[#1F3557]" value="">Select Recipient Staff...</option>
                   {mockStaff.filter(s => s.name !== currentUserName).map(s => (
-                    <option key={s.name} value={s.name}>{s.name} - {s.role}</option>
+                    <option className="bg-white text-[#1F3557]" key={s.name} value={s.name}>{s.name} - {s.role}</option>
                   ))}
                 </select>
               </div>
@@ -1791,13 +1875,25 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
 
       {/* MODAL 2: NEW GROUP CHAT CONFIGURE DIALOG */}
       {isNewGroupModalOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl p-6 w-full max-w-md text-left space-y-4 animate-scale-up">
+        <div 
+          onClick={() => setIsNewGroupModalOpen(false)}
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl p-6 w-full max-w-md text-left space-y-4 animate-scale-up cursor-default"
+          >
             <div className="flex items-center justify-between border-b pb-2">
               <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-[#315C9F]" /> Configure Team Group Chat
               </h4>
-              <button onClick={() => setIsNewGroupModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+              <button 
+                onClick={() => setIsNewGroupModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm p-1 cursor-pointer transition-colors"
+                title="Close"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -2110,7 +2206,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
           <span className="flex items-center gap-1">✓ Jobs Vault</span>
           <span className="flex items-center gap-1">✓ Inventory</span>
           <span className="flex items-center gap-1">✓ Documents</span>
-          <span className="flex items-center gap-1 text-slate-400">□ Roster (Bypassed)</span>
+          <span className="flex items-center gap-1 text-[#315C9F]">✓ Roster (Active)</span>
           <span className="flex items-center gap-1 text-indigo-600">✓ AI Companion</span>
         </div>
       </div>

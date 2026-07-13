@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { PDFEditor, EditorObject } from "./PDFEditor";
 import {
   Search,
   Plus,
@@ -37,7 +38,18 @@ import {
   Image,
   Video,
   FileSpreadsheet,
-  FileSignature
+  FileSignature,
+  FilePlus,
+  FolderPlus,
+  BookOpen,
+  Smartphone,
+  Cloud,
+  Images,
+  Link,
+  Mail,
+  MessageCircle,
+  ExternalLink,
+  QrCode
 } from "lucide-react";
 
 export interface DocumentItem {
@@ -51,7 +63,7 @@ export interface DocumentItem {
   uploadedBy: string;
   date: string;
   size: string;
-  status: "Signed" | "Unsigned" | "Pending" | "Archived";
+  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
   isFavorite: boolean;
   isArchived: boolean;
   notes: string;
@@ -61,6 +73,7 @@ export interface DocumentItem {
   receiptAmount?: number;
   lastModified: string;
   url?: string;
+  metaObjects?: any[];
 }
 
 interface DocumentsPageProps {
@@ -111,12 +124,193 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
     return documents.find((d) => d.id === selectedDocId) || documents[0] || null;
   }, [documents, selectedDocId]);
 
+  // Native PDF Editor States
+  const [isPDFEditorOpen, setIsPDFEditorOpen] = useState(false);
+  const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
+  const [pdfEditorDocName, setPdfEditorDocName] = useState("");
+  const [pdfEditorInitialObjects, setPdfEditorInitialObjects] = useState<any[]>([]);
+
+  // Dynamic directory lists for Create Folder action
+  const [foldersList, setFoldersList] = useState<string[]>([
+    "Inventory", "Fleet", "Insurance", "Legal", "Training", "Templates", "Standard Templates", "Custom Folders"
+  ]);
+
+  // Secondary high-fidelity interactive modals
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState(false);
+  const [isPhoneUploadModalOpen, setIsPhoneUploadModalOpen] = useState(false);
+  const [isPhotoToPDFModalOpen, setIsPhotoToPDFModalOpen] = useState(false);
+  const [isMainShareModalOpen, setIsMainShareModalOpen] = useState(false);
+  const [shareDocItem, setShareDocItem] = useState<DocumentItem | null>(null);
+
+  // Photo-to-PDF selection state
+  const [photoToPdfName, setPhotoToPdfName] = useState("Photo Compilation.pdf");
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([
+    "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=500",
+    "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500"
+  ]);
+
+  // Seed standard unchanged templates inside local state on component mount
+  useEffect(() => {
+    const hasTemplate1 = documents.some(d => d.name === "Standard Service Agreement (TEMPLATE).pdf");
+    if (!hasTemplate1) {
+      const standardTemplates: DocumentItem[] = [
+        {
+          id: "doc_template_1",
+          name: "Standard Service Agreement (TEMPLATE).pdf",
+          customer: "None",
+          employee: "System Core",
+          vendor: "None",
+          job: "None",
+          type: "Contracts",
+          uploadedBy: "System admin",
+          date: "2026-07-01",
+          size: "450 KB",
+          status: "Unsigned",
+          isFavorite: true,
+          isArchived: false,
+          notes: "Standard master service contract. This template remains unchanged; duplicate or open in PDF editor to create copy.",
+          tags: ["Template", "Standard", "Legal"],
+          estimateId: "None",
+          invoiceId: "None",
+          lastModified: "2026-07-01 09:00 AM"
+        },
+        {
+          id: "doc_template_2",
+          name: "Standard Field Assessment (TEMPLATE).pdf",
+          customer: "None",
+          employee: "System Core",
+          vendor: "None",
+          job: "None",
+          type: "Estimates",
+          uploadedBy: "System admin",
+          date: "2026-07-01",
+          size: "320 KB",
+          status: "Unsigned",
+          isFavorite: false,
+          isArchived: false,
+          notes: "Standard on-site damage and service assessment sheet. Intact template files.",
+          tags: ["Template", "Standard"],
+          estimateId: "None",
+          invoiceId: "None",
+          lastModified: "2026-07-01 09:00 AM"
+        }
+      ];
+      setDocuments(prev => [...prev, ...standardTemplates]);
+    }
+  }, [documents, setDocuments]);
+
+  // Handler to open PDF Editor
+  const handleOpenPDFEditor = (doc: DocumentItem | null) => {
+    if (doc) {
+      setPdfEditorDocId(doc.id);
+      setPdfEditorDocName(doc.name);
+      setPdfEditorInitialObjects((doc as any).metaObjects || []);
+    } else {
+      setPdfEditorDocId(null);
+      setPdfEditorDocName("New Blank Document.pdf");
+      setPdfEditorInitialObjects([]);
+    }
+    setIsPDFEditorOpen(true);
+    triggerNotification(doc ? `Opening PDF Editor for ${doc.name}` : "Opening clean blank PDF Canvas");
+  };
+
+  // Handler to save PDF Editor modifications
+  const handleSavePDFEditor = (docId: string, updatedName: string, metaProperties?: any) => {
+    setDocuments(prev => {
+      const exists = prev.some(d => d.id === docId);
+      if (exists) {
+        return prev.map(d => {
+          if (d.id === docId) {
+            // Anti-frustration: protect standard templates from being altered!
+            if (d.id.startsWith("doc_template_")) {
+              triggerNotification("⚠️ Standard templates are locked. Creating a custom copy with your edits!");
+              const copyId = `doc_dup_${Date.now()}`;
+              return {
+                ...d,
+                id: copyId,
+                name: `Copy of ${updatedName}`,
+                isFavorite: false,
+                status: metaProperties?.status || "Draft",
+                lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                metaObjects: metaProperties?.objects || [],
+                auditTrail: metaProperties?.auditTrail || [],
+                signingOptions: metaProperties?.signingOptions || {}
+              };
+            }
+            return {
+              ...d,
+              name: updatedName,
+              status: metaProperties?.status || d.status,
+              lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              metaObjects: metaProperties?.objects || [],
+              auditTrail: metaProperties?.auditTrail || (d as any).auditTrail || [],
+              signingOptions: metaProperties?.signingOptions || (d as any).signingOptions || {}
+            };
+          }
+          return d;
+        });
+      } else {
+        // Create brand new blank PDF document item
+        const newDoc: DocumentItem = {
+          id: docId,
+          name: updatedName,
+          customer: "None",
+          employee: loggedInUser?.name || "Staff Administrator",
+          vendor: "None",
+          job: "None",
+          type: "Contracts",
+          uploadedBy: loggedInUser?.name || "Staff Administrator",
+          date: new Date().toISOString().split('T')[0],
+          size: "150 KB",
+          status: metaProperties?.status || "Draft",
+          isFavorite: false,
+          isArchived: false,
+          notes: "Generated from Owner'sLocal Native PDF Editor tool.",
+          tags: ["Editor", "Draft"],
+          estimateId: "None",
+          invoiceId: "None",
+          lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          metaObjects: metaProperties?.objects || []
+        };
+        (newDoc as any).auditTrail = metaProperties?.auditTrail || [];
+        (newDoc as any).signingOptions = metaProperties?.signingOptions || {};
+        return [...prev, newDoc];
+      }
+    });
+
+    setIsPDFEditorOpen(false);
+    triggerNotification(`💾 Saved changes to: ${updatedName}`);
+    if (logOperationalEvent) {
+      logOperationalEvent("PDF Editor Save", `Updated elements inside ${updatedName}`, "💾");
+    }
+  };
+
+  const handleCreateFolder = () => {
+    const name = prompt("Enter new folder directory name:");
+    if (name && name.trim()) {
+      const trimmed = name.trim();
+      if (foldersList.includes(trimmed)) {
+        triggerNotification("⚠️ Folder directory already exists");
+        return;
+      }
+      setFoldersList(prev => [...prev, trimmed]);
+      triggerNotification(`📁 Created folder directory: ${trimmed}`);
+      if (logOperationalEvent) {
+        logOperationalEvent("Folder Created", `New directory '${trimmed}' added to local structure`, "📁");
+      }
+    }
+  };
+
   // Modal States
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"csv" | "json" | "tsv">("csv");
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportContent, setExportContent] = useState<string>("");
 
   // Snapshot Camera Simulation States
   const [snapshotStep, setSnapshotStep] = useState<"camera" | "scanning" | "ai_review" | "done">("camera");
@@ -126,6 +320,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
   const [aiInterpretationIssue, setAiInterpretationIssue] = useState<"customer" | "vendor" | "none">("none");
   const [resolvedCustomer, setResolvedCustomer] = useState("");
   const [resolvedVendor, setResolvedVendor] = useState("");
+  const [tempDocName, setTempDocName] = useState("");
 
   // Form states
   const [uploadName, setUploadName] = useState("");
@@ -137,6 +332,9 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
   const [uploadNotes, setUploadNotes] = useState("");
   const [uploadTags, setUploadTags] = useState("");
   const [uploadStatus, setUploadStatus] = useState<"Signed" | "Unsigned" | "Pending">("Signed");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [renameName, setRenameName] = useState("");
 
@@ -146,6 +344,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
 
   // Folder sidebar state
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
+    "eSignStatus": true,
     "Customers": true,
     "Jobs": true,
     "Employees": false,
@@ -229,6 +428,12 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
           if (lowerFolder === "legal" && doc.type !== "Contracts" && !doc.tags.includes("Legal")) return false;
           if (lowerFolder === "training" && !doc.tags.includes("Training")) return false;
           if (lowerFolder === "templates" && !doc.tags.includes("Template")) return false;
+          if (lowerFolder === "awaiting" && doc.status !== "Awaiting Signature") return false;
+          if (lowerFolder === "sent" && doc.status !== "Sent") return false;
+          if (lowerFolder === "signed" && doc.status !== "Signed") return false;
+          if (lowerFolder === "declined" && doc.status !== "Declined") return false;
+          if (lowerFolder === "expired" && doc.status !== "Expired") return false;
+          if (lowerFolder === "draft" && doc.status !== "Draft") return false;
         }
       }
 
@@ -351,6 +556,10 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
   // Upload actions
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!uploadFile) {
+      triggerNotification("⚠️ Please select a file to upload.");
+      return;
+    }
     if (!uploadName.trim()) {
       triggerNotification("⚠️ Please specify a document name.");
       return;
@@ -359,9 +568,19 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
     const tagsArray = uploadTags.split(",").map(t => t.trim()).filter(t => t.length > 0);
     const uName = loggedInUser?.name || "Sarah Jenkins";
 
+    // Use actual file size
+    const sizeStr = uploadFile.size > 1024 * 1024
+      ? `${(uploadFile.size / (1024 * 1024)).toFixed(2)} MB`
+      : `${(uploadFile.size / 1024).toFixed(1)} KB`;
+
+    // Retain exact original extension if they didn't specify one
+    const hasExtension = uploadName.includes(".");
+    const fileExt = uploadFile.name.split(".").pop() || "pdf";
+    const finalName = hasExtension ? uploadName : `${uploadName}.${fileExt}`;
+
     const newDoc: DocumentItem = {
       id: "doc_" + Math.random().toString(36).substring(2, 9),
-      name: uploadName.endsWith(".pdf") || uploadName.endsWith(".png") || uploadName.endsWith(".jpg") ? uploadName : `${uploadName}.pdf`,
+      name: finalName,
       customer: uploadCustomer,
       employee: uploadEmployee,
       vendor: uploadVendor,
@@ -369,15 +588,16 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
       type: uploadType,
       uploadedBy: uName,
       date: new Date().toISOString().slice(0, 10),
-      size: `${(Math.random() * 3 + 0.1).toFixed(1)} MB`,
+      size: sizeStr,
       status: uploadStatus === "Pending" ? "Pending" : uploadStatus,
       isFavorite: false,
       isArchived: false,
-      notes: uploadNotes.trim() || "Uploaded via document dashboard console.",
+      notes: uploadNotes.trim() || `Uploaded via document dashboard console. File type: ${uploadFile.type || "unknown"}`,
       tags: tagsArray.length > 0 ? tagsArray : [uploadType.replace("s", "")],
       estimateId: uploadType === "Estimates" ? `EST-${Math.floor(1000 + Math.random() * 9000)}` : "None",
       invoiceId: uploadType === "Invoices" ? `INV-${Math.floor(1000 + Math.random() * 9000)}` : "None",
-      lastModified: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      lastModified: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      url: URL.createObjectURL(uploadFile)
     };
 
     setDocuments(prev => [newDoc, ...prev]);
@@ -395,6 +615,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
     setUploadName("");
     setUploadNotes("");
     setUploadTags("");
+    setUploadFile(null);
   };
 
   // Rename action
@@ -464,6 +685,101 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
     triggerNotification(`🔗 Attached to ${attachTargetType}: ${attachValue}`);
   };
 
+  // Export actions
+  const convertToCSV = (docs: DocumentItem[]) => {
+    const headers = ["ID", "Document Name", "Customer Link", "Employee Link", "Vendor Link", "Job Link", "Type", "Uploaded By", "Date Created", "File Size", "Status", "Is Favorite", "Is Archived", "Notes", "Tags", "Estimate ID", "Invoice ID", "Last Modified"];
+    const rows = docs.map(d => [
+      d.id,
+      `"${(d.name || "").replace(/"/g, '""')}"`,
+      `"${(d.customer || "").replace(/"/g, '""')}"`,
+      `"${(d.employee || "").replace(/"/g, '""')}"`,
+      `"${(d.vendor || "").replace(/"/g, '""')}"`,
+      `"${(d.job || "").replace(/"/g, '""')}"`,
+      `"${(d.type || "").replace(/"/g, '""')}"`,
+      `"${(d.uploadedBy || "").replace(/"/g, '""')}"`,
+      d.date,
+      d.size,
+      d.status,
+      d.isFavorite ? "TRUE" : "FALSE",
+      d.isArchived ? "TRUE" : "FALSE",
+      `"${(d.notes || "").replace(/"/g, '""')}"`,
+      `"${(d.tags || []).join(", ").replace(/"/g, '""')}"`,
+      d.estimateId,
+      d.invoiceId,
+      d.lastModified
+    ]);
+    return [headers.join(","), ...rows.map(r => r.join(","))].join("\r\n");
+  };
+
+  const convertToTSV = (docs: DocumentItem[]) => {
+    const headers = ["ID", "Document Name", "Customer Link", "Employee Link", "Vendor Link", "Job Link", "Type", "Uploaded By", "Date Created", "File Size", "Status", "Is Favorite", "Is Archived", "Notes", "Tags", "Estimate ID", "Invoice ID", "Last Modified"];
+    const rows = docs.map(d => [
+      d.id,
+      (d.name || "").replace(/\t/g, ' '),
+      (d.customer || "").replace(/\t/g, ' '),
+      (d.employee || "").replace(/\t/g, ' '),
+      (d.vendor || "").replace(/\t/g, ' '),
+      (d.job || "").replace(/\t/g, ' '),
+      (d.type || "").replace(/\t/g, ' '),
+      (d.uploadedBy || "").replace(/\t/g, ' '),
+      d.date,
+      d.size,
+      d.status,
+      d.isFavorite ? "TRUE" : "FALSE",
+      d.isArchived ? "TRUE" : "FALSE",
+      (d.notes || "").replace(/\t/g, ' '),
+      (d.tags || []).join(", ").replace(/\t/g, ' '),
+      d.estimateId,
+      d.invoiceId,
+      d.lastModified
+    ]);
+    return [headers.join("\t"), ...rows.map(r => r.join("\t"))].join("\r\n");
+  };
+
+  const executeExport = (format: "csv" | "json" | "tsv") => {
+    let content = "";
+    let fileName = "";
+    let mimeType = "";
+
+    if (format === "json") {
+      content = JSON.stringify(documents, null, 2);
+      fileName = "leadforge_documents_database.json";
+      mimeType = "application/json";
+    } else if (format === "tsv") {
+      content = convertToTSV(documents);
+      fileName = "leadforge_documents_database.tsv";
+      mimeType = "text/tab-separated-values";
+    } else {
+      content = convertToCSV(documents);
+      fileName = "leadforge_documents_database.csv";
+      mimeType = "text/csv";
+    }
+
+    setExportContent(content);
+    setExportSuccessMessage(`Generating database export in ${format.toUpperCase()} format...`);
+
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      setExportSuccessMessage(`Successfully downloaded ${fileName}!`);
+      if (logOperationalEvent) {
+        logOperationalEvent("Database Exported", `Documents database exported as ${format.toUpperCase()}`, "📥");
+      }
+      triggerNotification(`✅ Export downloaded: ${fileName}`);
+    } catch (err) {
+      console.error(err);
+      setExportSuccessMessage(`Download initiated. Since you are in an iframe workspace, we've also provided a copy/paste option below!`);
+    }
+  };
+
   // Snapshot AI simulated scan step trigger
   const runCameraSnapshotAI = () => {
     setSnapshotStep("scanning");
@@ -474,6 +790,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
         if (prev >= 100) {
           clearInterval(interval);
           setSnapshotStep("ai_review");
+          const initialDocName = `AI_SCAN_${scannedDocType}_${Math.floor(100 + Math.random() * 900)}.pdf`;
+          setTempDocName(initialDocName);
           // Custom detection simulation based on scanned type
           if (scannedDocType === "Receipts") {
             setResolvedCustomer("Apex Plumb & Drain");
@@ -494,7 +812,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
 
   // Approve Snapshot AI Document
   const handleApproveSnapshotAI = () => {
-    const docName = `AI_SCAN_${scannedDocType}_${Math.floor(100 + Math.random() * 900)}.pdf`;
+    const docName = tempDocName || `AI_SCAN_${scannedDocType}_${Math.floor(100 + Math.random() * 900)}.pdf`;
     const uName = loggedInUser?.name || "Sarah Jenkins";
 
     const newDoc: DocumentItem = {
@@ -620,21 +938,17 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
               Filters
             </button>
             <button
-              onClick={() => onOpenPlaceholder("Import Document Templates", "📥")}
-              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              disabled
+              className="px-3 py-2 bg-slate-100 border border-slate-200 text-slate-400 font-bold rounded-xl text-xs uppercase tracking-wider cursor-not-allowed opacity-60"
+              title="This feature is coming soon"
             >
-              Import
+              Import (Coming Soon)
             </button>
             <button
               onClick={() => {
-                const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(documents, null, 2))}`;
-                const downloadAnchor = document.createElement("a");
-                downloadAnchor.setAttribute("href", jsonString);
-                downloadAnchor.setAttribute("download", "leadforge_documents_database.json");
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
-                triggerNotification("Exported Documents Database JSON");
+                setIsExportModalOpen(true);
+                setExportSuccessMessage(null);
+                setExportContent("");
               }}
               className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
             >
@@ -646,6 +960,103 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
               title="Refresh Sync"
             >
               <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* MOBILE-FIRST PDF CREATOR & CAPTURE LAUNCHPAD */}
+        <div className="bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white p-5 rounded-3xl border border-[#9EC8EF]/30 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-2 gap-2">
+            <h3 className="text-xs font-display font-black text-[#BDDDF8] uppercase tracking-widest flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+              Native Document & PDF Creator Hub
+            </h3>
+            <span className="text-[9px] bg-sky-500/35 px-2 py-0.5 rounded font-black tracking-wider uppercase text-sky-200">
+              ⚡ OWNER'SLOCAL PRO
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+            {/* 1. Create Blank Document */}
+            <button
+              onClick={() => handleOpenPDFEditor(null)}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <FilePlus className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Blank Canvas</span>
+            </button>
+
+            {/* 2. Create Folder */}
+            <button
+              onClick={handleCreateFolder}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <FolderPlus className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Create Folder</span>
+            </button>
+
+            {/* 3. Standard Folders / Templates */}
+            <button
+              onClick={() => {
+                setSelectedFolderFilter("Standard Templates");
+                triggerNotification("Filtering Standard Templates folder (Unchanged templates)");
+              }}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <BookOpen className="w-5 h-5 text-sky-300 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Standard Docs</span>
+            </button>
+
+            {/* 4. Upload from Phone */}
+            <button
+              onClick={() => setIsPhoneUploadModalOpen(true)}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <Smartphone className="w-5 h-5 text-indigo-300 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">From Phone</span>
+            </button>
+
+            {/* 5. Upload from Google Drive */}
+            <button
+              onClick={() => setIsGoogleDriveModalOpen(true)}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <Cloud className="w-5 h-5 text-cyan-300 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Google Drive</span>
+            </button>
+
+            {/* 6. Upload PDF */}
+            <button
+              onClick={() => {
+                setUploadName("");
+                setUploadType("Contracts");
+                setIsUploadModalOpen(true);
+              }}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <Upload className="w-5 h-5 text-teal-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Upload PDF</span>
+            </button>
+
+            {/* 7. Scan Document */}
+            <button
+              onClick={() => {
+                setSnapshotStep("camera");
+                setIsSnapshotModalOpen(true);
+              }}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <Camera className="w-5 h-5 text-pink-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Scan Camera</span>
+            </button>
+
+            {/* 8. PDF from Photos */}
+            <button
+              onClick={() => setIsPhotoToPDFModalOpen(true)}
+              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
+            >
+              <Images className="w-5 h-5 text-amber-300 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">from Photos</span>
             </button>
           </div>
         </div>
@@ -870,7 +1281,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
               Document Folders
             </h3>
             <button
-              onClick={() => onOpenPlaceholder("Create Custom Folder", "📁")}
+              onClick={handleCreateFolder}
               className="p-1 hover:bg-[#BDDDF8] text-[#1F3557] rounded-lg"
               title="Add Custom Folder"
             >
@@ -925,6 +1336,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
 
             {/* Expandable Folder Groups */}
             {[
+              { id: "eSignStatus", label: "eSignature Folders", icon: "✍️", items: ["Awaiting Signature", "Sent", "Signed", "Declined", "Expired", "Draft"] },
               { id: "Customers", label: "Customers", icon: "👥", items: ["Apex Plumb & Drain", "Chevron Logistics", "Oakridge Apartments"] },
               { id: "Employees", label: "Employees", icon: "👤", items: ["Sarah Jenkins", "Marcus Vance", "Sarah Connor"] },
               { id: "Jobs", label: "Jobs", icon: "💼", items: ["Job #1024", "Job #1085", "Job #1022"] },
@@ -976,7 +1388,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
             <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
 
             {/* Folder targets listed in requirements */}
-            {["Inventory", "Fleet", "Insurance", "Legal", "Training", "Templates", "Custom Folders"].map((fld) => {
+            {foldersList.map((fld) => {
               const isActive = selectedFolderFilter === fld;
               return (
                 <button
@@ -1016,12 +1428,13 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                   <th className="py-2.5 px-3">Uploaded</th>
                   <th className="py-2.5 px-3">Size</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#9EC8EF]/40">
                 {filteredDocs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
+                    <td colSpan={7} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
                       No matching files or documents located.
                     </td>
                   </tr>
@@ -1056,16 +1469,47 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase ${
+                            className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
                               doc.status === "Signed"
-                                ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                                : doc.status === "Pending"
-                                ? "bg-amber-50 text-amber-600 border border-amber-200"
-                                : "bg-rose-50 text-rose-600 border border-rose-200"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : doc.status === "Awaiting Signature"
+                                ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                                : doc.status === "Sent"
+                                ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                : doc.status === "Viewed"
+                                ? "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                                : doc.status === "Declined"
+                                ? "bg-rose-100 text-rose-800 border border-rose-300"
+                                : doc.status === "Expired"
+                                ? "bg-slate-100 text-slate-500 border border-slate-300"
+                                : doc.status === "Draft"
+                                ? "bg-sky-100 text-sky-800 border border-sky-300"
+                                : "bg-slate-100 text-slate-800 border border-slate-300"
                             }`}
                           >
                             {doc.status}
                           </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenPDFEditor(doc)}
+                              className="p-1 hover:bg-[#BDDDF8]/50 text-[#315C9F] rounded transition-colors"
+                              title="Edit Document"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShareDocItem(doc);
+                                setIsMainShareModalOpen(true);
+                              }}
+                              className="p-1 hover:bg-[#BDDDF8]/50 text-sky-600 rounded transition-colors"
+                              title="Share Document"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1114,6 +1558,15 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                   <span className="bg-[#315C9F] text-white px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider">Simulated Preview</span>
                 </div>
               </div>
+
+              {/* HIGH-FIDELITY PDF EDITOR LAUNCH TRIGGER */}
+              <button
+                onClick={() => handleOpenPDFEditor(activeDoc)}
+                className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                Launch Native PDF Editor
+              </button>
 
               {/* Information Ledger */}
               <div className="space-y-2 text-xs font-bold text-[#1F3557]">
@@ -1190,7 +1643,18 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
               {/* ACTION BUTTONS (NO DEAD BUTTONS) */}
               <div className="grid grid-cols-2 gap-1.5 pt-2">
                 <button
-                  onClick={() => triggerNotification(`📂 Opened document file: ${activeDoc.name}`)}
+                  onClick={() => {
+                    if (activeDoc.url) {
+                      const link = document.createElement('a');
+                      link.href = activeDoc.url;
+                      link.target = "_blank";
+                      link.rel = "noopener noreferrer";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }
+                    triggerNotification(`📂 Opened document file: ${activeDoc.name}`);
+                  }}
                   className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -1198,18 +1662,28 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    // Create simulated plain text file download
-                    const textContent = `LeadForge Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
-                    const blob = new Blob([textContent], { type: 'text/plain' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = blobUrl;
-                    link.download = activeDoc.name.replace(".pdf", ".txt");
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
-                    triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
+                    if (activeDoc.url) {
+                      const link = document.createElement('a');
+                      link.href = activeDoc.url;
+                      link.download = activeDoc.name;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
+                    } else {
+                      // Create simulated plain text file download for seed data
+                      const textContent = `LeadForge Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
+                      const blob = new Blob([textContent], { type: 'text/plain' });
+                      const blobUrl = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = blobUrl;
+                      link.download = activeDoc.name.endsWith(".pdf") ? activeDoc.name.replace(".pdf", ".txt") : activeDoc.name + ".txt";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(blobUrl);
+                      triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
+                    }
                   }}
                   className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
@@ -1393,6 +1867,368 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
         </div>
       </div>
 
+      {/* NATIVE PDF EDITOR OVERLAY */}
+      {isPDFEditorOpen && (
+        <PDFEditor
+          documentId={pdfEditorDocId}
+          documentName={pdfEditorDocName}
+          initialObjects={pdfEditorInitialObjects}
+          documentItem={documents.find(d => d.id === pdfEditorDocId) || null}
+          onClose={() => setIsPDFEditorOpen(false)}
+          onSave={handleSavePDFEditor}
+          triggerNotification={triggerNotification}
+          logOperationalEvent={logOperationalEvent}
+        />
+      )}
+
+      {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
+      {isGoogleDriveModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[500px] shadow-2xl border border-[#9EC8EF] text-left animate-scale-up">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF]/45 pb-3 mb-4">
+              <div className="flex items-center gap-1.5">
+                <Cloud className="w-5 h-5 text-cyan-600 animate-pulse" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-[#1F3557]">Google Drive Cloud Picker</h3>
+              </div>
+              <button onClick={() => setIsGoogleDriveModalOpen(false)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+            <div className="space-y-3.5 text-xs">
+              <p className="text-[10px] text-[#5E7393] font-black uppercase tracking-widest">Connect and Import Cloud Files:</p>
+              <div className="space-y-2">
+                {[
+                  { name: "Apex_Plumb_Main_Contract_Draft.gdoc", size: "12 KB", type: "Contracts", date: "Yesterday" },
+                  { name: "Q2_Corporate_Revenue_Tax_Filing.gsheet", size: "480 KB", type: "Payroll Documents", date: "July 2" },
+                  { name: "Commercial_Site_Blueprint_v3.gdraw", size: "4.2 MB", type: "Blueprints", date: "June 28" },
+                  { name: "Field_Service_Terms_Master.gdoc", size: "18 KB", type: "Contracts", date: "June 15" }
+                ].map((file, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const importedDoc: DocumentItem = {
+                        id: `doc_gdrive_${Date.now()}_${i}`,
+                        name: file.name.replace(".gdoc", ".pdf").replace(".gsheet", ".pdf").replace(".gdraw", ".pdf"),
+                        customer: "Apex Plumb & Drain",
+                        employee: loggedInUser?.name || "System Admin",
+                        vendor: "None",
+                        job: "None",
+                        type: file.type,
+                        uploadedBy: "Google Drive Sync",
+                        date: new Date().toISOString().split('T')[0],
+                        size: file.size,
+                        status: "Unsigned",
+                        isFavorite: false,
+                        isArchived: false,
+                        notes: `Imported directly from connected GDrive directory. Originally saved: ${file.date}`,
+                        tags: ["GDrive", "Cloud", "Imported"],
+                        estimateId: "None",
+                        invoiceId: "None",
+                        lastModified: "Just now"
+                      };
+                      setDocuments(prev => [...prev, importedDoc]);
+                      setIsGoogleDriveModalOpen(false);
+                      triggerNotification(`✅ Successfully imported and synchronized '${importedDoc.name}' from Google Drive!`);
+                      if (logOperationalEvent) {
+                        logOperationalEvent("GDrive Import", `Synchronized cloud file '${importedDoc.name}'`, "☁️");
+                      }
+                    }}
+                    className="w-full bg-white hover:bg-[#BDDDF8] border border-[#9EC8EF]/40 rounded-xl p-3 flex items-center justify-between text-left transition-colors cursor-pointer shadow-sm group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Cloud className="w-5 h-5 text-cyan-600" />
+                      <div>
+                        <p className="font-bold text-[#1F3557] group-hover:text-cyan-800 truncate max-w-[240px]">{file.name}</p>
+                        <p className="text-[9px] text-[#5E7393] font-medium font-sans">Google Cloud Sync • {file.size}</p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold uppercase">IMPORT</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setIsGoogleDriveModalOpen(false)}
+              className="w-full py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#1F3557] font-bold rounded-xl text-xs uppercase cursor-pointer mt-4 text-center"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SMARTPHONE REMOTE CAMERA CAPTURE CONNECT MODAL */}
+      {isPhoneUploadModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[420px] shadow-2xl border border-[#9EC8EF] text-center animate-scale-up space-y-4">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF]/45 pb-3 text-left">
+              <div className="flex items-center gap-1.5">
+                <Smartphone className="w-5 h-5 text-indigo-600 animate-bounce" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-[#1F3557]">Upload from Phone</h3>
+              </div>
+              <button onClick={() => setIsPhoneUploadModalOpen(false)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+            <div className="p-4 bg-white rounded-2xl border border-[#9EC8EF]/50 flex flex-col items-center gap-3">
+              {/* QR code simulation */}
+              <div className="bg-slate-100 p-3 rounded-xl border border-slate-300 shadow-inner flex items-center justify-center">
+                <QrCode className="w-32 h-32 text-slate-800" />
+              </div>
+              <p className="text-[10px] text-[#5E7393] leading-relaxed font-sans font-semibold">
+                Scan this QR Code with your smartphone camera to connect device, or click below to simulate immediate phone snapshot uploads!
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const simulatedUpload: DocumentItem = {
+                  id: `doc_phone_${Date.now()}`,
+                  name: `Phone_Snapshot_${new Date().toISOString().slice(0,10).replace(/-/g,"_")}.pdf`,
+                  customer: "Apex Plumb & Drain",
+                  employee: loggedInUser?.name || "Field Agent",
+                  vendor: "None",
+                  job: "None",
+                  type: "Photos",
+                  uploadedBy: "Phone Camera",
+                  date: new Date().toISOString().split('T')[0],
+                  size: "940 KB",
+                  status: "Unsigned",
+                  isFavorite: false,
+                  isArchived: false,
+                  notes: "Synchronized immediately from remote smartphone camera session.",
+                  tags: ["Camera", "Mobile", "Live Capture"],
+                  estimateId: "None",
+                  invoiceId: "None",
+                  lastModified: "Just now"
+                };
+                setDocuments(prev => [...prev, simulatedUpload]);
+                setIsPhoneUploadModalOpen(false);
+                triggerNotification("📱 Phone photo received and uploaded successfully!");
+                if (logOperationalEvent) {
+                  logOperationalEvent("Mobile Upload", "Transferred remote smartphone photo capture to records", "📱");
+                }
+              }}
+              className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
+            >
+              <Plus className="w-4 h-4" />
+              Simulate Phone Photo Upload
+            </button>
+            <button
+              onClick={() => setIsPhoneUploadModalOpen(false)}
+              className="w-full py-2 bg-white border border-[#9EC8EF] text-[#1F3557] hover:bg-slate-50 font-bold rounded-xl text-xs uppercase cursor-pointer text-center"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PHOTO-TO-PDF MULTI-IMAGE COMPILER */}
+      {isPhotoToPDFModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[500px] shadow-2xl border border-[#9EC8EF] text-left animate-scale-up space-y-4">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF]/45 pb-3">
+              <div className="flex items-center gap-1.5">
+                <Images className="w-5 h-5 text-amber-500 animate-pulse" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-[#1F3557]">Compile PDF from Photos</h3>
+              </div>
+              <button onClick={() => setIsPhotoToPDFModalOpen(false)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+            <div className="space-y-3.5 text-xs font-bold text-[#1F3557]">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase text-[#5E7393]">Output Document Name</label>
+                <input
+                  type="text"
+                  className="w-full bg-white border border-[#9EC8EF] rounded-xl px-3.5 py-2.5 focus:outline-none"
+                  value={photoToPdfName}
+                  onChange={(e) => setPhotoToPdfName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase text-[#5E7393]">Selected Photos to Compile (Drag-order or Click to Select)</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {[
+                    { id: "p1", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400", title: "Drain Jetting Site Rig" },
+                    { id: "p2", url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400", title: "Excavation Layout" },
+                    { id: "p3", url: "https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?w=400", title: "Inspected Mainline Valve" },
+                    { id: "p4", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400", title: "Technician Dispatch Rig" }
+                  ].map((photo, index) => {
+                    const isSel = selectedPhotos.includes(photo.url);
+                    return (
+                      <button
+                        key={photo.id}
+                        onClick={() => {
+                          if (isSel) {
+                            setSelectedPhotos(prev => prev.filter(u => u !== photo.url));
+                          } else {
+                            setSelectedPhotos(prev => [...prev, photo.url]);
+                          }
+                        }}
+                        className={`relative rounded-xl border p-1 transition-all text-left ${
+                          isSel ? "border-[#315C9F] bg-white ring-2 ring-[#315C9F]" : "border-slate-300 bg-slate-100"
+                        }`}
+                      >
+                        <img src={photo.url} alt="Compile asset" className="w-full h-24 object-cover rounded-lg" referrerPolicy="no-referrer" />
+                        <div className="p-1 text-[9px] truncate">{photo.title}</div>
+                        {isSel && (
+                          <div className="absolute top-2 right-2 bg-[#315C9F] text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[9px] font-black">
+                            {selectedPhotos.indexOf(photo.url) + 1}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (selectedPhotos.length === 0) {
+                  triggerNotification("⚠️ Please select at least one photo to compile");
+                  return;
+                }
+                const compiledObjects: EditorObject[] = selectedPhotos.map((photoUrl, index) => ({
+                  id: `compiled_photo_${Date.now()}_${index}`,
+                  type: "image",
+                  x: 15 + index * 5,
+                  y: 15 + index * 10,
+                  w: 400,
+                  h: 240,
+                  rotation: 0,
+                  isLocked: false,
+                  groupId: null,
+                  zIndex: index + 1,
+                  props: { imageSrc: photoUrl }
+                }));
+
+                setPdfEditorDocId(`doc_compile_${Date.now()}`);
+                setPdfEditorDocName(photoToPdfName);
+                setPdfEditorInitialObjects(compiledObjects);
+                setIsPhotoToPDFModalOpen(false);
+                setIsPDFEditorOpen(true);
+                triggerNotification("📸 Photo compiling session complete! Opening compiled documents inside Editor.");
+              }}
+              className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              Compile into PDF & Edit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSAL DOCUMENT SHARE FLOW MODAL */}
+      {isMainShareModalOpen && shareDocItem && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] border border-[#9EC8EF] rounded-[28px] p-6 w-[95%] max-w-[450px] shadow-2xl animate-scale-up text-left">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF]/45 pb-3 mb-4">
+              <div className="flex items-center gap-1.5">
+                <Share2 className="w-4.5 h-4.5 text-[#315C9F]" />
+                <h3 className="text-xs font-black uppercase tracking-wider">Share: {shareDocItem.name}</h3>
+              </div>
+              <button onClick={() => { setIsMainShareModalOpen(false); setShareDocItem(null); }} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-[10px] text-[#5E7393] uppercase tracking-wider">Choose Delivery / Export Channels:</p>
+
+              {/* Share Channels */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  onClick={() => {
+                    const email = prompt("Enter recipient email address:");
+                    if (email) {
+                      triggerNotification(`📧 Document shared via secure email link to ${email}`);
+                      setIsMainShareModalOpen(false);
+                      setShareDocItem(null);
+                      if (logOperationalEvent) {
+                        logOperationalEvent("Document Shared", `Document emailed to ${email}`, "📧");
+                      }
+                    }
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <Mail className="w-5 h-5 text-sky-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Send Email</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const phone = prompt("Enter recipient phone number:");
+                    if (phone) {
+                      triggerNotification(`💬 Document link shared via SMS to ${phone}`);
+                      setIsMainShareModalOpen(false);
+                      setShareDocItem(null);
+                      if (logOperationalEvent) {
+                        logOperationalEvent("Document Shared", `Document text-messaged to ${phone}`, "💬");
+                      }
+                    }
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <MessageCircle className="w-5 h-5 text-emerald-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Send Text SMS</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://ownerslocal.local/shared/docs/${shareDocItem.id}`);
+                    triggerNotification("📋 Secure copy-link copied to clipboard!");
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <Link className="w-5 h-5 text-indigo-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Copy Link</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    triggerNotification(`📥 PDF Download initialized: ${shareDocItem.name}`);
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <Download className="w-5 h-5 text-blue-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Download PDF</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    triggerNotification("🖨️ Spooling printing protocol service...");
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <Printer className="w-5 h-5 text-slate-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Print Document</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    triggerNotification("📲 Triggering phone system universal transfer protocols...");
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <ExternalLink className="w-5 h-5 text-pink-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Other Apps</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => { setIsMainShareModalOpen(false); setShareDocItem(null); }}
+              className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-[#1F3557] font-bold rounded-xl text-xs uppercase cursor-pointer mt-5 text-center"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 1: UPLOAD / REPLACE DOCUMENT */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -1406,6 +2242,57 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
             </div>
 
             <form onSubmit={handleUploadSubmit} className="space-y-4 text-xs font-bold text-[#1F3557]">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Select File (Required)</label>
+                <div 
+                  className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all duration-200 cursor-pointer ${
+                    dragActive 
+                      ? "border-[#4A86F7] bg-[#EAF5FF]" 
+                      : uploadFile 
+                        ? "border-emerald-500 bg-[#EAF5FF]/30" 
+                        : "border-[#9EC8EF] hover:border-[#4A86F7] bg-[#EAF5FF]/15"
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    const file = e.dataTransfer.files?.[0] || null;
+                    if (file) {
+                      setUploadFile(file);
+                      setUploadName(file.name.substring(0, file.name.lastIndexOf('.')) || file.name);
+                    }
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setUploadFile(file);
+                      if (file) {
+                        setUploadName(file.name.substring(0, file.name.lastIndexOf('.')) || file.name);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <Upload className="w-6 h-6 text-[#315C9F] animate-pulse" />
+                    <p className="text-xs font-bold text-[#1F3557] max-w-full truncate">
+                      {uploadFile ? `Selected: ${uploadFile.name}` : "Drag & drop file here, or click to browse"}
+                    </p>
+                    <p className="text-[9px] text-[#5E7393]">PDF, PNG, JPG, DOCX (Max 50MB)</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Document Title</label>
                 <input
@@ -1557,7 +2444,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                 <Sparkles className="w-5 h-5 text-blue-400 animate-pulse" />
                 <h3 className="text-sm font-black text-white uppercase tracking-wider">Snapshot AI Scanner</h3>
               </div>
-              <button onClick={() => setIsSnapshotModalOpen(false)} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+              <button onClick={() => { setIsSnapshotModalOpen(false); triggerNotification("Document processing canceled."); }} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
             </div>
 
             {snapshotStep === "camera" && (
@@ -1608,7 +2495,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setIsSnapshotModalOpen(false)}
+                    onClick={() => { setIsSnapshotModalOpen(false); triggerNotification("Document processing canceled."); }}
                     className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-bold rounded-xl cursor-pointer"
                   >
                     Cancel
@@ -1647,7 +2534,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                 <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-center gap-2">
                   <Info className="w-4 h-4 text-blue-400 shrink-0" />
                   <p className="text-[10.5px] text-blue-200">
-                    <strong>AI Optical Result:</strong> Parsed file data with high certainty. Let's resolve the links before storage.
+                    <strong>AI Optical Result:</strong> Parsed file data with simulated ambiguity. Please confirm or edit fields before saving.
                   </p>
                 </div>
 
@@ -1655,11 +2542,8 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                 <div className="bg-slate-800 border border-slate-700 rounded-xl p-3.5 space-y-2.5">
                   <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                    AI Interpretation confidence validation
+                    Verify and Edit Parsed Fields
                   </h4>
-                  <p className="text-[10px] text-slate-400 font-mono">
-                    "I found three possible customer records matching the invoice header. Please assist:"
-                  </p>
 
                   <div className="grid grid-cols-1 gap-1.5">
                     {[
@@ -1686,28 +2570,45 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                     ))}
                   </div>
 
-                  <div className="pt-2 border-t border-slate-700 text-[10.5px] text-slate-300 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Detected Vendor:</span>
-                      <span className="font-bold text-white">{resolvedVendor || "Home Depot"}</span>
+                  <div className="pt-2 border-t border-slate-700 text-[10.5px] text-slate-300 space-y-3">
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Document Name</label>
+                      <input 
+                        type="text" 
+                        value={tempDocName} 
+                        onChange={(e) => setTempDocName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors" 
+                      />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Detected Amount:</span>
-                      <span className="font-mono text-emerald-400 font-bold">$1,250.00</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Recognized Date:</span>
-                      <span className="font-mono text-white">2026-07-06</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Vendor Name</label>
+                        <input 
+                          type="text" 
+                          value={resolvedVendor} 
+                          onChange={(e) => setResolvedVendor(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Customer Link</label>
+                        <input 
+                          type="text" 
+                          value={resolvedCustomer} 
+                          onChange={(e) => setResolvedCustomer(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-colors" 
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setSnapshotStep("camera")}
+                    onClick={() => { setIsSnapshotModalOpen(false); triggerNotification("Document processing canceled."); }}
                     className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-bold rounded-xl cursor-pointer text-center"
                   >
-                    Rescan
+                    Cancel
                   </button>
                   <button
                     onClick={handleApproveSnapshotAI}
@@ -1857,7 +2758,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                     <option value="">-- Choose Employee --</option>
                     <option value="Sarah Jenkins">Sarah Jenkins (Office Manager)</option>
                     <option value="Marcus Vance">Marcus Vance (Excavator)</option>
-                    <option value="Sarah Connor">Sarah Connor (Bypass rep)</option>
+                    <option value="Sarah Connor">Sarah Connor (Field Tech)</option>
                   </select>
                 )}
               </div>
@@ -1876,6 +2777,109 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({
                   Apply Connection
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: EXPORT CONFIGURATION */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[480px] shadow-2xl border border-[#9EC8EF] text-left animate-scale-up flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3.5 mb-4 shrink-0">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-[#315C9F]" />
+                <h3 className="text-sm font-black text-[#1F3557] uppercase tracking-wider">Export Documents</h3>
+              </div>
+              <button onClick={() => setIsExportModalOpen(false)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+
+            <div className="space-y-4 text-xs font-bold text-[#1F3557] overflow-y-auto pr-1">
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Choose Export Format</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["csv", "json", "tsv"] as const).map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => {
+                        setExportFormat(format);
+                        setExportSuccessMessage(null);
+                        setExportContent("");
+                      }}
+                      className={`py-2.5 rounded-xl border text-[11px] font-bold text-center transition-all ${
+                        exportFormat === format
+                          ? "bg-[#315C9F] text-white border-[#315C9F]"
+                          : "bg-white border-[#9EC8EF] text-[#5E7393] hover:bg-[#EAF5FF]"
+                      }`}
+                    >
+                      {format.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-[#5E7393] leading-relaxed font-sans font-medium">
+                  {exportFormat === "csv" && "• CSV Format: Perfect for importing into Microsoft Excel, Google Sheets, or any other spreadsheet editor."}
+                  {exportFormat === "json" && "• JSON Format: Full structured data backup of all document meta-properties, tags, links, and details."}
+                  {exportFormat === "tsv" && "• TSV Format: Tab-Separated Values, ideal for copy-pasting directly into active spreadsheet cells."}
+                </p>
+              </div>
+
+              <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]/40 space-y-2">
+                <p className="text-[11px] text-[#1F3557] font-extrabold">Data Summary to Export:</p>
+                <ul className="text-[10px] text-[#5E7393] space-y-1 font-medium font-sans">
+                  <li>• Total Documents: <strong className="text-[#1F3557] font-bold">{documents.length}</strong></li>
+                  <li>• Database Schema: ID, Name, Customer, Employee, Vendor, Job, Type, Date, Size, Status</li>
+                </ul>
+              </div>
+
+              <button
+                onClick={() => executeExport(exportFormat)}
+                className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download {exportFormat.toUpperCase()} Export File
+              </button>
+
+              {exportSuccessMessage && (
+                <div className="mt-3 bg-emerald-50 border border-emerald-300 text-emerald-800 p-3.5 rounded-2xl space-y-2 animate-fade-in">
+                  <div className="flex items-start gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[11px] font-extrabold text-emerald-900">{exportSuccessMessage}</p>
+                      <p className="text-[10px] text-emerald-700/80 font-sans font-medium">If the automatic file download did not start, you can view or copy the exported data below.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase tracking-wider text-emerald-700">Raw Data Content</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(exportContent);
+                          triggerNotification("📋 Copied exported data to clipboard!");
+                        }}
+                        className="text-[10px] text-emerald-800 hover:underline font-bold animate-pulse"
+                      >
+                        Copy Data
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={exportContent}
+                      className="w-full h-24 bg-white/70 border border-emerald-200 rounded-lg p-2 font-mono text-[9px] text-emerald-950 focus:outline-none resize-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-[#9EC8EF] pt-3.5 mt-4 shrink-0">
+              <button
+                onClick={() => setIsExportModalOpen(false)}
+                className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer text-center"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

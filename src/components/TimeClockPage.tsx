@@ -1602,7 +1602,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           <div>
             <p className="font-extrabold text-[#315C9F] uppercase text-[9px] mb-1">READY TO CONNECT</p>
             <div className="grid grid-cols-2 gap-1 font-semibold text-slate-400">
-              <span className="flex items-center gap-1 text-slate-600 font-bold">□ Roster (Bypassed)</span>
+              <span className="flex items-center gap-1 text-slate-600 font-bold">✓ Roster (Active)</span>
               <span className="flex items-center gap-1">□ AI Assistant</span>
               <span className="flex items-center gap-1">□ Notifications</span>
             </div>

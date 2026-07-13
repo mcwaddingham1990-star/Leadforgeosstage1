@@ -159,6 +159,8 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
   const [formCustomPhone, setFormCustomPhone] = useState("");
   const [formCustomEmail, setFormCustomEmail] = useState("");
   const [formCustomAddress, setFormCustomAddress] = useState("");
+  const [formCustomCityState, setFormCustomCityState] = useState("");
+  const [formCustomZip, setFormCustomZip] = useState("");
 
   const [formEmployee, setFormEmployee] = useState("John Doe");
   const [formCrew, setFormCrew] = useState("Crew Alpha");
@@ -237,6 +239,8 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
     setFormCustomPhone("");
     setFormCustomEmail("");
     setFormCustomAddress("");
+    setFormCustomCityState("");
+    setFormCustomZip("");
     setFormEmployee(EMPLOYEES[0]);
     setFormCrew(CREWS[0]);
     setFormLocation("");
@@ -447,7 +451,7 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
     let customerName = formCustomName.trim();
     let customerPhone = formCustomPhone.trim();
     let customerEmail = formCustomEmail.trim();
-    let customerAddress = formCustomAddress.trim();
+    let customerAddress = [formCustomAddress.trim(), formCustomCityState.trim(), formCustomZip.trim()].filter(Boolean).join(", ");
 
     if (formCustomerMode === "search" && selectedCustomerId) {
       const match = customersList.find(c => c.id === selectedCustomerId);
@@ -556,7 +560,27 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
       setFormCustomName(evt.customer);
       setFormCustomPhone(evt.customerPhone || "");
       setFormCustomEmail(evt.customerEmail || "");
-      setFormCustomAddress(evt.customerAddress || "");
+      
+      const parts = (evt.customerAddress || "").split(",").map(s => s.trim());
+      const street = parts[0] || "";
+      let cityState = "";
+      let zip = "";
+      if (parts.length >= 3) {
+        cityState = parts[1];
+        zip = parts[2];
+      } else if (parts.length === 2) {
+        const lastPart = parts[1];
+        const zipMatch = lastPart.match(/\d{5}(-\d{4})?$/);
+        if (zipMatch) {
+          zip = zipMatch[0];
+          cityState = lastPart.replace(zip, "").trim();
+        } else {
+          cityState = lastPart;
+        }
+      }
+      setFormCustomAddress(street);
+      setFormCustomCityState(cityState);
+      setFormCustomZip(zip);
     }
 
     setFormEmployee(evt.assignedEmployee);
@@ -1257,7 +1281,7 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
               </li>
               <li className="flex items-start gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Leads CRM Module:</strong> Schedule appointment buttons bypass placeholders and launch the scheduling popup directly.</span>
+                <span><strong>Leads CRM Module:</strong> Schedule appointment buttons skip placeholders and launch the scheduling popup directly.</span>
               </li>
               <li className="flex items-start gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
@@ -1520,6 +1544,28 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
                         type="text"
                         className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] font-bold text-slate-500">City, State</label>
+                        <input
+                          value={formCustomCityState}
+                          onChange={(e) => setFormCustomCityState(e.target.value)}
+                          placeholder="Seattle, WA"
+                          type="text"
+                          className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] font-bold text-slate-500">Zip Code</label>
+                        <input
+                          value={formCustomZip}
+                          onChange={(e) => setFormCustomZip(e.target.value)}
+                          placeholder="98101"
+                          type="text"
+                          className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

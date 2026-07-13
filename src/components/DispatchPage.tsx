@@ -489,13 +489,31 @@ export const DispatchPage: React.FC<DispatchPageProps> = ({
         
         {/* Date Selector & Refresh Buttons */}
         <div className="flex items-center gap-2 self-stretch md:self-auto">
-          <div className="flex items-center bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-1.5 shadow-2xs">
-            <Calendar className="w-3.5 h-3.5 text-[#315C9F] mr-2" />
+          <div 
+            onClick={() => {
+              const inputEl = document.getElementById("dispatch-date-picker");
+              if (inputEl) {
+                try {
+                  (inputEl as any).focus();
+                  (inputEl as any).showPicker();
+                } catch (err) {}
+              }
+            }}
+            className="flex items-center bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-1.5 shadow-2xs cursor-pointer"
+          >
+            <Calendar className="w-3.5 h-3.5 text-[#315C9F] mr-2 shrink-0" />
             <input
+              id="dispatch-date-picker"
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent border-none text-xs font-bold text-[#1F3557] outline-none cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                try {
+                  (e.target as any).showPicker();
+                } catch (err) {}
+              }}
+              className="bg-transparent border-none text-xs font-bold text-[#1F3557] outline-none cursor-pointer w-full"
             />
           </div>
 

@@ -141,6 +141,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   // --- 1. CORE SIMULATION STATE ---
   const [activeTab, setActiveTab] = useState<"engine" | "database" | "ai" | "security" | "backups" | "system">("engine");
+  const [isConfirmReportModalOpen, setIsConfirmReportModalOpen] = useState<boolean>(false);
   const [devModeActive, setDevModeActive] = useState<boolean>(true);
   const [isSystemOnline, setIsSystemOnline] = useState<boolean>(true);
   const [overallHealthStatus, setOverallHealthStatus] = useState<"Healthy" | "Warning" | "Critical" | "Offline">("Healthy");
@@ -267,7 +268,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     { id: "sec_1", time: "2026-07-07 09:12:10", type: "Successful Login", user: "Owner (Sarah J.)", severity: "Low", status: "Authorized" },
     { id: "sec_2", time: "2026-07-07 09:14:44", type: "API Key Rotation Request", user: "Owner (Sarah J.)", severity: "Medium", status: "Approved" },
     { id: "sec_3", time: "2026-07-07 09:22:15", type: "Failed Password Verification", user: "Manager (Pete K.)", severity: "Low", status: "Blocked" },
-    { id: "sec_4", time: "2026-07-07 09:45:00", type: "Permission Override Bypass", user: "Manager (Marcus V.)", severity: "Medium", status: "Logged" },
+    { id: "sec_4", time: "2026-07-07 09:45:00", type: "Permission Override Authorization", user: "Manager (Marcus V.)", severity: "Medium", status: "Logged" },
     { id: "sec_5", time: "2026-07-07 10:08:45", type: "API Over-Quota Lockout", user: "Google System", severity: "High", status: "Mitigated" }
   ]);
 
@@ -355,6 +356,11 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   };
 
   const handleExportSystemReport = () => {
+    setIsConfirmReportModalOpen(true);
+  };
+
+  const executeExportSystemReport = () => {
+    setIsConfirmReportModalOpen(false);
     triggerNotification("📥 Owner Command: Preparing system JSON telemetry bundle...");
     
     const telemetryBundle = {
@@ -1505,7 +1511,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                 { id: "predictive_scheduling", label: "Predictive Schedule Optimizer", desc: "Auto-shifts Crew paths to prevent overlapping conflicts." },
                 { id: "advanced_revenue_forecast", label: "Advanced Revenue Forecast Engine", desc: "Gemini-compiled profit trend calculations." },
                 { id: "experimental_ai_v2", label: "Experimental AI Model (Gemini Ultra)", desc: "Enables deeper diagnostic reasoning logs." },
-                { id: "beta_websocket_sync", label: "Multi-User WebSocket Synchronization", desc: "Bypasses reload latency loops." },
+                { id: "beta_websocket_sync", label: "Multi-User WebSocket Synchronization", desc: "Eliminates reload latency loops." },
                 { id: "future_mobile_geofencing", label: "Future Mobile Geofencing Trigger", desc: "Automated check-ins for field technicians." }
               ].map((flag) => (
                 <div key={flag.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
@@ -1692,6 +1698,36 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
           ))}
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL */}
+      {isConfirmReportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl border border-blue-100 space-y-4 text-center">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-blue-600">
+              <Shield className="w-6 h-6 animate-pulse" />
+            </div>
+            <h3 className="text-base font-extrabold text-[#1F3557] uppercase tracking-wider">Confirm Report Generation</h3>
+            <p className="text-xs text-[#5E7393] leading-relaxed font-sans font-medium">
+              This action compiles and packages real-time operational and system telemetry indices. 
+              Please confirm your administrative authorization override.
+            </p>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                onClick={() => setIsConfirmReportModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeExportSystemReport}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 shadow-md shadow-blue-500/15"
+              >
+                Authorize & Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

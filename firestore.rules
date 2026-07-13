@@ -1,14 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /business_profiles/{document} {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data;
+    }
+
+    function getBusinessEmail() {
+      return getUserProfile().businessEmail;
+    }
+
+    // Profiles collection: users can read/write their own profiles
+    match /user_profiles/{uid} {
+      allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == getBusinessEmail()));
+    }
+
+    // Business profiles: owners can read/write their business profile
+    match /business_profiles/{email} {
+      allow read, write: if isAuthenticated() && (getBusinessEmail() == email);
+    }
+
+    // Employee invites: can be read during signup/onboarding
+    match /employee_invites/{code} {
       allow read, write: if true;
     }
-    match /employee_invites/{document} {
-      allow read, write: if true;
+
+    // Employees collection
+    match /employees/{email} {
+      allow read, write: if isAuthenticated() && (
+        (resource == null || resource.data.businessEmail == getBusinessEmail() || email == getBusinessEmail()) &&
+        (request.resource == null || request.resource.data.businessEmail == getBusinessEmail() || email == getBusinessEmail())
+      );
     }
-    match /employees/{document} {
-      allow read, write: if true;
+
+    // Generic multi-tenant rule for collections where the document has a businessId field
+    match /{collectionName}/{docId} {
+      allow read, write: if isAuthenticated() && (
+        // Allow if the new or existing document's businessId matches the user's business email
+        (resource == null || resource.data.businessId == getBusinessEmail()) &&
+        (request.resource == null || request.resource.data.businessId == getBusinessEmail())
+      );
     }
   }
 }

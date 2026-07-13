@@ -30,6 +30,7 @@ export interface Snapshot {
     filters: string;
     details: string;
   };
+  image?: string;
 }
 
 interface SnapshotsPageProps {
@@ -414,39 +415,51 @@ export const SnapshotsPage: React.FC<SnapshotsPageProps> = ({
               {/* Dynamic Simulated UI Layout Snapshot Panel */}
               <div className="border border-[#9EC8EF] rounded-2xl overflow-hidden bg-[#EAF5FF]">
                 <div className="bg-[#315C9F] text-white px-3 py-1.5 flex items-center justify-between text-[8px] font-bold uppercase tracking-wider font-mono">
-                  <span>📷 Simulated Screen Capture</span>
+                  <span>📷 {selectedSnapshot.image ? "Live Camera Photo" : "Simulated Screen Capture"}</span>
                   <span>{selectedSnapshot.fileSize}</span>
                 </div>
                 <div className="p-5 flex flex-col gap-4 text-[#1F3557] min-h-[160px] justify-between relative bg-[#EAF5FF]">
-                  {/* Mock UI Representation */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center pb-2 border-b border-blue-200/50">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-[#315C9F]">{selectedSnapshot.pageName}</p>
-                        <p className="text-[8px] text-[#5E7393]">LeadForge LocalOS Terminal Session</p>
-                      </div>
-                      <span className="text-[8px] font-mono px-1 bg-emerald-100 text-emerald-800 rounded font-bold">VERIFIED STATE</span>
+                  {selectedSnapshot.image ? (
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <img
+                        src={selectedSnapshot.image}
+                        alt="Captured site snapshot"
+                        className="rounded-xl max-h-48 w-full object-cover border border-[#9EC8EF]"
+                        referrerPolicy="no-referrer"
+                      />
+                      <p className="text-[9px] text-[#5E7393] font-sans font-semibold">Captured Live via Device Camera</p>
                     </div>
+                  ) : (
+                    /* Mock UI Representation */
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center pb-2 border-b border-blue-200/50">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-[#315C9F]">{selectedSnapshot.pageName}</p>
+                          <p className="text-[8px] text-[#5E7393]">LeadForge LocalOS Terminal Session</p>
+                        </div>
+                        <span className="text-[8px] font-mono px-1 bg-emerald-100 text-emerald-800 rounded font-bold">VERIFIED STATE</span>
+                      </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-2">
-                      <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
-                        <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Records</p>
-                        <p className="text-sm font-black text-[#1F3557] font-mono mt-0.5">{selectedSnapshot.meta.recordCount}</p>
+                      <div className="grid grid-cols-3 gap-2 pt-2">
+                        <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
+                          <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Records</p>
+                          <p className="text-sm font-black text-[#1F3557] font-mono mt-0.5">{selectedSnapshot.meta.recordCount}</p>
+                        </div>
+                        <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
+                          <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Active Filter</p>
+                          <p className="text-[9px] font-black text-[#1F3557] mt-0.5 truncate">{selectedSnapshot.meta.filters}</p>
+                        </div>
+                        <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
+                          <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Checksum</p>
+                          <p className="text-[8px] font-mono font-bold text-[#315C9F] mt-1">#LF{selectedSnapshot.id.toUpperCase()}</p>
+                        </div>
                       </div>
-                      <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
-                        <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Active Filter</p>
-                        <p className="text-[9px] font-black text-[#1F3557] mt-0.5 truncate">{selectedSnapshot.meta.filters}</p>
-                      </div>
-                      <div className="p-2 bg-[#C7E3FA]/40 rounded-xl border border-blue-200/40 text-center">
-                        <p className="text-[7.5px] uppercase font-bold text-[#5E7393]">Checksum</p>
-                        <p className="text-[8px] font-mono font-bold text-[#315C9F] mt-1">#LF{selectedSnapshot.id.toUpperCase()}</p>
-                      </div>
-                    </div>
 
-                    <div className="p-2.5 bg-[#C7E3FA]/20 rounded-xl border border-dashed border-blue-200 text-[8px] text-[#5E7393] font-semibold leading-relaxed">
-                      Captured session metrics: {selectedSnapshot.meta.details}
+                      <div className="p-2.5 bg-[#C7E3FA]/20 rounded-xl border border-dashed border-blue-200 text-[8px] text-[#5E7393] font-semibold leading-relaxed">
+                        Captured session metrics: {selectedSnapshot.meta.details}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

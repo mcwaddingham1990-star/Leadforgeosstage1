@@ -568,7 +568,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 <div className="bg-white p-4 rounded-2xl border border-[#9EC8EF]/40 space-y-3">
                   <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Module-Specific Overrides Configuration</h4>
                   <p className="text-[11px] text-slate-500 font-sans font-medium">
-                    Tweak specific operational bounds. Specific overrides bypass the global fallback configured above.
+                    Tweak specific operational bounds. Specific overrides customize the global fallback configured above.
                   </p>
 
                   <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1.5 scrollbar-thin">

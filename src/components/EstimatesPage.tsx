@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { SchedulingEvent } from "./SchedulingPage";
 import {
   Search,
   Plus,
@@ -26,7 +27,8 @@ import {
   Trash2,
   Lock,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  X
 } from "lucide-react";
 
 export interface Estimate {
@@ -46,112 +48,162 @@ interface EstimatesPageProps {
   onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
   onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
   onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
+  estimates?: Estimate[];
+  setEstimates?: React.Dispatch<React.SetStateAction<Estimate[]>>;
+  schedulingEvents?: SchedulingEvent[];
+  setSchedulingEvents?: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
+  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
+  loggedInUser?: { email: string; role: string; permissions: string[]; isEmployee?: boolean; name?: string };
+  recentRoster?: Array<{ name: string; role: string; code: string; status: string }>;
 }
 
 // 8 high-quality realistic Estimates
-const INITIAL_ESTIMATES: Estimate[] = [
-  {
-    id: "est_1",
-    number: "EST-2026-001",
-    customerName: "Marcus Vance",
-    company: "Apex Plumb & Drain",
-    status: "Accepted",
-    salesRep: "Sarah Connor",
-    amount: 12500,
-    createdDate: "2026-06-15",
-    expirationDate: "2026-07-15"
-  },
-  {
-    id: "est_2",
-    number: "EST-2026-002",
-    customerName: "Diana Prince",
-    company: "Themyscira Antiques",
-    status: "Sent",
-    salesRep: "Theresa W.",
-    amount: 8900,
-    createdDate: "2026-07-01",
-    expirationDate: "2026-08-01"
-  },
-  {
-    id: "est_3",
-    number: "EST-2026-003",
-    customerName: "Clara Oswald",
-    company: "Oakridge Apartments",
-    status: "Pending",
-    salesRep: "Marcus Vance",
-    amount: 2450,
-    createdDate: "2026-07-03",
-    expirationDate: "2026-08-03"
-  },
-  {
-    id: "est_4",
-    number: "EST-2026-004",
-    customerName: "Clark Kent",
-    company: "Daily Planet Corp",
-    status: "Viewed",
-    salesRep: "Theresa W.",
-    amount: 4200,
-    createdDate: "2026-07-02",
-    expirationDate: "2026-08-02"
-  },
-  {
-    id: "est_5",
-    number: "EST-2026-005",
-    customerName: "Bruce Wayne",
-    company: "Wayne Enterprises",
-    status: "Draft",
-    salesRep: "Sarah Connor",
-    amount: 45000,
-    createdDate: "2026-07-05",
-    expirationDate: "2026-08-05"
-  },
-  {
-    id: "est_6",
-    number: "EST-2026-006",
-    customerName: "Arthur Curry",
-    company: "Atlantis Marine LLC",
-    status: "Declined",
-    salesRep: "Marcus Vance",
-    amount: 15500,
-    createdDate: "2026-06-20",
-    expirationDate: "2026-07-20"
-  },
-  {
-    id: "est_7",
-    number: "EST-2026-007",
-    customerName: "Hal Jordan",
-    company: "Ferris Aircraft Corp",
-    status: "Expired",
-    salesRep: "Theresa W.",
-    amount: 6700,
-    createdDate: "2026-05-01",
-    expirationDate: "2026-06-01"
-  },
-  {
-    id: "est_8",
-    number: "EST-2026-008",
-    customerName: "Barry Allen",
-    company: "Central City Labs",
-    status: "Completed",
-    salesRep: "Sarah Connor",
-    amount: 3800,
-    createdDate: "2026-06-10",
-    expirationDate: "2026-07-10"
-  }
-];
+export const INITIAL_ESTIMATES: Estimate[] = [];
 
 export const EstimatesPage: React.FC<EstimatesPageProps> = ({
   onOpenPlaceholder,
   onTakeSnapshot,
   onOpenAIAnalysis,
-  onNavigateToScreen
+  onNavigateToScreen,
+  estimates: propsEstimates,
+  setEstimates,
+  schedulingEvents,
+  setSchedulingEvents,
+  logOperationalEvent,
+  loggedInUser,
+  recentRoster
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
+  const [localEstimates, setLocalEstimates] = useState<Estimate[]>(INITIAL_ESTIMATES);
+
+  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Form states
+  const [formCustomerName, setFormCustomerName] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formAmount, setFormAmount] = useState<number>(0);
+  const [formStatus, setFormStatus] = useState<Estimate["status"]>("Draft");
+  const [formSalesRep, setFormSalesRep] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+
+  const openAddModal = () => {
+    setFormCustomerName("");
+    setFormCompany("");
+    setFormAmount(0);
+    setFormStatus("Draft");
+    setFormSalesRep("Self");
+    setFormNotes("");
+    setIsAddModalOpen(true);
+  };
+
+  const handleAddEstimate = () => {
+    if (!formCustomerName.trim()) return;
+    const newEst: Estimate = {
+      id: "est_" + Math.random().toString(36).substring(2, 9),
+      number: "EST-2026-" + Math.floor(100 + Math.random() * 900),
+      customerName: formCustomerName.trim(),
+      company: formCompany.trim() || formCustomerName.trim() + " Inc",
+      status: formStatus,
+      salesRep: formSalesRep.trim() || "Self",
+      amount: Number(formAmount) || 0,
+      createdDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
+      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
+    };
+
+    if (setEstimates) {
+      setEstimates(prev => [newEst, ...prev]);
+    } else {
+      setLocalEstimates(prev => [newEst, ...prev]);
+    }
+    if (logOperationalEvent) {
+      logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
+    }
+    setIsAddModalOpen(false);
+  };
+
+  const openViewModal = (est: Estimate) => {
+    setSelectedEstimate(est);
+    setFormCustomerName(est.customerName);
+    setFormCompany(est.company || "");
+    setFormAmount(est.amount);
+    setFormStatus(est.status);
+    setFormSalesRep(est.salesRep);
+    setFormNotes("");
+    setIsEditMode(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedEstimate) return;
+    const updated = {
+      ...selectedEstimate,
+      customerName: formCustomerName.trim(),
+      company: formCompany.trim(),
+      amount: Number(formAmount) || 0,
+      status: formStatus,
+      salesRep: formSalesRep.trim()
+    };
+
+    if (setEstimates) {
+      setEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updated : e));
+    } else {
+      setLocalEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updated : e));
+    }
+    if (logOperationalEvent) {
+      logOperationalEvent("Estimate Updated", `${updated.number} saved`, "📝");
+    }
+    setSelectedEstimate(updated);
+    setIsEditMode(false);
+  };
+
+  const handleApproveEstimate = () => {
+    if (!selectedEstimate) return;
+
+    // Convert Estimate to a Scheduled Job!
+    const newJob = {
+      id: "job_" + Math.random().toString(36).substring(2, 9),
+      eventType: "Job",
+      date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
+      startTime: "09:00 AM",
+      endTime: "12:00 PM",
+      customer: selectedEstimate.customerName,
+      customerPhone: "(555) 123-4567",
+      customerEmail: "client@example.com",
+      customerAddress: "1024 Industrial Pkwy, Seattle WA", // Default Seallte bounds
+      assignedEmployee: "Theresa W.",
+      assignedCrew: "Crew Alpha",
+      location: "Seattle Area",
+      priority: "Medium",
+      notes: "Auto-generated from Approved Estimate " + selectedEstimate.number,
+      status: "Scheduled"
+    };
+
+    if (setSchedulingEvents) {
+      setSchedulingEvents(prev => [newJob, ...prev]);
+    }
+
+    // Set estimate status to Accepted
+    const updatedEst = { ...selectedEstimate, status: "Accepted" as const };
+    if (setEstimates) {
+      setEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
+    } else {
+      setLocalEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
+    }
+
+    if (logOperationalEvent) {
+      logOperationalEvent("Estimate Approved", `${selectedEstimate.number} converted to Scheduled Job`, "✅");
+    }
+
+    setSelectedEstimate(null);
+  };
+
+  const estimates = propsEstimates || localEstimates;
 
   // Filtered estimates list
   const filteredEstimates = useMemo(() => {
-    return INITIAL_ESTIMATES.filter((est) => {
+    return estimates.filter((est) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         q === "" ||
@@ -168,20 +220,20 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
 
       return matchesStatus;
     });
-  }, [searchQuery, activeStatusFilter]);
+  }, [estimates, searchQuery, activeStatusFilter]);
 
   // Metrics sums
   const metrics = useMemo(() => {
-    const totalEstimates = INITIAL_ESTIMATES.length;
-    const openEstimates = INITIAL_ESTIMATES.filter(
+    const totalEstimates = estimates.length;
+    const openEstimates = estimates.filter(
       (e) => e.status === "Draft" || e.status === "Pending" || e.status === "Sent" || e.status === "Viewed"
     ).length;
-    const pendingApproval = INITIAL_ESTIMATES.filter((e) => e.status === "Pending").length;
-    const accepted = INITIAL_ESTIMATES.filter((e) => e.status === "Accepted").length;
-    const declined = INITIAL_ESTIMATES.filter((e) => e.status === "Declined").length;
+    const pendingApproval = estimates.filter((e) => e.status === "Pending").length;
+    const accepted = estimates.filter((e) => e.status === "Accepted").length;
+    const declined = estimates.filter((e) => e.status === "Declined").length;
     
     // Revenue pending calculation
-    const revenuePending = INITIAL_ESTIMATES.filter(
+    const revenuePending = estimates.filter(
       (e) => e.status === "Pending" || e.status === "Sent" || e.status === "Viewed"
     ).reduce((sum, e) => sum + e.amount, 0);
 
@@ -193,7 +245,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
       declined,
       revenuePending
     };
-  }, []);
+  }, [estimates]);
 
   // Status lists for rendering filters
   const STATUS_FILTERS = [
@@ -242,7 +294,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => onOpenPlaceholder("Create New Estimate Form", "📝")}
+              onClick={openAddModal}
               className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -400,7 +452,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
                 Quotation Database Ledger
               </h3>
               <p className="text-[10px] text-[#5E7393] font-bold">
-                Filtered: {filteredEstimates.length} of {INITIAL_ESTIMATES.length} proposals
+                Filtered: {filteredEstimates.length} of {estimates.length} proposals
               </p>
             </div>
           </div>
@@ -418,7 +470,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
               All Statuses
             </button>
             {STATUS_FILTERS.map((f) => {
-              const count = INITIAL_ESTIMATES.filter((e) => e.status === f).length;
+              const count = estimates.filter((e) => e.status === f).length;
               return (
                 <button
                   key={f}
@@ -475,7 +527,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
                   return (
                     <tr
                       key={est.id}
-                      onClick={() => onOpenPlaceholder(`Estimate Details: ${est.number}`, "📝")}
+                      onClick={() => openViewModal(est)}
                       className="hover:bg-[#EAF5FF] transition-all cursor-pointer group bg-white"
                     >
                       <td className="py-3.5 px-4 font-mono font-black text-[#315C9F] group-hover:underline">
@@ -595,10 +647,15 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
                     </div>
                     <div>
                       <label className="text-[9px] uppercase tracking-wider text-[#5E7393] font-black block mb-1">Sales Rep</label>
-                      <select className="w-full text-xs bg-white border border-[#9EC8EF] rounded-xl px-2 py-2 font-semibold text-[#1F3557] focus:outline-none">
-                        <option>Sarah Connor</option>
-                        <option>Theresa W.</option>
-                        <option>Marcus Vance</option>
+                      <select 
+                        value={formSalesRep} 
+                        onChange={(e) => setFormSalesRep(e.target.value)}
+                        className="w-full text-xs bg-white border border-[#9EC8EF] rounded-xl px-2 py-2 font-semibold text-[#1F3557] focus:outline-none"
+                      >
+                        <option value={loggedInUser?.name || "Owner"}>{loggedInUser?.name || "Owner"}</option>
+                        {recentRoster && recentRoster.map((item, idx) => (
+                          <option key={idx} value={item.name}>{item.name}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -978,6 +1035,309 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Add Estimate Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">Create New Estimate</h3>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Client Name *</label>
+                  <input 
+                    type="text" 
+                    value={formCustomerName}
+                    onChange={e => setFormCustomerName(e.target.value)}
+                    placeholder="e.g. Wayne Enterprises"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company / Account Name</label>
+                  <input 
+                    type="text" 
+                    value={formCompany}
+                    onChange={e => setFormCompany(e.target.value)}
+                    placeholder="e.g. Apex Plumb & Drain"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount ($) *</label>
+                  <input 
+                    type="number" 
+                    value={formAmount || ""}
+                    onChange={e => setFormAmount(Number(e.target.value))}
+                    placeholder="e.g. 12500"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
+                  <select
+                    value={formStatus}
+                    onChange={e => setFormStatus(e.target.value as any)}
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Sent">Sent</option>
+                    <option value="Viewed">Viewed</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Declined">Declined</option>
+                    <option value="Expired">Expired</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Assigned Sales Representative</label>
+                <input 
+                  type="text" 
+                  value={formSalesRep}
+                  onChange={e => setFormSalesRep(e.target.value)}
+                  placeholder="e.g. Marcus Vance"
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Scope of Work Notes</label>
+                <textarea 
+                  value={formNotes}
+                  onChange={e => setFormNotes(e.target.value)}
+                  placeholder="Enter detailed description of proposed services, pricing terms, materials, exclusions..."
+                  rows={4}
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557] resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!formCustomerName.trim()}
+                onClick={handleAddEstimate}
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                }`}
+              >
+                Save Estimate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View / Edit Estimate Modal with Auto-Job Conversion */}
+      {selectedEstimate && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">
+                  {isEditMode ? "Edit Quotation Form" : `Estimate details: ${selectedEstimate.number}`}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setSelectedEstimate(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4">
+              {isEditMode ? (
+                // Edit fields
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Client Name *</label>
+                      <input 
+                        type="text" 
+                        value={formCustomerName}
+                        onChange={e => setFormCustomerName(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company / Account Name</label>
+                      <input 
+                        type="text" 
+                        value={formCompany}
+                        onChange={e => setFormCompany(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount ($) *</label>
+                      <input 
+                        type="number" 
+                        value={formAmount}
+                        onChange={e => setFormAmount(Number(e.target.value))}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quotation Status</label>
+                      <select
+                        value={formStatus}
+                        onChange={e => setFormStatus(e.target.value as any)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                      >
+                        <option value="Draft">Draft</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Sent">Sent</option>
+                        <option value="Viewed">Viewed</option>
+                        <option value="Accepted">Accepted</option>
+                        <option value="Declined">Declined</option>
+                        <option value="Expired">Expired</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Assigned Sales Representative</label>
+                    <input 
+                      type="text" 
+                      value={formSalesRep}
+                      onChange={e => setFormSalesRep(e.target.value)}
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                // Detailed view mode
+                <div className="space-y-4">
+                  <div className="bg-[#EAF5FF] p-4.5 rounded-2xl border border-[#9EC8EF]/60 space-y-3.5">
+                    <div className="flex justify-between items-start border-b border-[#9EC8EF]/40 pb-2.5">
+                      <div>
+                        <h4 className="text-sm font-bold text-[#1F3557]">{selectedEstimate.customerName}</h4>
+                        <p className="text-xs text-[#5E7393] font-semibold">{selectedEstimate.company || "No Company"}</p>
+                      </div>
+                      <span className="px-2.5 py-0.5 bg-[#315C9F] text-white font-extrabold uppercase text-[9px] rounded-lg border border-[#9EC8EF]/40">
+                        {selectedEstimate.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Estimate ID</p>
+                        <p className="font-mono text-[#1F3557] font-bold mt-0.5">{selectedEstimate.number}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount</p>
+                        <p className="text-[#315C9F] font-extrabold font-mono mt-0.5 text-blue-600">
+                          ${selectedEstimate.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Created Date</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedEstimate.createdDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Expiration Date</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedEstimate.expirationDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Representative</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedEstimate.salesRep}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-[#5E7393]">Scope notes / exclusions</p>
+                    <p className="text-xs bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl font-medium text-[#1F3557] min-h-[60px]">
+                      {formNotes || "No scope notes compiled for this proposal. Default labor and material warranty applies."}
+                    </p>
+                  </div>
+
+                  {/* Operational approve & convert workflow! */}
+                  {selectedEstimate.status !== "Accepted" && selectedEstimate.status !== "Completed" && (
+                    <div className="pt-3 border-t border-[#9EC8EF]/40">
+                      <p className="text-[10px] uppercase font-bold text-[#5E7393] mb-2">Back-Office OS Integration</p>
+                      <button
+                        onClick={handleApproveEstimate}
+                        className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 border border-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Approve & Convert to Scheduled Job
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between shrink-0">
+              <div>
+                {!isEditMode && (
+                  <button
+                    onClick={() => setIsEditMode(true)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Edit Proposal
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedEstimate(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                {isEditMode && (
+                  <button
+                    type="button"
+                    disabled={!formCustomerName.trim()}
+                    onClick={handleSaveEdit}
+                    className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                      formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Save Changes
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

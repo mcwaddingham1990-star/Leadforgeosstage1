@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Pacifico&family=Caveat:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -17,6 +17,7 @@
 .workspace-theme {
   background-color: #EAF5FF !important;
   color: #1F3557 !important;
+  color-scheme: light !important;
 }
 
 /* 2. All Primary Content Cards, Sub-Cards, and Containers forced to match exact user specifications (#EAF5FF) */
@@ -91,11 +92,48 @@
 /* 4. Inputs, Textareas, Selects (EAF5FF Background, 1F3557 Text, 9EC8EF Border) */
 .workspace-theme input,
 .workspace-theme select,
-.workspace-theme textarea,
-.workspace-theme select option {
+.workspace-theme textarea {
   background-color: #EAF5FF !important;
   color: #1F3557 !important;
   border-color: #9EC8EF !important;
+}
+
+.workspace-theme select option,
+select,
+option,
+select option {
+  background-color: #ffffff !important;
+  color: #1F3557 !important;
+  color-scheme: light !important;
+}
+
+/* Custom Dropdown popovers and options styled to stay bright white and legible */
+.custom-dropdown-popover {
+  background-color: #ffffff !important;
+  color: #1F3557 !important;
+  color-scheme: light !important;
+}
+
+.custom-dropdown-item {
+  background-color: #ffffff !important;
+  color: #1F3557 !important;
+}
+
+.custom-dropdown-item:hover {
+  background-color: #EAF5FF !important;
+  color: #4A86F7 !important;
+}
+
+.custom-dropdown-item-active {
+  background-color: #EAF5FF !important;
+  color: #4A86F7 !important;
+}
+
+/* Force light color scheme on date inputs and browser select dropdown lists */
+.workspace-theme select,
+.workspace-theme option,
+.workspace-theme input[type="date"] {
+  color-scheme: light !important;
 }
 
 .workspace-theme input::placeholder,

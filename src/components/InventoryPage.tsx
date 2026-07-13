@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import * as XLSX from "xlsx";
 import {
   Search,
   Plus,
@@ -92,188 +93,13 @@ export interface InventoryPageProps {
   logOperationalEvent?: (type: string, desc: string, icon: string) => void;
   events?: SchedulingEvent[];
   setEvents?: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
+  inventoryList?: InventoryItem[];
+  setInventoryList?: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
 }
 
-const INITIAL_PURCHASES: PurchaseRecord[] = [
-  { id: "P-101", vendor: "Home Depot Pro", receiptNumber: "HD-883921", date: "2026-07-05", employee: "Marcus Vance", itemsPurchased: "2x4 studs (50), Concrete Mix (20)", totalCost: 450 },
-  { id: "P-102", vendor: "Grainger Industrial", receiptNumber: "GR-774911", date: "2026-07-04", employee: "Theresa W.", itemsPurchased: "DeWalt Hammer Drill (2)", totalCost: 380 },
-  { id: "P-103", vendor: "Platt Electric", receiptNumber: "PE-221034", date: "2026-07-02", employee: "Pete Rogers", itemsPurchased: "14/2 Romex Wire (5)", totalCost: 750 }
-];
+const INITIAL_PURCHASES: PurchaseRecord[] = [];
 
-const INITIAL_INVENTORY: InventoryItem[] = [
-  {
-    id: "1",
-    name: "2x4 Stud Spruce-Pine-Fir",
-    category: "Lumber",
-    vendor: "Home Depot Pro",
-    manufacturer: "Weyerhaeuser",
-    sku: "SPF-248-KD",
-    barcode: "032054110022",
-    qrCode: "QR-SPF-248",
-    description: "Standard Spruce-Pine-Fir KD lumber stud for residential framing.",
-    quantity: 120,
-    unit: "pcs",
-    minQuantity: 40,
-    maxQuantity: 300,
-    location: "Warehouse A - Bay 2",
-    unitCost: 4.50,
-    sellingPrice: 7.25,
-    notes: "Store flat in dry location to prevent warping.",
-    photo: "🪵",
-    isFavorite: true,
-    assignedVehicle: "Truck 4 (Crew Alpha)",
-    assignedEmployee: "Theresa W.",
-    lastUpdated: "2026-07-06 10:30 AM",
-    customFields: [{ key: "Species", value: "SPF" }, { key: "Moisture", value: "KD 19%" }],
-    quantityHistory: [
-      { date: "2026-07-06", type: "Correction", amount: 120, previous: 110, current: 120, notes: "Cycle count verification" }
-    ],
-    purchaseHistory: [
-      { date: "2026-07-05", vendor: "Home Depot Pro", amount: 50, unitCost: 4.50, total: 225 }
-    ],
-    usageHistory: [
-      { date: "2026-07-06", jobName: "Base framing repair", amount: 12, employee: "Marcus Vance" }
-    ]
-  },
-  {
-    id: "2",
-    name: "DeWalt DCD771C2 Hammer Drill",
-    category: "Tools",
-    vendor: "Grainger Industrial",
-    manufacturer: "DeWALT",
-    sku: "DEW-DCD771",
-    barcode: "885911303120",
-    qrCode: "QR-DEW-771",
-    description: "20V MAX Lithium-Ion compact drill driver kit.",
-    quantity: 8,
-    unit: "pcs",
-    minQuantity: 3,
-    maxQuantity: 15,
-    location: "Warehouse B - Cabinet 1",
-    unitCost: 99.00,
-    sellingPrice: 159.00,
-    notes: "Check chargers before dispatching.",
-    photo: "🔌",
-    isFavorite: true,
-    assignedVehicle: "Warehouse",
-    assignedEmployee: "Pete Rogers",
-    lastUpdated: "2026-07-05 02:15 PM",
-    customFields: [{ key: "Voltage", value: "20V MAX" }],
-    quantityHistory: [],
-    purchaseHistory: [],
-    usageHistory: []
-  },
-  {
-    id: "3",
-    name: "Copper Pipe Type L 3/4in x 10ft",
-    category: "Plumbing",
-    vendor: "Home Depot Pro",
-    manufacturer: "Mueller Streamline",
-    sku: "COP-34-10",
-    barcode: "685711200155",
-    qrCode: "QR-COP-34",
-    description: "Hard temper copper water tube, NSF certified.",
-    quantity: 45,
-    unit: "ft",
-    minQuantity: 50,
-    maxQuantity: 200,
-    location: "Warehouse A - Rack 4",
-    unitCost: 23.50,
-    sellingPrice: 38.00,
-    notes: "Copper prices fluctuate; check weekly index.",
-    photo: "💧",
-    isFavorite: true,
-    assignedVehicle: "Truck 1",
-    assignedEmployee: "Sarah Jenkins",
-    lastUpdated: "2026-07-06 09:00 AM",
-    customFields: [{ key: "Wall Thickness", value: "Type L" }],
-    quantityHistory: [
-      { date: "2026-07-06", type: "Removal", amount: -15, previous: 60, current: 45, notes: "Checked out to Truck 1" }
-    ],
-    purchaseHistory: [],
-    usageHistory: []
-  },
-  {
-    id: "4",
-    name: "14/2 Romex NMB Wire 250ft",
-    category: "Electrical",
-    vendor: "Platt Electric",
-    manufacturer: "Southwire",
-    sku: "ROM-142-250",
-    barcode: "029892019488",
-    qrCode: "QR-ROM-142",
-    description: "Copper non-metallic sheathed cable for indoor residential branch wiring.",
-    quantity: 2,
-    unit: "boxes",
-    minQuantity: 5,
-    maxQuantity: 15,
-    location: "Warehouse A - Bay 1",
-    unitCost: 115.00,
-    sellingPrice: 165.00,
-    notes: "Critical safety item. Inspect outer jackets upon receipt.",
-    photo: "⚡",
-    isFavorite: false,
-    assignedVehicle: "Warehouse",
-    lastUpdated: "2026-07-04 11:45 AM",
-    quantityHistory: [],
-    purchaseHistory: [],
-    usageHistory: []
-  },
-  {
-    id: "5",
-    name: "Quikrete Concrete Mix 80lb",
-    category: "Concrete",
-    vendor: "Home Depot Pro",
-    manufacturer: "Quikrete",
-    sku: "QUIK-80-BAG",
-    barcode: "039645118025",
-    qrCode: "QR-QUIK-80",
-    description: "Original 4000 PSI high strength concrete mix for setting posts and building steps.",
-    quantity: 0,
-    unit: "bags",
-    minQuantity: 15,
-    maxQuantity: 100,
-    location: "Warehouse A - Pallet Row 1",
-    unitCost: 6.20,
-    sellingPrice: 11.50,
-    notes: "Must remain fully sealed on plastic wrap to prevent moisture activation.",
-    photo: "🧱",
-    isFavorite: true,
-    assignedVehicle: "Warehouse",
-    lastUpdated: "2026-07-06 12:00 PM",
-    quantityHistory: [
-      { date: "2026-07-06", type: "Removal", amount: -20, previous: 20, current: 0, notes: "Used on outdoor post setting" }
-    ],
-    purchaseHistory: [],
-    usageHistory: []
-  },
-  {
-    id: "6",
-    name: "Generac GP6500 CO Sense Generator",
-    category: "Equipment",
-    vendor: "Grainger Industrial",
-    manufacturer: "Generac",
-    sku: "GEN-GP6500",
-    barcode: "696471007682",
-    qrCode: "QR-GEN-6500",
-    description: "6500W Portable Generator with CO Sense security shutoff.",
-    quantity: 4,
-    unit: "pcs",
-    minQuantity: 2,
-    maxQuantity: 6,
-    location: "Warehouse B - Floor A",
-    unitCost: 899.00,
-    sellingPrice: 1199.00,
-    notes: "Requires regular oil and fuel testing.",
-    photo: "⚙️",
-    isFavorite: false,
-    assignedVehicle: "Truck 4 (Crew Alpha)",
-    lastUpdated: "2026-07-01 04:00 PM",
-    quantityHistory: [],
-    purchaseHistory: [],
-    usageHistory: []
-  }
-];
+export const INITIAL_INVENTORY: InventoryItem[] = [];
 
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
@@ -287,11 +113,26 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
   loggedInUser,
   logOperationalEvent,
   events,
-  setEvents
+  setEvents,
+  inventoryList: propsInventoryList,
+  setInventoryList: propsSetInventoryList
 }) => {
   // State variables
-  const [inventoryList, setInventoryList] = useState<InventoryItem[]>(INITIAL_INVENTORY);
+  const [localInventoryList, setLocalInventoryList] = useState<InventoryItem[]>(INITIAL_INVENTORY);
+  const inventoryList = propsInventoryList || localInventoryList;
+  const setInventoryList = propsSetInventoryList || setLocalInventoryList;
+
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(INITIAL_PURCHASES);
+
+  useEffect(() => {
+    if (loggedInUser && loggedInUser.email !== "operations@ironcladservices.com") {
+      setInventoryList([]);
+      setPurchases([]);
+    } else {
+      setInventoryList(propsInventoryList || INITIAL_INVENTORY);
+      setPurchases(INITIAL_PURCHASES);
+    }
+  }, [loggedInUser, propsInventoryList]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeTabFilter, setActiveTabFilter] = useState<string>("all"); // "all", "low_stock", "out_of_stock", "favorites", "recently_added"
@@ -304,6 +145,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [isDetailsPopupOpen, setIsDetailsPopupOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<InventoryItem | null>(null);
+  const [reorderModalOpen, setReorderModalOpen] = useState(false);
+  const [reorderCandidates, setReorderCandidates] = useState<InventoryItem[]>([]);
 
   // Snapshot AI Simulator Modal
   const [isSnapshotAIModalOpen, setIsSnapshotAIModalOpen] = useState(false);
@@ -447,7 +291,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
 
   // Actions
   const handleRefresh = () => {
-    triggerToast("Inventory telemetry cache re-indexed with active cloud nodes!");
+    triggerToast("Inventory cache successfully updated!");
   };
 
   const handleExport = () => {
@@ -617,12 +461,18 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
       triggerToast("Access Denied: Technicians cannot delete inventory.");
       return;
     }
-    const itemToDelete = inventoryList.find(item => item.id === id);
-    if (itemToDelete && window.confirm(`Permanently remove ${itemToDelete.name}?`)) {
-      setInventoryList(prev => prev.filter(item => item.id !== id));
-      triggerToast(`Purged ${itemToDelete.name} from catalog!`);
-      setIsDetailsPopupOpen(false);
+    const item = inventoryList.find(e => e.id === id);
+    if (item) {
+      setDeletingItem(item);
     }
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingItem) return;
+    setInventoryList(prev => prev.filter(item => item.id !== deletingItem.id));
+    triggerToast(`Purged ${deletingItem.name} from catalog!`);
+    setIsDetailsPopupOpen(false);
+    setDeletingItem(null);
   };
 
   const addCustomField = () => {
@@ -752,6 +602,15 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
     setScanInputCode("");
   };
 
+  const localCameraInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleLocalCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      runCameraAI();
+    }
+  };
+
   // AI Camera Mock
   const runCameraAI = () => {
     setSnapshotStage("processing");
@@ -805,6 +664,35 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
     }
 
     let matchId = "";
+    let updatedList = [...inventoryList];
+    const newItemId = `ai_${Date.now()}`;
+
+    const newItem: InventoryItem = {
+      id: newItemId,
+      name: aiSuggestions.name,
+      category: aiSuggestions.category,
+      vendor: aiSuggestions.vendor,
+      manufacturer: aiSuggestions.manufacturer,
+      sku: aiSuggestions.sku,
+      barcode: aiSuggestions.barcode,
+      qrCode: aiSuggestions.qrCode,
+      description: "Auto generated from scanned receipt",
+      quantity: aiSuggestions.quantity,
+      unit: aiSuggestions.unit,
+      minQuantity: 5,
+      maxQuantity: 100,
+      location: "Warehouse A",
+      unitCost: aiSuggestions.cost,
+      sellingPrice: aiSuggestions.cost * 1.5,
+      notes: "Created via Snapshot AI Camera OCR",
+      photo: "🪵",
+      isFavorite: false,
+      lastUpdated: new Date().toLocaleTimeString(),
+      quantityHistory: [{ date: "2026-07-06", type: "AI Scanned New", amount: aiSuggestions.quantity, previous: 0, current: aiSuggestions.quantity, notes: "Created new catalog entry" }],
+      purchaseHistory: [],
+      usageHistory: []
+    };
+
     if (userMappingSPF === "match" || !aiSuggestions.isUnrecognized) {
       // match with existing lumber SPF
       const match = inventoryList.find(e => e.sku === "SPF-248-KD");
@@ -818,37 +706,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
             ...match.quantityHistory
           ]
         };
-        setInventoryList(prev => prev.map(e => e.id === match.id ? updated : e));
-        triggerToast(`Receipt processed! Added ${aiSuggestions.quantity} units to standard Spruce stud stock.`);
+        updatedList = inventoryList.map(e => e.id === match.id ? updated : e);
+        setInventoryList(updatedList);
       }
     } else if (userMappingSPF === "new") {
-      const newItem: InventoryItem = {
-        id: `ai_${Date.now()}`,
-        name: aiSuggestions.name,
-        category: aiSuggestions.category,
-        vendor: aiSuggestions.vendor,
-        manufacturer: aiSuggestions.manufacturer,
-        sku: aiSuggestions.sku,
-        barcode: aiSuggestions.barcode,
-        qrCode: aiSuggestions.qrCode,
-        description: "Auto generated from scanned receipt",
-        quantity: aiSuggestions.quantity,
-        unit: aiSuggestions.unit,
-        minQuantity: 5,
-        maxQuantity: 100,
-        location: "Warehouse A",
-        unitCost: aiSuggestions.cost,
-        sellingPrice: aiSuggestions.cost * 1.5,
-        notes: "Created via Snapshot AI Camera OCR",
-        photo: "🪵",
-        isFavorite: false,
-        lastUpdated: new Date().toLocaleTimeString(),
-        quantityHistory: [{ date: "2026-07-06", type: "AI Scanned New", amount: aiSuggestions.quantity, previous: 0, current: aiSuggestions.quantity, notes: "Created new catalog entry" }],
-        purchaseHistory: [],
-        usageHistory: []
-      };
-      setInventoryList(prev => [...prev, newItem]);
-      triggerToast(`Receipt processed! Created brand new catalog listing for SPF 2x4x8 KD.`);
+      updatedList = [...inventoryList, newItem];
+      setInventoryList(updatedList);
     }
 
     // Add to local purchases
@@ -867,6 +730,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
     setSnapshotStage("camera");
     setAiSuggestions(null);
     setUserMappingSPF(null);
+
+    // Calculate new stats
+    const newTotalQty = updatedList.reduce((acc, item) => acc + item.quantity, 0);
+    const newLedgerVal = updatedList.reduce((acc, item) => acc + (item.quantity * item.unitCost), 0);
+
+    triggerToast(`Inventory updated successfully. New total stock: ${newTotalQty} units, Ledger value: $${newLedgerVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
   };
 
   // Generate a automatic Purchase order list from low stock items
@@ -876,9 +745,38 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
       triggerToast("No stock items are currently below minimum levels!");
       return;
     }
-    const reportText = lowStock.map(e => `• ${e.name} (${e.sku}): Qty ${e.quantity} (Min ${e.minQuantity}) - Order +${e.maxQuantity - e.quantity} units from ${e.vendor}`).join("\n");
-    alert(`AUTOMATIC PURCHASE LIST GENERATED:\n\n${reportText}\n\nList dispatched to procurement department!`);
-    triggerToast("Procurement PO list queued for approval!");
+    setReorderCandidates(lowStock);
+    setReorderModalOpen(true);
+  };
+
+  const handleReplenishStock = () => {
+    if (reorderCandidates.length === 0) return;
+    setInventoryList(prev => prev.map(item => {
+      const match = reorderCandidates.find(rc => rc.id === item.id);
+      if (match) {
+        const reorderAmount = match.maxQuantity - match.quantity;
+        return {
+          ...item,
+          quantity: match.maxQuantity,
+          quantityHistory: [
+            {
+              date: new Date().toISOString().slice(0, 10),
+              type: "Purchase" as const,
+              amount: reorderAmount,
+              previous: match.quantity,
+              current: match.maxQuantity,
+              notes: `Auto-replenishment order from ${match.vendor}`
+            },
+            ...(item.quantityHistory || [])
+          ]
+        };
+      }
+      return item;
+    }));
+
+    triggerToast(`🎉 Successfully reordered and replenished ${reorderCandidates.length} low-stock items!`);
+    setReorderModalOpen(false);
+    setReorderCandidates([]);
   };
 
   return (
@@ -1270,12 +1168,13 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                     <th className="py-3 px-3 text-right">Value</th>
                     <th className="py-3 px-3">Storage Pin</th>
                     <th className="py-3 px-3 text-center">Status</th>
+                    <th className="py-3 px-3 text-center w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredInventory.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-12 text-center text-slate-400 font-semibold uppercase tracking-wider">
+                      <td colSpan={13} className="py-12 text-center text-slate-400 font-semibold uppercase tracking-wider">
                         No matches found in active inventory nodes. Try adjusting query or filters.
                       </td>
                     </tr>
@@ -1316,12 +1215,36 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
                               isOut 
                                 ? "bg-rose-100 text-rose-700 border border-rose-300"
-                                : isLow
+                               : isLow
                                 ? "bg-amber-100 text-amber-700 border border-amber-300"
                                 : "bg-emerald-100 text-emerald-700 border border-emerald-300"
                             }`}>
                               {isOut ? "Out" : isLow ? "Low" : "In Stock"}
                             </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditClick(item);
+                                }}
+                                className="p-1 bg-white hover:bg-blue-100 border border-[#A9CDEE] rounded-lg text-[#315C9F] transition-colors cursor-pointer"
+                                title="Edit Item"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteItem(item.id);
+                                }}
+                                className="p-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-rose-600 transition-colors cursor-pointer"
+                                title="Delete Item"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1769,7 +1692,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                 <div className="bg-[#F5FAFF] p-4 rounded-2xl border border-[#A9CDEE]/40 space-y-3">
                   <h4 className="text-[10px] uppercase font-bold text-[#342D7E] tracking-wider flex items-center justify-between">
                     <span>Audit Trail & Quantity History</span>
-                    <span className="text-[9px] font-mono text-slate-400">Telemetry Log</span>
+                    <span className="text-[9px] font-mono text-slate-400 font-bold">Activity Log</span>
                   </h4>
                   <div className="space-y-2 max-h-[160px] overflow-y-auto">
                     {selectedItem.quantityHistory.length === 0 ? (
@@ -1995,7 +1918,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
 
               <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[10.5px] font-sans font-medium text-slate-600 flex items-start gap-1.5">
                 <Info className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>Every manual telemetry adjustment triggers a real-time event log in the connected company ledger for tracking purposes.</span>
+                <span>Every manual inventory adjustment triggers an activity log for tracking purposes.</span>
               </div>
 
               <div className="flex gap-2 justify-end border-t border-[#A9CDEE]/40 pt-3">
@@ -2029,7 +1952,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                 <Camera className="w-5 h-5 text-indigo-500 animate-pulse" /> LeadForge Snapshot AI Camera
               </h3>
               <button 
-                onClick={() => { setIsSnapshotAIModalOpen(false); setSnapshotStage("camera"); }}
+                onClick={() => { 
+                  setIsSnapshotAIModalOpen(false); 
+                  setSnapshotStage("camera"); 
+                  triggerToast("Inventory update canceled.");
+                }}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -2038,6 +1965,16 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
 
             {snapshotStage === "camera" && (
               <div className="space-y-4">
+                <input
+                  type="file"
+                  ref={localCameraInputRef}
+                  onChange={handleLocalCameraCapture}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  style={{ display: "none" }}
+                />
+
                 <div className="bg-slate-950 aspect-video rounded-2xl relative overflow-hidden flex items-center justify-center border-2 border-dashed border-[#A9CDEE]">
                   {/* Camera view simulation */}
                   <div className="absolute inset-x-0 h-0.5 bg-indigo-500/80 shadow-[0_0_8px_rgba(99,102,241,1)] animate-bounce" style={{ animationDuration: "3s" }} />
@@ -2048,27 +1985,45 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                   <div className="text-center p-6 text-slate-500 space-y-1.5 z-10">
                     <Camera className="w-10 h-10 mx-auto text-slate-600" />
                     <p className="text-xs font-bold font-sans text-slate-400">Position receipt, delivery pallet, shelf labels inside screen frame</p>
-                    <p className="text-[10px] font-mono text-slate-600">Active telemetry geofence coordinates checked dynamically</p>
+                    <p className="text-[10px] font-mono text-slate-600">Inventory status checked and updated dynamically</p>
                   </div>
                 </div>
 
-                <div className="space-y-2 text-xs font-semibold text-slate-700">
-                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Select Simulated Physical Target</label>
-                  <select
-                    value={selectedSnapshotType}
-                    onChange={(e) => setSelectedSnapshotType(e.target.value)}
-                    className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl cursor-pointer"
-                  >
-                    <option value="SPF 2x4x8 KD Receipt">🧾 Store Receipt (Weyerhaeuser SPF 2x4x8 KD Studs)</option>
-                    <option value="Copper Pipe Delivery Receipt">🧾 Inbound Bill of Lading (3/4in x 10ft Copper Tube)</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-2 text-xs font-semibold text-slate-700">
+                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Select Simulated Target</label>
+                    <select
+                      value={selectedSnapshotType}
+                      onChange={(e) => setSelectedSnapshotType(e.target.value)}
+                      className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl cursor-pointer font-bold"
+                    >
+                      <option value="SPF 2x4x8 KD Receipt">🧾 Store Receipt (Weyerhaeuser SPF 2x4x8 KD Studs)</option>
+                      <option value="Copper Pipe Delivery Receipt">🧾 Inbound Bill of Lading (3/4in x 10ft Copper Tube)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (localCameraInputRef.current) {
+                          localCameraInputRef.current.click();
+                        } else {
+                          runCameraAI();
+                        }
+                      }}
+                      className="w-full py-2.5 bg-[#342D7E] hover:bg-indigo-950 text-white font-black text-[10.5px] uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4 text-emerald-400 animate-pulse" /> Launch Phone Camera
+                    </button>
+                  </div>
                 </div>
 
                 <button
                   onClick={runCameraAI}
                   className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all hover:opacity-90"
                 >
-                  Capture Live Telemetry & Process with AI
+                  Process with LeadForge Snapshot AI
                 </button>
               </div>
             )}
@@ -2077,7 +2032,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
               <div className="py-12 text-center space-y-4">
                 <div className="w-12 h-12 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin mx-auto" />
                 <div className="space-y-1">
-                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Parsing Optical Telemetry Nodes</h4>
+                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Processing Scanned Items</h4>
                   <p className="text-[10.5px] text-slate-500 max-w-xs mx-auto leading-relaxed font-sans font-medium">
                     OCR engines are reading scanned receipts and matching vendor SKU abbreviations directly to company master inventory index...
                   </p>
@@ -2128,8 +2083,20 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
 
                 <div className="flex gap-2 justify-end pt-2">
                   <button
-                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); }}
+                    onClick={() => { 
+                      setIsSnapshotAIModalOpen(false); 
+                      setSnapshotStage("camera"); 
+                      setAiSuggestions(null); 
+                      setUserMappingSPF(null);
+                      triggerToast("Inventory update canceled.");
+                    }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); }}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold"
                   >
                     Retake Photo
                   </button>
@@ -2205,6 +2172,18 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
                 </div>
 
                 <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => { 
+                      setIsSnapshotAIModalOpen(false); 
+                      setSnapshotStage("camera"); 
+                      setAiSuggestions(null); 
+                      setUserMappingSPF(null);
+                      triggerToast("Inventory update canceled.");
+                    }}
+                    className="px-4 py-2 bg-slate-100 text-rose-600 rounded-lg font-bold"
+                  >
+                    Cancel
+                  </button>
                   <button
                     onClick={() => { setSnapshotStage("review"); setUserMappingSPF(null); }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg"
@@ -2325,33 +2304,192 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({
 
             <div className="space-y-3 text-xs font-semibold text-slate-700">
               <p className="text-[11px] text-slate-500 font-sans font-medium">
-                Paste comma-separated CSV rows directly. Use columns: <code className="bg-white px-1.5 py-0.5 border rounded">Name,Category,Vendor,SKU,Barcode,Quantity,Unit,Location,UnitCost,SellingPrice</code>
+                Upload a CSV spreadsheet file, or paste comma-separated rows directly below.
               </p>
+
+              <div className="bg-white p-3 rounded-xl border border-[#A9CDEE] space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400 block">Select CSV or Excel (.xlsx, .xls) File</label>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,.txt"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const fileExt = file.name.split('.').pop()?.toLowerCase();
+                      if (fileExt === 'xlsx' || fileExt === 'xls') {
+                        const fileReader = new FileReader();
+                        fileReader.onload = (event) => {
+                          try {
+                            const data = new Uint8Array(event.target?.result as ArrayBuffer);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            const csv = XLSX.utils.sheet_to_csv(worksheet);
+                            setImportText(csv);
+                            triggerToast(`📂 Excel sheet loaded: ${file.name}`);
+                          } catch (err) {
+                            triggerToast("⚠️ Failed to parse Excel spreadsheet file.");
+                          }
+                        };
+                        fileReader.readAsArrayBuffer(file);
+                      } else {
+                        const fileReader = new FileReader();
+                        fileReader.onload = (event) => {
+                          const text = event.target?.result as string;
+                          setImportText(text);
+                          triggerToast(`📂 CSV file loaded: ${file.name}`);
+                        };
+                        fileReader.readAsText(file);
+                      }
+                    }
+                  }}
+                  className="w-full text-xs text-slate-600 cursor-pointer focus:outline-none"
+                />
+              </div>
 
               <textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
                 placeholder="Name,Category,Vendor,SKU,Barcode,Quantity,Unit,Location,UnitCost,SellingPrice&#10;OSB Framing Sheet,Lumber,Home Depot,OSB-12-8,03992110292,80,pcs,Warehouse B,21.50,34.00"
-                rows={6}
+                rows={4}
                 className="w-full p-2.5 bg-white border border-[#A9CDEE] rounded-xl font-mono text-xs focus:outline-none"
               />
 
               <div className="flex gap-2 justify-end pt-2 border-t border-[#A9CDEE]/30">
                 <button
                   onClick={() => { setIsImportModalOpen(false); setImportText(""); }}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg"
+                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleImport}
-                  className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-lg"
+                  className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-lg cursor-pointer"
                 >
                   Import Rows Now
                 </button>
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingItem && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-3xl w-full max-w-md shadow-2xl p-6 text-left space-y-4">
+            <div className="flex justify-between items-center border-b border-[#A9CDEE]/40 pb-2">
+              <h3 className="text-xs font-sans font-extrabold text-rose-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Trash2 className="w-5 h-5 text-rose-500" /> Remove Catalog Item
+              </h3>
+              <button 
+                onClick={() => setDeletingItem(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="text-xs font-semibold text-slate-700 space-y-2">
+              <p className="text-sm text-slate-800">
+                Are you sure you want to permanently delete <span className="font-extrabold text-rose-600">{deletingItem.name}</span> from the inventory catalog?
+              </p>
+              <p className="text-[11px] text-slate-500">
+                SKU: {deletingItem.sku} | Location: {deletingItem.location}
+              </p>
+              <p className="text-[10px] text-amber-600 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                ⚠️ Warning: This action cannot be undone. All transaction and usage logs for this item will be removed.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 justify-end pt-2 border-t border-[#A9CDEE]/30">
+              <button
+                onClick={() => setDeletingItem(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
+              >
+                Permanently Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REORDER LOW STOCK MODAL */}
+      {reorderModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-3xl w-full max-w-xl shadow-2xl p-6 text-left space-y-4">
+            <div className="flex justify-between items-center border-b border-[#A9CDEE]/40 pb-2">
+              <h3 className="text-sm font-sans font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
+                <ShoppingCart className="w-5 h-5 text-amber-500 animate-bounce" /> Auto-Generate Purchase Reorder
+              </h3>
+              <button 
+                onClick={() => setReorderModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs font-semibold text-slate-700 space-y-3">
+              <p className="text-xs text-slate-600 font-medium">
+                The following {reorderCandidates.length} stock nodes have fallen below minimum safety threshold levels. We have calculated optimal replenishment quantities to bring them up to maximum capacities:
+              </p>
+
+              <div className="max-h-[220px] overflow-y-auto border border-[#A9CDEE] rounded-2xl bg-white divide-y divide-slate-100">
+                {reorderCandidates.map(e => {
+                  const reorderQty = e.maxQuantity - e.quantity;
+                  const totalCost = reorderQty * e.unitCost;
+                  return (
+                    <div key={e.id} className="p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                      <div>
+                        <span className="text-lg mr-2 select-none">{e.photo}</span>
+                        <span className="font-extrabold text-slate-800 text-xs">{e.name}</span>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          SKU: {e.sku} | Vendor: {e.vendor}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-xs font-black text-[#342D7E]">
+                          +{reorderQty} {e.unit}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Est. Cost: ${totalCost.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex justify-between items-center">
+                <span className="text-[11px] text-blue-700 font-extrabold uppercase tracking-wider">Total Proposed Purchase Order:</span>
+                <span className="font-mono text-xs font-black text-blue-900">
+                  ${reorderCandidates.reduce((acc, e) => acc + ((e.maxQuantity - e.quantity) * e.unitCost), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 justify-end pt-2 border-t border-[#A9CDEE]/30">
+              <button
+                onClick={() => setReorderModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                Cancel PO
+              </button>
+              <button
+                onClick={handleReplenishStock}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors shadow-md flex items-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" /> Approve & Replenish Stock Now
+              </button>
+            </div>
           </div>
         </div>
       )}

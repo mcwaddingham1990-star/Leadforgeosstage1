@@ -28,7 +28,9 @@ import {
   Instagram,
   User,
   AlertCircle,
-  Camera
+  Camera,
+  X,
+  Minus
 } from "lucide-react";
 
 export interface Lead {
@@ -60,6 +62,8 @@ export interface Lead {
   estimatedValue: number;
   dateAdded: string;
   addedDaysAgo: number;
+  address?: string;
+  notes?: string;
 }
 
 interface LeadsPageProps {
@@ -67,154 +71,226 @@ interface LeadsPageProps {
   onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
   onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
   onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
+  leads?: Lead[];
+  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
 }
 
 // 10 high-quality realistic LeadForge leads
-const INITIAL_LEADS: Lead[] = [
-  {
-    id: "lead_1",
-    name: "John Connor",
-    company: "Connor Resistance Gear",
-    phone: "(555) 111-2222",
-    email: "john@resistance.com",
-    source: "Website",
-    salesRep: "Marcus Vance",
-    status: "New",
-    estimatedValue: 4500,
-    dateAdded: "July 5, 2026",
-    addedDaysAgo: 0
-  },
-  {
-    id: "lead_2",
-    name: "Bruce Wayne",
-    company: "Wayne Enterprises",
-    phone: "(555) 999-8888",
-    email: "bruce@waynecorp.com",
-    source: "Referral",
-    salesRep: "Theresa W.",
-    status: "Qualified",
-    estimatedValue: 35000,
-    dateAdded: "July 3, 2026",
-    addedDaysAgo: 2
-  },
-  {
-    id: "lead_3",
-    name: "Clark Kent",
-    company: "Daily Planet",
-    phone: "(555) 333-4444",
-    email: "ckent@dailyplanet.com",
-    source: "Google Business Profile",
-    salesRep: "Albert F.",
-    status: "Contacted",
-    estimatedValue: 1200,
-    dateAdded: "July 4, 2026",
-    addedDaysAgo: 1
-  },
-  {
-    id: "lead_4",
-    name: "Diana Prince",
-    company: "Themyscira Antiques",
-    phone: "(555) 777-6666",
-    email: "diana@themyscira.museum",
-    source: "Instagram",
-    salesRep: "Esther H.",
-    status: "Estimate Sent",
-    estimatedValue: 8900,
-    dateAdded: "June 30, 2026",
-    addedDaysAgo: 5
-  },
-  {
-    id: "lead_5",
-    name: "Tony Stark",
-    company: "Stark Industries",
-    phone: "(555) 300-4000",
-    email: "tony@stark.com",
-    source: "Phone Call",
-    salesRep: "Marcus Vance",
-    status: "Won",
-    estimatedValue: 50000,
-    dateAdded: "June 25, 2026",
-    addedDaysAgo: 10
-  },
-  {
-    id: "lead_6",
-    name: "Peter Parker",
-    company: "Daily Bugle",
-    phone: "(555) 123-4321",
-    email: "pparker@bugle.com",
-    source: "Facebook",
-    salesRep: "James W.",
-    status: "Follow-Up Needed",
-    estimatedValue: 650,
-    dateAdded: "July 1, 2026",
-    addedDaysAgo: 4
-  },
-  {
-    id: "lead_7",
-    name: "Arthur Curry",
-    company: "Atlantis Seafood",
-    phone: "(555) 444-5555",
-    email: "acurry@atlantis.org",
-    source: "Walk-In",
-    salesRep: "Brandon M.",
-    status: "Lost",
-    estimatedValue: 15000,
-    dateAdded: "June 20, 2026",
-    addedDaysAgo: 15
-  },
-  {
-    id: "lead_8",
-    name: "Barry Allen",
-    company: "CCPD Lab",
-    phone: "(555) 888-9999",
-    email: "ballen@ccpd.gov",
-    source: "Manual Entry",
-    salesRep: "Theresa W.",
-    status: "Contacted",
-    estimatedValue: 2400,
-    dateAdded: "July 2, 2026",
-    addedDaysAgo: 3
-  },
-  {
-    id: "lead_9",
-    name: "Hal Jordan",
-    company: "Ferris Aircraft",
-    phone: "(555) 555-6666",
-    email: "hjordan@ferris.com",
-    source: "Other",
-    salesRep: "Albert F.",
-    status: "Archived",
-    estimatedValue: 3100,
-    dateAdded: "June 15, 2026",
-    addedDaysAgo: 20
-  },
-  {
-    id: "lead_10",
-    name: "Wanda Maximoff",
-    company: "Westview Realty",
-    phone: "(555) 666-7777",
-    email: "wanda@westview.org",
-    source: "Website",
-    salesRep: "Esther H.",
-    status: "New",
-    estimatedValue: 12500,
-    dateAdded: "July 5, 2026",
-    addedDaysAgo: 0
-  }
-];
+export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC<LeadsPageProps> = ({
   onOpenPlaceholder,
   onTakeSnapshot,
   onOpenAIAnalysis,
-  onNavigateToScreen
+  onNavigateToScreen,
+  leads: propsLeads,
+  setLeads,
+  customers,
+  setCustomers,
+  estimates,
+  setEstimates
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [activeSourceFilter, setActiveSourceFilter] = useState<string>("All");
+  const [localLeads, setLocalLeads] = useState<Lead[]>(INITIAL_LEADS);
 
-  // In-memory Leads list
-  const leads = useMemo(() => INITIAL_LEADS, []);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Form states
+  const [formName, setFormName] = useState("");
+  const [formCompany, setFormCompany] = useState("");
+  const [formPhones, setFormPhones] = useState<string[]>([""]);
+  const [formEmail, setFormEmail] = useState("");
+  const [formAddress, setFormAddress] = useState("");
+  const [formCityState, setFormCityState] = useState("");
+  const [formZip, setFormZip] = useState("");
+  const [formSource, setFormSource] = useState<Lead["source"]>("Manual Entry");
+  const [formStatus, setFormStatus] = useState<Lead["status"]>("New");
+  const [formEstimatedValue, setFormEstimatedValue] = useState<number>(0);
+  const [formNotes, setFormNotes] = useState("");
+
+  const openAddModal = () => {
+    setFormName("");
+    setFormCompany("");
+    setFormPhones([""]);
+    setFormEmail("");
+    setFormAddress("");
+    setFormCityState("");
+    setFormZip("");
+    setFormSource("Manual Entry");
+    setFormStatus("New");
+    setFormEstimatedValue(0);
+    setFormNotes("");
+    setIsAddModalOpen(true);
+  };
+
+  const handleAddLead = () => {
+    if (!formName.trim()) return;
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
+    
+    const newLead: Lead = {
+      id: "lead_" + Math.random().toString(36).substring(2, 9),
+      name: formName.trim(),
+      company: formCompany.trim(),
+      phone: phoneStr,
+      email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, "")}@example.com`,
+      source: formSource,
+      salesRep: "Self",
+      status: formStatus,
+      estimatedValue: Number(formEstimatedValue) || 0,
+      dateAdded: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+      addedDaysAgo: 0,
+      address: combinedAddress,
+      notes: formNotes.trim()
+    };
+
+    if (setLeads) {
+      setLeads(prev => [newLead, ...prev]);
+    } else {
+      setLocalLeads(prev => [newLead, ...prev]);
+    }
+    setIsAddModalOpen(false);
+  };
+
+  const openViewModal = (ld: Lead) => {
+    setSelectedLead(ld);
+    setFormName(ld.name);
+    setFormCompany(ld.company || "");
+    
+    // Parse phone list
+    const phones = (ld.phone || "").split(",").map(p => p.trim()).filter(Boolean);
+    setFormPhones(phones.length > 0 ? phones : [""]);
+    
+    setFormEmail(ld.email);
+    
+    // Parse address
+    const parts = (ld.address || "").split(",").map(s => s.trim());
+    const street = parts[0] || "";
+    let cityState = "";
+    let zip = "";
+    if (parts.length >= 3) {
+      cityState = parts[1];
+      zip = parts[2];
+    } else if (parts.length === 2) {
+      const lastPart = parts[1];
+      const zipMatch = lastPart.match(/\d{5}(-\d{4})?$/);
+      if (zipMatch) {
+        zip = zipMatch[0];
+        cityState = lastPart.replace(zip, "").trim();
+      } else {
+        cityState = lastPart;
+      }
+    }
+    setFormAddress(street);
+    setFormCityState(cityState);
+    setFormZip(zip);
+    
+    setFormSource(ld.source);
+    setFormStatus(ld.status);
+    setFormEstimatedValue(ld.estimatedValue);
+    setFormNotes(ld.notes || "");
+    setIsEditMode(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedLead) return;
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
+    
+    const updated = {
+      ...selectedLead,
+      name: formName.trim(),
+      company: formCompany.trim(),
+      phone: phoneStr,
+      email: formEmail.trim(),
+      address: combinedAddress,
+      source: formSource,
+      status: formStatus,
+      estimatedValue: Number(formEstimatedValue) || 0,
+      notes: formNotes.trim()
+    };
+
+    if (setLeads) {
+      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updated : l));
+    } else {
+      setLocalLeads(prev => prev.map(l => l.id === selectedLead.id ? updated : l));
+    }
+    setSelectedLead(updated);
+    setIsEditMode(false);
+  };
+
+  const handleConvertLead = () => {
+    if (!selectedLead) return;
+    
+    // Create new customer
+    const newCust = {
+      id: "cust_" + Math.random().toString(36).substring(2, 9),
+      company: selectedLead.company || selectedLead.name + " Inc",
+      contact: selectedLead.name,
+      phone: selectedLead.phone,
+      email: selectedLead.email,
+      address: selectedLead.address || "100 Operational Way",
+      openJobs: 0,
+      outstandingBalance: 0,
+      lifetimeValue: selectedLead.estimatedValue || 0,
+      status: "Active" as const,
+      type: "Residential" as const,
+      isVIP: false,
+      recentlyAdded: true
+    };
+
+    if (setCustomers) {
+      setCustomers(prev => [newCust, ...prev]);
+    }
+
+    // Set lead status to Won
+    const updatedLead = { ...selectedLead, status: "Won" as const };
+    if (setLeads) {
+      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
+    } else {
+      setLocalLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
+    }
+
+    setSelectedLead(null);
+  };
+
+  const handleCreateEstimate = () => {
+    if (!selectedLead) return;
+
+    const newEst = {
+      id: "est_" + Math.random().toString(36).substring(2, 9),
+      number: "E-" + (1000 + Math.floor(Math.random() * 9000)),
+      company: selectedLead.company || selectedLead.name + " Inc",
+      customerName: selectedLead.name,
+      email: selectedLead.email,
+      phone: selectedLead.phone,
+      amount: selectedLead.estimatedValue || 1500,
+      status: "Draft" as const,
+      createdDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+      notes: selectedLead.notes || "Estimate generated from sales lead."
+    };
+
+    if (setEstimates) {
+      setEstimates(prev => [newEst, ...prev]);
+    }
+
+    // Update lead status to Estimate Sent
+    const updatedLead = { ...selectedLead, status: "Estimate Sent" as const };
+    if (setLeads) {
+      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
+    } else {
+      setLocalLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
+    }
+
+    setSelectedLead(null);
+  };
+
+  const leads = propsLeads || localLeads;
 
   // Filtered and searched leads list
   const filteredLeads = useMemo(() => {
@@ -296,8 +372,8 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
           </div>
           <div className="flex flex-wrap gap-2.5">
             <button
-              onClick={() => onOpenPlaceholder("Add Lead Portal", "✨")}
-              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+              onClick={openAddModal}
+              className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#9EC8EF] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Lead
@@ -665,7 +741,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                   filteredLeads.map((ld) => (
                     <tr
                       key={ld.id}
-                      onClick={() => onOpenPlaceholder(`Lead Details: ${ld.name}`, "👤")}
+                      onClick={() => openViewModal(ld)}
                       className="hover:bg-[#BDDDF8]/70 transition-colors cursor-pointer text-xs"
                     >
                       <td className="py-3 px-4 font-bold text-[#1F3557]">{ld.name}</td>
@@ -871,6 +947,520 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
         </div>
       </div>
 
+      {/* Add Lead Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">Add New Sales Lead</h3>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Contact Person *</label>
+                  <input 
+                    type="text" 
+                    value={formName}
+                    onChange={e => setFormName(e.target.value)}
+                    placeholder="e.g. John Connor"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company Name</label>
+                  <input 
+                    type="text" 
+                    value={formCompany}
+                    onChange={e => setFormCompany(e.target.value)}
+                    placeholder="e.g. Connor Resistance Gear"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+              </div>
+
+              {/* Phone Numbers with Plus / Minus */}
+              <div className="space-y-1.5 bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393] flex items-center justify-between">
+                  <span>Phone Numbers *</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setFormPhones(prev => [...prev, ""])}
+                    className="text-[#4A86F7] hover:text-[#1E52C9] font-extrabold text-[11px] flex items-center gap-1 bg-[#EAF5FF] px-2.5 py-1 rounded-lg border border-[#9EC8EF]/50 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Add Phone
+                  </button>
+                </label>
+                <div className="space-y-2">
+                  {formPhones.map((phone, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input 
+                        type="text" 
+                        value={phone}
+                        onChange={e => {
+                          const updated = [...formPhones];
+                          updated[index] = e.target.value;
+                          setFormPhones(updated);
+                        }}
+                        placeholder="e.g. (555) 111-2222"
+                        className="flex-1 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                      {formPhones.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormPhones(prev => prev.filter((_, i) => i !== index))}
+                          className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl p-2.5 shrink-0 cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
+                <input 
+                  type="email" 
+                  value={formEmail}
+                  onChange={e => setFormEmail(e.target.value)}
+                  placeholder="e.g. john@resistance.com"
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                />
+              </div>
+
+              <div className="bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50 space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</label>
+                  <input 
+                    type="text" 
+                    value={formAddress}
+                    onChange={e => setFormAddress(e.target.value)}
+                    placeholder="e.g. 742 Evergreen Terrace"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">City, State</label>
+                    <input 
+                      type="text" 
+                      value={formCityState}
+                      onChange={e => setFormCityState(e.target.value)}
+                      placeholder="e.g. Springfield, OR"
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Zip Code</label>
+                    <input 
+                      type="text" 
+                      value={formZip}
+                      onChange={e => setFormZip(e.target.value)}
+                      placeholder="e.g. 97477"
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Lead Source</label>
+                  <select
+                    value={formSource}
+                    onChange={e => setFormSource(e.target.value as any)}
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                  >
+                    <option value="Google Business Profile">Google Business Profile</option>
+                    <option value="Website">Website</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Referral">Referral</option>
+                    <option value="Phone Call">Phone Call</option>
+                    <option value="Walk-In">Walk-In</option>
+                    <option value="Manual Entry">Manual Entry</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
+                  <select
+                    value={formStatus}
+                    onChange={e => setFormStatus(e.target.value as any)}
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                  >
+                    <option value="New">New</option>
+                    <option value="Contacted">Contacted</option>
+                    <option value="Qualified">Qualified</option>
+                    <option value="Estimate Sent">Estimate Sent</option>
+                    <option value="Follow-Up Needed">Follow-Up Needed</option>
+                    <option value="Won">Won</option>
+                    <option value="Lost">Lost</option>
+                    <option value="Archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Estimated Deal Value ($)</label>
+                  <input 
+                    type="number" 
+                    value={formEstimatedValue || ""}
+                    onChange={e => setFormEstimatedValue(Number(e.target.value))}
+                    placeholder="e.g. 4500"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Sales Notes / Requirements</label>
+                <textarea 
+                  value={formNotes}
+                  onChange={e => setFormNotes(e.target.value)}
+                  placeholder="Enter initial lead specifications, service needed, budget details..."
+                  rows={3}
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557] resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!formName.trim()}
+                onClick={handleAddLead}
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  formName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                }`}
+              >
+                Save Lead
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Details & Operations Modal */}
+      {selectedLead && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">
+                  {isEditMode ? "Edit Sales Lead" : "Sales Lead Details"}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setSelectedLead(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4">
+              {isEditMode ? (
+                // Edit Form fields
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Contact Person *</label>
+                      <input 
+                        type="text" 
+                        value={formName}
+                        onChange={e => setFormName(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company Name</label>
+                      <input 
+                        type="text" 
+                        value={formCompany}
+                        onChange={e => setFormCompany(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone Numbers with Plus / Minus */}
+                  <div className="space-y-1.5 bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393] flex items-center justify-between">
+                      <span>Phone Numbers *</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setFormPhones(prev => [...prev, ""])}
+                        className="text-[#4A86F7] hover:text-[#1E52C9] font-extrabold text-[11px] flex items-center gap-1 bg-[#EAF5FF] px-2.5 py-1 rounded-lg border border-[#9EC8EF]/50 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add Phone
+                      </button>
+                    </label>
+                    <div className="space-y-2">
+                      {formPhones.map((phone, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input 
+                            type="text" 
+                            value={phone}
+                            onChange={e => {
+                              const updated = [...formPhones];
+                              updated[index] = e.target.value;
+                              setFormPhones(updated);
+                            }}
+                            placeholder="e.g. (555) 111-2222"
+                            className="flex-1 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                          />
+                          {formPhones.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setFormPhones(prev => prev.filter((_, i) => i !== index))}
+                              className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl p-2.5 shrink-0 cursor-pointer"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={formEmail}
+                      onChange={e => setFormEmail(e.target.value)}
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+
+                  <div className="bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</label>
+                      <input 
+                        type="text" 
+                        value={formAddress}
+                        onChange={e => setFormAddress(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-[#5E7393]">City, State</label>
+                        <input 
+                          type="text" 
+                          value={formCityState}
+                          onChange={e => setFormCityState(e.target.value)}
+                          placeholder="e.g. Springfield, OR"
+                          className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-[#5E7393]">Zip Code</label>
+                        <input 
+                          type="text" 
+                          value={formZip}
+                          onChange={e => setFormZip(e.target.value)}
+                          placeholder="e.g. 97477"
+                          className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Lead Source</label>
+                      <select
+                        value={formSource}
+                        onChange={e => setFormSource(e.target.value as any)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                      >
+                        <option value="Google Business Profile">Google Business Profile</option>
+                        <option value="Website">Website</option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="Referral">Referral</option>
+                        <option value="Phone Call">Phone Call</option>
+                        <option value="Walk-In">Walk-In</option>
+                        <option value="Manual Entry">Manual Entry</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Lead Status</label>
+                      <select
+                        value={formStatus}
+                        onChange={e => setFormStatus(e.target.value as any)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                      >
+                        <option value="New">New</option>
+                        <option value="Contacted">Contacted</option>
+                        <option value="Qualified">Qualified</option>
+                        <option value="Estimate Sent">Estimate Sent</option>
+                        <option value="Follow-Up Needed">Follow-Up Needed</option>
+                        <option value="Won">Won</option>
+                        <option value="Lost">Lost</option>
+                        <option value="Archived">Archived</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Estimated Deal Value ($)</label>
+                      <input 
+                        type="number" 
+                        value={formEstimatedValue || ""}
+                        onChange={e => setFormEstimatedValue(Number(e.target.value))}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Sales Notes / Requirements</label>
+                    <textarea 
+                      value={formNotes}
+                      onChange={e => setFormNotes(e.target.value)}
+                      rows={3}
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557] resize-none"
+                    />
+                  </div>
+                </div>
+              ) : (
+                // View Details mode with operational integrations
+                <div className="space-y-4">
+                  <div className="bg-[#EAF5FF] p-4.5 rounded-2xl border border-[#9EC8EF]/60 space-y-3.5">
+                    <div className="flex justify-between items-start border-b border-[#9EC8EF]/40 pb-2.5">
+                      <div>
+                        <h4 className="text-sm font-bold text-[#1F3557]">{selectedLead.name}</h4>
+                        <p className="text-xs text-[#5E7393] font-semibold">{selectedLead.company || "No Company"}</p>
+                      </div>
+                      <span className="px-2.5 py-0.5 bg-[#315C9F] text-white font-extrabold uppercase text-[9px] rounded-lg border border-[#9EC8EF]/40">
+                        {selectedLead.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Phone</p>
+                        <p className="font-mono text-[#1F3557] font-bold mt-0.5">{selectedLead.phone}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Email</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.email}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.address || "No address provided."}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Source</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.source}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Value</p>
+                        <p className="text-[#1F3557] font-extrabold font-mono mt-0.5 text-blue-600">
+                          ${selectedLead.estimatedValue.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-[#5E7393]">Lead Notes</p>
+                    <p className="text-xs bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl font-medium text-[#1F3557] min-h-[60px]">
+                      {selectedLead.notes || "No notes available for this sales lead."}
+                    </p>
+                  </div>
+
+                  {/* Core Operations Engine Actions */}
+                  <div className="pt-3 border-t border-[#9EC8EF]/40">
+                    <p className="text-[10px] uppercase font-bold text-[#5E7393] mb-2.5">CRM System Operations</p>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        onClick={handleConvertLead}
+                        className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <UserCheck className="w-4 h-4 text-emerald-600" />
+                        Convert to Client
+                      </button>
+                      <button
+                        onClick={handleCreateEstimate}
+                        className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        Build Estimate
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between shrink-0">
+              <div>
+                {!isEditMode && (
+                  <button
+                    onClick={() => setIsEditMode(true)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Edit Profile
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLead(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                {isEditMode && (
+                  <button
+                    type="button"
+                    disabled={!formName.trim()}
+                    onClick={handleSaveEdit}
+                    className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                      formName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Save Changes
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

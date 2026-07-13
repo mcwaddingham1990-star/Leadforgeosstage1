@@ -79,9 +79,9 @@ export interface SettingsPageProps {
 // Initial defaults for fields not in parent state
 const INITIAL_DEFAULTS = {
   company: {
-    dba: "LeadForge Industrial Solutions",
-    website: "www.ironcladservices.com",
-    email: "operations@ironcladservices.com",
+    dba: "LEADFORGELOCAL",
+    website: "www.leadforgelocal.com",
+    email: "waterdrops2001@gmail.com",
     businessHours: "08:00 AM - 05:00 PM",
     timeZone: "Pacific Standard Time (PST)",
     currency: "USD ($)",
@@ -611,7 +611,7 @@ export default function SettingsPage({
 
     setRecentRoster(prev => [...prev, rosterEntry]);
     setNewUser({ name: "", role: "Technician", email: "" });
-    triggerNotification(`✉️ Invite generated for ${cleanName}! Security Bypass Code: ${randomCode}`);
+    triggerNotification(`✉️ Invite generated for ${cleanName}! Security Access Code: ${randomCode}`);
 
     // Audit Log Entry
     const formattedDate = new Date().toISOString().split("T")[0];
@@ -707,7 +707,7 @@ export default function SettingsPage({
             <span className="text-2xl select-none">⚙️</span>
             <div>
               <h1 className="text-lg font-sans font-black text-[#342D7E] uppercase tracking-wider">Company Settings Control Center</h1>
-              <p className="text-xs text-[#5E7393] font-sans font-semibold">Configure core parameters, administrative bypasses, and cross-module synchronization settings</p>
+              <p className="text-xs text-[#5E7393] font-sans font-semibold">Configure core parameters, administrative permissions, and cross-module synchronization settings</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -1035,7 +1035,7 @@ export default function SettingsPage({
                         required
                         value={newUser.email}
                         onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="richard@ironcladservices.com"
+                        placeholder="richard@leadforgelocal.com"
                         className="w-full px-2.5 py-1.5 bg-white border border-[#A9CDEE] rounded-lg text-xs font-bold text-slate-800 focus:outline-none"
                       />
                     </div>
@@ -1128,7 +1128,7 @@ export default function SettingsPage({
                         { key: "view", title: "View Core Screens", desc: "Allow reading operational indices, metrics, logs, and dispatch states." },
                         { key: "create", title: "Create Operations", desc: "Allow generating new records (leads, jobs, estimates, invoices, etc.)." },
                         { key: "edit", title: "Edit Documents & Records", desc: "Authorize full modification of parameters, amounts, and dates." },
-                        { key: "delete", title: "Destructive Delete Bypass", desc: "Permit permanently wiping out inventory, jobs, or customer entries." },
+                        { key: "delete", title: "Destructive Delete Security Authorization", desc: "Permit permanently wiping out inventory, jobs, or customer entries." },
                         { key: "approve", title: "Approve Estimates & Payroll", desc: "Allow digital sign-off on cost sheets, payroll multipliers, and POs." },
                         { key: "export", title: "Data Export & Print Archive", desc: "Allow compiling local databases to JSON, Excel, or PDF structures." },
                         { key: "ai", title: "Master AI Autonomous Actions", desc: "Authorize AI agent to schedule, draft POs, or dispatch without approval." }
@@ -1915,7 +1915,7 @@ export default function SettingsPage({
                     <label className="flex items-center justify-between cursor-pointer pb-2 border-b border-[#A9CDEE]/30">
                       <div>
                         <p className="text-xs font-extrabold text-slate-800">Two-Factor Authentication (2FA)</p>
-                        <p className="text-[10px] text-slate-400 font-sans">Mandate SMS bypass tokens on unknown credentials logs.</p>
+                        <p className="text-[10px] text-slate-400 font-sans">Mandate SMS verification tokens on unknown credentials logs.</p>
                       </div>
                       <input
                         type="checkbox"
@@ -2095,11 +2095,11 @@ export default function SettingsPage({
               {/* ADVANCED SETTINGS */}
               {activeCategory === "advanced" && (
                 <div className="space-y-4 text-xs font-medium">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">System Infrastructure Bypass Controls</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">System Infrastructure Administrative Controls</h3>
                   <div className="bg-white p-4 rounded-xl border border-[#A9CDEE] space-y-3">
                     <div className="flex items-center justify-between cursor-pointer pb-2 border-b border-[#A9CDEE]/30">
                       <div>
-                        <p className="font-extrabold text-slate-800">Allow Employee Redo-Onboarding Bypass</p>
+                        <p className="font-extrabold text-slate-800">Allow Employee Redo-Onboarding Option</p>
                         <p className="text-[10px] text-slate-400 font-sans mt-0.5">Authorize personnel to restart onboarding Step 1 directly.</p>
                       </div>
                       <button
@@ -2288,7 +2288,7 @@ export default function SettingsPage({
                   key: "security",
                   title: "Enforce Two-Factor Authentication (2FA) Mandate",
                   module: "Security",
-                  desc: "With 4 field technicians logging into mobile dispatch views remotely, requiring multi-factor security bypass codes is highly advised.",
+                  desc: "With 4 field technicians logging into mobile dispatch views remotely, requiring multi-factor security verification codes is highly advised.",
                   benefit: "Mitigate brute force login attempts on external mobile terminals."
                 },
                 {

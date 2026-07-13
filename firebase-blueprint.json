@@ -1,127 +1,215 @@
 {
-  "collections": {
-    "business_profiles": {
+  "entities": {
+    "BusinessProfile": {
+      "title": "BusinessProfile",
       "description": "Stores onboarding business profile details",
-      "fields": {
-        "ownerNames": {
-          "type": "array",
-          "description": "List of owner names"
-        },
-        "ownerPhones": {
-          "type": "array",
-          "description": "List of owner phone numbers"
-        },
-        "businessNames": {
-          "type": "array",
-          "description": "List of business names"
-        },
-        "businessPhones": {
-          "type": "array",
-          "description": "List of business phone numbers"
-        },
-        "businessAddresses": {
-          "type": "array",
-          "description": "List of business addresses"
-        },
-        "businessLogos": {
-          "type": "array",
-          "description": "List of business logo URLs"
-        },
-        "companyLocations": {
-          "type": "array",
-          "description": "List of company locations"
-        },
-        "billingMethods": {
-          "type": "array",
-          "description": "List of billing card methods with brand, cardholderName, cardNumber, expiry, cvv, and id"
-        },
-        "selectedBillingMethodId": {
-          "type": "string",
-          "description": "ID of currently selected billing method"
-        },
-        "updatedAt": {
-          "type": "timestamp",
-          "description": "Timestamp of the last update"
-        }
+      "type": "object",
+      "properties": {
+        "ownerNames": { "type": "array" },
+        "ownerPhones": { "type": "array" },
+        "businessNames": { "type": "array" },
+        "businessPhones": { "type": "array" },
+        "businessAddresses": { "type": "array" },
+        "businessLogos": { "type": "array" },
+        "companyLocations": { "type": "array" },
+        "billingMethods": { "type": "array" },
+        "selectedBillingMethodId": { "type": "string" },
+        "updatedAt": { "type": "string" }
       }
     },
-    "employee_invites": {
+    "EmployeeInvite": {
+      "title": "EmployeeInvite",
       "description": "Stores secure invite codes generated for employees",
-      "fields": {
-        "code": {
-          "type": "string",
-          "description": "Unique invite code string"
-        },
-        "role": {
-          "type": "string",
-          "description": "Target role name"
-        },
-        "businessEmail": {
-          "type": "string",
-          "description": "Owner's business email"
-        },
-        "permissions": {
-          "type": "array",
-          "description": "Allowed navigation sidebar screens"
-        },
-        "status": {
-          "type": "string",
-          "description": "Status of the invite (pending, completed)"
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "description": "Creation date of the invite"
-        }
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "role": { "type": "string" },
+        "businessEmail": { "type": "string" },
+        "permissions": { "type": "array" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
       }
     },
-    "employees": {
+    "Employee": {
+      "title": "Employee",
       "description": "Stores employee profile details and role configurations",
-      "fields": {
-        "email": {
-          "type": "string",
-          "description": "Verified employee email"
-        },
-        "firstName": {
-          "type": "string",
-          "description": "First name of employee"
-        },
-        "lastName": {
-          "type": "string",
-          "description": "Last name of employee"
-        },
-        "address": {
-          "type": "string",
-          "description": "Home address"
-        },
-        "phone": {
-          "type": "string",
-          "description": "Phone number"
-        },
-        "photo": {
-          "type": "string",
-          "description": "Profile picture URL or empty"
-        },
-        "goals": {
-          "type": "string",
-          "description": "Employee professional or career goals"
-        },
-        "role": {
-          "type": "string",
-          "description": "Assigned employee role"
-        },
-        "permissions": {
-          "type": "array",
-          "description": "Custom or default navigation sidebar screens"
-        },
-        "businessEmail": {
-          "type": "string",
-          "description": "Associated business account email"
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "description": "Time of registration"
-        }
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "photo": { "type": "string" },
+        "goals": { "type": "string" },
+        "role": { "type": "string" },
+        "permissions": { "type": "array" },
+        "businessEmail": { "type": "string" },
+        "createdAt": { "type": "string" }
       }
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer profiles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "notes": { "type": "string" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "name", "businessId"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Lead and inquiry data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "source": { "type": "string" },
+        "salesRep": { "type": "string" },
+        "status": { "type": "string" },
+        "estimatedValue": { "type": "number" },
+        "address": { "type": "string" },
+        "notes": { "type": "string" },
+        "dateAdded": { "type": "string" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "name", "businessId"]
+    },
+    "Estimate": {
+      "title": "Estimate",
+      "description": "System estimates and bids",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "company": { "type": "string" },
+        "customerName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdDate": { "type": "string" },
+        "expirationDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "number", "businessId"]
+    },
+    "SchedulingEvent": {
+      "title": "SchedulingEvent",
+      "description": "Job schedules and calendar events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventType": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "customer": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "assignedEmployee": { "type": "string" },
+        "assignedCrew": { "type": "string" },
+        "location": { "type": "string" },
+        "priority": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "eventType", "businessId"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Inventory records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "sku": { "type": "string" },
+        "barcode": { "type": "string" },
+        "quantity": { "type": "number" },
+        "minQuantity": { "type": "number" },
+        "maxQuantity": { "type": "number" },
+        "location": { "type": "string" },
+        "unitCost": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "isFavorite": { "type": "boolean" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "name", "businessId"]
+    },
+    "DocumentItem": {
+      "title": "DocumentItem",
+      "description": "Invoices, receipts, and files",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "customer": { "type": "string" },
+        "employee": { "type": "string" },
+        "vendor": { "type": "string" },
+        "job": { "type": "string" },
+        "type": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "date": { "type": "string" },
+        "size": { "type": "string" },
+        "status": { "type": "string" },
+        "isFavorite": { "type": "boolean" },
+        "isArchived": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "businessId": { "type": "string" }
+      },
+      "required": ["id", "name", "businessId"]
+    }
+  },
+  "firestore": {
+    "/business_profiles/{email}": {
+      "schema": { "$ref": "#/entities/BusinessProfile" },
+      "description": "Stores onboarding business profile details"
+    },
+    "/employee_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/EmployeeInvite" },
+      "description": "Stores employee registration invite codes"
+    },
+    "/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/Employee" },
+      "description": "Stores employee registrations"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customer collection"
+    },
+    "/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "Leads collection"
+    },
+    "/estimates/{estimateId}": {
+      "schema": { "$ref": "#/entities/Estimate" },
+      "description": "Estimates collection"
+    },
+    "/scheduling_events/{eventId}": {
+      "schema": { "$ref": "#/entities/SchedulingEvent" },
+      "description": "Scheduling events and jobs"
+    },
+    "/inventory/{inventoryId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Inventory records"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/DocumentItem" },
+      "description": "Uploaded documents and invoices"
     }
   }
 }

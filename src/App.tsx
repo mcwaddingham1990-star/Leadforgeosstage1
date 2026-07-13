@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  onAuthStateChanged
+} from "firebase/auth";
 import { 
   Mail, 
   Lock, 
   User, 
+  UserPlus, 
   Eye, 
   EyeOff, 
   HelpCircle, 
@@ -75,15 +83,16 @@ import {
   Legend
 } from "recharts";
 import { LineChart, Line } from "recharts";
-import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
-import { LeadsPage } from "./components/LeadsPage";
+import { LeadsPage, INITIAL_LEADS, Lead } from "./components/LeadsPage";
 import { SnapshotsPage } from "./components/SnapshotsPage";
-import { EstimatesPage } from "./components/EstimatesPage";
+import { EstimatesPage, INITIAL_ESTIMATES, Estimate } from "./components/EstimatesPage";
 import { SchedulingPage, SchedulingEvent } from "./components/SchedulingPage";
 import { DispatchPage } from "./components/DispatchPage";
 import { TimeClockPage } from "./components/TimeClockPage";
-import { InventoryPage } from "./components/InventoryPage";
+import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
+import { InteractiveMapPage } from "./components/InteractiveMapPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
@@ -92,6 +101,19 @@ import SettingsPage from "./components/SettingsPage";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
+import {
+  INITIAL_DASHBOARD_LEADS,
+  INITIAL_RECENT_ROSTER,
+  INITIAL_DOCUMENTS,
+  INITIAL_SCHEDULING_EVENTS,
+  INITIAL_RECENT_AI_ACTIONS,
+  INITIAL_SNAPSHOTS
+} from "./initialData";
+import {
+  syncArrayToFirestore,
+  subscribeToCollection,
+  validateConnection
+} from "./lib/firestoreService";
 
 export interface SelectedRole {
   id: string;
@@ -244,7 +266,7 @@ const OS_SCREENS = [
   { id: "estimates", label: "Estimates & Bids", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightestimatesbids.jpg", icon: "📝", top: "57%", bottom: "62%" },
   { id: "scheduling", label: "Scheduling", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightscheduling.jpg", icon: "📅", top: "37%", bottom: "42%" },
   { id: "dispatch", label: "Dispatch", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdispatch.jpg", icon: "🚚", top: "42%", bottom: "47%" },
-  { id: "routes", label: "Routes", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightroutes.jpg", icon: "🗺️", top: "52%", bottom: "57%" },
+  { id: "routes", label: "Interactive Map & Routes", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightroutes.jpg", icon: "🗺️", top: "52%", bottom: "57%" },
   { id: "jobs", label: "Jobs", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightjobs.jpg", icon: "💼", top: "22%", bottom: "27%" },
   { id: "timeclock", label: "Time Clock", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lighttimeclock.jpg", icon: "⏱️", top: "47%", bottom: "52%" },
   { id: "inventory", label: "Inventory", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightinventory.jpg", icon: "📦", top: "72%", bottom: "77%" },
@@ -312,15 +334,261 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   }
 };
 
+interface DynamicFieldListProps {
+  label: string;
+  items: string[];
+  setter: React.Dispatch<React.SetStateAction<string[]>>;
+  placeholder: string;
+  scale: number;
+  error?: string;
+}
+
+const DynamicFieldList: React.FC<DynamicFieldListProps> = ({
+  label,
+  items,
+  setter,
+  placeholder,
+  scale,
+  error
+}) => {
+  const [localItems, setLocalItems] = useState<{ id: string; value: string }[]>(() =>
+    items.map(val => ({ id: Math.random().toString(36).substring(2, 9), value: val }))
+  );
+
+  const prevItemsRef = React.useRef(items);
+  if (prevItemsRef.current !== items) {
+    prevItemsRef.current = items;
+    const prevValues = localItems.map(p => p.value);
+    if (JSON.stringify(prevValues) !== JSON.stringify(items)) {
+      setLocalItems(
+        items.map((val, idx) => {
+          const existingId = localItems[idx]?.id || Math.random().toString(36).substring(2, 9);
+          return { id: existingId, value: val };
+        })
+      );
+    }
+  }
+
+  const handleAdd = () => {
+    const newItem = { id: Math.random().toString(36).substring(2, 9), value: "" };
+    const updated = [...localItems, newItem];
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const handleChange = (index: number, newValue: string) => {
+    const updated = [...localItems];
+    updated[index] = { ...updated[index], value: newValue };
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const handleRemove = (index: number) => {
+    if (localItems.length <= 1) return;
+    const updated = localItems.filter((_, i) => i !== index);
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const getFontSize = (baseSize: number) => {
+    return { fontSize: `${Math.max(10, Math.round(baseSize * scale))}px` };
+  };
+
+  return (
+    <div className="space-y-1.5 mb-4">
+      <div className="flex items-center justify-between px-1">
+        <label style={getFontSize(11)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider">
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={handleAdd}
+          style={{ padding: `${3 * scale}px ${8 * scale}px`, borderRadius: `${6 * scale}px`, ...getFontSize(10) }}
+          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-blue-200/50 animate-fade-in"
+        >
+          <span>+ Add</span>
+        </button>
+      </div>
+      <div className="space-y-1.5">
+        {localItems.map((item, idx) => {
+          const isEmpty = !item.value || !item.value.trim();
+          const hasError = !!error && isEmpty;
+          return (
+            <div key={item.id} className="flex gap-1.5 items-center">
+              <input
+                type="text"
+                value={item.value}
+                onChange={(e) => handleChange(idx, e.target.value)}
+                placeholder={placeholder}
+                style={{
+                  height: `${42 * scale}px`,
+                  borderRadius: `${12 * scale}px`,
+                  paddingLeft: `${14 * scale}px`,
+                  paddingRight: `${14 * scale}px`,
+                  ...getFontSize(12.5)
+                }}
+                className={`flex-1 bg-white border focus:ring-1 focus:outline-none transition-all placeholder:text-slate-400/70 shadow-sm font-medium ${
+                  hasError 
+                    ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500 text-rose-900" 
+                    : "border-slate-200 focus:border-blue-500 focus:ring-blue-500 text-slate-800"
+                }`}
+              />
+              {localItems.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemove(idx)}
+                  style={{ width: `${30 * scale}px`, height: `${30 * scale}px`, borderRadius: `${8 * scale}px` }}
+                  className="hover:bg-rose-50 text-rose-500 hover:text-rose-700 font-bold transition-colors cursor-pointer flex items-center justify-center text-xs shrink-0 border border-transparent hover:border-rose-100"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="text-rose-600 font-bold text-[10.5px] mt-1 pl-1 flex items-center gap-1 animate-pulse">
+          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0 animate-ping" />
+          <span>{error}</span>
+        </p>
+      )}
+    </div>
+  );
+};
+
+const DAILY_VIEW_OPTIONS = [
+  { value: "revenue", label: "📊 Company Revenue Graph" },
+  { value: "leads", label: "🎯 Active Leads Count" },
+  { value: "scheduling", label: "📅 Jobs Scheduled Today" },
+  { value: "fleet", label: "🚚 Fleet Telemetry Hub" },
+  { value: "messages", label: "💬 Messages Feed Board" },
+  { value: "inventory", label: "📦 Warehouse Inventory Scans" },
+];
+
+interface CustomDropdownProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  scale: number;
+}
+
+const CustomDropdown: React.FC<CustomDropdownProps> = ({ value, onChange, options, scale }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value) || options[0];
+
+  const getFontSize = (baseSize: number) => {
+    return { fontSize: `${Math.max(10, Math.round(baseSize * scale))}px` };
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative w-full z-30">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          height: `${42 * scale}px`,
+          borderRadius: `${12 * scale}px`,
+          ...getFontSize(12.5),
+          backgroundColor: "#ffffff",
+          color: "#1F3557",
+        }}
+        className="w-full flex items-center justify-between border border-[#9EC8EF] px-3.5 focus:outline-none focus:border-[#4A86F7] font-bold cursor-pointer transition-all hover:bg-slate-50 text-left custom-dropdown-popover"
+      >
+        <span>{selectedOption.label}</span>
+        <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform duration-200 shrink-0 ml-2 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            borderRadius: `${12 * scale}px`,
+            marginTop: `${4 * scale}px`,
+            backgroundColor: "#ffffff",
+            color: "#1f3557",
+          }}
+          className="absolute left-0 w-full border border-[#9EC8EF] shadow-2xl py-1.5 z-[100] max-h-48 overflow-y-auto animate-fade-in text-left block custom-dropdown-popover"
+        >
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                style={{
+                  ...getFontSize(12),
+                  backgroundColor: isSelected ? "#EAF5FF" : "#ffffff",
+                  color: isSelected ? "#4A86F7" : "#1F3557",
+                }}
+                className={`w-full text-left px-4 py-2.5 font-bold transition-all block cursor-pointer border-0 custom-dropdown-item ${
+                  isSelected ? "custom-dropdown-item-active font-extrabold" : ""
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
+  // Logged in user profile (null if guest/default owner, or set when authenticated)
+  const [loggedInUser, setLoggedInUser] = useState<{
+    email: string;
+    role: string;
+    permissions: string[];
+    isEmployee?: boolean;
+    name?: string;
+    goals?: string;
+  } | null>(null);
+
   // Authentication & Form States
-  const [email, setEmail] = useState("operations@ironcladservices.com");
-  const [password, setPassword] = useState("••••••••••••••••");
-  const [inviteCode, setInviteCode] = useState("DRIVER-X4F91");
+  const [rememberMe, setRememberMe] = useState(() => {
+    return localStorage.getItem("rememberMe") === "true";
+  });
+  const [email, setEmail] = useState(() => {
+    if (localStorage.getItem("rememberMe") === "true") {
+      return localStorage.getItem("rememberedEmail") || "";
+    }
+    return "";
+  });
+  const [password, setPassword] = useState(() => {
+    if (localStorage.getItem("rememberMe") === "true") {
+      return localStorage.getItem("rememberedPassword") || "";
+    }
+    return "";
+  });
+  const [inviteCode, setInviteCode] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [onboardingErrors, setOnboardingErrors] = useState<Record<string, string>>({});
   
   // Proportional Scaling State for Mobile viewport compatibility
   const [cardWidth, setCardWidth] = useState(440);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
+  const pendingSnapshotRef = React.useRef<{ pageId: string; pageName: string; metaData?: any } | null>(null);
+  const refSecurityLogged = React.useRef<Record<string, boolean>>({});
+  const isTimeClockLoadedRef = React.useRef(false);
+  const [revenueConfirmAction, setRevenueConfirmAction] = useState<{ label: string; icon: string } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -342,13 +610,21 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginMethod, setLoginMethod] = useState<"password" | "invite" | "google" | null>(null);
+
+  // Sign Up Flow State
+  const [showSignUpModal, setShowSignUpModal] = useState(false);
+  const [signUpUsername, setSignUpUsername] = useState("");
+  const [signUpEmail, setSignUpEmail] = useState("");
+  const [signUpPassword, setSignUpPassword] = useState("");
+  const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
+  const [signUpError, setSignUpError] = useState("");
+  const [isSignUpSubmitting, setIsSignUpSubmitting] = useState(false);
   
   // Navigation & Flow states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentView, setCurrentView] = useState<string>("login");
   const [activeScreen, setActiveScreen] = useState(OS_SCREENS[0]);
   const [showNotification, setShowNotification] = useState<string | null>(null);
-  const [isBypassUser, setIsBypassUser] = useState(false);
   const [employeeRedoOnboardingAllowed, setEmployeeRedoOnboardingAllowed] = useState(false);
 
   // New Sidebar & Workspace Simulation states
@@ -358,7 +634,7 @@ export default function App() {
   const [liveTime, setLiveTime] = useState(new Date());
 
   // Notification system states
-  const [notifications, setNotifications] = useState<Array<{
+  const [notifications, _setNotifications] = useState<Array<{
     id: string;
     category: "message" | "location" | "job" | "lead" | "other";
     screenId?: string;
@@ -366,292 +642,219 @@ export default function App() {
     description: string;
     time: string;
     isRead: boolean;
-  }>>([
-    { id: "1", category: "message", screenId: "messages", title: "New Message", description: "Dispatcher Pete: 'Need leak repair update on Route A'", time: "2 mins ago", isRead: false },
-    { id: "2", category: "location", screenId: "routes", title: "New Map Location", description: "New location dispatched: 1420 Pine St, Seattle WA", time: "10 mins ago", isRead: false },
-    { id: "3", category: "job", screenId: "jobs", title: "New Job Duty Assigned", description: "Leak troubleshooting assigned to you by Sarah Jenkins", time: "25 mins ago", isRead: false },
-    { id: "4", category: "lead", screenId: "leads", title: "New CRM Lead Intake", description: "Lead form from David Miller (HVAC Installation Request)", time: "1 hour ago", isRead: false },
-    { id: "5", category: "message", screenId: "messages", title: "Support Bulletin", description: "Heat wave safety protocols updated for field staff", time: "2 hours ago", isRead: false }
-  ]);
+  }>>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
   // Dashboard & Operational Interactive states
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [clockInTime, setClockInTime] = useState<string | null>(null);
   const [clockInDuration, setClockInDuration] = useState(0);
-  const [dashboardLeads, setDashboardLeads] = useState([
-    { id: "1", name: "Theresa Webb", phone: "(206) 555-0153", service: "AC Leak Repair", status: "New Inquiry", date: "Today, 10:24 AM" },
-    { id: "2", name: "Albert Flores", phone: "(206) 565-0122", service: "Full Heat Pump Install", status: "Quote Sent", date: "Today, 8:15 AM" },
-    { id: "3", name: "Esther Howard", phone: "(206) 565-0129", service: "Emergency Pipe Burst", status: "Dispatched", date: "Yesterday" }
-  ]);
+  const [dashboardLeads, setDashboardLeads] = useState<Array<{
+    id: string;
+    name: string;
+    phone: string;
+    service: string;
+    status: string;
+    date: string;
+  }>>([]);
   const [integrationStatuses, setIntegrationStatuses] = useState({
     quickbooks: true,
     stripe: true,
     google_maps: true,
     gmail: false
   });
-  const [recentRoster, setRecentRoster] = useState([
-    { name: "John Doe", role: "Driver", code: "DRIVER-X4F91", status: "Active" },
-    { name: "Jane Miller", role: "Office Manager", code: "MGR-Y2A11", status: "Active" },
-    { name: "David Vance", role: "Technician", code: "TECH-Z9K53", status: "Awaiting Login" }
-  ]);
+  const [recentRoster, _setRecentRoster] = useState<Array<{
+    id?: string;
+    name: string;
+    role: string;
+    code: string;
+    status: string;
+  }>>([]);
   const [newRosterName, setNewRosterName] = useState("");
   const [newRosterRole, setNewRosterRole] = useState("Technician");
 
-  // Core Event Engine & CRM Shared States
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [documents, setDocuments] = useState<DocumentItem[]>([
-    {
-      id: "doc_1",
-      name: "Apex Plumb & Drain Contract.pdf",
-      customer: "Apex Plumb & Drain",
-      employee: "Sarah Jenkins",
-      vendor: "None",
-      job: "Job #1024",
-      type: "Contracts",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-07-02",
-      size: "1.8 MB",
-      status: "Signed",
-      isFavorite: true,
-      isArchived: false,
-      notes: "Fully signed master service agreement for 2026 commercial drain works.",
-      tags: ["Contract", "Signed", "Drainage"],
-      estimateId: "E-1084",
-      invoiceId: "None",
-      lastModified: "2026-07-02 03:30 PM"
-    },
-    {
-      id: "doc_2",
-      name: "Estimate_E-1084_Apex_Drainage.pdf",
-      customer: "Apex Plumb & Drain",
-      employee: "Sarah Jenkins",
-      vendor: "None",
-      job: "Job #1024",
-      type: "Estimates",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-07-01",
-      size: "340 KB",
-      status: "Signed",
-      isFavorite: false,
-      isArchived: false,
-      notes: "Initial estimate for drainage line routing at main facility.",
-      tags: ["Estimate", "Approved"],
-      estimateId: "E-1084",
-      invoiceId: "None",
-      lastModified: "2026-07-01 11:20 AM"
-    },
-    {
-      id: "doc_3",
-      name: "Invoice_I-2049_Chevron_Logistics.pdf",
-      customer: "Chevron Logistics",
-      employee: "Marcus Vance",
-      vendor: "None",
-      job: "Job #1085",
-      type: "Invoices",
-      uploadedBy: "Marcus Vance",
-      date: "2026-07-05",
-      size: "420 KB",
-      status: "Signed",
-      isFavorite: true,
-      isArchived: false,
-      notes: "Invoice for heavy sewer excavation. Paid in full via Stripe.",
-      tags: ["Invoice", "Paid", "Sewer"],
-      estimateId: "None",
-      invoiceId: "I-2049",
-      lastModified: "2026-07-05 04:00 PM"
-    },
-    {
-      id: "doc_4",
-      name: "HomeDepot_Receipt_993.pdf",
-      customer: "None",
-      employee: "Sarah Jenkins",
-      vendor: "Home Depot",
-      job: "Job #1024",
-      type: "Receipts",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-07-06",
-      size: "150 KB",
-      status: "Signed",
-      isFavorite: false,
-      isArchived: false,
-      notes: "Purchase receipt for high-capacity ABS pipe fittings and couplers.",
-      tags: ["Receipt", "Materials", "Drainage"],
-      estimateId: "None",
-      invoiceId: "None",
-      lastModified: "2026-07-06 10:15 AM"
-    },
-    {
-      id: "doc_5",
-      name: "F-150_Fleet_Insurance_2026.pdf",
-      customer: "None",
-      employee: "Sarah Jenkins",
-      vendor: "Progressive Commercial",
-      job: "None",
-      type: "Insurance",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-06-15",
-      size: "2.4 MB",
-      status: "Signed",
-      isFavorite: false,
-      isArchived: false,
-      notes: "Automobile insurance policy validation certificate for Ford F-150 Service Truck.",
-      tags: ["Insurance", "Fleet", "Active"],
-      estimateId: "None",
-      invoiceId: "None",
-      lastModified: "2026-06-15 09:00 AM"
-    },
-    {
-      id: "doc_6",
-      name: "Blueprints_Oakridge_Sewer_System.pdf",
-      customer: "Oakridge Apartments",
-      employee: "Sarah Jenkins",
-      vendor: "None",
-      job: "Job #1022",
-      type: "Blueprints",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-06-20",
-      size: "4.8 MB",
-      status: "Signed",
-      isFavorite: true,
-      isArchived: false,
-      notes: "Architectural blueprints and subterranean schematic diagram for Oakridge block C sewer systems.",
-      tags: ["Blueprint", "Subterranean", "Schematic"],
-      estimateId: "None",
-      invoiceId: "None",
-      lastModified: "2026-06-20 02:00 PM"
-    },
-    {
-      id: "doc_7",
-      name: "Sarah_Jenkins_W4_Form.pdf",
-      customer: "None",
-      employee: "Sarah Jenkins",
-      vendor: "None",
-      job: "None",
-      type: "Employee Files",
-      uploadedBy: "Sarah Jenkins",
-      date: "2025-01-10",
-      size: "820 KB",
-      status: "Signed",
-      isFavorite: false,
-      isArchived: false,
-      notes: "IRS Form W-4 for employee tax withholdings.",
-      tags: ["Employee File", "W-4", "Tax"],
-      estimateId: "None",
-      invoiceId: "None",
-      lastModified: "2025-01-10 11:00 AM"
-    },
-    {
-      id: "doc_8",
-      name: "Commercial_Lease_Agreement_Suite_A.pdf",
-      customer: "None",
-      employee: "Sarah Jenkins",
-      vendor: "Seattle Real Estate Partners",
-      job: "None",
-      type: "Contracts",
-      uploadedBy: "Sarah Jenkins",
-      date: "2026-01-01",
-      size: "3.2 MB",
-      status: "Signed",
-      isFavorite: false,
-      isArchived: false,
-      notes: "Seattle central corporate headquarters lease agreement document.",
-      tags: ["Legal", "Lease", "HQ"],
-      estimateId: "None",
-      invoiceId: "None",
-      lastModified: "2026-01-01 04:00 PM"
-    }
-  ]);
+  // Core Event Engine & CRM Shared States back-ended by Firestore
+  const [leads, _setLeads] = useState<Lead[]>([]);
+  const [estimates, _setEstimates] = useState<Estimate[]>([]);
+  const [inventoryList, _setInventoryList] = useState<InventoryItem[]>([]);
+  const [completedJobsRevenue, setCompletedJobsRevenue] = useState<number>(0);
+  const [customers, _setCustomers] = useState<Customer[]>([]);
+  const [documents, _setDocuments] = useState<DocumentItem[]>([]);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
-  const [schedulingEvents, setSchedulingEvents] = useState<SchedulingEvent[]>([
-    {
-      id: "evt_1",
-      eventType: "Job",
-      date: "2026-07-05", // Today
-      startTime: "09:00",
-      endTime: "11:30",
-      customer: "Apex Plumb & Drain",
-      customerPhone: "(555) 234-5678",
-      customerEmail: "marcus@apexplumb.com",
-      customerAddress: "1024 Industrial Pkwy, Ste B",
-      assignedEmployee: "John Doe",
-      assignedCrew: "Crew Alpha",
-      location: "1024 Industrial Pkwy, Ste B",
-      priority: "High",
-      notes: "Main St HVAC Installation",
-      status: "Scheduled"
-    },
-    {
-      id: "evt_2",
-      eventType: "Job",
-      date: "2026-07-05", // Today
-      startTime: "13:00",
-      endTime: "14:30",
-      customer: "Clark Kent",
-      customerPhone: "(555) 123-4567",
-      customerEmail: "superman@dailyplanet.com",
-      customerAddress: "344 Clinton St, Apt 3B",
-      assignedEmployee: "Pete Rogers",
-      assignedCrew: "Crew Beta",
-      location: "1420 Pine St, Seattle WA",
-      priority: "Medium",
-      notes: "Leak Repair - Pine St",
-      status: "Scheduled"
-    },
-    {
-      id: "evt_3",
-      eventType: "Job",
-      date: "2026-07-05", // Today
-      startTime: "16:30",
-      endTime: "18:00",
-      customer: "Emma Watson",
-      customerPhone: "(555) 567-8901",
-      customerEmail: "emma@hogwarts.edu",
-      customerAddress: "42 Wallaby Way",
-      assignedEmployee: "Sarah Jenkins",
-      assignedCrew: "None",
-      location: "42 Wallaby Way",
-      priority: "High",
-      notes: "Water Heater Swap - Oak Ave",
-      status: "Scheduled"
-    },
-    {
-      id: "evt_4",
-      eventType: "Site Visit",
-      date: "2026-07-06", // Tomorrow
-      startTime: "10:00",
-      endTime: "11:30",
-      customer: "Clara Oswald",
-      customerPhone: "(555) 876-5432",
-      customerEmail: "manager@oakridgeapartments.net",
-      customerAddress: "4400 Oakridge Ln, Bldg 4",
-      assignedEmployee: "John Doe",
-      assignedCrew: "Crew Alpha",
-      location: "4400 Oakridge Ln, Bldg 4",
-      priority: "Low",
-      notes: "General Site Inspection",
-      status: "Scheduled"
-    },
-    {
-      id: "evt_5",
-      eventType: "Custom",
-      customType: "In-person project review consultation",
-      date: "2027-04-11", // Example Date
-      startTime: "15:26",
-      endTime: "16:30",
-      customer: "Marcus Vance",
-      customerPhone: "(555) 234-5678",
-      customerEmail: "marcus@apexplumb.com",
-      customerAddress: "1024 Industrial Pkwy, Ste B",
-      assignedEmployee: "Pete Rogers",
-      assignedCrew: "Crew Beta",
-      location: "1024 Industrial Pkwy, Ste B",
-      priority: "Urgent",
-      notes: "Meeting notes - review project details with client on site",
-      status: "Scheduled"
+  const [schedulingEvents, _setSchedulingEvents] = useState<SchedulingEvent[]>([]);
+
+  // Intercepting setters to sync with Firestore
+  const setCustomers: React.Dispatch<React.SetStateAction<Customer[]>> = (value) => {
+    _setCustomers((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("customers", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setLeads: React.Dispatch<React.SetStateAction<Lead[]>> = (value) => {
+    _setLeads((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("leads", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setEstimates: React.Dispatch<React.SetStateAction<Estimate[]>> = (value) => {
+    _setEstimates((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("estimates", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setSchedulingEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>> = (value) => {
+    _setSchedulingEvents((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("scheduling_events", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setInventoryList: React.Dispatch<React.SetStateAction<InventoryItem[]>> = (value) => {
+    _setInventoryList((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("inventory", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>> = (value) => {
+    _setDocuments((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("documents", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setRecentRoster: React.Dispatch<React.SetStateAction<Array<{
+    id?: string;
+    name: string;
+    role: string;
+    code: string;
+    status: string;
+  }>>> = (value) => {
+    _setRecentRoster((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      const formattedList = nextList.map(item => ({
+        ...item,
+        id: item.id || item.code
+      }));
+      syncArrayToFirestore("roster", prev.map(p => ({ ...p, id: p.id || p.code })), formattedList, loggedInUser?.email);
+      return formattedList;
+    });
+  };
+
+  const setBulletins: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
+    _setBulletins((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("bulletins", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setNotifications: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
+    _setNotifications((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("notifications", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
+    _setRecentAiActions((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("recent_ai_actions", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  const setSnapshots: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
+    _setSnapshots((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      syncArrayToFirestore("snapshots", prev, nextList, loggedInUser?.email);
+      return nextList;
+    });
+  };
+
+  // Test connection on boot
+  useEffect(() => {
+    validateConnection();
+  }, []);
+
+  // Sync state with Firestore in real-time when a user logs in
+  useEffect(() => {
+    if (!loggedInUser?.email) return;
+
+    localStorage.setItem("leadforge_logged_in_user_email", loggedInUser.email);
+
+    const unsubCustomers = subscribeToCollection("customers", loggedInUser.email, (items) => {
+      _setCustomers(items);
+    });
+    const unsubLeads = subscribeToCollection("leads", loggedInUser.email, (items) => {
+      _setLeads(items);
+    });
+    const unsubEstimates = subscribeToCollection("estimates", loggedInUser.email, (items) => {
+      _setEstimates(items);
+    });
+    const unsubEvents = subscribeToCollection("scheduling_events", loggedInUser.email, (items) => {
+      _setSchedulingEvents(items);
+    });
+    const unsubInventory = subscribeToCollection("inventory", loggedInUser.email, (items) => {
+      _setInventoryList(items);
+    });
+    const unsubDocuments = subscribeToCollection("documents", loggedInUser.email, (items) => {
+      _setDocuments(items);
+    });
+    const unsubRoster = subscribeToCollection("roster", loggedInUser.email, (items) => {
+      _setRecentRoster(items);
+    });
+    const unsubBulletins = subscribeToCollection("bulletins", loggedInUser.email, (items) => {
+      _setBulletins(items);
+    });
+    const unsubNotifications = subscribeToCollection("notifications", loggedInUser.email, (items) => {
+      _setNotifications(items);
+    });
+    const unsubAiActions = subscribeToCollection("recent_ai_actions", loggedInUser.email, (items) => {
+      _setRecentAiActions(items);
+    });
+    const unsubSnapshots = subscribeToCollection("snapshots", loggedInUser.email, (items) => {
+      _setSnapshots(items);
+    });
+
+    return () => {
+      unsubCustomers();
+      unsubLeads();
+      unsubEstimates();
+      unsubEvents();
+      unsubInventory();
+      unsubDocuments();
+      unsubRoster();
+      unsubBulletins();
+      unsubNotifications();
+      unsubAiActions();
+      unsubSnapshots();
+    };
+  }, [loggedInUser]);
+
+  // Clear states upon logout to prevent cross-account leaking
+  useEffect(() => {
+    if (!isLoggedIn) {
+      _setCustomers([]);
+      _setLeads([]);
+      _setEstimates([]);
+      _setSchedulingEvents([]);
+      _setInventoryList([]);
+      _setDocuments([]);
+      localStorage.removeItem("leadforge_logged_in_user_email");
     }
-  ]);
+  }, [isLoggedIn]);
 
   // Timer for Clocked In Duration
   useEffect(() => {
@@ -737,9 +940,9 @@ export default function App() {
   };
 
   // Onboarding Profile Settings States
-  const [ownerNames, setOwnerNames] = useState<string[]>(["John Doe"]);
+  const [ownerNames, setOwnerNames] = useState<string[]>(["waterdrops2001"]);
   const [ownerPhones, setOwnerPhones] = useState<string[]>(["(206) 555-0199"]);
-  const [businessNames, setBusinessNames] = useState<string[]>(["Ironclad Plumbing & HVAC"]);
+  const [businessNames, setBusinessNames] = useState<string[]>(["LEADFORGELOCAL"]);
   const [businessPhones, setBusinessPhones] = useState<string[]>(["(206) 565-0144"]);
   const [businessAddresses, setBusinessAddresses] = useState<string[]>(["1102 Industrial Way, Seattle WA 98108"]);
   const [businessLogos, setBusinessLogos] = useState<string[]>(["https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Buttons/CutPaste_2026-07-04_09-47-21-356.png"]);
@@ -779,6 +982,16 @@ export default function App() {
   const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
   const [showGoogleDialog, setShowGoogleDialog] = useState(false);
   
+  // Sign Up Instructions Modal States
+  const [showSignUpInstructions, setShowSignUpInstructions] = useState(false);
+  const [signUpInstructionsStep, setSignUpInstructionsStep] = useState<"input" | "pending">("input");
+  const [signUpInstructionsEmail, setSignUpInstructionsEmail] = useState("");
+  const [signUpInstructionsBusinessName, setSignUpInstructionsBusinessName] = useState("");
+  const [signUpInstructionsOwnerName, setSignUpInstructionsOwnerName] = useState("");
+  const [signUpInstructionsPassword, setSignUpInstructionsPassword] = useState("");
+  const [signUpInstructionsError, setSignUpInstructionsError] = useState("");
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  
   // Forgot password email field
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
@@ -791,7 +1004,7 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  const [bulletins, setBulletins] = useState<Array<{
+  const [bulletins, _setBulletins] = useState<Array<{
     id: string;
     title: string;
     content: string;
@@ -799,10 +1012,7 @@ export default function App() {
     role: string;
     date: string;
     status: "approved" | "pending";
-  }>>([
-    { id: "1", title: "Heat Wave Safety Protocol", content: "Stay hydrated! Ensure you take 10-minute cooling breaks every hour while working in attics or unconditioned spaces.", author: "Sarah Jenkins", role: "Owner", date: "Today, 10:00 AM", status: "approved" },
-    { id: "2", title: "New Fleet Cleanliness Policy", content: "All trucks must be washed and inventoried every Friday afternoon before clocking out. Refills can be requested via Inventory tab.", author: "Pete Rogers", role: "Office Manager", date: "Yesterday, 3:30 PM", status: "approved" },
-  ]);
+  }>>([]);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -833,7 +1043,7 @@ export default function App() {
     snapshots: "DEFAULT",
   });
   
-  const [recentAiActions, setRecentAiActions] = useState<Array<{
+  const [recentAiActions, _setRecentAiActions] = useState<Array<{
     id: string;
     date: string;
     time: string;
@@ -842,28 +1052,7 @@ export default function App() {
     reason: string;
     status: "Approved" | "Pending Approval" | "Completed" | "Undone" | "Active";
     approvedBy: string;
-  }>>([
-    {
-      id: "act_1",
-      date: "2026-07-06",
-      time: "04:15 PM",
-      module: "Inventory",
-      action: "Optimize stock alert",
-      reason: "Low stock count of copper tubing detected (< 5 units remaining)",
-      status: "Completed",
-      approvedBy: "Sarah Jenkins (Owner)",
-    },
-    {
-      id: "act_2",
-      date: "2026-07-06",
-      time: "02:30 PM",
-      module: "Scheduling",
-      action: "Detect schedule overlaps",
-      reason: "Conflict resolver detected double-booking on Route A",
-      status: "Completed",
-      approvedBy: "Jane Miller (Office Manager)",
-    }
-  ]);
+  }>>([]);
 
   // Context Selection States
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("cust_1");
@@ -890,7 +1079,7 @@ export default function App() {
   const [floatingAiLoading, setFloatingAiLoading] = useState(false);
 
   // SNAPSHOT ARCHIVES STATE & MUTATIONS
-  const [snapshots, setSnapshots] = useState<Array<{
+  const [snapshots, _setSnapshots] = useState<Array<{
     id: string;
     pageId: string;
     pageName: string;
@@ -898,38 +1087,11 @@ export default function App() {
     filename: string;
     fileSize: string;
     meta: { recordCount: number; filters: string; details: string };
-  }>>([
-    {
-      id: "snap_1",
-      pageId: "dashboard",
-      pageName: "Dashboard",
-      timestamp: "Jul 4, 2026, 04:12 PM",
-      filename: "leadforge_snap_dashboard_2026_07_04_1612.png",
-      fileSize: "512 KB",
-      meta: {
-        recordCount: 3,
-        filters: "Pay Period Active",
-        details: "Dashboard summary. 3 active modules (Company Revenue, Active Leads, Jobs Scheduled Today)."
-      }
-    },
-    {
-      id: "snap_2",
-      pageId: "leads",
-      pageName: "Leads",
-      timestamp: "Jul 5, 2026, 08:30 AM",
-      filename: "leadforge_snap_leads_2026_07_05_0830.png",
-      fileSize: "468 KB",
-      meta: {
-        recordCount: 10,
-        filters: "Status: All | Source: All",
-        details: "Leads database snapshot. 10 incoming leads pipeline recorded. Top source is Website."
-      }
-    }
-  ]);
+  }>>([]);
 
   const [isFlashing, setIsFlashing] = useState(false);
 
-  const takeSnapshot = (pageId: string, pageName: string, metaData?: any) => {
+  const createAndAddSnapshot = (pageId: string, pageName: string, metaData?: any, imageSrc?: string) => {
     setIsFlashing(true);
     setTimeout(() => {
       setIsFlashing(false);
@@ -955,17 +1117,172 @@ export default function App() {
         recordCount: pageId === "dashboard" ? 3 : pageId === "customers" ? 10 : 10,
         filters: "Default Filters",
         details: `${pageName} operational snapshot captured during simulated user session.`
-      }
+      },
+      image: imageSrc
     };
 
     setSnapshots(prev => [newSnapshot, ...prev]);
     triggerNotification(`Snapshot captured: ${filenameStr} saved to Snapshots Folder`);
   };
 
+  // Real-time Firebase Authentication listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
+            const isEmployee = profileData.isEmployee ?? false;
+            const isOnboarded = profileData.isOnboarded ?? false;
+
+            if (isEmployee || isOnboarded) {
+              setLoggedInUser({
+                email: user.email || "",
+                role: profileData.role || "Owner",
+                permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+                isEmployee: isEmployee,
+                name: profileData.name || user.displayName || "Owner",
+                goals: profileData.goals || ""
+              });
+              setIsLoggedIn(true);
+              
+              // Also, restore their settings from the business profile!
+              const businessId = isEmployee ? profileData.businessEmail : user.email;
+              if (businessId) {
+                const bizSnap = await getDoc(doc(db, "business_profiles", businessId));
+                if (bizSnap.exists()) {
+                  const bizData = bizSnap.data();
+                  if (bizData.customCardTargets) setCustomCardTargets(bizData.customCardTargets);
+                  if (bizData.globalAiSetting) setGlobalAiSetting(bizData.globalAiSetting);
+                  if (bizData.moduleAiSettings) setModuleAiSettings(bizData.moduleAiSettings);
+                  if (bizData.integrationStatuses) setIntegrationStatuses(bizData.integrationStatuses);
+                }
+                
+                // Restore Time Clock state
+                const clockSnap = await getDoc(doc(db, "timeclock_states", user.email || ""));
+                if (clockSnap.exists()) {
+                  const clockData = clockSnap.data();
+                  setIsClockedIn(clockData.isClockedIn ?? false);
+                  setClockInTime(clockData.clockInTime ?? null);
+                  setClockInDuration(clockData.clockInDuration ?? 0);
+                }
+              }
+            } else {
+              // Not onboarded yet! Direct to Onboarding Step 1 within Interactive Login Card
+              setEmail(user.email || "");
+              setBusinessNames([profileData.name || ""]);
+              setOwnerNames([profileData.name || ""]);
+              setLoggedInUser({
+                email: user.email || "",
+                role: "Owner",
+                permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+                isEmployee: false,
+                name: profileData.name || "Owner",
+                goals: ""
+              });
+              setIsLoggedIn(false);
+              setCurrentView("placeholder_password");
+            }
+          } else {
+            setLoggedInUser({
+              email: user.email || "",
+              role: "Owner",
+              permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+              isEmployee: false,
+              name: user.displayName || "Owner",
+              goals: ""
+            });
+            setIsLoggedIn(false);
+            setCurrentView("placeholder_password");
+          }
+        } catch (err) {
+          console.error("Error reading user profile:", err);
+        } finally {
+          isTimeClockLoadedRef.current = true;
+        }
+      } else {
+        setLoggedInUser(null);
+        setIsLoggedIn(false);
+        isTimeClockLoadedRef.current = false;
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync Time Clock state to Firestore
+  useEffect(() => {
+    if (!loggedInUser?.email || !isTimeClockLoadedRef.current) return;
+    const saveTimeClock = async () => {
+      try {
+        await setDoc(doc(db, "timeclock_states", loggedInUser.email), {
+          isClockedIn,
+          clockInTime,
+          clockInDuration,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.error("Failed to save time clock state:", err);
+      }
+    };
+    saveTimeClock();
+  }, [isClockedIn, clockInTime, clockInDuration, loggedInUser]);
+
+  const takeSnapshot = (pageId: string, pageName: string, metaData?: any) => {
+    pendingSnapshotRef.current = { pageId, pageName, metaData };
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    } else {
+      createAndAddSnapshot(pageId, pageName, metaData);
+    }
+  };
+
+  const handleCameraCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      // Fallback if no file was selected or camera was closed
+      if (pendingSnapshotRef.current) {
+        const { pageId, pageName, metaData } = pendingSnapshotRef.current;
+        createAndAddSnapshot(pageId, pageName, metaData);
+        pendingSnapshotRef.current = null;
+      }
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      if (pendingSnapshotRef.current) {
+        const { pageId, pageName, metaData } = pendingSnapshotRef.current;
+        createAndAddSnapshot(pageId, pageName, metaData, dataUrl);
+        pendingSnapshotRef.current = null;
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input value so same file can be captured again
+    event.target.value = "";
+  };
+
   const deleteSnapshot = (id: string) => {
     setSnapshots(prev => prev.filter(s => s.id !== id));
     triggerNotification("Snapshot deleted from folder index");
   };
+
+  function logOperationalEvent(type: string, desc: string, icon: string = "🤖") {
+    triggerNotification(`${icon} ${type}: ${desc}`);
+    const newAct = {
+      id: "act_sec_" + Math.random().toString(36).substring(2, 9),
+      date: new Date().toISOString().slice(0, 10),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      module: type,
+      action: desc,
+      reason: "Security tracking log",
+      status: "Completed" as const,
+      approvedBy: loggedInUser?.name || "System"
+    };
+    setRecentAiActions(prev => [newAct, ...prev]);
+  }
 
   // AI PAGE ANALYSIS STATE & DIALOG ENGINE
   const [isAIAnalysisOpen, setIsAIAnalysisOpen] = useState(false);
@@ -975,6 +1292,7 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([]);
   const [aiInputMessage, setAiInputMessage] = useState("");
   const [aiIsLoading, setAiIsLoading] = useState(false);
+  const [pendingAiAction, setPendingAiAction] = useState<{ type: "drawer" | "floating"; query: string; customText?: string } | null>(null);
 
   const openPageAIAnalysis = (pageId: string, pageName: string, customContext?: string) => {
     setAiPageId(pageId);
@@ -984,6 +1302,8 @@ export default function App() {
     setIsAIAnalysisOpen(true);
     setAiIsLoading(true);
 
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+
     setTimeout(() => {
       let welcomeText = "";
       if (pageId === "dashboard") {
@@ -991,7 +1311,7 @@ export default function App() {
 
 I have executed a diagnostic scan of your **Dashboard Operating Space**. Here are my automated optimization recommendations:
 
-1. **Revenue Recovery**: Outstanding payments of **$2,450.00** are currently tracked in past-due logs. Suggest activating automated invoice workflows.
+1. **Revenue Recovery**: Outstanding payments of **${isOwnerOrAdmin ? "$2,450.00" : "[REDACTED - OWNER ONLY]"}** are currently tracked in past-due logs. Suggest activating automated invoice workflows.
 2. **Technician Allocation**: Field telemetries indicate peak dispatcher density on **Tuesday mornings**.
 3. **Acquisition Trends**: Lead pipeline value has grown **14%** month-over-month.
 
@@ -1001,8 +1321,8 @@ I have executed a diagnostic scan of your **Dashboard Operating Space**. Here ar
 
 I have compiled the CRM customer profile index. Here is the operational diagnosis:
 
-1. **VIP Loyalty Concentration**: **Marcus Vance (Apex Plumb & Drain)** holds your highest Lifetime Value of **$24,500.00**.
-2. **Outstanding Risk**: **Oakridge Apartments** has an active **$2,450.00 past due balance** spanning multiple billing cycles.
+1. **VIP Loyalty Concentration**: **Marcus Vance (Apex Plumb & Drain)** holds your highest Lifetime Value of **${isOwnerOrAdmin ? "$24,500.00" : "[REDACTED - OWNER ONLY]"}**.
+2. **Outstanding Risk**: **Oakridge Apartments** has an active **${isOwnerOrAdmin ? "$2,450.00 past due balance" : "[REDACTED - OWNER ONLY] past due balance"}** spanning multiple billing cycles.
 3. **Follow-Up Efficiency**: 2 residential accounts are flagged as "Past Due". Immediate automated outreach recommended.
 
 *Ask me to summarize custom client metrics or analyze demographic performance!*`;
@@ -1011,7 +1331,7 @@ I have compiled the CRM customer profile index. Here is the operational diagnosi
 
 The incoming sales opportunities pipeline has been audited successfully:
 
-1. **Pipeline Value**: Total pipeline value is modeled at **$48,900.00** across **10 active leads**.
+1. **Pipeline Value**: Total pipeline value is modeled at **${isOwnerOrAdmin ? "$48,900.00" : "[REDACTED - OWNER ONLY]"}** across **10 active leads**.
 2. **Top Customer Acquisition Source**: **Website forms** are leading both in count and in high-intent value, followed closely by **Google Business Profile**.
 3. **Velocity Warning**: 3 leads have been in the "New" pipeline for over 48 hours without a dispatcher touchpoint.
 
@@ -1019,10 +1339,10 @@ The incoming sales opportunities pipeline has been audited successfully:
       } else {
         welcomeText = `### 🤖 LeadForge OS — Operational Module Assistant
 
-I have completed a telemetry capture of the **${pageName}** workspace.
+I have completed a snapshot capture of the **${pageName}** workspace.
 
-- **System Node**: Connected & verified.
-- **Diagnostic Mode**: Ready.
+- **System Status**: Connected & verified.
+- **Analysis Mode**: Ready.
 - **Data Log**: Local state successfully cataloged.
 
 *Ask me any question about the operational configuration or data fields for the ${pageName} system!*`;
@@ -1039,17 +1359,11 @@ I have completed a telemetry capture of the **${pageName}** workspace.
     }, 600);
   };
 
-  const handleSendAIMessage = () => {
-    if (!aiInputMessage.trim()) return;
-
-    const userMsgText = aiInputMessage;
-    setAiMessages(prev => [...prev, { sender: "user", text: userMsgText }]);
-    setAiInputMessage("");
+  const executeConfirmedAIMessage = (query: string) => {
     setAiIsLoading(true);
-
     setTimeout(() => {
       let responseText = "";
-      const lower = userMsgText.toLowerCase();
+      const lower = query.toLowerCase();
 
       if (lower.includes("highest") || lower.includes("top") || lower.includes("best")) {
         if (aiPageId === "customers") {
@@ -1059,9 +1373,67 @@ I have completed a telemetry capture of the **${pageName}** workspace.
         } else {
           responseText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer ($24,500 LTV), and **Website forms** is your most consistent acquisition source (4 leads, $34k total).";
         }
-      } else if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt")) {
+      } else if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
         responseText = "You have **$2,450.00** past due from **Oakridge Apartments** (Clara Oswald). I recommend triggering an automated gentle SMS reminder to pay since they have a system maintenance appointment scheduled soon.";
-      } else if (lower.includes("convert") || lower.includes("improve") || lower.includes("grow") || lower.includes("marketing")) {
+      } else {
+        responseText = `Based on the active **${aiPageName}** ledger, I have compiled your query with full financial access. 
+- Customer Outstanding: **$2,450.00** past due
+- Customer Lifetime Value (LTV): **$24,500.00** (Marcus Vance)
+- Active Opportunities pipeline: **$48,900.00**`;
+      }
+
+      setAiMessages(prev => [...prev, { sender: "ai", text: responseText }]);
+      setAiIsLoading(false);
+    }, 800);
+  };
+
+  const handleSendAIMessage = () => {
+    if (!aiInputMessage.trim()) return;
+
+    const userMsgText = aiInputMessage;
+    setAiMessages(prev => [...prev, { sender: "user", text: userMsgText }]);
+    setAiInputMessage("");
+
+    const lower = userMsgText.toLowerCase();
+    const isFinancialQuery = lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("highest") || lower.includes("top") || lower.includes("best") || lower.includes("profit") || lower.includes("revenue") || lower.includes("expense") || lower.includes("billing") || lower.includes("ltv") || lower.includes("lifetime") || lower.includes("financial") || lower.includes("invoice");
+
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+
+    if (isFinancialQuery) {
+      if (!isOwnerOrAdmin) {
+        setAiIsLoading(true);
+        setTimeout(() => {
+          let blockedText = "";
+          if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
+            blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
+          } else {
+            if (aiPageId === "customers") {
+              blockedText = "Your highest value client is **Marcus Vance** representing **Apex Plumb & Drain** with an elegant Lifetime Value of **[REDACTED - OWNER ONLY]**. They have 3 open jobs currently.";
+            } else if (aiPageId === "leads") {
+              blockedText = "The highest value lead is **Theresa W.** representing Facebook source with an estimated contract value of **[REDACTED - OWNER ONLY]** currently marked in 'New' status.";
+            } else {
+              blockedText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer (**[REDACTED - OWNER ONLY]** LTV), and your most consistent acquisition source is Website forms.";
+            }
+          }
+          setAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
+          setAiIsLoading(false);
+        }, 600);
+        return;
+      }
+
+      setPendingAiAction({
+        type: "drawer",
+        query: userMsgText
+      });
+      return;
+    }
+
+    setAiIsLoading(true);
+
+    setTimeout(() => {
+      let responseText = "";
+
+      if (lower.includes("convert") || lower.includes("improve") || lower.includes("grow") || lower.includes("marketing")) {
         responseText = "To maximize conversions:\n1. **Auto-Assign**: Immediately route Website leads to sales rep Sarah Connor (95% win-rate).\n2. **Commercial Focus**: Prioritize bids above $5,000; historical conversion data is 2.5x higher here than for under-$1,000 residential maintenance.";
       } else if (lower.includes("help") || lower.includes("what is") || lower.includes("explain")) {
         responseText = `I can help you monitor this page's activities. Currently, we are looking at the **${aiPageName}** screen. You can ask me to evaluate financial charts, calculate conversion averages, draft follow-up emails, or recommend crew dispatch times.`;
@@ -1076,20 +1448,93 @@ To execute your request, I recommend assigning dispatcher Sarah to review the re
     }, 800);
   };
 
+  const executeConfirmedFloatingAiMessage = (query: string, customText?: string) => {
+    setFloatingAiLoading(true);
+    setTimeout(() => {
+      let aiResponseText = "";
+      const lowerText = query.toLowerCase();
+
+      if (lowerText.includes("why did profit drop") && activeScreen.id === "revenue") {
+        aiResponseText = `### 📊 Profit Margin Diagnostic Analysis
+I have audited the ledger for the selected period. Profit margins dipped **4.2%** due to the following triggers:
+1. **Unpaid Invoices**: Cumulative outstanding balance of **$2,450.00** from past-due accounts.
+2. **Fuel Overruns**: Higher travel density on Route B added **$310.00** in auxiliary fuel charges.
+3. **Labor Allocation**: Peak dispatch overlaps led to **2.5 hours** of overtime billing.
+
+**Recommendation**: Activate the *Automatic Past-Due Balance Hold* workflow to protect estimate margins on active accounts.`;
+      } else if (lowerText.includes("highest") || lowerText.includes("top") || lowerText.includes("best")) {
+        aiResponseText = `### 🤖 LeadForge AI Solution
+Processed context query for **${activeScreen.label} Page**:
+- **Highest Customer Lifetime Value**: **$24,500.00** (Marcus Vance)
+- **Top Lead Pipeline Value**: **$48,900.00**
+
+Full financial database access has been confirmed and verified.`;
+      } else if (lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt")) {
+        aiResponseText = `### 📊 Outstanding Receivables Analysis
+The active past-due ledger tracks:
+- **Past Due Sum**: **$2,450.00** outstanding from **Oakridge Apartments**.
+- **LTV Exposure**: High risk. Recommend automated collection workflow.`;
+      } else {
+        aiResponseText = `### 🤖 LeadForge AI Solution
+Processed context query for **${activeScreen.label} Page**:
+- **Prompt**: "${query}"
+- **Outstanding Balance**: **$2,450.00** (Clara Oswald)
+- **LTV**: **$24,500.00** (Marcus Vance)
+- **Status**: Secure Financial Session Active`;
+      }
+
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
+      setFloatingAiLoading(false);
+    }, 1000);
+  };
+
   const handleSendFloatingAiMessage = (customText?: string) => {
     const textToSend = customText || floatingAiInput;
     if (!textToSend.trim()) return;
 
     setFloatingAiMessages(prev => [...prev, { sender: "user", text: textToSend }]);
     setFloatingAiInput("");
+
+    const lowerText = textToSend.toLowerCase();
+    const isFinancialQuery = lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("highest") || lowerText.includes("top") || lowerText.includes("best") || lowerText.includes("profit") || lowerText.includes("revenue") || lowerText.includes("expense") || lowerText.includes("billing") || lowerText.includes("ltv") || lowerText.includes("lifetime") || lowerText.includes("financial") || lowerText.includes("invoice");
+
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+
+    if (isFinancialQuery) {
+      if (!isOwnerOrAdmin) {
+        setFloatingAiLoading(true);
+        setTimeout(() => {
+          let blockedText = "";
+          if (lowerText.includes("why did profit drop") || lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("invoice")) {
+            blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
+          } else {
+            blockedText = `### 🤖 LeadForge AI Solution
+Processed context query for **${activeScreen.label} Page**:
+- **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
+- **Lifetime Value**: **[REDACTED - OWNER ONLY]**
+- **Outstanding Balance**: **[REDACTED - OWNER ONLY]**
+
+Access to full financial telemetry is restricted.`;
+          }
+          setFloatingAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
+          setFloatingAiLoading(false);
+        }, 600);
+        return;
+      }
+
+      setPendingAiAction({
+        type: "floating",
+        query: textToSend,
+        customText: customText
+      });
+      return;
+    }
+
     setFloatingAiLoading(true);
 
-    // Simulate AI response based on text and activeScreen.id
     setTimeout(() => {
       let aiResponseText = "";
-      const lowerText = textToSend.toLowerCase();
 
-      // Check presets first
       if (lowerText.includes("order more") && activeScreen.id === "inventory") {
         aiResponseText = `### 📦 Purchase Order Generated - LeadForge Autonomous Inventory
 Based on your current context (**Selected Inventory Item: ${selectedInventoryItem}**), I have verified that stock level is critical.
@@ -1101,7 +1546,6 @@ I have executed the following actions:
 
 *This action has been added to the AI Ledger and can be reversed in the Recent Actions tab.*`;
         
-        // Log action
         const newAct = {
           id: `act_${Date.now()}`,
           date: new Date().toISOString().split("T")[0],
@@ -1127,7 +1571,6 @@ Parsed request to shift schedules for technician on **Selected Schedule Event ID
 
 *Action logged in Recent Actions tab and fully reversible.*`;
         
-        // Let's modify the schedulingEvents dates!
         setSchedulingEvents(prev => prev.map(e => e.id === selectedScheduleEventId ? { ...e, date: "2026-07-06" } : e));
 
         const newAct = {
@@ -1143,14 +1586,6 @@ Parsed request to shift schedules for technician on **Selected Schedule Event ID
         setRecentAiActions(prev => [newAct, ...prev]);
         triggerNotification(`📅 Moved schedule event to tomorrow successfully!`);
 
-      } else if (lowerText.includes("why did profit drop") && activeScreen.id === "revenue") {
-        aiResponseText = `### 📊 Profit Margin Diagnostic Analysis
-I have audited the ledger for the selected period. Profit margins dipped **4.2%** due to the following triggers:
-1. **Unpaid Invoices**: Cumulative outstanding balance of **$2,450.00** from past-due accounts.
-2. **Fuel Overruns**: Higher travel density on Route B added **$310.00** in auxiliary fuel charges.
-3. **Labor Allocation**: Peak dispatch overlaps led to **2.5 hours** of overtime billing.
-
-**Recommendation**: Activate the *Automatic Past-Due Balance Hold* workflow to protect estimate margins on active accounts.`;
       } else if (lowerText.includes("call him") && activeScreen.id === "customers") {
         aiResponseText = `### 📞 RingCentral Dialer Activated
 Initiating outbound call to customer associated with current context:
@@ -1169,7 +1604,6 @@ Analyzing selected job context (**Job ID: ${selectedJobId}**):
 
 *I have drafted a pre-inspection form for this job. Type 'approve' to execute.*`;
       } else {
-        // Generic page action or general query response
         aiResponseText = `### 🤖 LeadForge AI Solution
 Processed context query for **${activeScreen.label} Page**:
 - **Prompt**: "${textToSend}"
@@ -1234,20 +1668,73 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
   const [showRoleInfoPopup, setShowRoleInfoPopup] = useState<string | null>(null);
   const [showCustomRoleModal, setShowCustomRoleModal] = useState(false);
   const [customRoleName, setCustomRoleName] = useState("");
+  const [roleIdPendingDelete, setRoleIdPendingDelete] = useState<string | null>(null);
   
   // Generated invites state for modal
   const [generatedInvites, setGeneratedInvites] = useState<Array<{ code: string; role: string; permissions: string[] }>>([]);
   const [showInvitesModal, setShowInvitesModal] = useState(false);
 
-  // Logged in user profile (null if guest/default owner, or set when authenticated)
-  const [loggedInUser, setLoggedInUser] = useState<{
-    email: string;
-    role: string;
-    permissions: string[];
-    isEmployee?: boolean;
-    name?: string;
-    goals?: string;
-  } | null>(null);
+  useEffect(() => {
+    refSecurityLogged.current = {};
+  }, [loggedInUser, simulatedRole]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+    if (activeRole === "Technician" && (activeScreen.id === "owner_console" || activeScreen.id === "revenue")) {
+      if (!refSecurityLogged.current[activeScreen.id]) {
+        refSecurityLogged.current[activeScreen.id] = true;
+        logOperationalEvent("Security Violation", `Blocked unauthorized attempt to access page: ${activeScreen.label}`, "🚨");
+      }
+    }
+  }, [activeScreen, isLoggedIn, loggedInUser, simulatedRole]);
+
+  useEffect(() => {
+    if (!loggedInUser) return;
+    const isDemoUser = loggedInUser.email === "admin@ownerslocal.com" || loggedInUser.email === "sec_manager@ownerslocal.com";
+    if (!isDemoUser) {
+      // Clear all Ironclad Plumbing & HVAC demo data for a fresh start
+      setCustomers([]);
+      setDashboardLeads([]);
+      setRecentRoster([]);
+      setDocuments([]);
+      setSchedulingEvents([]);
+      
+      // Load any existing profile settings if they exist in firestore
+      const loadBizProfile = async () => {
+        try {
+          const bizSnap = await getDoc(doc(db, "business_profiles", loggedInUser.email));
+          if (bizSnap.exists()) {
+            const bizData = bizSnap.data();
+            if (bizData.businessNames) setBusinessNames(bizData.businessNames);
+            if (bizData.ownerNames) setOwnerNames(bizData.ownerNames);
+            if (bizData.businessPhones) setBusinessPhones(bizData.businessPhones);
+            if (bizData.businessAddresses) setBusinessAddresses(bizData.businessAddresses);
+            if (bizData.businessLogos) setBusinessLogos(bizData.businessLogos);
+            if (bizData.companyLocations) setCompanyLocations(bizData.companyLocations);
+            if (bizData.billingMethods) setBillingMethods(bizData.billingMethods);
+            if (bizData.selectedBillingMethodId) setSelectedBillingMethodId(bizData.selectedBillingMethodId);
+          } else {
+            // For brand-new accounts, start completely blank
+            setBusinessNames([]);
+            setOwnerNames([]);
+            setBusinessPhones([]);
+            setBusinessAddresses([]);
+            setBusinessLogos([]);
+            setCompanyLocations([]);
+            setBillingMethods([]);
+            setSelectedBillingMethodId("");
+          }
+        } catch (err) {
+          console.error("Error loading non-demo business profile:", err);
+        }
+      };
+      
+      if (!loggedInUser.isEmployee) {
+        loadBizProfile();
+      }
+    }
+  }, [loggedInUser]);
 
   // Employee Onboarding form states
   const [empInviteCode, setEmpInviteCode] = useState("");
@@ -1278,117 +1765,207 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     triggerNotification(`Navigated to Placeholder for: ${label}`);
   };
 
-  // Real Firestore check for Password sign-in
+  const handleOwnerSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = signUpInstructionsEmail.trim().toLowerCase();
+    const cleanUser = signUpInstructionsBusinessName.trim();
+    const cleanOwner = signUpInstructionsOwnerName.trim();
+    const cleanPass = signUpInstructionsPassword.trim();
+
+    if (!cleanUser || !cleanOwner || !cleanEmail || !cleanPass) {
+      setSignUpInstructionsError("All fields are required.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setSignUpInstructionsError("Please enter a valid email address.");
+      return;
+    }
+
+    if (cleanPass.length < 6) {
+      setSignUpInstructionsError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setSignUpInstructionsError("");
+    setIsSignUpSubmitting(true);
+
+    try {
+      // 1. Create real authentication user
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
+      const user = userCredential.user;
+
+      // 2. Create owner user profile document
+      const userProfile = {
+        uid: user.uid,
+        email: cleanEmail,
+        role: "Owner",
+        permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"],
+        name: cleanOwner,
+        isEmployee: false,
+        businessEmail: cleanEmail,
+        isOnboarded: false,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, "user_profiles", user.uid), userProfile);
+
+      // 3. Create owner business profile document in Firestore
+      await setDoc(doc(db, "business_profiles", cleanEmail), {
+        password: cleanPass,
+        businessNames: [cleanUser],
+        ownerNames: [cleanOwner],
+        businessPhones: [""],
+        businessAddresses: [""],
+        businessLogos: ["https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60"],
+        companyLocations: [""],
+        billingMethods: [],
+        selectedBillingMethodId: "",
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update relevant states for consistency
+      setEmail(cleanEmail);
+      setPassword(cleanPass);
+      setBusinessNames([cleanUser]);
+      setOwnerNames([cleanOwner]);
+
+      setLoggedInUser({
+        email: cleanEmail,
+        role: "Owner",
+        permissions: userProfile.permissions,
+        isEmployee: false,
+        name: cleanOwner,
+        goals: ""
+      });
+
+      // Directly show Step 1 of Onboarding!
+      setCurrentView("placeholder_password");
+      setShowSignUpInstructions(false);
+      triggerNotification(`Welcome, Owner of ${cleanUser}! Please complete onboarding.`);
+    } catch (err: any) {
+      console.error("Error signing up:", err);
+      let errMsg = err.message || "Unknown error";
+      if (err.code === "auth/email-already-in-use") {
+        errMsg = "This email address is already registered.";
+      }
+      setSignUpInstructionsError("Sign up failed: " + errMsg);
+    } finally {
+      setIsSignUpSubmitting(false);
+    }
+  };
+
+  // Real Firebase Auth Password sign-in
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = email.trim();
+    const cleanEmail = email.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    // Check for developer bypass
-    if (cleanEmail === "0722" && cleanPass === "0722") {
-      setIsBypassUser(true);
-      setEmail("operations@ironcladservices.com");
-      setLoggedInUser({
-        email: "operations@ironcladservices.com",
-        role: "Owner",
-        permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-      });
-      setIsLoggedIn(false);
-      setCurrentView("placeholder_password"); // Step 1 of Owner Onboarding
-      setActiveScreen(OS_SCREENS[0]); // Reset to Dashboard
-      triggerNotification("Developer bypass active. Showing Step 1 Owner Onboarding.");
+    if (rememberMe) {
+      localStorage.setItem("rememberMe", "true");
+      localStorage.setItem("rememberedEmail", email);
+      localStorage.setItem("rememberedPassword", password);
+    } else {
+      localStorage.removeItem("rememberMe");
+      localStorage.removeItem("rememberedEmail");
+      localStorage.removeItem("rememberedPassword");
+    }
+
+    // 1. Business Email must be a valid email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setLoginError("Please enter a valid business email address.");
+      triggerNotification("Invalid email format.");
       return;
     }
 
-    setIsBypassUser(false);
+    // 2. Password cannot be empty
+    if (!cleanPass) {
+      setLoginError("Password cannot be empty.");
+      triggerNotification("Password cannot be empty.");
+      return;
+    }
 
-    if (!email) {
-      triggerNotification("Please enter a business email.");
-      return;
-    }
-    if (!password) {
-      triggerNotification("Please enter a password.");
-      return;
-    }
-    
+    setLoginError(null);
     setIsSubmitting(true);
     setLoginMethod("password");
     
     try {
-      // 1. Check if employee exists
-      const empSnap = await getDoc(doc(db, "employees", cleanEmail));
-      if (empSnap.exists()) {
-        const empData = empSnap.data();
+      // Authenticate with real Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+      const user = userCredential.user;
+
+      // Fetch user profile from user_profiles to load their role and permissions
+      const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
         setLoggedInUser({
-          email: cleanEmail,
-          role: empData.role || "Driver",
-          permissions: empData.permissions || ["dashboard", "routes"],
-          isEmployee: true,
-          name: `${empData.firstName || ""} ${empData.lastName || ""}`.trim() || "Employee",
-          goals: empData.goals
+          email: user.email || "",
+          role: profileData.role || "Owner",
+          permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+          isEmployee: profileData.isEmployee ?? false,
+          name: profileData.name || user.displayName || "Owner",
+          goals: profileData.goals || ""
         });
         setIsLoggedIn(true);
-        const firstPermitted = OS_SCREENS.find(s => (empData.permissions || []).includes(s.id)) || OS_SCREENS[0];
-        setActiveScreen(firstPermitted);
-        triggerNotification(`Signed in as employee: ${empData.firstName || "User"} (${empData.role})`);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // 2. Check if owner business profile exists
-      const bizSnap = await getDoc(doc(db, "business_profiles", cleanEmail));
-      if (bizSnap.exists()) {
-        const bizData = bizSnap.data();
+
+        const isEmployee = profileData.isEmployee ?? false;
+        if (isEmployee) {
+          const firstPermitted = OS_SCREENS.find(s => (profileData.permissions || []).includes(s.id)) || OS_SCREENS[0];
+          setActiveScreen(firstPermitted);
+          triggerNotification(`Signed in as employee: ${profileData.name || "User"} (${profileData.role})`);
+        } else {
+          setActiveScreen(OS_SCREENS[0]);
+          triggerNotification(`Signed in as Owner`);
+        }
+      } else {
         setLoggedInUser({
-          email: cleanEmail,
+          email: user.email || "",
           role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
+          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+          isEmployee: false,
+          name: user.displayName || "Owner",
+          goals: ""
         });
         setIsLoggedIn(true);
         setActiveScreen(OS_SCREENS[0]);
-        triggerNotification(`Signed in as Owner of ${bizData.businessNames?.[0] || "LeadForge Biz"}`);
-      } else {
-        // Owner doesn't have a profile yet, take them to Onboarding Step 1
-        setLoggedInUser({
-          email: cleanEmail,
-          role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-        });
-        setCurrentView("placeholder_password");
-        triggerNotification(`Welcome Owner! Please complete Step 1 of Onboarding.`);
+        triggerNotification(`Signed in successfully.`);
       }
-    } catch (err) {
-      console.error("Error signing in:", err);
-      // Fallback in case of offline / permission issues
-      setCurrentView("placeholder_password");
-      triggerNotification("Signed in successfully!");
+    } catch (err: any) {
+      console.error("Error signing in with Firebase Auth:", err);
+      let errMsg = "Incorrect password or email. Please try again.";
+      if (err.code === "auth/user-not-found") {
+        errMsg = "User account not found. Please sign up.";
+      } else if (err.code === "auth/wrong-password") {
+        errMsg = "Incorrect password. Please try again.";
+      } else if (err.code === "auth/invalid-credential") {
+        errMsg = "Invalid login credentials. Please check your email and password.";
+      }
+      setLoginError(errMsg);
+      triggerNotification("Sign-in failed.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async () => {
+    if (!forgotEmail) {
+      triggerNotification("Please provide an email.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail.trim());
+      setForgotSubmitted(true);
+      triggerNotification("Password recovery email transmitted successfully!");
+    } catch (err: any) {
+      console.error("Password reset failed:", err);
+      triggerNotification("Reset failed: " + (err.message || "Unknown error"));
     }
   };
 
   // Real Firestore check for Employee Invite code
   const handleInviteSignIn = async () => {
     const codeTrim = inviteCode.trim().toUpperCase();
-    
-    if (codeTrim === "0722") {
-      setIsBypassUser(true);
-      setEmpInviteCode("0722");
-      setLoggedInUser({
-        email: "employee_test@ironcladservices.com",
-        role: "Office Manager",
-        permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings", "timeclock", "roster"],
-        isEmployee: true,
-        name: "Sarah Jenkins"
-      });
-      setIsLoggedIn(false);
-      setCurrentView("employee_onboarding"); // Take to Employee Onboarding Step 1
-      setActiveScreen(OS_SCREENS[0]); // Reset to Dashboard
-      triggerNotification("Developer bypass active. Showing Step 1 Employee Onboarding.");
-      return;
-    }
-
-    setIsBypassUser(false);
 
     if (!codeTrim) {
       triggerNotification("Please enter an employee invite code.");
@@ -1420,15 +1997,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
         setCurrentView("employee_onboarding");
         triggerNotification(`Invite verified for: ${inviteData.role}! Complete setup.`);
       } else {
-        // Demo Code check or general fallback to ensure fluid experience
-        if (codeTrim === "DRIVER-X4F91") {
-          setEmpInviteCode("DRIVER-X4F91");
-          setCurrentView("employee_onboarding");
-          triggerNotification("Loaded DEMO Driver invite. Complete profile!");
-        } else {
-          // If code is valid uppercase, let them register or show error
-          triggerNotification("Invite code not found in database. Try DRIVER-X4F91");
-        }
+        triggerNotification("Invite code not found in database. Please ask your owner or manager for a valid code.");
       }
     } catch (err) {
       console.error("Error verifying invite:", err);
@@ -1442,7 +2011,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
   // Google Sign In integration with Firestore
   const handleGoogleSignIn = async (selectedEmail: string) => {
-    setIsBypassUser(false);
     setShowGoogleDialog(false);
     setIsSubmitting(true);
     setLoginMethod("google");
@@ -1506,12 +2074,22 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
   };
 
   // Logout routine
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentView("login");
-    setLoginMethod(null);
-    setPassword("••••••••••••••••");
-    triggerNotification("Logged out of LeadForge LOCAL OS.");
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsLoggedIn(false);
+      setCurrentView("login");
+      setLoginMethod(null);
+      setPassword("••••••••••••••••");
+      triggerNotification("Logged out of LeadForge.");
+    } catch (err) {
+      console.error("Logout error:", err);
+      // Fallback
+      setIsLoggedIn(false);
+      setCurrentView("login");
+      setLoginMethod(null);
+      setPassword("••••••••••••••••");
+    }
   };
 
   // Load business profile from Firestore on mount or when view transitions to onboarding
@@ -1580,12 +2158,17 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
           return { ...r, count: Math.max(0, newCount) };
         }
         return r;
-      }).filter(r => {
-        // Keep Owner always, remove other roles if count drops to 0
-        if (r.id === "owner") return true;
-        return r.count > 0;
       });
     });
+  };
+
+  const handleRemoveRole = (roleId: string) => {
+    if (roleId === "owner") {
+      triggerNotification("Cannot remove the Owner role.");
+      return;
+    }
+    setSelectedRoles(prev => prev.filter(r => r.id !== roleId));
+    triggerNotification("Role removed successfully.");
   };
 
   // Add a role from the dropdown selection
@@ -1692,7 +2275,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
         await setDoc(doc(db, "employee_invites", inv.code), {
           code: inv.code,
           role: inv.role,
-          businessEmail: email || "operations@ironcladservices.com",
+          businessEmail: email || "admin@ownerslocal.com",
           permissions: inv.permissions,
           status: "pending",
           createdAt: new Date().toISOString()
@@ -1730,10 +2313,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     // Look up role & permissions from invite
     let inviteRole = "Driver";
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
-    let businessEmail = email || "operations@ironcladservices.com";
+    let businessEmail = email || "admin@ownerslocal.com";
     
     try {
-      if (empInviteCode && empInviteCode !== "DRIVER-X4F91") {
+      if (empInviteCode) {
         const inviteSnap = await getDoc(doc(db, "employee_invites", empInviteCode));
         if (inviteSnap.exists()) {
           const inviteData = inviteSnap.data();
@@ -1744,33 +2327,47 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       }
     } catch (lookupErr) {
       console.warn("Invite lookup failed (offline/network):", lookupErr);
-      // Fallback is already initialized
     }
     
-    const newEmployee = {
-      email: cleanEmail,
-      firstName: empFirstName,
-      lastName: empLastName,
-      address: empAddress,
-      phone: empPhone,
-      photo: empPhoto || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-      goals: empGoals,
-      role: inviteRole,
-      permissions: invitePermissions,
-      businessEmail,
-      createdAt: new Date().toISOString()
-    };
-    
     try {
-      // Save employee profile
+      // 1. Create real Auth User
+      const authResult = await createUserWithEmailAndPassword(auth, cleanEmail, empPassword);
+      const user = authResult.user;
+
+      // 2. Initialize user_profile
+      await setDoc(doc(db, "user_profiles", user.uid), {
+        role: inviteRole,
+        permissions: invitePermissions,
+        isEmployee: true,
+        businessEmail,
+        isOnboarded: true,
+        name: `${empFirstName} ${empLastName}`,
+        goals: empGoals,
+        createdAt: new Date().toISOString()
+      });
+
+      // 3. Save detailed employees entry
+      const newEmployee = {
+        email: cleanEmail,
+        firstName: empFirstName,
+        lastName: empLastName,
+        address: empAddress,
+        phone: empPhone,
+        photo: empPhoto || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+        goals: empGoals,
+        role: inviteRole,
+        permissions: invitePermissions,
+        businessEmail,
+        createdAt: new Date().toISOString()
+      };
       await setDoc(doc(db, "employees", cleanEmail), newEmployee);
       
-      // Update invite status
+      // 4. Update invite status
       if (empInviteCode && empInviteCode !== "DRIVER-X4F91") {
         await setDoc(doc(db, "employee_invites", empInviteCode), { status: "completed", usedBy: cleanEmail }, { merge: true });
       }
       
-      // Log the employee in!
+      // 5. Update UI local state
       setLoggedInUser({
         email: cleanEmail,
         role: inviteRole,
@@ -1785,47 +2382,13 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       const trainingScreen = OS_SCREENS.find(s => s.id === "training") || OS_SCREENS[0];
       setActiveScreen(trainingScreen);
       triggerNotification("Employee profile registered! Welcome to Employee Training.");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Employee onboarding database save failed:", err);
       const errMsg = err instanceof Error ? err.message : String(err);
-      
-      // Local fallback login so user does not get stuck
-      setLoggedInUser({
-        email: cleanEmail,
-        role: inviteRole,
-        permissions: invitePermissions,
-        isEmployee: true,
-        name: `${empFirstName} ${empLastName}`,
-        goals: empGoals
-      });
-      setIsLoggedIn(true);
-      
-      const trainingScreen = OS_SCREENS.find(s => s.id === "training") || OS_SCREENS[0];
-      setActiveScreen(trainingScreen);
-      triggerNotification(`Registered profile locally (Cloud save deferred: ${errMsg.slice(0, 45)}...)`);
+      triggerNotification(`Registration failed: ${errMsg}`);
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Dynamic list manipulation helpers
-  const addField = (setter: React.Dispatch<React.SetStateAction<string[]>>) => {
-    setter(prev => [...prev, ""]);
-  };
-
-  const updateField = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number, value: string) => {
-    setter(prev => {
-      const updated = [...prev];
-      updated[index] = value;
-      return updated;
-    });
-  };
-
-  const removeField = (setter: React.Dispatch<React.SetStateAction<string[]>>, index: number) => {
-    setter(prev => {
-      if (prev.length <= 1) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
   };
 
   const renderDynamicField = (
@@ -1835,62 +2398,35 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     placeholder: string
   ) => {
     return (
-      <div className="space-y-1.5 mb-4">
-        <div className="flex items-center justify-between px-1">
-          <label style={getFontSize(11)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider">
-            {label}
-          </label>
-          <button
-            type="button"
-            onClick={() => addField(setter)}
-            style={{ padding: `${3 * scale}px ${8 * scale}px`, borderRadius: `${6 * scale}px`, ...getFontSize(10) }}
-            className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-blue-200/50"
-          >
-            <span>+ Add</span>
-          </button>
-        </div>
-        <div className="space-y-1.5">
-          {items.map((val, idx) => (
-            <div key={idx} className="flex gap-1.5 items-center">
-              <input
-                type="text"
-                value={val}
-                onChange={(e) => updateField(setter, idx, e.target.value)}
-                placeholder={placeholder}
-                style={{
-                  height: `${42 * scale}px`,
-                  borderRadius: `${12 * scale}px`,
-                  paddingLeft: `${14 * scale}px`,
-                  paddingRight: `${14 * scale}px`,
-                  ...getFontSize(12.5)
-                }}
-                className="flex-1 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium focus:outline-none transition-all placeholder:text-slate-400/70 shadow-sm"
-              />
-              {items.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeField(setter, idx)}
-                  style={{ width: `${30 * scale}px`, height: `${30 * scale}px`, borderRadius: `${8 * scale}px` }}
-                  className="hover:bg-rose-50 text-rose-500 hover:text-rose-700 font-bold transition-colors cursor-pointer flex items-center justify-center text-xs shrink-0 border border-transparent hover:border-rose-100"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <DynamicFieldList
+        label={label}
+        items={items}
+        setter={setter}
+        placeholder={placeholder}
+        scale={scale}
+        error={onboardingErrors[label.toLowerCase()]}
+      />
     );
   };
 
   return (
     <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
+      {/* Hidden device camera capture input */}
+      <input
+        type="file"
+        ref={cameraInputRef}
+        onChange={handleCameraCapture}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        style={{ display: "none" }}
+      />
       
       {/* Background ambient light effects */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-cyan-500/10 blur-[150px] rounded-full pointer-events-none" />
 
-      {/* Header section (only shown when logged out to present the sandbox controls) */}
+      {/* Header section (only shown when logged out to present the gateway metadata) */}
       {!isLoggedIn && (
         <header className="hidden sm:flex w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex-col sm:flex-row items-center justify-between gap-3 border-b border-blue-200/50 bg-white/45 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">
@@ -1898,19 +2434,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
             <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">LEADFORGE CLOUD GATEWAY v2.8.4</span>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => {
-                setEmail("operations@ironcladservices.com");
-                setPassword("demo_pass_123");
-                setInviteCode("DRIVER-X4F91");
-                triggerNotification("Demo inputs filled successfully!");
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-200 rounded-lg text-xs font-bold text-[#342D7E] transition-all cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset Demo Inputs
-            </button>
-            <div className="h-4 w-px bg-blue-200" />
             <div className="text-xs text-[#342D7E]/75 font-mono bg-blue-100/60 px-2 py-1 rounded">
               PORT: 3000 (SECURE)
             </div>
@@ -1929,7 +2452,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
             <div 
               id="login-card-container"
               ref={containerRef}
-              className="relative w-full sm:max-w-[440px] aspect-[1440/3200] sm:rounded-[44px] rounded-none overflow-hidden sm:shadow-[0_20px_50px_rgba(8,112,184,0.2)] sm:border border-blue-200/20 bg-cover bg-center select-none"
+              className="relative w-full sm:max-w-[440px] aspect-[1440/3200] sm:rounded-[44px] rounded-none overflow-hidden sm:shadow-[0_20px_50px_rgba(8,112,184,0.2)] sm:border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
               style={{ backgroundImage: `url(${CARD_BG_URL})` }}
             >
               {/* Inner glassmorphic shading overlay */}
@@ -2048,7 +2571,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           type="text"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="operations@ironcladservices.com"
+                          placeholder="you@example.com"
                           style={{
                             paddingLeft: `${42 * scale}px`,
                             paddingRight: `${14 * scale}px`,
@@ -2123,12 +2646,34 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           )}
                         </button>
                       </div>
+
+                      {/* REMEMBER ME CHECKBOX */}
+                      <div 
+                        style={{ marginTop: `${5 * scale}px`, gap: `${6 * scale}px` }}
+                        className="flex items-center select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          id="remember-me-checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          style={{ width: `${14 * scale}px`, height: `${14 * scale}px` }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <label 
+                          htmlFor="remember-me-checkbox"
+                          style={getFontSize(11.5)}
+                          className="font-bold text-blue-900/80 cursor-pointer"
+                        >
+                          Remember Me
+                        </label>
+                      </div>
                     </div>
 
                     {/* SIGN IN GENERATED GLOWING BUTTON */}
                     <div 
-                      style={{ top: "57.96875%", left: "11%", width: "78%", height: "4.5%" }}
-                      className="absolute"
+                      style={{ top: "58.2%", left: "11%", width: "78%", height: "4.5%" }}
+                      className="absolute flex items-center"
                     >
                       <button
                         type="submit"
@@ -2142,11 +2687,50 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       </button>
                     </div>
 
+                    {loginError && (
+                      <div 
+                        style={{ top: "54.1%", left: "11%", width: "78%" }}
+                        className="absolute text-rose-600 font-bold text-[10px] sm:text-[11px] leading-tight flex items-center gap-1.5 bg-rose-50/95 py-1 px-2 border border-rose-200/50 rounded-lg shadow-sm"
+                      >
+                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
+                        <span>{loginError}</span>
+                      </div>
+                    )}
+
                   </form>
+
+                  {/* DYNAMIC OR SIGN UP LINK */}
+                  <div 
+                    style={{ 
+                      top: "62.333%", 
+                      left: "11%", 
+                      width: "78%", 
+                      height: "3.5%",
+                    }}
+                    className="absolute flex items-center justify-center"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSignUpInstructionsEmail("");
+                        setSignUpInstructionsBusinessName("");
+                        setSignUpInstructionsOwnerName("");
+                        setSignUpInstructionsPassword("");
+                        setSignUpInstructionsError("");
+                        setSignUpInstructionsStep("input");
+                        setShowSignUpInstructions(true);
+                      }}
+                      style={getFontSize(11.5)}
+                      className="font-bold text-[#1E3A8A] hover:text-[#2563EB] transition-colors cursor-pointer flex items-center justify-center gap-1 hover:underline"
+                    >
+                      <span>Don't have an account?</span>
+                      <span className="font-extrabold text-[#315C9F] underline">Or Sign Up</span>
+                    </button>
+                  </div>
 
                   {/* SEPARATOR - FIELD SERVICE LOG IN */}
                   <div 
-                    style={{ top: "65.45%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                    style={{ top: "67.68%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
                     className="absolute flex items-center justify-between"
                   >
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
@@ -2164,7 +2748,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   {/* INVITE CODE SECTION */}
                   <div 
-                    style={{ top: "68.875%", left: "11%", width: "54%" }}
+                    style={{ top: "72.204%", left: "11%", width: "54%" }}
                     className="absolute"
                   >
                     <label 
@@ -2205,7 +2789,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   {/* GO GENERATED GLOWING BUTTON */}
                   <div 
-                    style={{ top: "71.125%", left: "68%", width: "21%", height: "4.5%" }}
+                    style={{ top: "74.454%", left: "68%", width: "21%", height: "4.5%" }}
                     className="absolute"
                   >
                     <button
@@ -2219,32 +2803,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     >
                       <span>Go ➔</span>
                     </button>
-                  </div>
-
-                  {/* DEMO TIP INFO BOX */}
-                  <div 
-                    style={{ 
-                      top: "78.625%", 
-                      left: "11%", 
-                      width: "78%", 
-                      height: "9%",
-                      padding: `${10 * scale}px ${12 * scale}px`,
-                      borderRadius: `${16 * scale}px`,
-                      gap: `${8 * scale}px`
-                    }}
-                    className="absolute flex items-start text-blue-900 overflow-y-auto"
-                  >
-                    <div className="text-blue-600 mt-0.5 shrink-0">
-                      <Info style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
-                    </div>
-                    <div className="flex-1">
-                      <p 
-                        style={getFontSize(11.5)}
-                        className="leading-relaxed font-sans font-medium text-blue-950"
-                      >
-                        <span className="font-bold text-blue-700">Demo tip:</span> Onboard first to generate codes, or log in as Owner to view active employee codes.
-                      </p>
-                    </div>
                   </div>
 
                   {/* FOOTER NAV LINKS */}
@@ -2275,6 +2833,34 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     >
                       <Shield style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
                       <span>Privacy Policy</span>
+                    </button>
+                  </div>
+
+                  {/* AI BUTTONS ON THE BOTTOM OF THE BLUE BACKGROUND */}
+                  <div 
+                    style={{ 
+                      bottom: "5.5%", 
+                      left: "11%", 
+                      width: "78%"
+                    }}
+                    className="absolute flex items-center justify-center pointer-events-auto"
+                  >
+                    {/* AI ASSISTANT BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFloatingAiOpen(true)}
+                      style={{
+                        padding: `${6 * scale}px ${10 * scale}px`,
+                        borderRadius: `${10 * scale}px`,
+                        ...getFontSize(10)
+                      }}
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:scale-105 active:scale-[0.98] border border-blue-300/30 transition-all cursor-pointer"
+                    >
+                      <span className="relative flex" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}></span>
+                      </span>
+                      <span>LeadForge AI</span>
                     </button>
                   </div>
                 </>
@@ -2407,35 +2993,35 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           Back
                         </button>
 
-                        {isBypassUser && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLoggedInUser({
-                                email: "operations@ironcladservices.com",
-                                role: "Owner",
-                                permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-                              });
-                              setIsLoggedIn(true);
-                              setActiveScreen(OS_SCREENS[0]); // Dashboard
-                              triggerNotification("Onboarding skipped. Standard Owner session active.");
-                            }}
-                            style={{
-                              height: `${38 * scale}px`,
-                              borderRadius: `${12 * scale}px`,
-                              paddingLeft: `${14 * scale}px`,
-                              paddingRight: `${14 * scale}px`,
-                              ...getFontSize(11.5)
-                            }}
-                            className="font-sans font-extrabold text-amber-600 hover:text-amber-800 hover:bg-amber-50 border border-amber-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 bg-white shadow-sm animate-fade-in"
-                          >
-                            Skip Onboarding
-                          </button>
-                        )}
-
                         <button
                           type="button"
                           onClick={async () => {
+                            const errors: Record<string, string> = {};
+                            const hasEmptyValue = (arr: string[]) => !arr || arr.length === 0 || arr.some(v => !v || !v.trim());
+                            
+                            if (hasEmptyValue(ownerNames)) {
+                              errors["owner name"] = "Owner Name cannot be empty.";
+                            }
+                            if (hasEmptyValue(ownerPhones)) {
+                              errors["owner phone"] = "Owner Phone cannot be empty.";
+                            }
+                            if (hasEmptyValue(businessNames)) {
+                              errors["business name"] = "Business Name cannot be empty.";
+                            }
+                            if (hasEmptyValue(businessPhones)) {
+                              errors["business phone"] = "Business Phone cannot be empty.";
+                            }
+                            if (hasEmptyValue(businessAddresses)) {
+                              errors["business address"] = "Business Address cannot be empty.";
+                            }
+                            
+                            if (Object.keys(errors).length > 0) {
+                              setOnboardingErrors(errors);
+                              triggerNotification("Please fill in all required fields.");
+                              return;
+                            }
+                            
+                            setOnboardingErrors({});
                             setIsSubmitting(true);
                             await saveProfileToFirestore();
                             setIsSubmitting(false);
@@ -2669,25 +3255,68 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                             </div>
 
                             {/* CARD SUB-ACTIONS */}
-                            <div className="flex items-center justify-between pt-1 border-t border-slate-100/50 text-[10px] text-slate-500">
-                              <button
-                                type="button"
-                                onClick={() => setCustomizingRole(role)}
-                                className="font-sans font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Settings className="w-3 h-3 text-blue-500 animate-spin-slow" />
-                                <span>Customize Permissions</span>
-                              </button>
+                            {roleIdPendingDelete === role.id ? (
+                              <div className="flex items-center justify-between w-full bg-rose-50/90 px-2 py-1 rounded border border-rose-100/50 animate-fade-in mt-1">
+                                <span style={getFontSize(9.5)} className="text-rose-700 font-bold flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
+                                  <span>Remove this role?</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleRemoveRole(role.id);
+                                      setRoleIdPendingDelete(null);
+                                    }}
+                                    className="font-sans font-extrabold text-rose-600 hover:text-rose-800 bg-rose-100 hover:bg-rose-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                    style={getFontSize(9.5)}
+                                  >
+                                    Yes, Remove
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoleIdPendingDelete(null)}
+                                    className="font-sans font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                    style={getFontSize(9.5)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100/50 text-[10px] text-slate-500">
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomizingRole(role)}
+                                  className="font-sans font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Settings className="w-3 h-3 text-blue-500 animate-spin-slow" />
+                                  <span>Customize Permissions</span>
+                                </button>
 
-                              <button
-                                type="button"
-                                onClick={() => handleDuplicateRole(role)}
-                                className="font-sans font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Copy className="w-3 h-3 text-slate-400" />
-                                <span>Duplicate</span>
-                              </button>
-                            </div>
+                                <div className="flex items-center gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDuplicateRole(role)}
+                                    className="font-sans font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Copy className="w-3 h-3 text-slate-400" />
+                                    <span>Duplicate</span>
+                                  </button>
+
+                                  {role.id !== "owner" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRoleIdPendingDelete(role.id)}
+                                      className="font-sans font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-400" />
+                                      <span>Remove Role</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                           </div>
                         ))}
@@ -2709,32 +3338,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                         >
                           Back
                         </button>
-
-                        {isBypassUser && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLoggedInUser({
-                                email: "operations@ironcladservices.com",
-                                role: "Owner",
-                                permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-                              });
-                              setIsLoggedIn(true);
-                              setActiveScreen(OS_SCREENS[0]); // Dashboard
-                              triggerNotification("Onboarding skipped. Standard Owner session active.");
-                            }}
-                            style={{
-                              height: `${38 * scale}px`,
-                              borderRadius: `${12 * scale}px`,
-                              paddingLeft: `${14 * scale}px`,
-                              paddingRight: `${14 * scale}px`,
-                              ...getFontSize(11.5)
-                            }}
-                            className="font-sans font-extrabold text-amber-600 hover:text-amber-800 hover:bg-amber-50 border border-amber-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 bg-white shadow-sm"
-                          >
-                            Skip Onboarding
-                          </button>
-                        )}
 
                         <button
                           type="button"
@@ -2991,34 +3594,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           >
                             Cancel
                           </button>
-
-                          {isBypassUser && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLoggedInUser({
-                                  email: "employee_test@ironcladservices.com",
-                                  role: "Office Manager",
-                                  permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings", "timeclock", "roster"],
-                                  isEmployee: true,
-                                  name: "Sarah Jenkins"
-                                });
-                                setIsLoggedIn(true);
-                                setActiveScreen(OS_SCREENS[0]); // Dashboard
-                                triggerNotification("Employee Onboarding skipped. Developer session active.");
-                              }}
-                              style={{
-                                height: `${38 * scale}px`,
-                                borderRadius: `${12 * scale}px`,
-                                paddingLeft: `${14 * scale}px`,
-                                paddingRight: `${14 * scale}px`,
-                                ...getFontSize(11.5)
-                              }}
-                              className="font-sans font-extrabold text-amber-600 hover:text-amber-800 hover:bg-amber-50 border border-amber-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 bg-white shadow-sm animate-fade-in"
-                            >
-                              Skip Onboarding
-                            </button>
-                          )}
 
                           <button
                             type="submit"
@@ -3581,7 +4156,16 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
+                              try {
+                                if (auth.currentUser) {
+                                  await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
+                                    isOnboarded: true
+                                  }, { merge: true });
+                                }
+                              } catch (err) {
+                                console.error("Error setting onboarded flag:", err);
+                              }
                               setLoggedInUser({
                                 email,
                                 role: "Owner",
@@ -3611,10 +4195,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
                     <Sparkles className="w-5 h-5 text-blue-600 absolute animate-pulse" />
                   </div>
-                  <p className="text-blue-950 font-bold mt-4 text-xs md:text-sm tracking-wider font-mono animate-pulse">
-                    {loginMethod === "google" && "AUTHENTICATING GOOGLE NODE..."}
-                    {loginMethod === "password" && "VERIFYING SECURE SHELL PASS..."}
-                    {loginMethod === "invite" && "VALIDATING INVITE PROTOCOL..."}
+                  <p className="text-blue-950 font-bold mt-4 text-xs md:text-sm tracking-wider font-sans animate-pulse">
+                    {loginMethod === "google" && "Signing in..."}
+                    {loginMethod === "password" && "Signing in..."}
+                    {loginMethod === "invite" && "Verifying invite..."}
                   </p>
                 </div>
               )}
@@ -3630,7 +4214,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     {!forgotSubmitted ? (
                       <>
                         <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
-                          Enter your registered business email and we'll transmit a secure decryption key bypass.
+                          Enter your registered business email and we'll transmit a secure password recovery link.
                         </p>
                         <div className="relative mb-4">
                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -3655,13 +4239,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!forgotEmail) {
-                                triggerNotification("Please provide an email.");
-                                return;
-                              }
-                              setForgotSubmitted(true);
-                            }}
+                            onClick={handleForgotPasswordSubmit}
                             className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer"
                           >
                             Send Link
@@ -3704,10 +4282,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     </p>
                     <div className="space-y-2 mb-4">
                       <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-[10px] text-blue-950">
-                        <span className="font-bold">Password Log In:</span> Use your primary corporate email (try <code className="bg-white/80 px-1 py-0.5 rounded">operations@ironcladservices.com</code> with any password).
+                        <span className="font-bold">Password Log In:</span> Use your primary corporate email and registered password to log in.
                       </div>
                       <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-[10px] text-blue-950">
-                        <span className="font-bold">Employee Invite Log In:</span> Use your invite code string (try <code className="bg-white/80 px-1 py-0.5 rounded">DRIVER-X4F91</code> and click Go).
+                        <span className="font-bold">Employee Invite Log In:</span> Use a custom invite code generated in settings.
                       </div>
                     </div>
                     <button
@@ -3757,7 +4335,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     
                     <div className="space-y-2 mb-4">
                       {[
-                        { name: "IronClad Operations", email: "operations@ironcladservices.com", initials: "IO" },
+                        { name: "OwnersLocal Admin", email: "admin@ownerslocal.com", initials: "OA" },
                         { name: "John Doe", email: "john.doe@gmail.com", initials: "JD" },
                         { name: "LeadForge Guest Account", email: "guest@leadforge.ai", initials: "GA" }
                       ].map((acc, index) => (
@@ -3788,6 +4366,134 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   </div>
                 </div>
               )}
+
+              {/* SUB-MODAL 5: SIGN UP INSTRUCTIONS WITH REAL FIREBASE AUTH */}
+              {showSignUpInstructions && (
+                <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100 flex flex-col justify-between max-h-[92%] overflow-y-auto font-sans">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded-xl">
+                          <UserPlus className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-blue-950 tracking-tight uppercase">
+                            Gateway Registration
+                          </h3>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                            Establish Secure Node
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mb-4 leading-relaxed font-semibold">
+                        Register your business to activate a secure cloud gateway database node. Verification is required before access is granted.
+                      </p>
+
+                      <form onSubmit={handleOwnerSignUp} className="space-y-3">
+                        {/* OWNER NAME */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Owner Full Name
+                          </label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="text"
+                              required
+                              value={signUpInstructionsOwnerName}
+                              onChange={(e) => setSignUpInstructionsOwnerName(e.target.value)}
+                              placeholder="e.g. John Doe"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* BUSINESS NAME */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Business Name
+                          </label>
+                          <div className="relative">
+                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="text"
+                              required
+                              value={signUpInstructionsBusinessName}
+                              onChange={(e) => setSignUpInstructionsBusinessName(e.target.value)}
+                              placeholder="e.g. Ironclad Plumbing"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* BUSINESS EMAIL */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Business Email
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="email"
+                              required
+                              value={signUpInstructionsEmail}
+                              onChange={(e) => setSignUpInstructionsEmail(e.target.value)}
+                              placeholder="e.g. owner@ironclad.com"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* PASSWORD */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Create Passcode
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="password"
+                              required
+                              value={signUpInstructionsPassword}
+                              onChange={(e) => setSignUpInstructionsPassword(e.target.value)}
+                              placeholder="••••••••"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {signUpInstructionsError && (
+                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200/50 animate-pulse leading-snug">
+                            {signUpInstructionsError}
+                          </p>
+                        )}
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowSignUpInstructions(false);
+                              setSignUpInstructionsError("");
+                            }}
+                            className="flex-1 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer text-center"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isSignUpSubmitting}
+                            className="flex-1 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer text-center disabled:opacity-50"
+                          >
+                            {isSignUpSubmitting ? "Registering..." : "Sign Up"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
 
             </div>
 
@@ -3857,7 +4563,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                 {!isSidebarCollapsed && (
                   <div className="mt-2.5 px-0.5 animate-fade-in text-left">
                     <p className="font-sans font-black text-xs text-[#1F3557] tracking-wider uppercase leading-normal">
-                      {businessNames?.[0] || "IRONCLAD PLUMBING & HVAC"}
+                      {businessNames?.[0] || "LEADFORGELOCAL"}
                     </p>
                   </div>
                 )}
@@ -3875,6 +4581,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       key={screen.id}
                       onClick={() => {
                         setActiveScreen(screen);
+                        setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
                         triggerNotification(`Navigated to: ${screen.label}`);
                       }}
                       className={`w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
@@ -4018,7 +4725,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     {!isSidebarCollapsed && (
                       <div className="flex-1 min-w-0 animate-fade-in text-left">
                         <p className="text-xs font-sans font-extrabold text-[#1F3557] truncate leading-tight">
-                           {loggedInUser?.name || "Sarah Jenkins"}
+                           {loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001")}
                         </p>
                         <div 
                           className="flex items-center gap-1.5 mt-0.5 cursor-pointer hover:opacity-80"
@@ -4182,11 +4889,13 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     <div className="absolute top-0 left-0 bottom-0 w-[16%] flex flex-col select-none pointer-events-auto">
                       <div className="h-[11%] w-full pointer-events-none" />
                       <div className="flex-1 flex flex-col w-full relative">
-                        {OS_SCREENS.map((screen) => (
+                        {getVisibleScreens().filter(screen => screen.id !== "owner_console").map((screen) => (
                           <button
                             key={screen.id}
                             onClick={() => {
                               setActiveScreen(screen);
+                              // Auto-clear notification dot for clicked screen
+                              setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
                               triggerNotification(`Hotspot navigated to ${screen.label}`);
                             }}
                             style={{
@@ -4308,107 +5017,132 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
                       switch (targetId) {
                         case "revenue":
-                          return (
-                            <div 
-                              key={slotLabel}
-                              onClick={() => {
-                                const matched = OS_SCREENS.find(s => s.id === "revenue");
-                                if (matched) setActiveScreen(matched);
-                                triggerNotification("Navigated to Revenue details");
-                              }}
-                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer relative text-left"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5 text-[#1F3557]">
-                                  {getScreenIcon("revenue", "w-4 h-4 text-[#315C9F]")}
-                                  <span className="text-[10px] font-black tracking-wider uppercase">COMPANY REVENUE</span>
+                          {
+                            const activeRoleVal = simulatedRole || loggedInUser?.role || "Owner";
+                            const isFinAuthorized = ["Owner", "Admin", "Administrator", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"].includes(activeRoleVal);
+                            return (
+                              <div 
+                                key={slotLabel}
+                                onClick={() => {
+                                  if (!isFinAuthorized) {
+                                    triggerNotification("⚠️ Access Denied: Financial metrics are restricted to Owners/Admins.");
+                                    logOperationalEvent("Security Violation", `User with role ${activeRoleVal} attempted to navigate to financial details via dashboard widget`, "🚨");
+                                    return;
+                                  }
+                                  const matched = OS_SCREENS.find(s => s.id === "revenue");
+                                  if (matched) setActiveScreen(matched);
+                                  triggerNotification("Navigated to Revenue details");
+                                }}
+                                className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer relative text-left"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                    {getScreenIcon("revenue", "w-4 h-4 text-[#315C9F]")}
+                                    <span className="text-[10px] font-black tracking-wider uppercase">COMPANY REVENUE</span>
+                                  </div>
+                                  <span className="text-[8px] bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                    {revenuePageFilter}
+                                  </span>
                                 </div>
-                                <span className="text-[8px] bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                                  {revenuePageFilter}
-                                </span>
-                              </div>
-                              
-                              <div className="my-1 text-left">
-                                <p className="text-lg font-sans font-black text-[#1F3557] tracking-tight leading-none">
-                                  {revenuePageFilter === "Pay Period" && "$24,850.00"}
-                                  {revenuePageFilter === "Week" && "$5,820.00"}
-                                  {revenuePageFilter === "Month" && "$24,850.00"}
-                                  {revenuePageFilter === "Quarter" && "$74,550.00"}
-                                  {revenuePageFilter === "Year" && "$298,000.00"}
-                                  {revenuePageFilter === "Custom" && "$15,200.00"}
-                                </p>
-                                <p className="text-[9px] text-[#5E7393] font-bold mt-0.5">Live Income vs Expenses & Taxes</p>
-                              </div>
+                                
+                                <div className="my-1 text-left">
+                                  <p className="text-lg font-sans font-black text-[#1F3557] tracking-tight leading-none">
+                                    {isFinAuthorized ? (
+                                      <>
+                                        {revenuePageFilter === "Pay Period" && "$24,850.00"}
+                                        {revenuePageFilter === "Week" && "$5,820.00"}
+                                        {revenuePageFilter === "Month" && "$24,850.00"}
+                                        {revenuePageFilter === "Quarter" && "$74,550.00"}
+                                        {revenuePageFilter === "Year" && "$298,000.00"}
+                                        {revenuePageFilter === "Custom" && "$15,200.00"}
+                                      </>
+                                    ) : (
+                                      <span className="text-sm font-sans font-extrabold text-red-600 bg-red-100 px-2 py-0.5 rounded-md border border-red-200">
+                                        [REDACTED - OWNER ONLY]
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-0.5">Live Income vs Expenses & Taxes</p>
+                                </div>
 
-                              <div className="flex-1 w-full min-h-[100px] mt-2 relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <LineChart data={getDashboardGraphData()} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                                    <XAxis
-                                      dataKey="time"
-                                      stroke="#5E7393"
-                                      fontSize={8}
-                                      tickLine={false}
-                                      axisLine={false}
-                                      className="font-mono"
-                                    />
-                                    <YAxis
-                                      stroke="#5E7393"
-                                      fontSize={8}
-                                      tickLine={false}
-                                      axisLine={false}
-                                      className="font-mono"
-                                    />
-                                    <Line
-                                      type="monotone"
-                                      dataKey="Revenue"
-                                      stroke="#22C55E"
-                                      strokeWidth={1.5}
-                                      dot={{ r: 1 }}
-                                      activeDot={{ r: 3 }}
-                                      name="Revenue"
-                                    />
-                                    <Line
-                                      type="monotone"
-                                      dataKey="Profit"
-                                      stroke="#3B82F6"
-                                      strokeWidth={1.5}
-                                      dot={{ r: 1 }}
-                                      activeDot={{ r: 3 }}
-                                      name="Profit"
-                                    />
-                                    <Line
-                                      type="monotone"
-                                      dataKey="Expenses"
-                                      stroke="#EF4444"
-                                      strokeWidth={1.2}
-                                      dot={{ r: 1 }}
-                                      activeDot={{ r: 3 }}
-                                      name="Expenses"
-                                    />
-                                    <Line
-                                      type="monotone"
-                                      dataKey="Payroll"
-                                      stroke="#8B5CF6"
-                                      strokeWidth={1.2}
-                                      dot={{ r: 1 }}
-                                      activeDot={{ r: 3 }}
-                                      name="Payroll"
-                                    />
-                                    <Line
-                                      type="monotone"
-                                      dataKey="Taxes"
-                                      stroke="#F59E0B"
-                                      strokeWidth={1.2}
-                                      dot={{ r: 1 }}
-                                      activeDot={{ r: 3 }}
-                                      name="Taxes"
-                                    />
-                                  </LineChart>
-                                </ResponsiveContainer>
+                                <div className="flex-1 w-full min-h-[100px] mt-2 relative">
+                                  {isFinAuthorized ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <LineChart data={getDashboardGraphData()} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                        <XAxis
+                                          dataKey="time"
+                                          stroke="#5E7393"
+                                          fontSize={8}
+                                          tickLine={false}
+                                          axisLine={false}
+                                          className="font-mono"
+                                        />
+                                        <YAxis
+                                          stroke="#5E7393"
+                                          fontSize={8}
+                                          tickLine={false}
+                                          axisLine={false}
+                                          className="font-mono"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Revenue"
+                                          stroke="#22C55E"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Revenue"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Profit"
+                                          stroke="#3B82F6"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Profit"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Expenses"
+                                          stroke="#EF4444"
+                                          strokeWidth={1.2}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Expenses"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Payroll"
+                                          stroke="#8B5CF6"
+                                          strokeWidth={1.2}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Payroll"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Taxes"
+                                          stroke="#F59E0B"
+                                          strokeWidth={1.2}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Taxes"
+                                        />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950/5 border border-dashed border-red-300 rounded-2xl p-2 text-center">
+                                      <span className="text-lg">🔒</span>
+                                      <p className="text-[10px] font-sans font-bold text-red-700 mt-1 uppercase tracking-wider">Financial Visualization Locked</p>
+                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business ledger streams.</p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
+                            );
+                          }
                         case "leads":
                           return (
                             <div 
@@ -4636,10 +5370,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           <div className="text-left space-y-1 bg-transparent border-none p-0 shadow-none">
                             <div className="flex items-center gap-1.5 text-[10px] font-black text-[#1F3557] uppercase tracking-wider">
                               <Laptop className="w-3.5 h-3.5 text-[#315C9F]" />
-                              <span>TEAM MEMBER TERMINAL</span>
+                              <span>TEAM DASHBOARD</span>
                             </div>
                             <h2 className="text-base md:text-lg font-sans font-black tracking-tight text-[#1F3557] flex items-center gap-2">
-                              Welcome, {loggedInUser?.name || "Sarah Jenkins"}!
+                              Welcome, {loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001")}!
                               <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
                             </h2>
                             <p className="text-[11px] font-sans font-bold text-[#5E7393]">
@@ -4657,7 +5391,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                                 {liveTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                               </span>
                               <span className="text-[8px] font-bold text-blue-200 font-mono mt-1 uppercase tracking-widest leading-none">
-                                Secure Terminal Node
+                                Secure Workspace
                               </span>
                             </div>
                             <div className="flex gap-2 w-full">
@@ -4798,50 +5532,32 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                               <div className="space-y-4">
                                 <div className="space-y-1 flex flex-col">
                                   <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 1 Metric Card</label>
-                                  <select
+                                  <CustomDropdown
                                     value={customCardTargets.card1}
-                                    onChange={(e) => setCustomCardTargets(prev => ({ ...prev, card1: e.target.value }))}
-                                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
-                                  >
-                                    <option value="revenue">📊 Company Revenue Graph</option>
-                                    <option value="leads">🎯 Active Leads Count</option>
-                                    <option value="scheduling">📅 Jobs Scheduled Today</option>
-                                    <option value="fleet">🚚 Fleet Telemetry Hub</option>
-                                    <option value="messages">💬 Messages Feed Board</option>
-                                    <option value="inventory">📦 Warehouse Inventory Scans</option>
-                                  </select>
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card1: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
                                 </div>
 
                                 <div className="space-y-1 flex flex-col">
                                   <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 2 Metric Card</label>
-                                  <select
+                                  <CustomDropdown
                                     value={customCardTargets.card2}
-                                    onChange={(e) => setCustomCardTargets(prev => ({ ...prev, card2: e.target.value }))}
-                                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
-                                  >
-                                    <option value="revenue">📊 Company Revenue Graph</option>
-                                    <option value="leads">🎯 Active Leads Count</option>
-                                    <option value="scheduling">📅 Jobs Scheduled Today</option>
-                                    <option value="fleet">🚚 Fleet Telemetry Hub</option>
-                                    <option value="messages">💬 Messages Feed Board</option>
-                                    <option value="inventory">📦 Warehouse Inventory Scans</option>
-                                  </select>
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card2: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
                                 </div>
 
                                 <div className="space-y-1 flex flex-col">
                                   <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 3 Metric Card</label>
-                                  <select
+                                  <CustomDropdown
                                     value={customCardTargets.card3}
-                                    onChange={(e) => setCustomCardTargets(prev => ({ ...prev, card3: e.target.value }))}
-                                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
-                                  >
-                                    <option value="revenue">📊 Company Revenue Graph</option>
-                                    <option value="leads">🎯 Active Leads Count</option>
-                                    <option value="scheduling">📅 Jobs Scheduled Today</option>
-                                    <option value="fleet">🚚 Fleet Telemetry Hub</option>
-                                    <option value="messages">💬 Messages Feed Board</option>
-                                    <option value="inventory">📦 Warehouse Inventory Scans</option>
-                                  </select>
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card3: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
                                 </div>
                               </div>
 
@@ -4910,6 +5626,12 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "leads" ? (
                     <LeadsPage
+                      leads={leads}
+                      setLeads={setLeads}
+                      customers={customers}
+                      setCustomers={setCustomers}
+                      estimates={estimates}
+                      setEstimates={setEstimates}
                       onOpenPlaceholder={openPlaceholderPage}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
@@ -4941,9 +5663,15 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "estimates" ? (
                     <EstimatesPage
+                      estimates={estimates}
+                      setEstimates={setEstimates}
+                      schedulingEvents={schedulingEvents}
+                      setSchedulingEvents={setSchedulingEvents}
                       onOpenPlaceholder={openPlaceholderPage}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
+                      loggedInUser={loggedInUser || undefined}
+                      recentRoster={recentRoster}
                       onNavigateToScreen={(screenId, params) => {
                         if (params?.customerId) {
                           setPreSelectedCustomerId(params.customerId);
@@ -4970,7 +5698,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
                         <div>
                           <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Corporate Roster</h2>
-                          <p className="text-xs text-slate-500">Employee database and security bypass index</p>
+                          <p className="text-xs text-slate-500">Employee database and secure roster logs</p>
                         </div>
                         <span className="px-3 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-xs font-mono font-bold rounded-xl border border-[#A9CDEE]">
                           Secure Node Connected
@@ -4984,7 +5712,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                             <PlusCircle className="w-4 h-4 text-[#4A9BFF]" /> Create Security Invitation
                           </h4>
                           <p className="text-[10.5px] text-slate-500 leading-normal font-medium">
-                            Generate temporary bypass login tokens for onboarding new employees.
+                            Generate temporary secure invitation keys for onboarding new employees.
                           </p>
                           
                           <div className="space-y-1">
@@ -5050,7 +5778,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                                 </div>
 
                                 <div className="p-2 bg-[#F5FAFF] rounded-xl border border-[#A9CDEE]/30 flex items-center justify-between">
-                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold font-sans">Bypass Key</span>
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold font-sans">Access Key</span>
                                   <code 
                                     onClick={() => {
                                       navigator.clipboard.writeText(item.code);
@@ -5107,6 +5835,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "inventory" ? (
                     <InventoryPage
+                      inventoryList={inventoryList}
+                      setInventoryList={setInventoryList}
                       onOpenPlaceholder={openPlaceholderPage}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
@@ -5326,28 +6056,57 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     />
 
                   ) : activeScreen.id === "owner_console" ? (
-
-                    <OwnerConsolePage
-                      onTakeSnapshot={() => takeSnapshot("owner_console", "Owner Console")}
-                      onOpenAIAnalysis={(prompt) => openPageAIAnalysis("owner_console", "Owner Console", prompt)}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      triggerNotification={triggerNotification}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      dashboardLeads={dashboardLeads}
-                      setDashboardLeads={setDashboardLeads}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      revenueResetInterval={revenueResetInterval}
-                    />
+                    (simulatedRole || loggedInUser?.role || "Owner") === "Technician" ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access – Owner only</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account role (Technician) does not have permissions to access the Owner Console. This event has been logged for security audit purposes.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
+                      <OwnerConsolePage
+                        onTakeSnapshot={() => takeSnapshot("owner_console", "Owner Console")}
+                        onOpenAIAnalysis={(prompt) => openPageAIAnalysis("owner_console", "Owner Console", prompt)}
+                        activeRole={simulatedRole || loggedInUser?.role || "Owner"}
+                        loggedInUser={loggedInUser}
+                        triggerNotification={triggerNotification}
+                        customers={customers}
+                        setCustomers={setCustomers}
+                        dashboardLeads={dashboardLeads}
+                        setDashboardLeads={setDashboardLeads}
+                        schedulingEvents={schedulingEvents}
+                        setSchedulingEvents={setSchedulingEvents}
+                        recentAiActions={recentAiActions}
+                        setRecentAiActions={setRecentAiActions}
+                        revenueResetInterval={revenueResetInterval}
+                      />
+                    )
 
                   ) : activeScreen.id === "revenue" ? (
-                    
-                    /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
-                    <div className="space-y-6 animate-fade-in text-left">
+                    (simulatedRole || loggedInUser?.role || "Owner") === "Technician" ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access – Owner only</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account role (Technician) does not have permissions to access the Revenue Page or view financial data.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
+                      /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
+                      <div className="space-y-6 animate-fade-in text-left">
                       
                       {/* HEADER SECTION - Separate clean header block */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -5843,7 +6602,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                         
                         <div className="text-center pt-2">
                           <button
-                            onClick={() => openPlaceholderPage("Complete Payroll & Wage Ledger", "👥")}
+                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
                             className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
                           >
                             View All Employees ➔
@@ -5950,7 +6709,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           </div>
                           
                           <button
-                            onClick={() => openPlaceholderPage("Financial Reports Hub", "📊")}
+                            onClick={() => setRevenueConfirmAction({ label: "Financial Reports Hub", icon: "📊" })}
                             className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
                           >
                             View Financial Reports
@@ -6009,6 +6768,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       </div>
 
                     </div>
+                    )
 
                   ) : activeScreen.id === "scheduling" ? (
                     <SchedulingPage
@@ -6060,6 +6820,45 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           setActiveScreen(matched);
                         }
                       }}
+                    />
+
+                  ) : activeScreen.id === "routes" ? (
+                    <InteractiveMapPage
+                      customers={customers}
+                      setCustomers={setCustomers}
+                      leads={leads}
+                      setLeads={setLeads}
+                      estimates={estimates}
+                      setEstimates={setEstimates}
+                      schedulingEvents={schedulingEvents}
+                      setSchedulingEvents={setSchedulingEvents}
+                      inventoryList={inventoryList}
+                      setInventoryList={setInventoryList}
+                      documents={documents}
+                      setDocuments={setDocuments}
+                      businessAddresses={businessAddresses}
+                      logOperationalEvent={(type, desc, icon) => {
+                        triggerNotification(`${icon} ${type}: ${desc}`);
+                      }}
+                      onNavigateToScreen={(screenId, params) => {
+                        if (params?.customerId) {
+                          setPreSelectedCustomerId(params.customerId);
+                        } else {
+                          setPreSelectedCustomerId(undefined);
+                        }
+                        if (params?.date) {
+                          setPreSelectedDate(params.date);
+                        } else {
+                          setPreSelectedDate(undefined);
+                        }
+                        const matched = OS_SCREENS.find(s => s.id === screenId);
+                        if (matched) {
+                          setActiveScreen(matched);
+                        }
+                      }}
+                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
+                      completedJobsRevenue={completedJobsRevenue}
+                      setCompletedJobsRevenue={setCompletedJobsRevenue}
                     />
 
                   ) : activeScreen.id === "bulletins" ? (
@@ -6115,7 +6914,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                                 return;
                               }
                               const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-                              const nameClean = loggedInUser?.name || "Sarah Jenkins";
+                              const nameClean = loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001");
                               
                               const directApprovalRoles = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Scheduler"];
                               const isDirect = directApprovalRoles.includes(activeRole);
@@ -6302,6 +7101,42 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
         />
       )}
 
+      {/* REVENUE SENSITIVE OPERATIONS CONFIRMATION DIALOG */}
+      {revenueConfirmAction && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl border border-blue-100 space-y-4 text-center">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
+              <Lock className="w-6 h-6 animate-pulse" />
+            </div>
+            <h3 className="text-base font-extrabold text-[#1F3557] uppercase tracking-wider">Confirm Financial Report Download</h3>
+            <p className="text-xs text-[#5E7393] leading-relaxed font-sans font-medium">
+              You are requesting to generate and load: <strong className="text-red-600">{revenueConfirmAction.label}</strong>. 
+              This contains confidential company revenue, profit margins, and payroll balances. 
+              Please confirm your administrative override to compile this data.
+            </p>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                onClick={() => setRevenueConfirmAction(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = revenueConfirmAction;
+                  setRevenueConfirmAction(null);
+                  openPlaceholderPage(target.label, target.icon);
+                  logOperationalEvent("Financial Export", `User authorized download of sensitive report: ${target.label}`, "📊");
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 shadow-md shadow-blue-500/15"
+              >
+                Authorize & Load
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AI OPTION COMPANION WORKSPACE CHATBOT DRAWER */}
       {isAIAnalysisOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs animate-fade-in">
@@ -6383,6 +7218,40 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   <span>AI Agent is analyzing workspace ledger...</span>
                 </div>
               )}
+
+              {pendingAiAction && pendingAiAction.type === "drawer" && (
+                <div className="bg-[#FFF5F5] border-2 border-red-200 rounded-2xl p-4 shadow-sm space-y-3 animate-fade-in text-left">
+                  <div className="flex items-start gap-2.5">
+                    <span className="p-1.5 bg-red-100 rounded-lg text-red-600 font-bold text-sm">🔒</span>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pl-8 pt-1">
+                    <button
+                      onClick={() => {
+                        const queryToRun = pendingAiAction.query;
+                        setPendingAiAction(null);
+                        executeConfirmedAIMessage(queryToRun);
+                      }}
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10.5px] font-extrabold rounded-lg shadow-sm transition-all uppercase cursor-pointer tracking-wider"
+                    >
+                      Confirm & Reveal
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPendingAiAction(null);
+                      }}
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[10.5px] font-bold rounded-lg transition-all uppercase cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Quick Suggestions list */}
@@ -6394,10 +7263,11 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
               ].map((sug, sIdx) => (
                 <button
                   key={sIdx}
+                  disabled={!!pendingAiAction}
                   onClick={() => {
                     setAiInputMessage(sug);
                   }}
-                  className="px-2.5 py-1 text-[10px] font-sans font-bold text-[#315C9F] hover:text-white hover:bg-[#315C9F] bg-white border border-[#9EC8EF] rounded-lg transition-all cursor-pointer shadow-sm shrink-0"
+                  className={`px-2.5 py-1 text-[10px] font-sans font-bold text-[#315C9F] hover:text-white hover:bg-[#315C9F] bg-white border border-[#9EC8EF] rounded-lg transition-all cursor-pointer shadow-sm shrink-0 ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {sug}
                 </button>
@@ -6409,16 +7279,18 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
               <input
                 type="text"
                 value={aiInputMessage}
+                disabled={!!pendingAiAction}
                 onChange={(e) => setAiInputMessage(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSendAIMessage();
+                  if (e.key === "Enter" && !pendingAiAction) handleSendAIMessage();
                 }}
-                placeholder={`Ask about ${aiPageName} metrics or suggestions...`}
-                className="flex-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-4 py-3 text-xs text-[#1F3557] placeholder-[#5E7393]/70 focus:outline-none focus:border-[#315C9F] font-semibold"
+                placeholder={pendingAiAction ? "Confirmation pending... make a selection above" : `Ask about ${aiPageName} metrics or suggestions...`}
+                className={`flex-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-4 py-3 text-xs text-[#1F3557] placeholder-[#5E7393]/70 focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
               />
               <button
                 onClick={handleSendAIMessage}
-                className="px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl transition-all uppercase tracking-wider cursor-pointer shadow-sm"
+                disabled={!!pendingAiAction}
+                className={`px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl transition-all uppercase tracking-wider cursor-pointer shadow-sm ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
               >
                 Send
               </button>
@@ -6431,7 +7303,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       <div id="floating-ai-widget" className="fixed bottom-24 right-6 z-40 select-none">
         
         {/* Toggle Trigger Pill */}
-        {!isFloatingAiOpen && (
+        {!isFloatingAiOpen && isLoggedIn && (
           <button
             onClick={() => setIsFloatingAiOpen(true)}
             className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-pointer group font-sans font-black text-xs uppercase tracking-wider"
@@ -6561,45 +7433,85 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     )}
                   </div>
 
+                  {pendingAiAction && pendingAiAction.type === "floating" && (
+                    <div className="bg-[#FFF5F5] border border-red-200 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-red-100 rounded text-red-600 font-bold text-xs">🔒</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
+                          <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={() => {
+                            const queryToRun = pendingAiAction.query;
+                            const cTxt = pendingAiAction.customText;
+                            setPendingAiAction(null);
+                            executeConfirmedFloatingAiMessage(queryToRun, cTxt);
+                          }}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPendingAiAction(null);
+                          }}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Smart suggestion chips based on active module */}
                   <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
                     <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
                     {activeScreen.id === "inventory" && (
                       <button
-                        onClick={() => handleSendFloatingAiMessage("Order more.")}
-                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider"
+                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Order more.")}
+                        disabled={!!pendingAiAction}
+                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Order more
                       </button>
                     )}
                     {activeScreen.id === "scheduling" && (
                       <button
-                        onClick={() => handleSendFloatingAiMessage("Move him to tomorrow.")}
-                        className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider"
+                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
+                        disabled={!!pendingAiAction}
+                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Move to tomorrow
                       </button>
                     )}
                     {activeScreen.id === "revenue" && (
                       <button
-                        onClick={() => handleSendFloatingAiMessage("Why did profit drop?")}
-                        className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider"
+                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Why did profit drop?")}
+                        disabled={!!pendingAiAction}
+                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Analyze drop
                       </button>
                     )}
                     {activeScreen.id === "customers" && (
                       <button
-                        onClick={() => handleSendFloatingAiMessage("Call him.")}
-                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider"
+                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Call him.")}
+                        disabled={!!pendingAiAction}
+                        className={`px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Dial customer
                       </button>
                     )}
                     {activeScreen.id === "jobs" && (
                       <button
-                        onClick={() => handleSendFloatingAiMessage("What should I do next?")}
-                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider"
+                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("What should I do next?")}
+                        disabled={!!pendingAiAction}
+                        className={`px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Suggest next step
                       </button>
@@ -6612,16 +7524,18 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     <input
                       type="text"
                       value={floatingAiInput}
+                      disabled={!!pendingAiAction}
                       onChange={(e) => setFloatingAiInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSendFloatingAiMessage();
+                        if (e.key === "Enter" && !pendingAiAction) handleSendFloatingAiMessage();
                       }}
-                      placeholder={`Ask LeadForge AI about ${activeScreen.label}...`}
-                      className="flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold"
+                      placeholder={pendingAiAction ? "Clearance check active..." : `Ask LeadForge AI about ${activeScreen.label}...`}
+                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button
-                      onClick={() => handleSendFloatingAiMessage()}
-                      className="px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer"
+                      onClick={() => !pendingAiAction && handleSendFloatingAiMessage()}
+                      disabled={!!pendingAiAction}
+                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
                     >
                       Send
                     </button>
@@ -6680,7 +7594,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   <div className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 space-y-1.5">
                     <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Module Override AI Level</h4>
                     <p className="text-[9px] text-slate-400 font-sans font-medium">
-                      Control parameters for {activeScreen.label} specifically. Specific overrides bypass the global fallback configured below.
+                      Control parameters for {activeScreen.label} specifically. Specific overrides customize the global fallback configured below.
                     </p>
                     <select
                       value={moduleAiSettings[activeScreen.id] || "DEFAULT"}
@@ -6788,6 +7702,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
           </div>
         </div>
       )}
+
+
+
+
 
       {/* Universal footer */}
       <footer className="w-full py-4 text-center border-t border-white/5 bg-slate-950/80 backdrop-blur text-[11px] font-mono tracking-wider text-slate-500 z-10">

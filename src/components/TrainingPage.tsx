@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 import {
   GraduationCap,
   Award,
@@ -368,8 +370,145 @@ export const TrainingPage: React.FC<TrainingPageProps> = ({
   setEvents
 }) => {
   // State
-  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSES);
-  const [profiles, setProfiles] = useState<EmployeeTrainingProfile[]>(INITIAL_PROFILES);
+  const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
+
+  const [courses, _setCourses] = useState<Course[]>([]);
+  const [profiles, _setProfiles] = useState<EmployeeTrainingProfile[]>([]);
+
+  // Real-time synchronization helper for courses
+  const syncCoursesToFirestore = async (oldArray: Course[], newArray: Course[], bid: string) => {
+    const oldMap = new Map(oldArray.map(item => [item.id, item]));
+    for (const item of newArray) {
+      const oldItem = oldMap.get(item.id);
+      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
+        try {
+          await setDoc(doc(db, "courses", item.id), {
+            ...item,
+            businessId: bid,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Error saving course:", err);
+        }
+      }
+    }
+    const newSet = new Set(newArray.map(item => item.id));
+    for (const item of oldArray) {
+      if (!newSet.has(item.id)) {
+        try {
+          await deleteDoc(doc(db, "courses", item.id));
+        } catch (err) {
+          console.error("Error deleting course:", err);
+        }
+      }
+    }
+  };
+
+  const setCourses = (value: React.SetStateAction<Course[]>) => {
+    _setCourses((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      if (businessId) {
+        syncCoursesToFirestore(prev, nextList, businessId);
+      }
+      return nextList;
+    });
+  };
+
+  // Real-time synchronization helper for training profiles
+  const syncProfilesToFirestore = async (oldArray: EmployeeTrainingProfile[], newArray: EmployeeTrainingProfile[], bid: string) => {
+    const getProfileId = (p: EmployeeTrainingProfile) => p.employeeName.replace(/\s+/g, "_").toLowerCase();
+    const oldMap = new Map(oldArray.map(item => [getProfileId(item), item]));
+    for (const item of newArray) {
+      const itemKey = getProfileId(item);
+      const oldItem = oldMap.get(itemKey);
+      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
+        try {
+          await setDoc(doc(db, "training_profiles", itemKey), {
+            ...item,
+            businessId: bid,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Error saving training profile:", err);
+        }
+      }
+    }
+    const newSet = new Set(newArray.map(item => getProfileId(item)));
+    for (const item of oldArray) {
+      const itemKey = getProfileId(item);
+      if (!newSet.has(itemKey)) {
+        try {
+          await deleteDoc(doc(db, "training_profiles", itemKey));
+        } catch (err) {
+          console.error("Error deleting training profile:", err);
+        }
+      }
+    }
+  };
+
+  const setProfiles = (value: React.SetStateAction<EmployeeTrainingProfile[]>) => {
+    _setProfiles((prev) => {
+      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
+      if (businessId) {
+        syncProfilesToFirestore(prev, nextList, businessId);
+      }
+      return nextList;
+    });
+  };
+
+  // Subscribe and seed courses & training profiles from Firestore based on multi-tenant businessId
+  useEffect(() => {
+    if (!businessId) return;
+
+    // 1. Subscribe to courses
+    const qCourses = query(collection(db, "courses"), where("businessId", "==", businessId));
+    const unsubCourses = onSnapshot(qCourses, (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_COURSES.forEach(async (course) => {
+          await setDoc(doc(db, "courses", course.id), {
+            ...course,
+            businessId,
+            updatedAt: new Date().toISOString()
+          });
+        });
+      } else {
+        const items: Course[] = [];
+        snapshot.forEach((docSnap) => {
+          const { businessId: _, updatedAt: __, ...courseData } = docSnap.data();
+          items.push(courseData as Course);
+        });
+        _setCourses(items);
+      }
+    });
+
+    // 2. Subscribe to profiles
+    const qProfiles = query(collection(db, "training_profiles"), where("businessId", "==", businessId));
+    const unsubProfiles = onSnapshot(qProfiles, (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_PROFILES.forEach(async (profile) => {
+          const profileId = profile.employeeName.replace(/\s+/g, "_").toLowerCase();
+          await setDoc(doc(db, "training_profiles", profileId), {
+            ...profile,
+            businessId,
+            updatedAt: new Date().toISOString()
+          });
+        });
+      } else {
+        const items: EmployeeTrainingProfile[] = [];
+        snapshot.forEach((docSnap) => {
+          const { businessId: _, updatedAt: __, ...profileData } = docSnap.data();
+          items.push(profileData as EmployeeTrainingProfile);
+        });
+        _setProfiles(items);
+      }
+    });
+
+    return () => {
+      unsubCourses();
+      unsubProfiles();
+    };
+  }, [businessId]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchBy, setSearchBy] = useState<"all" | "employee" | "course" | "certification" | "department" | "role" | "status">("all");
   const [selectedDeptFilter, setSelectedDeptFilter] = useState("All");
@@ -1740,13 +1879,13 @@ export const TrainingPage: React.FC<TrainingPageProps> = ({
                         
                         <button
                           onClick={() => {
-                            // Security bypass simulation
+                            // Security grace period simulation
                             setProfiles(prev => prev.map(item => {
                               if (item.employeeName === p.employeeName) {
                                 const certs = item.certifications.map(c => 
                                   c.status === "Expired" ? { ...c, status: "Active" as const, expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] } : c
                                 );
-                                triggerNotification(`Bypassed safety lock for 30-day grace period on ${p.employeeName}`);
+                                triggerNotification(`Granted 30-day credential grace period on ${p.employeeName}`);
                                 return { ...item, certifications: certs };
                               }
                               return item;
@@ -1754,7 +1893,7 @@ export const TrainingPage: React.FC<TrainingPageProps> = ({
                           }}
                           className="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[10px] font-black rounded-lg cursor-pointer text-center uppercase"
                         >
-                          Temp Bypass
+                          Grant Grace Period
                         </button>
                       </div>
                     </div>

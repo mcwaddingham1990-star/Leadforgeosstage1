@@ -30,7 +30,8 @@ import {
   Trash2,
   Edit3,
   X,
-  Save
+  Save,
+  Minus
 } from "lucide-react";
 
 export interface Customer {
@@ -62,173 +63,7 @@ export interface CustomersPageProps {
 }
 
 // 10 high-quality realistic LeadForge customers
-export const INITIAL_CUSTOMERS: Customer[] = [
-  {
-    id: "1",
-    company: "Apex Plumb & Drain",
-    contact: "Marcus Vance",
-    phone: "(555) 234-5678",
-    email: "marcus@apexplumb.com",
-    address: "1024 Industrial Pkwy, Ste B",
-    openJobs: 3,
-    outstandingBalance: 0,
-    lifetimeValue: 24500,
-    status: "Active",
-    type: "Commercial",
-    isVIP: true,
-    recentlyAdded: false,
-    upcomingJobDate: "July 12, 2026",
-    requireFollowUp: false
-  },
-  {
-    id: "2",
-    company: "Sarah Connor",
-    contact: "Sarah Connor",
-    phone: "(555) 987-6543",
-    email: "sconnor@cyberdyne.org",
-    address: "742 Evergreen Terrace",
-    openJobs: 1,
-    outstandingBalance: 150,
-    lifetimeValue: 3200,
-    status: "Active",
-    type: "Residential",
-    isVIP: true,
-    recentlyAdded: true,
-    upcomingJobDate: "July 15, 2026",
-    requireFollowUp: false
-  },
-  {
-    id: "3",
-    company: "Oakridge Apartments",
-    contact: "Clara Oswald",
-    phone: "(555) 876-5432",
-    email: "manager@oakridgeapartments.net",
-    address: "4400 Oakridge Ln, Bldg 4",
-    openJobs: 2,
-    outstandingBalance: 2450,
-    lifetimeValue: 18900,
-    status: "Past Due",
-    type: "Commercial",
-    isVIP: false,
-    recentlyAdded: false,
-    requireFollowUp: true
-  },
-  {
-    id: "4",
-    company: "John Miller Plastering",
-    contact: "John Miller",
-    phone: "(555) 345-6789",
-    email: "john@millerplaster.com",
-    address: "893 West End Ave",
-    openJobs: 0,
-    outstandingBalance: 0,
-    lifetimeValue: 850,
-    status: "Active",
-    type: "Residential",
-    isVIP: false,
-    recentlyAdded: false,
-    requireFollowUp: false
-  },
-  {
-    id: "5",
-    company: "Dynamic Retailers Inc.",
-    contact: "Arthur Dent",
-    phone: "(555) 456-7890",
-    email: "adent@dynamicretail.com",
-    address: "42 Towel Way",
-    openJobs: 0,
-    outstandingBalance: 0,
-    lifetimeValue: 12400,
-    status: "Inactive",
-    type: "Commercial",
-    isVIP: false,
-    recentlyAdded: false,
-    requireFollowUp: false
-  },
-  {
-    id: "6",
-    company: "Emma Watson",
-    contact: "Emma Watson",
-    phone: "(555) 567-8901",
-    email: "emma@granger.co.uk",
-    address: "12 Grimmauld Place",
-    openJobs: 1,
-    outstandingBalance: 0,
-    lifetimeValue: 1450,
-    status: "Active",
-    type: "Residential",
-    isVIP: false,
-    recentlyAdded: false,
-    upcomingJobDate: "July 20, 2026",
-    requireFollowUp: false
-  },
-  {
-    id: "7",
-    company: "Downey Enterprises",
-    contact: "Robert Downey",
-    phone: "(555) 678-9012",
-    email: "tony@starkindustries.com",
-    address: "10880 Malibu Point",
-    openJobs: 0,
-    outstandingBalance: 1200,
-    lifetimeValue: 4800,
-    status: "Past Due",
-    type: "Residential",
-    isVIP: false,
-    recentlyAdded: false,
-    requireFollowUp: true
-  },
-  {
-    id: "8",
-    company: "Chevron Logistics",
-    contact: "William Riker",
-    phone: "(555) 789-0123",
-    email: "riker@chevronlog.com",
-    address: "1701 Enterprise Way",
-    openJobs: 4,
-    outstandingBalance: 0,
-    lifetimeValue: 45000,
-    status: "Active",
-    type: "Commercial",
-    isVIP: true,
-    recentlyAdded: false,
-    upcomingJobDate: "July 10, 2026",
-    requireFollowUp: false
-  },
-  {
-    id: "9",
-    company: "Lisa Kudrow Home",
-    contact: "Lisa Kudrow",
-    phone: "(555) 890-1234",
-    email: "phoebe@buffay.ms",
-    address: "5 Ocean Dr",
-    openJobs: 0,
-    outstandingBalance: 0,
-    lifetimeValue: 350,
-    status: "Inactive",
-    type: "Residential",
-    isVIP: false,
-    recentlyAdded: false,
-    requireFollowUp: false
-  },
-  {
-    id: "10",
-    company: "Jordan Athletics",
-    contact: "Michael Jordan",
-    phone: "(555) 901-2345",
-    email: "mj@jordan23.com",
-    address: "23 Championship Dr",
-    openJobs: 1,
-    outstandingBalance: 350,
-    lifetimeValue: 9500,
-    status: "Active",
-    type: "Residential",
-    isVIP: true,
-    recentlyAdded: true,
-    upcomingJobDate: "July 24, 2026",
-    requireFollowUp: false
-  }
-];
+export const INITIAL_CUSTOMERS: Customer[] = [];
 
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder,
@@ -263,13 +98,149 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFileError, setImportFileError] = useState<string | null>(null);
+  const [importPreviewList, setImportPreviewList] = useState<Customer[]>([]);
+
+  const handleExportCSV = () => {
+    const headers = ["ID", "Company Name", "Contact Person", "Phone", "Email", "Address", "Open Jobs", "Outstanding Balance ($)", "Lifetime Value ($)", "Status", "Customer Type", "VIP Status"];
+    
+    const rows = customers.map(c => [
+      c.id,
+      c.company.replace(/"/g, '""'),
+      c.contact.replace(/"/g, '""'),
+      c.phone,
+      c.email,
+      c.address.replace(/"/g, '""'),
+      c.openJobs,
+      c.outstandingBalance,
+      c.lifetimeValue,
+      c.status,
+      c.type,
+      c.isVIP ? "Yes" : "No"
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(fields => fields.map(val => {
+        const strVal = String(val);
+        if (strVal.includes(",") || strVal.includes('"') || strVal.includes("\n")) {
+          return `"${strVal}"`;
+        }
+        return strVal;
+      }).join(","))
+    ].join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "leadforge_customer_database.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    if (logOperationalEvent) {
+      logOperationalEvent("CSV Exported", `Exported ${customers.length} customer records to CSV file`, "📥");
+    }
+  };
+
+  const handleImportCSVData = (text: string) => {
+    try {
+      const lines = text.split(/\r?\n/);
+      if (lines.length <= 1) {
+        setImportFileError("The file seems to be empty or contains no headers.");
+        return;
+      }
+
+      const parsedList: Customer[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const fields: string[] = [];
+        let cur = "";
+        let inQuotes = false;
+        for (let charIdx = 0; charIdx < line.length; charIdx++) {
+          const char = line[charIdx];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            fields.push(cur.trim().replace(/^["']|["']$/g, ""));
+            cur = "";
+          } else {
+            cur += char;
+          }
+        }
+        fields.push(cur.trim().replace(/^["']|["']$/g, ""));
+
+        let company = fields[0] || "";
+        let contact = fields[1] || "";
+        let phone = fields[2] || "";
+        let email = fields[3] || "";
+        let address = fields[4] || "";
+        let typeStr = fields[5] || "Residential";
+        let statusStr = fields[6] || "Active";
+        let vipStr = fields[7] || "No";
+
+        if (!contact && company) {
+          contact = company;
+        }
+        if (!contact && !company) continue;
+
+        const importedCustomer: Customer = {
+          id: "cust_csv_" + Math.random().toString(36).substring(2, 9),
+          company: company || contact,
+          contact: contact || company,
+          phone: phone || "(555) 555-0100",
+          email: email || `${(contact || company).toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+          address: address || "No address supplied",
+          openJobs: 0,
+          outstandingBalance: 0,
+          lifetimeValue: 0,
+          status: (statusStr.toLowerCase().includes("past") || statusStr.toLowerCase().includes("due"))
+            ? "Past Due"
+            : statusStr.toLowerCase().includes("inactive")
+            ? "Inactive"
+            : "Active",
+          type: (typeStr.toLowerCase().includes("commercial") || typeStr.toLowerCase().includes("comm"))
+            ? "Commercial"
+            : "Residential",
+          isVIP: vipStr.toLowerCase() === "yes" || vipStr.toLowerCase() === "true" || vipStr.toLowerCase() === "y" || vipStr.toLowerCase() === "vip",
+          recentlyAdded: true
+        };
+        parsedList.push(importedCustomer);
+      }
+
+      if (parsedList.length === 0) {
+        setImportFileError("Could not extract any valid customer records. Please verify headers.");
+      } else {
+        setImportPreviewList(parsedList);
+        setImportFileError(null);
+      }
+    } catch (err) {
+      setImportFileError("Failed to parse the CSV file. Please check the file formatting.");
+    }
+  };
+
+  const loadPresetImport = (presetName: string) => {
+    let presetText = "";
+    if (presetName === "hvac") {
+      presetText = `Company Name,Contact Person,Phone,Email,Address,Customer Type,Status,VIP Status\n"Titan Air Conditioning","Ray Nelson","(555) 304-9811","ray@titanair.com","452 Industrial Parkway, Ste E","Commercial","Active","Yes"\n"Linda Geller Residential","Linda Geller","(555) 881-2356","linda.geller@gmail.com","128 Maple Lane","Residential","Active","No"\n"Metro Cold Storage Inc","Victor Stone","(555) 441-9022","vstone@metrocold.org","99 Waterfront Rd","Commercial","Past Due","No"`;
+    } else {
+      presetText = `Company Name,Contact Person,Phone,Email,Address,Customer Type,Status,VIP Status\n"Stark Remodeling","Howard Stark","(555) 902-1144","howard@starkremodel.com","10880 Malibu Point","Commercial","Active","Yes"\n"Green Acres Farms","Bruce Banner","(555) 234-9900","bruce@hulkscience.org","14 Outer Ridge Road","Residential","Active","No"`;
+    }
+    handleImportCSVData(presetText);
+  };
 
   // Form states
   const [formCompany, setFormCompany] = useState("");
   const [formContact, setFormContact] = useState("");
-  const [formPhone, setFormPhone] = useState("");
+  const [formPhones, setFormPhones] = useState<string[]>([""]);
   const [formEmail, setFormEmail] = useState("");
   const [formAddress, setFormAddress] = useState("");
+  const [formCityState, setFormCityState] = useState("");
+  const [formZip, setFormZip] = useState("");
   const [formType, setFormType] = useState<"Residential" | "Commercial">("Residential");
   const [formStatus, setFormStatus] = useState<"Active" | "Inactive" | "Past Due">("Active");
   const [formIsVIP, setFormIsVIP] = useState(false);
@@ -277,9 +248,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const openAddModal = () => {
     setFormCompany("");
     setFormContact("");
-    setFormPhone("");
+    setFormPhones([""]);
     setFormEmail("");
     setFormAddress("");
+    setFormCityState("");
+    setFormZip("");
     setFormType("Residential");
     setFormStatus("Active");
     setFormIsVIP(false);
@@ -290,9 +263,35 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setSelectedCustomer(cust);
     setFormCompany(cust.company);
     setFormContact(cust.contact);
-    setFormPhone(cust.phone);
+    
+    // Parse phones
+    const phones = (cust.phone || "").split(",").map(p => p.trim()).filter(Boolean);
+    setFormPhones(phones.length > 0 ? phones : [""]);
+    
     setFormEmail(cust.email);
-    setFormAddress(cust.address);
+    
+    // Parse address
+    const parts = (cust.address || "").split(",").map(s => s.trim());
+    const street = parts[0] || "";
+    let cityState = "";
+    let zip = "";
+    if (parts.length >= 3) {
+      cityState = parts[1];
+      zip = parts[2];
+    } else if (parts.length === 2) {
+      const lastPart = parts[1];
+      const zipMatch = lastPart.match(/\d{5}(-\d{4})?$/);
+      if (zipMatch) {
+        zip = zipMatch[0];
+        cityState = lastPart.replace(zip, "").trim();
+      } else {
+        cityState = lastPart;
+      }
+    }
+    setFormAddress(street);
+    setFormCityState(cityState);
+    setFormZip(zip);
+    
     setFormType(cust.type);
     setFormStatus(cust.status);
     setFormIsVIP(cust.isVIP);
@@ -301,13 +300,16 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleAddCustomer = () => {
     if (!formContact.trim()) return;
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ") || "100 Operational Way, Seattle, WA";
+    
     const newCust: Customer = {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
       company: formCompany.trim() || formContact.trim() + " Inc",
       contact: formContact.trim(),
-      phone: formPhone.trim() || "(555) 000-0000",
+      phone: phoneStr,
       email: formEmail.trim() || `${formContact.toLowerCase().replace(/\s+/g, "")}@example.com`,
-      address: formAddress.trim() || "100 Operational Way",
+      address: combinedAddress,
       openJobs: 0,
       outstandingBalance: 0,
       lifetimeValue: 0,
@@ -329,13 +331,16 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleEditCustomer = () => {
     if (!selectedCustomer) return;
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
+    
     setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? {
       ...c,
       company: formCompany.trim() || formContact.trim() + " Inc",
       contact: formContact.trim(),
-      phone: formPhone.trim(),
+      phone: phoneStr,
       email: formEmail.trim(),
-      address: formAddress.trim(),
+      address: combinedAddress,
       type: formType,
       status: formStatus,
       isVIP: formIsVIP
@@ -486,7 +491,9 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             </button>
             <button
               onClick={() => {
-                onOpenPlaceholder("CSV Customer Importer Template", "📥");
+                setImportFileError(null);
+                setImportPreviewList([]);
+                setIsImportModalOpen(true);
               }}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
@@ -494,16 +501,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               Import Customers
             </button>
             <button
-              onClick={() => {
-                // Mock downloading JSON/CSV database
-                const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(customers, null, 2))}`;
-                const downloadAnchor = document.createElement("a");
-                downloadAnchor.setAttribute("href", jsonString);
-                downloadAnchor.setAttribute("download", "leadforge_customer_database.json");
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
-              }}
+              onClick={handleExportCSV}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
@@ -976,6 +974,740 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Add Customer Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">Add New Customer</h3>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Contact Person *</label>
+                  <input 
+                    type="text" 
+                    value={formContact}
+                    onChange={e => setFormContact(e.target.value)}
+                    placeholder="e.g. Marcus Vance"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company Name</label>
+                  <input 
+                    type="text" 
+                    value={formCompany}
+                    onChange={e => setFormCompany(e.target.value)}
+                    placeholder="e.g. Apex Plumb & Drain"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+              </div>
+
+              {/* Phone Numbers with Plus / Minus */}
+              <div className="space-y-1.5 bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393] flex items-center justify-between">
+                  <span>Phone Numbers *</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setFormPhones(prev => [...prev, ""])}
+                    className="text-[#4A86F7] hover:text-[#1E52C9] font-extrabold text-[11px] flex items-center gap-1 bg-[#EAF5FF] px-2.5 py-1 rounded-lg border border-[#9EC8EF]/50 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Add Phone
+                  </button>
+                </label>
+                <div className="space-y-2">
+                  {formPhones.map((phone, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input 
+                        type="text" 
+                        value={phone}
+                        onChange={e => {
+                          const updated = [...formPhones];
+                          updated[index] = e.target.value;
+                          setFormPhones(updated);
+                        }}
+                        placeholder="e.g. (555) 234-5678"
+                        className="flex-1 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                      {formPhones.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFormPhones(prev => prev.filter((_, i) => i !== index))}
+                          className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl p-2.5 shrink-0 cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
+                <input 
+                  type="email" 
+                  value={formEmail}
+                  onChange={e => setFormEmail(e.target.value)}
+                  placeholder="e.g. marcus@apexplumb.com"
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                />
+              </div>
+
+              <div className="bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50 space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</label>
+                  <input 
+                    type="text" 
+                    value={formAddress}
+                    onChange={e => setFormAddress(e.target.value)}
+                    placeholder="e.g. 1024 Industrial Pkwy, Ste B"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">City, State</label>
+                    <input 
+                      type="text" 
+                      value={formCityState}
+                      onChange={e => setFormCityState(e.target.value)}
+                      placeholder="e.g. Seattle, WA"
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Zip Code</label>
+                    <input 
+                      type="text" 
+                      value={formZip}
+                      onChange={e => setFormZip(e.target.value)}
+                      placeholder="e.g. 98101"
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Customer Type</label>
+                  <select
+                    value={formType}
+                    onChange={e => setFormType(e.target.value as any)}
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                  >
+                    <option value="Residential">Residential</option>
+                    <option value="Commercial">Commercial</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
+                  <select
+                    value={formStatus}
+                    onChange={e => setFormStatus(e.target.value as any)}
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Past Due">Past Due</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox"
+                  id="isVIPAdd"
+                  checked={formIsVIP}
+                  onChange={e => setFormIsVIP(e.target.checked)}
+                  className="w-4 h-4 text-[#315C9F] bg-[#EAF5FF] border-[#9EC8EF] rounded focus:ring-blue-400 cursor-pointer"
+                />
+                <label htmlFor="isVIPAdd" className="text-xs font-bold text-[#1F3557] select-none cursor-pointer">
+                  Mark as VIP Client
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!formContact.trim()}
+                onClick={handleAddCustomer}
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                }`}
+              >
+                Save Customer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Customers Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-white" />
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">CSV Customer Importer</h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFileError(null);
+                  setImportPreviewList([]);
+                }}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-5 text-[#1F3557]">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold">Import Instructions:</h4>
+                <p className="text-[11px] text-[#5E7393] leading-relaxed">
+                  Upload a standard comma-separated values (CSV) file. The file should contain headers like 
+                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Company Name</code>, 
+                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Contact Person</code>, 
+                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Phone</code>, 
+                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Email</code>, and 
+                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Address</code>.
+                </p>
+              </div>
+
+              {/* Drag & Drop Zone */}
+              <div className="relative border-2 border-dashed border-[#9EC8EF] hover:border-[#315C9F] bg-[#EAF5FF]/30 hover:bg-[#EAF5FF]/50 rounded-2xl p-6 transition-colors text-center cursor-pointer">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        const text = evt.target?.result as string;
+                        handleImportCSVData(text);
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-[#315C9F]" />
+                  <p className="text-xs font-extrabold">Click to select or drag & drop a CSV file</p>
+                  <p className="text-[10px] text-[#5E7393]">Supported files: .csv (Max 5MB)</p>
+                </div>
+              </div>
+
+              {/* Preset Simulators */}
+              <div className="bg-[#EAF5FF]/50 p-3 rounded-2xl border border-[#9EC8EF]/40 space-y-2 text-left">
+                <span className="text-[10px] uppercase font-bold text-[#5E7393] block">No CSV on hand? Load instant test dataset:</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadPresetImport("construction")}
+                    className="px-3 py-1.5 bg-[#C7E3FA] hover:bg-[#BDDDF8] text-[#1F3557] text-[10.5px] font-bold rounded-xl transition-all border border-[#9EC8EF]/40 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3 text-[#1F3557]" /> Stark Remodeling Preset (2 Leads)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => loadPresetImport("hvac")}
+                    className="px-3 py-1.5 bg-[#C7E3FA] hover:bg-[#BDDDF8] text-[#1F3557] text-[10.5px] font-bold rounded-xl transition-all border border-[#9EC8EF]/40 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3 text-[#1F3557]" /> Ray Nelson HVAC Preset (3 Leads)
+                  </button>
+                </div>
+              </div>
+
+              {/* Error box */}
+              {importFileError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl flex items-center gap-2 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span className="font-semibold">{importFileError}</span>
+                </div>
+              )}
+
+              {/* Previews */}
+              {importPreviewList.length > 0 && (
+                <div className="space-y-2.5 text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold">
+                      Previewing parsed customers ({importPreviewList.length}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setImportPreviewList([])}
+                      className="text-[10.5px] font-bold text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Clear Preview
+                    </button>
+                  </div>
+                  
+                  <div className="border border-[#9EC8EF]/40 rounded-xl overflow-hidden max-h-40 overflow-y-auto divide-y divide-[#9EC8EF]/20 bg-slate-50">
+                    {importPreviewList.map((parsed, idx) => (
+                      <div key={idx} className="p-2.5 text-[11px] flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">{parsed.company}</p>
+                          <p className="text-[10px] text-[#5E7393] font-medium mt-0.5 truncate">Contact: {parsed.contact} | {parsed.email}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-[#1F3557] rounded font-bold uppercase">{parsed.type}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold uppercase">{parsed.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFileError(null);
+                  setImportPreviewList([]);
+                }}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={importPreviewList.length === 0}
+                onClick={() => {
+                  setCustomers(prev => [...importPreviewList, ...prev]);
+                  if (logOperationalEvent) {
+                    logOperationalEvent("CSV Imported", `Imported ${importPreviewList.length} customer records into CRM database`, "📥");
+                  }
+                  setIsImportModalOpen(false);
+                  setImportPreviewList([]);
+                }}
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1 ${
+                  importPreviewList.length > 0 ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                }`}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Confirm Import ({importPreviewList.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Details & Edit Modal */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {isEditModalOpen ? (
+                  <Edit3 className="w-5 h-5 text-white" />
+                ) : (
+                  <User className="w-5 h-5 text-white" />
+                )}
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">
+                  {isEditModalOpen ? "Edit Customer Profile" : "Customer Details"}
+                </h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setSelectedCustomer(null);
+                  setIsEditModalOpen(false);
+                  setIsDeleteConfirmOpen(false);
+                }}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isEditModalOpen ? (
+              /* EDIT FORM MODE */
+              <>
+                <div className="p-6 overflow-y-auto space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1 col-span-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Contact Person *</label>
+                      <input 
+                        type="text" 
+                        value={formContact}
+                        onChange={e => setFormContact(e.target.value)}
+                        placeholder="e.g. Marcus Vance"
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1 col-span-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company Name</label>
+                      <input 
+                        type="text" 
+                        value={formCompany}
+                        onChange={e => setFormCompany(e.target.value)}
+                        placeholder="e.g. Apex Plumb & Drain"
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone Numbers with Plus / Minus */}
+                  <div className="space-y-1.5 bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393] flex items-center justify-between">
+                      <span>Phone Numbers *</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setFormPhones(prev => [...prev, ""])}
+                        className="text-[#4A86F7] hover:text-[#1E52C9] font-extrabold text-[11px] flex items-center gap-1 bg-[#EAF5FF] px-2.5 py-1 rounded-lg border border-[#9EC8EF]/50 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add Phone
+                      </button>
+                    </label>
+                    <div className="space-y-2">
+                      {formPhones.map((phone, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input 
+                            type="text" 
+                            value={phone}
+                            onChange={e => {
+                              const updated = [...formPhones];
+                              updated[index] = e.target.value;
+                              setFormPhones(updated);
+                            }}
+                            placeholder="e.g. (555) 234-5678"
+                            className="flex-1 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                          />
+                          {formPhones.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setFormPhones(prev => prev.filter((_, i) => i !== index))}
+                              className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl p-2.5 shrink-0 cursor-pointer"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={formEmail}
+                      onChange={e => setFormEmail(e.target.value)}
+                      placeholder="e.g. marcus@apexplumb.com"
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+
+                  <div className="bg-[#F5FAFF] p-3 rounded-2xl border border-blue-100/50 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</label>
+                      <input 
+                        type="text" 
+                        value={formAddress}
+                        onChange={e => setFormAddress(e.target.value)}
+                        placeholder="e.g. 1024 Industrial Pkwy, Ste B"
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-[#5E7393]">City, State</label>
+                        <input 
+                          type="text" 
+                          value={formCityState}
+                          onChange={e => setFormCityState(e.target.value)}
+                          placeholder="e.g. Seattle, WA"
+                          className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-[#5E7393]">Zip Code</label>
+                        <input 
+                          type="text" 
+                          value={formZip}
+                          onChange={e => setFormZip(e.target.value)}
+                          placeholder="e.g. 98101"
+                          className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1 col-span-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Customer Type</label>
+                      <select
+                        value={formType}
+                        onChange={e => setFormType(e.target.value as any)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                      >
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1 col-span-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
+                      <select
+                        value={formStatus}
+                        onChange={e => setFormStatus(e.target.value as any)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Past Due">Past Due</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <input 
+                      type="checkbox"
+                      id="isVIPEdit"
+                      checked={formIsVIP}
+                      onChange={e => setFormIsVIP(e.target.checked)}
+                      className="w-4 h-4 text-[#315C9F] bg-[#EAF5FF] border-[#9EC8EF] rounded focus:ring-blue-400 cursor-pointer"
+                    />
+                    <label htmlFor="isVIPEdit" className="text-xs font-bold text-[#1F3557] select-none cursor-pointer">
+                      Mark as VIP Client
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!formContact.trim()}
+                    onClick={handleEditCustomer}
+                    className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                      formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </>
+            ) : isDeleteConfirmOpen ? (
+              /* DELETE CONFIRM MODE */
+              <div className="p-6 space-y-6">
+                <div className="flex items-center gap-3 text-rose-600">
+                  <AlertTriangle className="w-8 h-8 text-rose-500 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-sm text-[#1F3557]">Delete Customer Record?</h4>
+                    <p className="text-xs text-rose-700/80 font-medium">This action cannot be undone and will permanently remove this customer's record.</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#5E7393] font-semibold">
+                  Are you sure you want to delete <span className="text-[#1F3557] font-bold">"{selectedCustomer.company}"</span> (Contact: {selectedCustomer.contact})?
+                </p>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteConfirmOpen(false)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteCustomer}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-800 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Permanently Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* VIEW DETAILS MODE */
+              <>
+                <div className="p-6 overflow-y-auto space-y-6 text-[#1F3557] text-left">
+                  
+                  {/* Profile Info */}
+                  <div className="flex items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
+                    <div className="w-14 h-14 rounded-2xl bg-[#C7E3FA] text-[#1F3557] border border-[#9EC8EF] flex items-center justify-center font-display text-xl font-black shrink-0 select-none">
+                      {selectedCustomer.contact.split(" ").map(w => w[0]).join("").substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-base font-extrabold tracking-tight flex items-center gap-1.5 flex-wrap">
+                        <span>{selectedCustomer.company}</span>
+                        {selectedCustomer.isVIP && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black uppercase rounded-lg border border-amber-200/50">
+                            VIP Partner
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-xs font-semibold text-[#5E7393] mt-0.5">Primary Contact: {selectedCustomer.contact}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className={`inline-block px-2 py-0.5 rounded-lg text-[8.5px] font-extrabold uppercase ${
+                          selectedCustomer.status === "Active"
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            : selectedCustomer.status === "Past Due"
+                            ? "bg-rose-100 text-rose-800 border border-rose-200"
+                            : "bg-gray-100 text-gray-800 border border-gray-200"
+                        }`}>
+                          {selectedCustomer.status}
+                        </span>
+                        <span className="inline-block px-2 py-0.5 rounded-lg text-[8.5px] bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF] font-extrabold uppercase">
+                          {selectedCustomer.type}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
+                      <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Phone</span>
+                      <span className="font-mono font-bold flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-[#315C9F]" />
+                        {selectedCustomer.phone}
+                      </span>
+                    </div>
+                    <div className="space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
+                      <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Email</span>
+                      <span className="font-semibold truncate block flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-[#315C9F]" />
+                        {selectedCustomer.email}
+                      </span>
+                    </div>
+                    <div className="sm:col-span-2 space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
+                      <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Billing / Service Address</span>
+                      <span className="font-semibold flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
+                        {selectedCustomer.address}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metrics */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                      <span className="text-[8px] uppercase font-bold text-[#5E7393] block">Open Jobs</span>
+                      <span className="text-sm font-black font-mono block mt-1">{selectedCustomer.openJobs}</span>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                      <span className="text-[8px] uppercase font-bold text-[#5E7393] block">Outstanding</span>
+                      <span className={`text-sm font-black font-mono block mt-1 ${selectedCustomer.outstandingBalance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        ${selectedCustomer.outstandingBalance.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                      <span className="text-[8px] uppercase font-bold text-[#5E7393] block">Lifetime Value</span>
+                      <span className="text-sm font-black font-mono block mt-1">${selectedCustomer.lifetimeValue.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Shortcuts */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Quick Actions</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          if (onNavigateToScreen) {
+                            onNavigateToScreen("scheduling", { customerId: selectedCustomer.id });
+                          } else {
+                            onOpenPlaceholder("scheduling");
+                          }
+                          setSelectedCustomer(null);
+                        }}
+                        className="p-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-left text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                      >
+                        <Calendar className="w-4 h-4 text-[#315C9F]" />
+                        Schedule Job
+                      </button>
+                      <button
+                        onClick={() => {
+                          onOpenPlaceholder("estimates");
+                          setSelectedCustomer(null);
+                        }}
+                        className="p-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-left text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                      >
+                        <FileText className="w-4 h-4 text-[#315C9F]" />
+                        Create Estimate
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between items-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteConfirmOpen(true)}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 hover:text-rose-800 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Record
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(selectedCustomer)}
+                      className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Edit Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomer(null)}
+                      className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
