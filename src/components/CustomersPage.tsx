@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -38,27 +40,27 @@ export type { Customer } from "../types/domain";
 import type { Customer } from "../types/domain";
 
 export interface CustomersPageProps {
+  // NOTE: this page calls onOpenPlaceholder("estimates")/("scheduling", "icon")
+  // with real screen IDs, not (label, icon) placeholder pairs like every other
+  // page — App.tsx wires a special-cased closure for this one call site to
+  // compensate. Left as a distinct prop rather than folded into
+  // NavTelemetryContext's openPlaceholderPage to avoid changing behavior here.
   onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  customers?: Customer[];
-  setCustomers?: React.Dispatch<React.SetStateAction<Customer[]>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
 }
 
 // 10 high-quality realistic LeadForge customers
 export const INITIAL_CUSTOMERS: Customer[] = [];
 
 export const CustomersPage: React.FC<CustomersPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  customers: propCustomers,
-  setCustomers: propSetCustomers,
-  logOperationalEvent,
-  onNavigateToScreen
+  onOpenPlaceholder
 }) => {
+  const { customers: propCustomers, setCustomers: propSetCustomers } = useDomainData();
+  const {
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "All" | "Residential" | "Commercial" | "Active" | "Inactive" | "Past Due" | "VIP" | "Recently Added"

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useDomainActions } from "../hooks/useDomainActions";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -37,31 +39,18 @@ import {
 export type { Lead } from "../types/domain";
 import type { Lead } from "../types/domain";
 
-interface LeadsPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  leads?: Lead[];
-  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
-}
-
 // 10 high-quality realistic LeadForge leads
 export const INITIAL_LEADS: Lead[] = [];
 
-export const LeadsPage: React.FC<LeadsPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  leads: propsLeads,
-  setLeads,
-  customers,
-  setCustomers,
-  estimates,
-  setEstimates
-}) => {
+export const LeadsPage: React.FC = () => {
   const { convertLeadToCustomer, createEstimateFromLead } = useDomainActions();
+  const { leads: propsLeads, setLeads } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen
+  } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [activeSourceFilter, setActiveSourceFilter] = useState<string>("All");

@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
-import { SchedulingEvent } from "./SchedulingPage";
 import { useDomainActions } from "../hooks/useDomainActions";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -35,37 +37,20 @@ import {
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
 
-interface EstimatesPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  estimates?: Estimate[];
-  setEstimates?: React.Dispatch<React.SetStateAction<Estimate[]>>;
-  schedulingEvents?: SchedulingEvent[];
-  setSchedulingEvents?: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  loggedInUser?: { email: string; role: string; permissions: string[]; isEmployee?: boolean; name?: string };
-  recentRoster?: Array<{ name: string; role: string; code: string; status: string }>;
-}
-
 // 8 high-quality realistic Estimates
 export const INITIAL_ESTIMATES: Estimate[] = [];
 
-export const EstimatesPage: React.FC<EstimatesPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  estimates: propsEstimates,
-  setEstimates,
-  schedulingEvents,
-  setSchedulingEvents,
-  logOperationalEvent,
-  loggedInUser,
-  recentRoster
-}) => {
+export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob } = useDomainActions();
+  const { loggedInUser } = useAuth();
+  const { estimates: propsEstimates, setEstimates, recentRoster } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [localEstimates, setLocalEstimates] = useState<Estimate[]>(INITIAL_ESTIMATES);

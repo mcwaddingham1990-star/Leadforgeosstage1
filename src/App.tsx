@@ -5472,8 +5472,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "customers" ? (
                     <CustomersPage
-                      customers={customers}
-                      setCustomers={setCustomers}
                       onOpenPlaceholder={(screenId) => {
                         const matched = OS_SCREENS.find(s => s.id === screenId);
                         if (matched) {
@@ -5481,42 +5479,16 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           triggerNotification(`Navigated to Placeholder for: ${matched.label}`);
                         }
                       }}
-                      onNavigateToScreen={navigateToScreen}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      logOperationalEvent={logOperationalEvent}
                     />
 
                   ) : activeScreen.id === "leads" ? (
-                    <LeadsPage
-                      leads={leads}
-                      setLeads={setLeads}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={navigateToScreen}
-                    />
+                    <LeadsPage />
 
                   ) : activeScreen.id === "snapshots" ? (
                     <SnapshotsPage />
 
                   ) : activeScreen.id === "estimates" ? (
-                    <EstimatesPage
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      loggedInUser={loggedInUser || undefined}
-                      recentRoster={recentRoster}
-                      onNavigateToScreen={navigateToScreen}
-                    />
+                    <EstimatesPage />
 
                   ) : activeScreen.id === "roster" ? (
                     
@@ -5635,33 +5607,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     />
 
                   ) : activeScreen.id === "inventory" ? (
-                    <InventoryPage
-                      inventoryList={inventoryList}
-                      setInventoryList={setInventoryList}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      onNavigateToScreen={navigateToScreen}
-                    />
+                    <InventoryPage />
 
                   ) : activeScreen.id === "documents" ? (
-                    <DocumentsPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      customersList={customers}
-                    />
+                    <DocumentsPage />
 
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />

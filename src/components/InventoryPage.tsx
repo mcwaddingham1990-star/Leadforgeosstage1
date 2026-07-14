@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -47,19 +50,7 @@ import { SchedulingEvent } from "./SchedulingPage";
 export type { InventoryItem, PurchaseRecord } from "../types/domain";
 import type { InventoryItem, PurchaseRecord } from "../types/domain";
 
-export interface InventoryPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  activeRole: string;
-  loggedInUser: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  events?: SchedulingEvent[];
-  setEvents?: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  inventoryList?: InventoryItem[];
-  setInventoryList?: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
-}
+export interface InventoryPageProps {}
 
 const INITIAL_PURCHASES: PurchaseRecord[] = [];
 
@@ -68,19 +59,22 @@ export const INITIAL_INVENTORY: InventoryItem[] = [];
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
 
-export const InventoryPage: React.FC<InventoryPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
-  events,
-  setEvents,
-  inventoryList: propsInventoryList,
-  setInventoryList: propsSetInventoryList
-}) => {
+export const InventoryPage: React.FC<InventoryPageProps> = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    schedulingEvents: events,
+    setSchedulingEvents: setEvents,
+    inventoryList: propsInventoryList,
+    setInventoryList: propsSetInventoryList
+  } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // State variables
   const [localInventoryList, setLocalInventoryList] = useState<InventoryItem[]>(INITIAL_INVENTORY);
   const inventoryList = propsInventoryList || localInventoryList;
