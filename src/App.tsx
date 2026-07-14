@@ -112,6 +112,8 @@ import {
 import { validateConnection } from "./lib/firestoreService";
 import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
 import { AuthContext, AuthContextValue } from "./context/AuthContext";
+import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
+import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 
 export interface SelectedRole {
   id: string;
@@ -1573,6 +1575,19 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     triggerNotification(`Navigated to Placeholder for: ${label}`);
   };
 
+  // Canonical cross-page navigation: every page-to-page link (map pin, table
+  // row, dropdown, card) should route through this so "many roads lead to the
+  // same record" behaves identically everywhere, instead of each page call
+  // site redefining its own copy of this logic.
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string }) => {
+    setPreSelectedCustomerId(params?.customerId ?? undefined);
+    setPreSelectedDate(params?.date ?? undefined);
+    const matched = OS_SCREENS.find(s => s.id === screenId);
+    if (matched) {
+      setActiveScreen(matched);
+    }
+  };
+
   const handleOwnerSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = signUpInstructionsEmail.trim().toLowerCase();
@@ -2228,8 +2243,53 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     handleLogout
   };
 
+  const domainDataContextValue: DomainDataContextValue = {
+    customers,
+    setCustomers,
+    leads,
+    setLeads,
+    estimates,
+    setEstimates,
+    schedulingEvents,
+    setSchedulingEvents,
+    inventoryList,
+    setInventoryList,
+    documents,
+    setDocuments,
+    recentRoster,
+    setRecentRoster,
+    bulletins,
+    setBulletins,
+    notifications,
+    setNotifications,
+    recentAiActions,
+    setRecentAiActions,
+    snapshots,
+    setSnapshots,
+    completedJobsRevenue,
+    setCompletedJobsRevenue,
+    preSelectedDate,
+    setPreSelectedDate,
+    preSelectedCustomerId,
+    setPreSelectedCustomerId
+  };
+
+  const navTelemetryContextValue: NavTelemetryContextValue = {
+    activeScreen,
+    setActiveScreen,
+    navigateToScreen,
+    logOperationalEvent,
+    takeSnapshot,
+    deleteSnapshot,
+    openPageAIAnalysis,
+    openPlaceholderPage,
+    triggerNotification
+  };
+
   return (
     <AuthContext.Provider value={authContextValue}>
+    <DomainDataContext.Provider value={domainDataContextValue}>
+    <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
       {/* Hidden device camera capture input */}
       <input
@@ -5421,27 +5481,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           triggerNotification(`Navigated to Placeholder for: ${matched.label}`);
                         }
                       }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                     />
 
                   ) : activeScreen.id === "leads" ? (
@@ -5455,22 +5498,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenPlaceholder={openPlaceholderPage}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "snapshots" ? (
@@ -5492,23 +5520,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       loggedInUser={loggedInUser || undefined}
                       recentRoster={recentRoster}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                          triggerNotification(`Navigated to page: ${matched.label}`);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "roster" ? (
@@ -5630,27 +5642,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       setClockInTime={setClockInTime}
                       clockInDuration={clockInDuration}
                       setClockInDuration={setClockInDuration}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                       events={schedulingEvents}
                       setEvents={setSchedulingEvents}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "inventory" ? (
@@ -5662,27 +5657,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                       events={schedulingEvents}
                       setEvents={setSchedulingEvents}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "documents" ? (
@@ -5692,25 +5670,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                       documents={documents}
                       setDocuments={setDocuments}
                       customersList={customers}
@@ -5723,25 +5684,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                       documents={documents}
                       setDocuments={setDocuments}
                       customersList={customers}
@@ -5752,27 +5696,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenPlaceholder={openPlaceholderPage}
                       onTakeSnapshot={takeSnapshot}
                       onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                       recentRoster={recentRoster}
                       setRecentRoster={setRecentRoster}
                       documents={documents}
@@ -5788,9 +5715,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                       globalAiSetting={globalAiSetting}
                       setGlobalAiSetting={setGlobalAiSetting}
                       moduleAiSettings={moduleAiSettings}
@@ -5806,23 +5731,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                       schedulingEvents={schedulingEvents}
                       setSchedulingEvents={setSchedulingEvents}
                       customers={customers}
@@ -5868,10 +5778,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       triggerNotification={triggerNotification}
                       recentAiActions={recentAiActions}
                       setRecentAiActions={setRecentAiActions}
-                      onNavigateToScreen={(screenId) => {
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                     />
 
@@ -6599,17 +6506,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       setEvents={setSchedulingEvents}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       customersList={customers}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
                       preSelectedDate={preSelectedDate}
                       preSelectedCustomerId={preSelectedCustomerId}
-                      onNavigateToScreen={(screenId) => {
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "dispatch" ? (
@@ -6621,25 +6521,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       setEvents={setSchedulingEvents}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       customersList={customers}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "routes" ? (
@@ -6657,25 +6540,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       documents={documents}
                       setDocuments={setDocuments}
                       businessAddresses={businessAddresses}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       completedJobsRevenue={completedJobsRevenue}
                       setCompletedJobsRevenue={setCompletedJobsRevenue}
@@ -6837,23 +6703,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       onOpenAIAnalysis={openPageAIAnalysis}
                       activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                       loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
+                      logOperationalEvent={logOperationalEvent}
+                      onNavigateToScreen={navigateToScreen}
                       schedulingEvents={schedulingEvents}
                       setSchedulingEvents={setSchedulingEvents}
                       customers={customers}
@@ -7533,6 +7384,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       </footer>
 
     </div>
+    </NavTelemetryContext.Provider>
+    </DomainDataContext.Provider>
     </AuthContext.Provider>
   );
 }
