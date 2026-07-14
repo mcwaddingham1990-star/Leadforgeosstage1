@@ -152,4 +152,6 @@ export interface SchedulingEvent {
   priority: "Low" | "Medium" | "High" | "Urgent";
   notes?: string;
   status: "Scheduled" | "Completed" | "Cancelled";
+  /** Set when this job was created via Estimate->Job conversion (useDomainActions.approveEstimateToJob); lets the Event Engine's job-completion cascade find a real revenue amount instead of guessing. */
+  sourceEstimateId?: string;
 }

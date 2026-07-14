@@ -114,6 +114,7 @@ import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
 import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
+import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 
 export interface SelectedRole {
   id: string;
@@ -548,6 +549,13 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ value, onChange, option
       )}
     </div>
   );
+};
+
+// Mounts the Event Engine's cascade subscribers (see src/hooks/useEventEngineSubscribers.ts).
+// Renders nothing — must be rendered inside DomainDataContext/NavTelemetryContext.
+const EventEngineEffects: React.FC = () => {
+  useEventEngineSubscribers();
+  return null;
 };
 
 export default function App() {
@@ -2290,6 +2298,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     <AuthContext.Provider value={authContextValue}>
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
+    <EventEngineEffects />
     <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
       {/* Hidden device camera capture input */}
       <input

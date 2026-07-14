@@ -79,7 +79,8 @@ export function useDomainActions() {
       location: "Seattle Area",
       priority: "Medium",
       notes: "Auto-generated from Approved Estimate " + estimate.number,
-      status: "Scheduled"
+      status: "Scheduled",
+      sourceEstimateId: estimate.id
     };
 
     setSchedulingEvents(prev => [newJob, ...prev]);
