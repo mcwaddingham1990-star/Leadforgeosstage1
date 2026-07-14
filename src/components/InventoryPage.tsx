@@ -89,22 +89,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     navigateToScreen: onNavigateToScreen,
     logOperationalEvent
   } = useNavTelemetry();
-  // State variables
-  const [localInventoryList, setLocalInventoryList] = useState<InventoryItem[]>(INITIAL_INVENTORY);
-  const inventoryList = propsInventoryList || localInventoryList;
-  const setInventoryList = propsSetInventoryList || setLocalInventoryList;
+  // State variables — real, Firestore-backed inventory from context.
+  const inventoryList = propsInventoryList;
+  const setInventoryList = propsSetInventoryList;
 
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>(INITIAL_PURCHASES);
-
-  useEffect(() => {
-    if (loggedInUser && loggedInUser.email !== "operations@ironcladservices.com") {
-      setInventoryList([]);
-      setPurchases([]);
-    } else {
-      setInventoryList(propsInventoryList || INITIAL_INVENTORY);
-      setPurchases(INITIAL_PURCHASES);
-    }
-  }, [loggedInUser, propsInventoryList]);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeTabFilter, setActiveTabFilter] = useState<string>("all"); // "all", "low_stock", "out_of_stock", "favorites", "recently_added"
@@ -506,7 +495,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
             priority: "Medium",
             notes: `Auto dispatched ${Math.abs(qtyChange)} ${selectedItem.unit} to Job site.`,
             status: "Scheduled",
-            assignedEmployee: selectedItem.assignedEmployee || "Sarah Jenkins"
+            assignedEmployee: selectedItem.assignedEmployee || loggedInUser?.name || "Unassigned"
           };
           setEvents(prev => [...prev, newEvent]);
         }

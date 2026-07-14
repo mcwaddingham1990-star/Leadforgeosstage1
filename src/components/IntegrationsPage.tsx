@@ -1042,7 +1042,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
         action: "AI Assistant Sync",
         reason: `${id.toUpperCase()} model analysis updated client-interaction parameters.`,
         status: "Completed" as const,
-        approvedBy: loggedInUser?.name || "Sarah Jenkins"
+        approvedBy: loggedInUser?.name || "Unknown User"
       };
       setRecentAiActions((prev) => [newAct, ...prev]);
       triggerNotification(`✨ Shared Event Engine: ${id.toUpperCase()} LLM pipeline verified with AI Assistant.`);

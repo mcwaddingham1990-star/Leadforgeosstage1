@@ -266,9 +266,6 @@ export default function SettingsPage({
     reason: string;
     undoData?: { type: string; key: string; value: any };
   }>>([
-    { id: "audit_1", date: "2026-07-06", time: "18:15", user: "Sarah Jenkins", module: "AI Settings", change: "Global AI switched to ASSIST", reason: "Operational efficiency check" },
-    { id: "audit_2", date: "2026-07-06", time: "17:40", user: "Sarah Jenkins", module: "Appearance", change: "Updated system accent color to Blue", reason: "Brand alignment" },
-    { id: "audit_3", date: "2026-07-05", time: "09:30", user: "Sarah Jenkins", module: "Payroll", change: "Overtime multiplier updated to 1.5x", reason: "Standardize labor costs" }
   ]);
 
   // Track if there are unsaved local modifications
@@ -385,7 +382,7 @@ export default function SettingsPage({
             id: `audit_${Date.now()}_${field}`,
             date: formattedDate,
             time: formattedTime,
-            user: "Sarah Jenkins",
+            user: loggedInUser?.name || "Unknown User",
             module: section.toUpperCase(),
             change: `Updated ${field} from "${val2}" to "${val1}"`,
             reason: "User configuration update",
@@ -500,7 +497,7 @@ export default function SettingsPage({
         id: `audit_rec_${Date.now()}`,
         date: formattedDate,
         time: formattedTime,
-        user: "Sarah Jenkins",
+        user: loggedInUser?.name || "Unknown User",
         module: "COMPANY",
         change: "Optimized Business Hours to 07:00 AM - 06:00 PM (AI Recommendation)",
         reason: "Increase customer service slots"
@@ -516,7 +513,7 @@ export default function SettingsPage({
         id: `audit_rec_${Date.now()}`,
         date: formattedDate,
         time: formattedTime,
-        user: "Sarah Jenkins",
+        user: loggedInUser?.name || "Unknown User",
         module: "PAYROLL",
         change: "Set overtime multiplier to 1.5x (AI Recommendation)",
         reason: "Ensure standard regulatory margins"
@@ -529,7 +526,7 @@ export default function SettingsPage({
         id: `audit_rec_${Date.now()}`,
         date: formattedDate,
         time: formattedTime,
-        user: "Sarah Jenkins",
+        user: loggedInUser?.name || "Unknown User",
         module: "SECURITY",
         change: "Mandated 2-Factor Authentication (AI Recommendation)",
         reason: "Compliance audit"
@@ -542,7 +539,7 @@ export default function SettingsPage({
         id: `audit_rec_${Date.now()}`,
         date: formattedDate,
         time: formattedTime,
-        user: "Sarah Jenkins",
+        user: loggedInUser?.name || "Unknown User",
         module: "INVENTORY",
         change: "Adjusted critical replenishment threshold to 15 units (AI Recommendation)",
         reason: "Prevent supply depletion"
@@ -613,7 +610,7 @@ export default function SettingsPage({
       id: `audit_invite_${Date.now()}`,
       date: formattedDate,
       time: formattedTime,
-      user: "Sarah Jenkins",
+      user: loggedInUser?.name || "Unknown User",
       module: "USERS",
       change: `Generated invitation key ${randomCode} for ${cleanName} (${newUser.role})`,
       reason: "Personnel deployment"
@@ -632,7 +629,7 @@ export default function SettingsPage({
       id: `audit_deact_${Date.now()}`,
       date: formattedDate,
       time: formattedTime,
-      user: "Sarah Jenkins",
+      user: loggedInUser?.name || "Unknown User",
       module: "USERS",
       change: `Revoked credentials and deactivated user ${name} (${code})`,
       reason: "Security compliance"
@@ -666,7 +663,7 @@ export default function SettingsPage({
       id: `audit_role_${Date.now()}`,
       date: formattedDate,
       time: formattedTime,
-      user: "Sarah Jenkins",
+      user: loggedInUser?.name || "Unknown User",
       module: "ROLES",
       change: `Created custom role profile: ${cleanRoleName}`,
       reason: "Custom structural hierarchy"
@@ -1151,12 +1148,7 @@ export default function SettingsPage({
                 <div className="space-y-4">
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Business Divisions & Departments</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {[
-                      { name: "Field Operations & HVAC", count: 4, lead: "David Vance" },
-                      { name: "Customer Relations (CRM)", count: 2, lead: "Jane Miller" },
-                      { name: "Supply Logistics & Inventory", count: 1, lead: "Sarah Jenkins" },
-                      { name: "Estimators & Bids Division", count: 2, lead: "Albert F." }
-                    ].map((dept, i) => (
+                    {([] as { name: string; count: number; lead: string }[]).map((dept, i) => (
                       <div key={i} className="p-3.5 bg-white border border-[#A9CDEE] rounded-xl flex justify-between items-center">
                         <div>
                           <p className="text-xs font-extrabold text-slate-800">{dept.name}</p>
@@ -1415,11 +1407,7 @@ export default function SettingsPage({
                 <div className="space-y-4">
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Fleet Logistics & Vehicles</h3>
                   <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    {[
-                      { id: "Van #101", model: "Ford Transit Eco", assigned: "John Doe", mileage: "24,520 mi", status: "Active" },
-                      { id: "Truck #202", model: "Chevrolet Silverado 2500", assigned: "David Vance", mileage: "12,940 mi", status: "Active" },
-                      { id: "Van #103", model: "Mercedes-Benz Sprinter", assigned: "Sarah Jenkins", mileage: "8,400 mi", status: "Under Maintenance" }
-                    ].map((vehicle, i) => (
+                    {([] as { id: string; model: string; assigned: string; mileage: string; status: string }[]).map((vehicle, i) => (
                       <div key={i} className="p-3 bg-white border border-[#A9CDEE] rounded-xl flex justify-between items-center">
                         <div>
                           <p className="text-xs font-extrabold text-slate-800">{vehicle.id} • {vehicle.model}</p>

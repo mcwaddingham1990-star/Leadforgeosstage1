@@ -61,7 +61,7 @@ import type { DocumentItem } from "../types/domain";
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -367,7 +367,7 @@ export const DocumentsPage: React.FC = () => {
       // Role permission security check
       if (!hasManagePermission) {
         // Regular employees can only see files they uploaded or related to them
-        const uName = loggedInUser?.name || "Sarah Jenkins";
+        const uName = loggedInUser?.name || "Unknown User";
         if (doc.type === "Employee Files" || doc.type === "Payroll Documents") {
           if (doc.employee !== uName && doc.uploadedBy !== uName) {
             return false;
@@ -534,7 +534,7 @@ export const DocumentsPage: React.FC = () => {
     }
 
     const tagsArray = uploadTags.split(",").map(t => t.trim()).filter(t => t.length > 0);
-    const uName = loggedInUser?.name || "Sarah Jenkins";
+    const uName = loggedInUser?.name || "Unknown User";
 
     // Use actual file size
     const sizeStr = uploadFile.size > 1024 * 1024
@@ -781,7 +781,7 @@ export const DocumentsPage: React.FC = () => {
   // Approve Snapshot AI Document
   const handleApproveSnapshotAI = () => {
     const docName = tempDocName || `AI_SCAN_${scannedDocType}_${Math.floor(100 + Math.random() * 900)}.pdf`;
-    const uName = loggedInUser?.name || "Sarah Jenkins";
+    const uName = loggedInUser?.name || "Unknown User";
 
     const newDoc: DocumentItem = {
       id: "doc_ai_" + Math.random().toString(36).substring(2, 9),
@@ -1305,9 +1305,8 @@ export const DocumentsPage: React.FC = () => {
             {/* Expandable Folder Groups */}
             {[
               { id: "eSignStatus", label: "eSignature Folders", icon: "✍️", items: ["Awaiting Signature", "Sent", "Signed", "Declined", "Expired", "Draft"] },
-              { id: "Customers", label: "Customers", icon: "👥", items: ["Apex Plumb & Drain", "Chevron Logistics", "Oakridge Apartments"] },
-              { id: "Employees", label: "Employees", icon: "👤", items: ["Sarah Jenkins", "Marcus Vance", "Sarah Connor"] },
-              { id: "Jobs", label: "Jobs", icon: "💼", items: ["Job #1024", "Job #1085", "Job #1022"] },
+              { id: "Customers", label: "Customers", icon: "👥", items: customersList.map(c => c.company) },
+              { id: "Employees", label: "Employees", icon: "👤", items: recentRoster.map(r => r.name) },
               { id: "Finance", label: "Finance & Accounting", icon: "📈", items: ["Revenue Folder", "Payroll Folder", "Vendors Folder"] }
             ].map((grp) => {
               const isExpanded = expandedFolders[grp.id];
@@ -2340,9 +2339,9 @@ export const DocumentsPage: React.FC = () => {
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
                     <option value="None">None</option>
-                    <option value="Sarah Jenkins">Sarah Jenkins</option>
-                    <option value="Marcus Vance">Marcus Vance</option>
-                    <option value="Sarah Connor">Sarah Connor</option>
+                    {recentRoster.map(r => (
+                      <option key={r.id || r.name} value={r.name}>{r.name}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -2713,9 +2712,9 @@ export const DocumentsPage: React.FC = () => {
                     className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
                   >
                     <option value="">-- Choose Job --</option>
-                    <option value="Job #1024">Job #1024 (Apex sewer install)</option>
-                    <option value="Job #1085">Job #1085 (Chevron dig)</option>
-                    <option value="Job #1022">Job #1022 (Oakridge repair)</option>
+                    {schedulingEvents.filter(e => e.eventType === "Job").map(e => (
+                      <option key={e.id} value={e.id}>{e.customer} - {e.date}</option>
+                    ))}
                   </select>
                 ) : (
                   <select
@@ -2724,9 +2723,9 @@ export const DocumentsPage: React.FC = () => {
                     className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
                   >
                     <option value="">-- Choose Employee --</option>
-                    <option value="Sarah Jenkins">Sarah Jenkins (Office Manager)</option>
-                    <option value="Marcus Vance">Marcus Vance (Excavator)</option>
-                    <option value="Sarah Connor">Sarah Connor (Field Tech)</option>
+                    {recentRoster.map(r => (
+                      <option key={r.id || r.name} value={r.name}>{r.name} ({r.role})</option>
+                    ))}
                   </select>
                 )}
               </div>

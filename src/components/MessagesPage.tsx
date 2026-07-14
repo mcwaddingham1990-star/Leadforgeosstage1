@@ -103,282 +103,10 @@ export interface Conversation {
   createdDate: string;
 }
 
-const INITIAL_CONVERSATIONS: Conversation[] = [
-  {
-    id: "conv_1",
-    title: "Apex Plumb & Drain - Drainage Project",
-    type: "Customer Chat",
-    participants: ["Marcus Vance", "Sarah Jenkins", "Pete Rogers"],
-    unreadCount: 2,
-    lastMessage: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
-    lastMessageTime: "2026-07-06 14:15",
-    lastMessageSender: "Marcus Vance",
-    isRead: false,
-    isFavorite: true,
-    isArchived: false,
-    priority: "High",
-    onlineStatus: "Online",
-    customerId: "1",
-    customerName: "Apex Plumb & Drain",
-    jobId: "Job #1024",
-    jobName: "Main Facility Drainage",
-    estimateId: "E-1084",
-    routeId: "Route A-101",
-    routeName: "Seattle Central Drain Patrol",
-    documentIds: ["doc_1", "doc_2"],
-    revenueAmount: 12450,
-    createdDate: "2026-07-01",
-    messages: [
-      {
-        id: "m1_1",
-        sender: "Sarah Jenkins",
-        senderRole: "Office Manager",
-        content: "Hi Marcus, we've assigned Pete Rogers to inspect the drainage pipe layout today.",
-        timestamp: "2026-07-06 10:00"
-      },
-      {
-        id: "m1_2",
-        sender: "Pete Rogers",
-        senderRole: "Technician",
-        content: "Copy that. Heading out now. Checked the truck inventory and we have the ABS fittings.",
-        timestamp: "2026-07-06 10:30"
-      },
-      {
-        id: "m1_3",
-        sender: "Marcus Vance",
-        senderRole: "Customer",
-        content: "Hey team, the subterranean excavators have reached the junction. Need leak repair update.",
-        timestamp: "2026-07-06 14:15",
-        attachments: [
-          {
-            id: "att_1",
-            type: "Photo",
-            name: "Junction_Excavation.jpg",
-            size: "1.2 MB",
-            meta: { url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=300" }
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: "conv_2",
-    title: "Pete Rogers (Field Updates)",
-    type: "Direct Message",
-    participants: ["Pete Rogers", "Sarah Jenkins"],
-    unreadCount: 0,
-    lastMessage: "I finished the pressure test. It is holding 80 PSI perfectly.",
-    lastMessageTime: "2026-07-06 12:45",
-    lastMessageSender: "Pete Rogers",
-    isRead: true,
-    isFavorite: false,
-    isArchived: false,
-    priority: "Normal",
-    onlineStatus: "Online",
-    customerId: "1",
-    customerName: "Apex Plumb & Drain",
-    jobId: "Job #1024",
-    createdDate: "2026-07-02",
-    messages: [
-      {
-        id: "m2_1",
-        sender: "Sarah Jenkins",
-        senderRole: "Office Manager",
-        content: "Pete, did you get the signed contract copy for Apex Plumb?",
-        timestamp: "2026-07-06 12:00"
-      },
-      {
-        id: "m2_2",
-        sender: "Pete Rogers",
-        senderRole: "Technician",
-        content: "Yes, fully signed. Uploaded it to the documents hub under 'Apex Plumb & Drain Contract.pdf'.",
-        timestamp: "2026-07-06 12:15"
-      },
-      {
-        id: "m2_3",
-        sender: "Pete Rogers",
-        senderRole: "Technician",
-        content: "I finished the pressure test. It is holding 80 PSI perfectly.",
-        timestamp: "2026-07-06 12:45"
-      }
-    ]
-  },
-  {
-    id: "conv_3",
-    title: "Seattle Field Crew",
-    type: "Crew Chat",
-    participants: ["Pete Rogers", "Theresa W.", "Sarah Jenkins", "Dave Miller"],
-    unreadCount: 0,
-    lastMessage: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
-    lastMessageTime: "2026-07-06 09:30",
-    lastMessageSender: "Sarah Jenkins",
-    isRead: true,
-    isFavorite: false,
-    isArchived: false,
-    priority: "Normal",
-    onlineStatus: "Away",
-    routeId: "Route B-204",
-    routeName: "North Seattle Sewer Maintenance",
-    createdDate: "2026-06-25",
-    messages: [
-      {
-        id: "m3_1",
-        sender: "Theresa W.",
-        senderRole: "Technician",
-        content: "Crew Alpha is ready. We have the sewer cameras and snake devices.",
-        timestamp: "2026-07-06 09:00"
-      },
-      {
-        id: "m3_2",
-        sender: "Sarah Jenkins",
-        senderRole: "Office Manager",
-        content: "Safety equipment check is mandatory for tomorrow's commercial sewer project.",
-        timestamp: "2026-07-06 09:30"
-      }
-    ]
-  },
-  {
-    id: "conv_4",
-    title: "LeadForge AI Assistant",
-    type: "AI Conversation",
-    participants: ["LeadForge AI", "Sarah Jenkins"],
-    unreadCount: 1,
-    lastMessage: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
-    lastMessageTime: "2026-07-06 15:30",
-    lastMessageSender: "LeadForge AI",
-    isRead: false,
-    isFavorite: true,
-    isArchived: false,
-    priority: "Normal",
-    onlineStatus: "Online",
-    createdDate: "2026-07-05",
-    messages: [
-      {
-        id: "m4_1",
-        sender: "Sarah Jenkins",
-        senderRole: "Office Manager",
-        content: "Can you analyze our financial performance for early July?",
-        timestamp: "2026-07-06 15:28"
-      },
-      {
-        id: "m4_2",
-        sender: "LeadForge AI",
-        senderRole: "AI Assistant",
-        content: "Based on the recent invoices, you have a 14% increase in commercial revenue this week. Would you like me to draft a follow-up email to Chevron Logistics?",
-        timestamp: "2026-07-06 15:30"
-      }
-    ]
-  },
-  {
-    id: "conv_5",
-    title: "Fleet Dispatch Central",
-    type: "Dispatch Chat",
-    participants: ["Sarah Jenkins", "Dave Miller", "John Doe"],
-    unreadCount: 0,
-    lastMessage: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
-    lastMessageTime: "2026-07-05 16:20",
-    lastMessageSender: "John Doe",
-    isRead: true,
-    isFavorite: false,
-    isArchived: false,
-    priority: "Normal",
-    onlineStatus: "Offline",
-    routeId: "Route A-101",
-    routeName: "Seattle Central Drain Patrol",
-    createdDate: "2026-06-12",
-    messages: [
-      {
-        id: "m5_1",
-        sender: "Sarah Jenkins",
-        senderRole: "Dispatcher",
-        content: "All drivers: Check your active GPS dispatches.",
-        timestamp: "2026-07-05 16:00"
-      },
-      {
-        id: "m5_2",
-        sender: "John Doe",
-        senderRole: "Driver",
-        content: "Traffic on Interstate 5 is heavy, taking detour via Aurora Ave.",
-        timestamp: "2026-07-05 16:20",
-        attachments: [
-          {
-            id: "att_gps1",
-            type: "GPS Location",
-            name: "Aurora Ave Detour",
-            meta: { lat: 47.6062, lng: -122.3321, address: "Aurora Ave N, Seattle, WA" }
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: "conv_6",
-    title: "[System Alert] Warehouse Inventory Low",
-    type: "System Notification",
-    participants: ["System Event Node"],
-    unreadCount: 0,
-    lastMessage: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
-    lastMessageTime: "2026-07-06 08:00",
-    lastMessageSender: "System Event Node",
-    isRead: true,
-    isArchived: false,
-    priority: "High",
-    onlineStatus: "Offline",
-    createdDate: "2026-07-06",
-    messages: [
-      {
-        id: "m6_1",
-        sender: "System Event Node",
-        senderRole: "System Notification",
-        content: "Warning: 2-inch PVC couplings are below critical safety stock of 10 units. Current count is 4.",
-        timestamp: "2026-07-06 08:00",
-        attachments: [
-          {
-            id: "att_inv1",
-            type: "Inventory",
-            name: "2-inch PVC Coupler",
-            meta: { sku: "PVC-C-002", qty: 4, minQty: 10 }
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: "conv_7",
-    title: "Archive - Q2 General Plan",
-    type: "Team Chat",
-    participants: ["Sarah Jenkins", "Dave Miller"],
-    unreadCount: 0,
-    lastMessage: "The Q2 targets have been locked.",
-    lastMessageTime: "2026-04-15 11:00",
-    lastMessageSender: "Dave Miller",
-    isRead: true,
-    isArchived: true,
-    priority: "Low",
-    createdDate: "2026-04-01",
-    messages: [
-      {
-        id: "m7_1",
-        sender: "Sarah Jenkins",
-        senderRole: "Office Manager",
-        content: "Here are the goals.",
-        timestamp: "2026-04-15 10:00"
-      },
-      {
-        id: "m7_2",
-        sender: "Dave Miller",
-        senderRole: "General Manager",
-        content: "The Q2 targets have been locked.",
-        timestamp: "2026-04-15 11:00"
-      }
-    ]
-  }
-];
-
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -386,8 +114,8 @@ export const MessagesPage: React.FC = () => {
     navigateToScreen: onNavigateToScreen,
     logOperationalEvent
   } = useNavTelemetry();
-  const currentUserName = loggedInUser?.name || "Sarah Jenkins";
-  const currentUserEmail = loggedInUser?.email || "sarah@leadforge.com";
+  const currentUserName = loggedInUser?.name || "Unknown User";
+  const currentUserEmail = loggedInUser?.email || "";
   const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
 
   const [conversations, _setConversations] = useState<Conversation[]>([]);
@@ -437,23 +165,12 @@ export const MessagesPage: React.FC = () => {
 
     const q = query(collection(db, "conversations"), where("businessId", "==", businessId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        // Seed initial conversations for this tenant
-        INITIAL_CONVERSATIONS.forEach(async (conv) => {
-          await setDoc(doc(db, "conversations", conv.id), {
-            ...conv,
-            businessId,
-            updatedAt: new Date().toISOString()
-          });
-        });
-      } else {
-        const items: Conversation[] = [];
-        snapshot.forEach((docSnap) => {
-          const { businessId: _, updatedAt: __, ...convData } = docSnap.data();
-          items.push(convData as Conversation);
-        });
-        _setConversations(items);
-      }
+      const items: Conversation[] = [];
+      snapshot.forEach((docSnap) => {
+        const { businessId: _, updatedAt: __, ...convData } = docSnap.data();
+        items.push(convData as Conversation);
+      });
+      _setConversations(items);
     });
 
     return () => unsubscribe();
@@ -515,15 +232,8 @@ export const MessagesPage: React.FC = () => {
   const [newConvRecipient, setNewConvRecipient] = useState("");
   const [newConvPriority, setNewConvPriority] = useState<"High" | "Normal" | "Low">("Normal");
   
-  // Roster or staff for group setup
-  const mockStaff = [
-    { name: "Sarah Jenkins", role: "Office Manager" },
-    { name: "Pete Rogers", role: "Field Technician" },
-    { name: "Marcus Vance", role: "Sales Manager" },
-    { name: "Dave Miller", role: "General Manager" },
-    { name: "Theresa W.", role: "Lead Installer" },
-    { name: "John Doe", role: "Driver" }
-  ];
+  // Roster or staff for group setup, from the real team roster
+  const mockStaff = recentRoster.map(r => ({ name: r.name, role: r.role }));
 
   // Mock list of active Jobs in system
   const mockJobs = [
@@ -960,7 +670,7 @@ export const MessagesPage: React.FC = () => {
       id: "conv_" + Date.now(),
       title: newConvTitle,
       type: isGroup ? "Team Chat" : "Direct Message",
-      participants: isGroup ? ["Sarah Jenkins", ...newConvRecipient.split(",").map(x => x.trim())] : ["Sarah Jenkins", newConvRecipient.trim()],
+      participants: isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())] : [currentUserName, newConvRecipient.trim()],
       unreadCount: 0,
       lastMessage: "Conversation created.",
       lastMessageTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -968,13 +678,13 @@ export const MessagesPage: React.FC = () => {
       isRead: true,
       isArchived: false,
       priority: newConvPriority,
-      createdDate: "2026-07-06",
+      createdDate: new Date().toISOString().substring(0, 10),
       messages: [
         {
           id: "m_init_" + Date.now(),
           sender: "System Event Node",
           senderRole: "System Notification",
-          content: `Security channel established. Participants: ${isGroup ? ["Sarah Jenkins", ...newConvRecipient.split(",").map(x => x.trim())].join(', ') : "Sarah Jenkins, " + newConvRecipient}`,
+          content: `Security channel established. Participants: ${isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())].join(', ') : currentUserName + ", " + newConvRecipient}`,
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
         }
       ]

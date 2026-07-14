@@ -56,16 +56,6 @@ const DEFAULT_EVENT_TYPES = [
   "Custom"
 ];
 
-const EMPLOYEES = [
-  "John Doe",
-  "Sarah Jenkins",
-  "Pete Rogers",
-  "Pete Moore",
-  "Clara Oswald",
-  "Clark Kent",
-  "Emma Watson",
-  "Theresa Williams"
-];
 
 const CREWS = ["Crew Alpha", "Crew Beta", "Crew Gamma", "None"];
 
@@ -79,8 +69,10 @@ export const SchedulingPage: React.FC = () => {
     setSchedulingEvents: setEvents,
     customers: customersList,
     preSelectedDate,
-    preSelectedCustomerId
+    preSelectedCustomerId,
+    recentRoster
   } = useDomainData();
+  const EMPLOYEES = recentRoster.map(r => r.name);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
