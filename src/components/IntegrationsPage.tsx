@@ -1,4 +1,7 @@
 import React, { useState, useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Link2,
   Plus,
@@ -88,46 +91,33 @@ export interface WebhookHistoryEntry {
 }
 
 interface IntegrationsPageProps {
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  activeRole: string; // Owner, Office Manager, Technician, Driver
-  loggedInUser?: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  
-  // Shared Event Engine Data and Setters
-  schedulingEvents: SchedulingEvent[];
-  setSchedulingEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  customers: Customer[];
-  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
-  documents: DocumentItem[];
-  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
   dashboardLeads: any[];
   setDashboardLeads: React.Dispatch<React.SetStateAction<any[]>>;
-  recentAiActions: any[];
-  setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>>;
-  triggerNotification: (msg: string) => void;
 }
 
 export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole = "Owner",
-  loggedInUser,
-  logOperationalEvent,
-  onNavigateToScreen,
-  schedulingEvents,
-  setSchedulingEvents,
-  customers,
-  setCustomers,
-  documents,
-  setDocuments,
   dashboardLeads,
-  setDashboardLeads,
-  recentAiActions,
-  setRecentAiActions,
-  triggerNotification,
+  setDashboardLeads
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    schedulingEvents,
+    setSchedulingEvents,
+    customers,
+    setCustomers,
+    documents,
+    setDocuments,
+    recentAiActions,
+    setRecentAiActions
+  } = useDomainData();
+  const {
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent,
+    triggerNotification
+  } = useNavTelemetry();
   // Check authorization - Owners full access, managers configurable, employees limited
   const isAuthorized = useMemo(() => {
     if (activeRole === "Owner") return true;

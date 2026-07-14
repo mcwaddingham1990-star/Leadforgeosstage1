@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Sparkles,
   Bot,
@@ -41,52 +44,27 @@ import {
 } from "recharts";
 
 interface AIAssistantPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  activeRole: string;
-  loggedInUser: any;
-  logOperationalEvent: (type: string, desc: string, icon: string) => void;
   globalAiSetting: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO";
   setGlobalAiSetting: (val: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO") => void;
   moduleAiSettings: Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">;
   setModuleAiSettings: React.Dispatch<React.SetStateAction<Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">>>;
-  recentAiActions: Array<{
-    id: string;
-    date: string;
-    time: string;
-    module: string;
-    action: string;
-    reason: string;
-    status: "Approved" | "Pending Approval" | "Completed" | "Undone" | "Active";
-    approvedBy: string;
-  }>;
-  setRecentAiActions: React.Dispatch<React.SetStateAction<Array<{
-    id: string;
-    date: string;
-    time: string;
-    module: string;
-    action: string;
-    reason: string;
-    status: "Approved" | "Pending Approval" | "Completed" | "Undone" | "Active";
-    approvedBy: string;
-  }>>>;
 }
 
 export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
   globalAiSetting,
   setGlobalAiSetting,
   moduleAiSettings,
-  setModuleAiSettings,
-  recentAiActions,
-  setRecentAiActions
+  setModuleAiSettings
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { recentAiActions, setRecentAiActions } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [activeTab, setActiveTab] = useState<"command" | "reports" | "workflows" | "config" | "insights" | "settings">("command");
   
   // Local state for interactive configurations

@@ -5671,40 +5671,17 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "ai_assistant" ? (
                     <AIAssistantPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
                       globalAiSetting={globalAiSetting}
                       setGlobalAiSetting={setGlobalAiSetting}
                       moduleAiSettings={moduleAiSettings}
                       setModuleAiSettings={setModuleAiSettings}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
                     />
 
                   ) : activeScreen.id === "integrations" ? (
                     
                     <IntegrationsPage
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      triggerNotification={triggerNotification}
                     />
 
                   ) : activeScreen.id === "settings" ? (
@@ -6650,23 +6627,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   ) : activeScreen.id === "notifications" ? (
                     
                     <NotificationsPage
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      triggerNotification={triggerNotification}
                     />
 
                   ) : (
