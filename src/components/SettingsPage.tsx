@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Save,
   Undo,
@@ -65,15 +68,8 @@ export interface SettingsPageProps {
   setGlobalAiSetting: (val: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO") => void;
   moduleAiSettings: Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">;
   setModuleAiSettings: React.Dispatch<React.SetStateAction<Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">>>;
-  recentRoster: Array<{ name: string; role: string; code: string; status: string }>;
-  setRecentRoster: React.Dispatch<React.SetStateAction<Array<{ name: string; role: string; code: string; status: string }>>>;
   selectedRoles: any[];
   setSelectedRoles: React.Dispatch<React.SetStateAction<any[]>>;
-  triggerNotification: (msg: string) => void;
-  recentAiActions?: any[];
-  setRecentAiActions?: React.Dispatch<React.SetStateAction<any[]>>;
-  onNavigateToScreen?: (screenId: string) => void;
-  activeRole?: string;
 }
 
 // Initial defaults for fields not in parent state
@@ -234,16 +230,13 @@ export default function SettingsPage({
   setGlobalAiSetting,
   moduleAiSettings,
   setModuleAiSettings,
-  recentRoster,
-  setRecentRoster,
   selectedRoles,
-  setSelectedRoles,
-  triggerNotification,
-  recentAiActions,
-  setRecentAiActions,
-  onNavigateToScreen,
-  activeRole
+  setSelectedRoles
 }: SettingsPageProps) {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions } = useDomainData();
+  const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
 
   // Local settings state combining parent states and auxiliary defaults
   const [localConfig, setLocalConfig] = useState(INITIAL_DEFAULTS);

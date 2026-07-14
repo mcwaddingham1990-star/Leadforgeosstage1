@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Activity,
   AlertCircle,
@@ -89,40 +92,22 @@ export interface DecisionLogEntry {
 }
 
 interface OwnerConsolePageProps {
-  onTakeSnapshot: () => void;
-  onOpenAIAnalysis: (prompt: string) => void;
-  activeRole: string;
-  loggedInUser: any;
-  triggerNotification: (msg: string) => void;
-  customers: any[];
-  setCustomers: React.Dispatch<React.SetStateAction<any[]>>;
   dashboardLeads: any[];
   setDashboardLeads: React.Dispatch<React.SetStateAction<any[]>>;
-  schedulingEvents: any[];
-  setSchedulingEvents: React.Dispatch<React.SetStateAction<any[]>>;
-  recentAiActions: any[];
-  setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>>;
   revenueResetInterval?: string;
   setRevenueResetInterval?: (val: string) => void;
 }
 
 export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole,
-  loggedInUser,
-  triggerNotification,
-  customers,
-  setCustomers,
   dashboardLeads,
   setDashboardLeads,
-  schedulingEvents,
-  setSchedulingEvents,
-  recentAiActions,
-  setRecentAiActions,
   revenueResetInterval,
   setRevenueResetInterval
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions } = useDomainData();
+  const { triggerNotification } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
 

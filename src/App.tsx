@@ -5658,15 +5658,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       setGlobalAiSetting={setGlobalAiSetting}
                       moduleAiSettings={moduleAiSettings}
                       setModuleAiSettings={setModuleAiSettings}
-                      recentRoster={recentRoster}
-                      setRecentRoster={setRecentRoster}
                       selectedRoles={selectedRoles}
                       setSelectedRoles={setSelectedRoles}
-                      triggerNotification={triggerNotification}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      onNavigateToScreen={navigateToScreen}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                     />
 
                   ) : activeScreen.id === "owner_console" ? (
@@ -5686,19 +5679,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       </div>
                     ) : (
                       <OwnerConsolePage
-                        onTakeSnapshot={() => takeSnapshot("owner_console", "Owner Console")}
-                        onOpenAIAnalysis={(prompt) => openPageAIAnalysis("owner_console", "Owner Console", prompt)}
-                        activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                        loggedInUser={loggedInUser}
-                        triggerNotification={triggerNotification}
-                        customers={customers}
-                        setCustomers={setCustomers}
                         dashboardLeads={dashboardLeads}
                         setDashboardLeads={setDashboardLeads}
-                        schedulingEvents={schedulingEvents}
-                        setSchedulingEvents={setSchedulingEvents}
-                        recentAiActions={recentAiActions}
-                        setRecentAiActions={setRecentAiActions}
                         revenueResetInterval={revenueResetInterval}
                       />
                     )
@@ -6385,43 +6367,14 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     )
 
                   ) : activeScreen.id === "scheduling" ? (
-                    <SchedulingPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      customersList={customers}
-                      logOperationalEvent={logOperationalEvent}
-                      preSelectedDate={preSelectedDate}
-                      preSelectedCustomerId={preSelectedCustomerId}
-                      onNavigateToScreen={navigateToScreen}
-                    />
+                    <SchedulingPage />
 
                   ) : activeScreen.id === "dispatch" ? (
                     <DispatchPage />
 
                   ) : activeScreen.id === "routes" ? (
                     <InteractiveMapPage
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      leads={leads}
-                      setLeads={setLeads}
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      inventoryList={inventoryList}
-                      setInventoryList={setInventoryList}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       businessAddresses={businessAddresses}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      completedJobsRevenue={completedJobsRevenue}
-                      setCompletedJobsRevenue={setCompletedJobsRevenue}
                     />
 
                   ) : activeScreen.id === "bulletins" ? (

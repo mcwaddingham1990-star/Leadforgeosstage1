@@ -66,6 +66,7 @@ export interface Estimate {
   amount: number;
   createdDate: string;
   expirationDate: string;
+  address?: string;
 }
 
 export interface InventoryItem {

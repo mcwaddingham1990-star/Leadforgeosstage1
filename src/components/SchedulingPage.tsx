@@ -30,20 +30,9 @@ import {
 
 export type { SchedulingEvent } from "../types/domain";
 import type { SchedulingEvent } from "../types/domain";
-
-export interface SchedulingPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  events: SchedulingEvent[];
-  setEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  activeRole: string;
-  customersList?: Array<{ id: string; contact: string; phone?: string; email?: string; address?: string; company?: string }>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  preSelectedDate?: string;
-  preSelectedCustomerId?: string;
-  onNavigateToScreen?: (screenId: string) => void;
-}
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -82,19 +71,23 @@ const CREWS = ["Crew Alpha", "Crew Beta", "Crew Gamma", "None"];
 
 const PRIORITIES: Array<"Low" | "Medium" | "High" | "Urgent"> = ["Low", "Medium", "High", "Urgent"];
 
-export const SchedulingPage: React.FC<SchedulingPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  events,
-  setEvents,
-  activeRole,
-  customersList = [],
-  logOperationalEvent,
-  preSelectedDate,
-  preSelectedCustomerId,
-  onNavigateToScreen
-}) => {
+export const SchedulingPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    schedulingEvents: events,
+    setSchedulingEvents: setEvents,
+    customers: customersList,
+    preSelectedDate,
+    preSelectedCustomerId
+  } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // Navigation states
   const [currentDate, setCurrentDate] = useState<Date>(() => {
     if (preSelectedDate) {
