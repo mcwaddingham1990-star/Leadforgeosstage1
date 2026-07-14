@@ -31,17 +31,8 @@ import {
   X
 } from "lucide-react";
 
-export interface Estimate {
-  id: string;
-  number: string;
-  customerName: string;
-  company: string;
-  status: "Draft" | "Pending" | "Sent" | "Viewed" | "Accepted" | "Declined" | "Expired" | "Completed";
-  salesRep: string;
-  amount: number;
-  createdDate: string;
-  expirationDate: string;
-}
+export type { Estimate } from "../types/domain";
+import type { Estimate } from "../types/domain";
 
 interface EstimatesPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

@@ -109,11 +109,9 @@ import {
   INITIAL_RECENT_AI_ACTIONS,
   INITIAL_SNAPSHOTS
 } from "./initialData";
-import {
-  syncArrayToFirestore,
-  subscribeToCollection,
-  validateConnection
-} from "./lib/firestoreService";
+import { validateConnection } from "./lib/firestoreService";
+import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
+import { AuthContext, AuthContextValue } from "./context/AuthContext";
 
 export interface SelectedRole {
   id: string;
@@ -634,15 +632,6 @@ export default function App() {
   const [liveTime, setLiveTime] = useState(new Date());
 
   // Notification system states
-  const [notifications, _setNotifications] = useState<Array<{
-    id: string;
-    category: "message" | "location" | "job" | "lead" | "other";
-    screenId?: string;
-    title: string;
-    description: string;
-    time: string;
-    isRead: boolean;
-  }>>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
   // Dashboard & Operational Interactive states
@@ -663,198 +652,47 @@ export default function App() {
     google_maps: true,
     gmail: false
   });
-  const [recentRoster, _setRecentRoster] = useState<Array<{
-    id?: string;
-    name: string;
-    role: string;
-    code: string;
-    status: string;
-  }>>([]);
   const [newRosterName, setNewRosterName] = useState("");
   const [newRosterRole, setNewRosterRole] = useState("Technician");
 
-  // Core Event Engine & CRM Shared States back-ended by Firestore
-  const [leads, _setLeads] = useState<Lead[]>([]);
-  const [estimates, _setEstimates] = useState<Estimate[]>([]);
-  const [inventoryList, _setInventoryList] = useState<InventoryItem[]>([]);
+  // Core Event Engine & CRM Shared States back-ended by Firestore.
+  // Each collection is backed by useFirestoreCollection, which centralizes the
+  // sync-to-Firestore + realtime-subscribe + clear-on-logout behavior that used
+  // to be hand-duplicated per collection (see src/hooks/useFirestoreCollection.ts).
+  const businessId = loggedInUser?.email;
+  const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId);
+  const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
+  const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
+  const [schedulingEvents, setSchedulingEvents] = useFirestoreCollection<SchedulingEvent>("scheduling_events", businessId);
+  const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
+  const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
+  const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
+    "roster",
+    businessId,
+    { normalize: (item) => ({ ...item, id: item.id || item.code }) }
+  );
+  const [bulletins, setBulletins] = useFirestoreCollection<any>("bulletins", businessId);
+  const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId);
+  const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
+  const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
+
   const [completedJobsRevenue, setCompletedJobsRevenue] = useState<number>(0);
-  const [customers, _setCustomers] = useState<Customer[]>([]);
-  const [documents, _setDocuments] = useState<DocumentItem[]>([]);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
-  const [schedulingEvents, _setSchedulingEvents] = useState<SchedulingEvent[]>([]);
-
-  // Intercepting setters to sync with Firestore
-  const setCustomers: React.Dispatch<React.SetStateAction<Customer[]>> = (value) => {
-    _setCustomers((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("customers", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setLeads: React.Dispatch<React.SetStateAction<Lead[]>> = (value) => {
-    _setLeads((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("leads", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setEstimates: React.Dispatch<React.SetStateAction<Estimate[]>> = (value) => {
-    _setEstimates((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("estimates", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setSchedulingEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>> = (value) => {
-    _setSchedulingEvents((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("scheduling_events", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setInventoryList: React.Dispatch<React.SetStateAction<InventoryItem[]>> = (value) => {
-    _setInventoryList((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("inventory", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>> = (value) => {
-    _setDocuments((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("documents", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setRecentRoster: React.Dispatch<React.SetStateAction<Array<{
-    id?: string;
-    name: string;
-    role: string;
-    code: string;
-    status: string;
-  }>>> = (value) => {
-    _setRecentRoster((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      const formattedList = nextList.map(item => ({
-        ...item,
-        id: item.id || item.code
-      }));
-      syncArrayToFirestore("roster", prev.map(p => ({ ...p, id: p.id || p.code })), formattedList, loggedInUser?.email);
-      return formattedList;
-    });
-  };
-
-  const setBulletins: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setBulletins((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("bulletins", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setNotifications: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setNotifications((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("notifications", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setRecentAiActions((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("recent_ai_actions", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setSnapshots: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setSnapshots((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("snapshots", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
 
   // Test connection on boot
   useEffect(() => {
     validateConnection();
   }, []);
 
-  // Sync state with Firestore in real-time when a user logs in
+  // Track the logged-in-user email in localStorage across login/logout
   useEffect(() => {
-    if (!loggedInUser?.email) return;
-
-    localStorage.setItem("leadforge_logged_in_user_email", loggedInUser.email);
-
-    const unsubCustomers = subscribeToCollection("customers", loggedInUser.email, (items) => {
-      _setCustomers(items);
-    });
-    const unsubLeads = subscribeToCollection("leads", loggedInUser.email, (items) => {
-      _setLeads(items);
-    });
-    const unsubEstimates = subscribeToCollection("estimates", loggedInUser.email, (items) => {
-      _setEstimates(items);
-    });
-    const unsubEvents = subscribeToCollection("scheduling_events", loggedInUser.email, (items) => {
-      _setSchedulingEvents(items);
-    });
-    const unsubInventory = subscribeToCollection("inventory", loggedInUser.email, (items) => {
-      _setInventoryList(items);
-    });
-    const unsubDocuments = subscribeToCollection("documents", loggedInUser.email, (items) => {
-      _setDocuments(items);
-    });
-    const unsubRoster = subscribeToCollection("roster", loggedInUser.email, (items) => {
-      _setRecentRoster(items);
-    });
-    const unsubBulletins = subscribeToCollection("bulletins", loggedInUser.email, (items) => {
-      _setBulletins(items);
-    });
-    const unsubNotifications = subscribeToCollection("notifications", loggedInUser.email, (items) => {
-      _setNotifications(items);
-    });
-    const unsubAiActions = subscribeToCollection("recent_ai_actions", loggedInUser.email, (items) => {
-      _setRecentAiActions(items);
-    });
-    const unsubSnapshots = subscribeToCollection("snapshots", loggedInUser.email, (items) => {
-      _setSnapshots(items);
-    });
-
-    return () => {
-      unsubCustomers();
-      unsubLeads();
-      unsubEstimates();
-      unsubEvents();
-      unsubInventory();
-      unsubDocuments();
-      unsubRoster();
-      unsubBulletins();
-      unsubNotifications();
-      unsubAiActions();
-      unsubSnapshots();
-    };
-  }, [loggedInUser]);
-
-  // Clear states upon logout to prevent cross-account leaking
-  useEffect(() => {
-    if (!isLoggedIn) {
-      _setCustomers([]);
-      _setLeads([]);
-      _setEstimates([]);
-      _setSchedulingEvents([]);
-      _setInventoryList([]);
-      _setDocuments([]);
+    if (businessId) {
+      localStorage.setItem("leadforge_logged_in_user_email", businessId);
+    } else {
       localStorage.removeItem("leadforge_logged_in_user_email");
     }
-  }, [isLoggedIn]);
+  }, [businessId]);
 
   // Timer for Clocked In Duration
   useEffect(() => {
@@ -1004,15 +842,6 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  const [bulletins, _setBulletins] = useState<Array<{
-    id: string;
-    title: string;
-    content: string;
-    author: string;
-    role: string;
-    date: string;
-    status: "approved" | "pending";
-  }>>([]);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -1043,17 +872,6 @@ export default function App() {
     snapshots: "DEFAULT",
   });
   
-  const [recentAiActions, _setRecentAiActions] = useState<Array<{
-    id: string;
-    date: string;
-    time: string;
-    module: string;
-    action: string;
-    reason: string;
-    status: "Approved" | "Pending Approval" | "Completed" | "Undone" | "Active";
-    approvedBy: string;
-  }>>([]);
-
   // Context Selection States
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("cust_1");
   const [selectedEmployeeName, setSelectedEmployeeName] = useState<string>("John Doe");
@@ -1079,16 +897,6 @@ export default function App() {
   const [floatingAiLoading, setFloatingAiLoading] = useState(false);
 
   // SNAPSHOT ARCHIVES STATE & MUTATIONS
-  const [snapshots, _setSnapshots] = useState<Array<{
-    id: string;
-    pageId: string;
-    pageName: string;
-    timestamp: string;
-    filename: string;
-    fileSize: string;
-    meta: { recordCount: number; filters: string; details: string };
-  }>>([]);
-
   const [isFlashing, setIsFlashing] = useState(false);
 
   const createAndAddSnapshot = (pageId: string, pageName: string, metaData?: any, imageSrc?: string) => {
@@ -2409,7 +2217,19 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     );
   };
 
+  const authContextValue: AuthContextValue = {
+    loggedInUser,
+    isLoggedIn,
+    currentView,
+    setCurrentView,
+    simulatedRole,
+    setSimulatedRole,
+    businessId,
+    handleLogout
+  };
+
   return (
+    <AuthContext.Provider value={authContextValue}>
     <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
       {/* Hidden device camera capture input */}
       <input
@@ -7375,7 +7195,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
               </div>
               <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 pt-1 text-[8px] font-mono lowercase select-none">
                 <div className="truncate">Page: <span className="text-slate-700 font-sans font-bold uppercase">{activeScreen.label}</span></div>
-                <div className="truncate">Customer: <span className="text-slate-700 font-sans font-bold uppercase">{customers.find(c => c.id === selectedCustomerId)?.name || "Apex Plumb & Drain"}</span></div>
+                <div className="truncate">Customer: <span className="text-slate-700 font-sans font-bold uppercase">{customers.find(c => c.id === selectedCustomerId)?.company || "Apex Plumb & Drain"}</span></div>
                 <div className="truncate">Employee: <span className="text-slate-700 font-sans font-bold uppercase">{selectedEmployeeName}</span></div>
                 <div className="truncate">Inventory: <span className="text-slate-700 font-sans font-bold uppercase">{selectedInventoryItem}</span></div>
               </div>
@@ -7713,5 +7533,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       </footer>
 
     </div>
+    </AuthContext.Provider>
   );
 }

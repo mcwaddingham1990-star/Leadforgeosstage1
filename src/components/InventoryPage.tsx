@@ -44,44 +44,8 @@ import {
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 
-export interface InventoryItem {
-  id: string;
-  name: string;
-  category: string;
-  vendor: string;
-  manufacturer: string;
-  sku: string;
-  barcode: string;
-  qrCode: string;
-  description: string;
-  quantity: number;
-  unit: string;
-  minQuantity: number;
-  maxQuantity: number;
-  location: string;
-  unitCost: number;
-  sellingPrice: number;
-  notes: string;
-  photo: string;
-  isFavorite: boolean;
-  assignedVehicle?: string;
-  assignedEmployee?: string;
-  lastUpdated: string;
-  customFields?: Array<{ key: string; value: string }>;
-  quantityHistory: Array<{ date: string; type: string; amount: number; previous: number; current: number; notes: string }>;
-  purchaseHistory: Array<{ date: string; vendor: string; amount: number; unitCost: number; total: number }>;
-  usageHistory: Array<{ date: string; jobName: string; amount: number; employee: string }>;
-}
-
-export interface PurchaseRecord {
-  id: string;
-  vendor: string;
-  receiptNumber: string;
-  date: string;
-  employee: string;
-  itemsPurchased: string;
-  totalCost: number;
-}
+export type { InventoryItem, PurchaseRecord } from "../types/domain";
+import type { InventoryItem, PurchaseRecord } from "../types/domain";
 
 export interface InventoryPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

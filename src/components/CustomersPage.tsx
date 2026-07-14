@@ -34,23 +34,8 @@ import {
   Minus
 } from "lucide-react";
 
-export interface Customer {
-  id: string;
-  company: string;
-  contact: string;
-  phone: string;
-  email: string;
-  address: string;
-  openJobs: number;
-  outstandingBalance: number;
-  lifetimeValue: number;
-  status: "Active" | "Inactive" | "Past Due";
-  type: "Residential" | "Commercial";
-  isVIP: boolean;
-  recentlyAdded: boolean;
-  upcomingJobDate?: string;
-  requireFollowUp?: boolean;
-}
+export type { Customer } from "../types/domain";
+import type { Customer } from "../types/domain";
 
 export interface CustomersPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

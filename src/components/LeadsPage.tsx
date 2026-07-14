@@ -33,38 +33,8 @@ import {
   Minus
 } from "lucide-react";
 
-export interface Lead {
-  id: string;
-  name: string;
-  company: string;
-  phone: string;
-  email: string;
-  source:
-    | "Google Business Profile"
-    | "Website"
-    | "Facebook"
-    | "Instagram"
-    | "Referral"
-    | "Phone Call"
-    | "Walk-In"
-    | "Manual Entry"
-    | "Other";
-  salesRep: string;
-  status:
-    | "New"
-    | "Contacted"
-    | "Qualified"
-    | "Estimate Sent"
-    | "Follow-Up Needed"
-    | "Won"
-    | "Lost"
-    | "Archived";
-  estimatedValue: number;
-  dateAdded: string;
-  addedDaysAgo: number;
-  address?: string;
-  notes?: string;
-}
+export type { Lead } from "../types/domain";
+import type { Lead } from "../types/domain";
 
 interface LeadsPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

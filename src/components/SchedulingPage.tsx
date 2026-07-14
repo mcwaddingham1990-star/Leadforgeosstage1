@@ -28,24 +28,8 @@ import {
   ArrowRight
 } from "lucide-react";
 
-export interface SchedulingEvent {
-  id: string;
-  eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
-  customType?: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:MM (24-hour)
-  endTime: string; // HH:MM (24-hour)
-  customer: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  customerAddress?: string;
-  assignedEmployee: string;
-  assignedCrew?: string;
-  location?: string;
-  priority: "Low" | "Medium" | "High" | "Urgent";
-  notes?: string;
-  status: "Scheduled" | "Completed" | "Cancelled";
-}
+export type { SchedulingEvent } from "../types/domain";
+import type { SchedulingEvent } from "../types/domain";
 
 export interface SchedulingPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

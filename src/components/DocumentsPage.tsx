@@ -52,29 +52,8 @@ import {
   QrCode
 } from "lucide-react";
 
-export interface DocumentItem {
-  id: string;
-  name: string;
-  customer: string;
-  employee: string;
-  vendor: string;
-  job: string;
-  type: string;
-  uploadedBy: string;
-  date: string;
-  size: string;
-  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
-  isFavorite: boolean;
-  isArchived: boolean;
-  notes: string;
-  tags: string[];
-  estimateId: string;
-  invoiceId: string;
-  receiptAmount?: number;
-  lastModified: string;
-  url?: string;
-  metaObjects?: any[];
-}
+export type { DocumentItem } from "../types/domain";
+import type { DocumentItem } from "../types/domain";
 
 interface DocumentsPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;

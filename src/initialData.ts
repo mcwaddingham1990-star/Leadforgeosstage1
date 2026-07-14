@@ -1,3 +1,6 @@
+import type { DocumentItem, SchedulingEvent } from "./types/domain";
+export type { DocumentItem, SchedulingEvent } from "./types/domain";
+
 export interface DashboardLead {
   id: string;
   name: string;
@@ -12,45 +15,6 @@ export interface RosterItem {
   role: string;
   code: string;
   status: string;
-}
-
-export interface DocumentItem {
-  id: string;
-  name: string;
-  customer: string;
-  employee: string;
-  vendor: string;
-  job: string;
-  type: string;
-  uploadedBy: string;
-  date: string;
-  size: string;
-  status: string;
-  isFavorite: boolean;
-  isArchived: boolean;
-  notes: string;
-  tags: string[];
-  estimateId: string;
-  invoiceId: string;
-  lastModified: string;
-}
-
-export interface SchedulingEvent {
-  id: string;
-  eventType: "Job" | "Estimate" | "Leave" | "Meeting" | "Dispatch";
-  date: string;
-  startTime: string;
-  endTime: string;
-  customer: string;
-  customerPhone: string;
-  customerEmail: string;
-  customerAddress: string;
-  assignedEmployee: string;
-  assignedCrew: string;
-  location: string;
-  priority: "High" | "Medium" | "Low";
-  notes: string;
-  status: "Scheduled" | "In Progress" | "Completed" | "Cancelled";
 }
 
 export interface RecentAiAction {

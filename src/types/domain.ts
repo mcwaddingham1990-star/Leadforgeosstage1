@@ -1,0 +1,151 @@
+// Canonical domain types shared across the app. Previously these were each
+// defined independently inside their "owning" page component (and, for
+// DocumentItem/SchedulingEvent, duplicated with conflicting shapes in
+// src/initialData.ts). Page components re-export from here so existing
+// imports (e.g. `import { Customer } from "./components/CustomersPage"`)
+// keep working.
+
+export interface Customer {
+  id: string;
+  company: string;
+  contact: string;
+  phone: string;
+  email: string;
+  address: string;
+  openJobs: number;
+  outstandingBalance: number;
+  lifetimeValue: number;
+  status: "Active" | "Inactive" | "Past Due";
+  type: "Residential" | "Commercial";
+  isVIP: boolean;
+  recentlyAdded: boolean;
+  upcomingJobDate?: string;
+  requireFollowUp?: boolean;
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  company: string;
+  phone: string;
+  email: string;
+  source:
+    | "Google Business Profile"
+    | "Website"
+    | "Facebook"
+    | "Instagram"
+    | "Referral"
+    | "Phone Call"
+    | "Walk-In"
+    | "Manual Entry"
+    | "Other";
+  salesRep: string;
+  status:
+    | "New"
+    | "Contacted"
+    | "Qualified"
+    | "Estimate Sent"
+    | "Follow-Up Needed"
+    | "Won"
+    | "Lost"
+    | "Archived";
+  estimatedValue: number;
+  dateAdded: string;
+  addedDaysAgo: number;
+  address?: string;
+  notes?: string;
+}
+
+export interface Estimate {
+  id: string;
+  number: string;
+  customerName: string;
+  company: string;
+  status: "Draft" | "Pending" | "Sent" | "Viewed" | "Accepted" | "Declined" | "Expired" | "Completed";
+  salesRep: string;
+  amount: number;
+  createdDate: string;
+  expirationDate: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  vendor: string;
+  manufacturer: string;
+  sku: string;
+  barcode: string;
+  qrCode: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  minQuantity: number;
+  maxQuantity: number;
+  location: string;
+  unitCost: number;
+  sellingPrice: number;
+  notes: string;
+  photo: string;
+  isFavorite: boolean;
+  assignedVehicle?: string;
+  assignedEmployee?: string;
+  lastUpdated: string;
+  customFields?: Array<{ key: string; value: string }>;
+  quantityHistory: Array<{ date: string; type: string; amount: number; previous: number; current: number; notes: string }>;
+  purchaseHistory: Array<{ date: string; vendor: string; amount: number; unitCost: number; total: number }>;
+  usageHistory: Array<{ date: string; jobName: string; amount: number; employee: string }>;
+}
+
+export interface PurchaseRecord {
+  id: string;
+  vendor: string;
+  receiptNumber: string;
+  date: string;
+  employee: string;
+  itemsPurchased: string;
+  totalCost: number;
+}
+
+export interface DocumentItem {
+  id: string;
+  name: string;
+  customer: string;
+  employee: string;
+  vendor: string;
+  job: string;
+  type: string;
+  uploadedBy: string;
+  date: string;
+  size: string;
+  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
+  isFavorite: boolean;
+  isArchived: boolean;
+  notes: string;
+  tags: string[];
+  estimateId: string;
+  invoiceId: string;
+  receiptAmount?: number;
+  lastModified: string;
+  url?: string;
+  metaObjects?: any[];
+}
+
+export interface SchedulingEvent {
+  id: string;
+  eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
+  customType?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM (24-hour)
+  endTime: string; // HH:MM (24-hour)
+  customer: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  assignedEmployee: string;
+  assignedCrew?: string;
+  location?: string;
+  priority: "Low" | "Medium" | "High" | "Urgent";
+  notes?: string;
+  status: "Scheduled" | "Completed" | "Cancelled";
+}
