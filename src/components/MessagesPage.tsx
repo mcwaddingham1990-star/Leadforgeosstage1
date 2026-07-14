@@ -677,6 +677,21 @@ export const MessagesPage: React.FC = () => {
     triggerRealTimeNotification(`Attached ${type}: ${name} to message draft.`);
   };
 
+  // Real file attachment — reads the actual selected/captured file (name, size, content as a
+  // data URL) instead of the old hardcoded fake "Manual_Leak_Fix.pdf"/"Field_Inspection_Main.jpg".
+  const fileAttachInputRef = useRef<HTMLInputElement | null>(null);
+  const photoAttachInputRef = useRef<HTMLInputElement | null>(null);
+  const handleRealFileAttach = (e: React.ChangeEvent<HTMLInputElement>, type: "PDF" | "Photo" | "Document") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      attachItem(type, file.name, `${(file.size / 1024).toFixed(0)} KB`, { dataUrl: reader.result });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   // Sending active message
   const handleSendMessage = () => {
     if (!inputText.trim() && draftAttachments.length === 0) return;
@@ -1592,24 +1607,40 @@ export const MessagesPage: React.FC = () => {
               
               {/* Media tools shortcuts */}
               <div className="flex gap-1 shrink-0 bg-white p-1 rounded-xl border border-[#A9CDEE] h-10 items-center">
+                <input
+                  type="file"
+                  ref={fileAttachInputRef}
+                  onChange={(e) => handleRealFileAttach(e, "PDF")}
+                  className="hidden"
+                  style={{ display: "none" }}
+                />
+                <input
+                  type="file"
+                  ref={photoAttachInputRef}
+                  onChange={(e) => handleRealFileAttach(e, "Photo")}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  style={{ display: "none" }}
+                />
                 <button
-                  onClick={() => attachItem("PDF", "Manual_Leak_Fix.pdf", "1.4 MB")}
+                  onClick={() => fileAttachInputRef.current?.click()}
                   className="p-1 hover:bg-slate-100 rounded text-slate-500"
                   title="Attach File"
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => attachItem("Photo", "Field_Inspection_Main.jpg", "850 KB")}
+                  onClick={() => photoAttachInputRef.current?.click()}
                   className="p-1 hover:bg-slate-100 rounded text-slate-500"
                   title="Attach Camera Photo"
                 >
                   <Camera className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => attachItem("Voice Note", "VoiceMemo_Status.mp3", "450 KB")}
-                  className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                  title="Attach Voice Note"
+                  disabled
+                  className="p-1 rounded text-slate-300 cursor-not-allowed"
+                  title="Voice notes aren't available yet"
                 >
                   <Mic className="w-4 h-4" />
                 </button>

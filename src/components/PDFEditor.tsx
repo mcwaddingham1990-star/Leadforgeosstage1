@@ -184,7 +184,6 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
         role: "system",
         action: "created",
         timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-        ipAddress: "127.0.0.1",
         device: "Server Core Node",
         documentVersion: "v1.0"
       }
@@ -250,7 +249,10 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
       setObjects(initialObjects);
       saveToHistory(initialObjects);
     } else {
-      // Seed nice standard elements to make it look fully active and professional
+      // Seed a blank standard contract template with generic, editable
+      // placeholder fields. No specific client, no pre-applied approval
+      // stamp, and no pre-checked consent box — those must reflect a real
+      // document and a real signer's real choice, not fabricated defaults.
       const seeded: EditorObject[] = [
         {
           id: "seed_1",
@@ -289,21 +291,6 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
           }
         },
         {
-          id: "seed_3",
-          type: "stamp",
-          x: 75,
-          y: 4,
-          w: 160,
-          h: 60,
-          rotation: -12,
-          isLocked: false,
-          groupId: null,
-          zIndex: 10,
-          props: {
-            stampType: "APPROVED"
-          }
-        },
-        {
           id: "seed_4",
           type: "text",
           x: 10,
@@ -315,7 +302,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
           groupId: null,
           zIndex: 3,
           props: {
-            text: "CLIENT DETAILS\nName: Apex Plumb & Drain\nContact: Sarah Jenkins\nAddress: 1024 Industrial Pkwy, Suite B\nEmail: contact@apexdrain.com\n\nSERVICE SCHEDULE\nType: Emergency Mainline Jetting\nFrequency: Bi-Monthly Maintenance",
+            text: "CLIENT DETAILS\nName: [Client / Company Name]\nContact: [Contact Name]\nAddress: [Service Address]\nEmail: [Client Email]\n\nSERVICE SCHEDULE\nType: [Service Type]\nFrequency: [Frequency]",
             fontFamily: "Inter",
             fontSize: 13,
             color: "#1F3557"
@@ -351,7 +338,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
           groupId: null,
           zIndex: 5,
           props: {
-            isChecked: true
+            isChecked: false
           }
         },
         {
@@ -626,7 +613,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     const role = (obj.props as any).role || "customer";
     setSignerRole(role);
     if (loggedInUser && (role === "employee" || role === "owner")) {
-      setSignerFullName(loggedInUser.name || "Sarah Jenkins");
+      setSignerFullName(loggedInUser.name || "");
     } else {
       setSignerFullName((obj.props as any).signedBy || "");
     }
@@ -634,21 +621,46 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     setIsSignModalOpen(true);
   };
 
-  const addAuditTrailEntry = (signerName: string, role: string, action: string) => {
-    const randomIP = `172.56.${Math.floor(Math.random() * 80) + 10}.${Math.floor(Math.random() * 240) + 10}`;
+  // Builds a real audit trail entry: the IP comes from a server-side request
+  // (client JS can't know its own public IP), and the hash is a genuine
+  // SHA-256 digest of the entry's contents via the Web Crypto API — not a
+  // fabricated value. If the IP lookup fails (offline, etc.) we say so
+  // honestly instead of inventing an address.
+  const buildAuditEntry = async (signerName: string, role: string, action: string) => {
+    const timestamp = new Date().toISOString().replace("T", " ").substring(0, 19);
     const userAgent = navigator.userAgent;
     const deviceName = userAgent.includes("Mobi") ? "Tablet/Mobile Client" : "Desktop Workstation";
-    const newEntry = {
+
+    let ipAddress = "Unavailable";
+    try {
+      const res = await fetch("/api/client-info");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ip) ipAddress = data.ip;
+      }
+    } catch {
+      // Leave as "Unavailable" — do not fabricate an address.
+    }
+
+    const hashInput = `${documentId || documentName}|${signerName}|${role}|${action}|${timestamp}`;
+    const digestBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hashInput));
+    const hash = Array.from(new Uint8Array(digestBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    return {
       id: `evt_${Date.now()}`,
       signerName,
       role,
       action,
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-      ipAddress: randomIP,
+      timestamp,
+      ipAddress,
       device: `${deviceName} (${navigator.platform})`,
-      documentVersion: `v1.0-${action === "signed" ? "Signed" : "Modified"}`,
-      hash: "sha256-" + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10)
+      documentVersion: `v1.0-${action === "signed" || action === "completed" ? "Signed" : "Modified"}`,
+      hash: `sha256-${hash}`
     };
+  };
+
+  const addAuditTrailEntry = async (signerName: string, role: string, action: string) => {
+    const newEntry = await buildAuditEntry(signerName, role, action);
     setAuditTrail(prev => [...prev, newEntry]);
   };
 
@@ -836,7 +848,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     }, 1200);
   };
 
-  const handleFinalizeESign = () => {
+  const handleFinalizeESign = async () => {
     const unsignedRequired = objects.filter(o => (o.type === "signature" || o.type === "initial") && !o.props.text);
     if (unsignedRequired.length > 0) {
       const confirmForce = confirm(`Warning: There are ${unsignedRequired.length} unsigned signature/initial fields remaining. Are you sure you want to lock and finalize anyway?`);
@@ -846,18 +858,8 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     const lockedObjects = objects.map(o => ({ ...o, isLocked: true }));
     setObjects(lockedObjects);
     saveToHistory(lockedObjects);
-    
-    const finalEvent = {
-      id: `evt_finalize_${Date.now()}`,
-      signerName: loggedInUser?.name || "System Admin",
-      role: "employee",
-      action: "completed",
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-      ipAddress: "172.56.24.112",
-      device: "Desktop Core App",
-      documentVersion: "v1.0-Signed",
-      hash: "sha256-finalized-" + Math.random().toString(36).substring(2, 12)
-    };
+
+    const finalEvent = await buildAuditEntry(loggedInUser?.name || "Unknown Signer", "employee", "completed");
 
     const finalAuditTrail = [...auditTrail, finalEvent];
     setAuditTrail(finalAuditTrail);
@@ -2587,21 +2589,11 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
               Finalize & Lock Document
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm("Reset all signature fields and clear the audit log?")) {
                   setObjects(prev => prev.map(o => (o.type === "signature" || o.type === "initial") ? { ...o, props: { ...o.props, text: "" } } : o));
-                  setAuditTrail([
-                    {
-                      id: "evt_reset",
-                      signerName: loggedInUser?.name || "System Admin",
-                      role: "employee",
-                      action: "cleared signatures",
-                      timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-                      ipAddress: "127.0.0.1",
-                      device: "Core Server Console",
-                      documentVersion: "v1.0"
-                    }
-                  ]);
+                  const resetEntry = await buildAuditEntry(loggedInUser?.name || "Unknown User", "employee", "cleared signatures");
+                  setAuditTrail([resetEntry]);
                   triggerNotification("Cleared all signatures and initials from document.");
                 }
               }}
@@ -3062,8 +3054,8 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
 
                 <button
                   onClick={() => {
-                    triggerNotification("🖨️ Initializing printing spool sequence...");
                     setIsShareModalOpen(false);
+                    window.print();
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
@@ -3072,9 +3064,21 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
                 </button>
 
                 <button
-                  onClick={() => {
-                    triggerNotification("📲 Opening device universal share sheet protocols...");
+                  onClick={async () => {
                     setIsShareModalOpen(false);
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: documentName,
+                          text: `Document: ${documentName}`,
+                          url: window.location.href
+                        });
+                      } catch {
+                        // User cancelled the native share sheet — no error to surface.
+                      }
+                    } else {
+                      triggerNotification("Native sharing isn't supported by this browser.");
+                    }
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
@@ -3291,13 +3295,13 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
 
                   {/* Preview of typed cursive */}
                   <div className="border border-[#9EC8EF] rounded-2xl bg-white p-4 h-24 flex items-center justify-center relative shadow-inner overflow-hidden">
-                    <span 
-                      className="text-2xl text-[#1F3557] select-none text-center block transition-all"
-                      style={{ 
-                        fontFamily: typedFont === "Pacifico" ? "Pacifico, cursive" : typedFont === "Caveat" ? "Caveat, cursive" : "monospace" 
+                    <span
+                      className={`text-2xl select-none text-center block transition-all ${signerFullName.trim() ? "text-[#1F3557]" : "text-[#9EC8EF]"}`}
+                      style={{
+                        fontFamily: typedFont === "Pacifico" ? "Pacifico, cursive" : typedFont === "Caveat" ? "Caveat, cursive" : "monospace"
                       }}
                     >
-                      {signerFullName.trim() || (activeSignObject.type === "initial" ? "SJ" : "Sarah Jenkins")}
+                      {signerFullName.trim() || "Type your name above"}
                     </span>
                     <div className="absolute bottom-2 left-4 text-[7px] text-slate-300 font-mono">Cursive Generated Output</div>
                   </div>
@@ -3351,7 +3355,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
                       finalVal = canvas.toDataURL();
                     }
                   } else if (signMethod === "type") {
-                    finalVal = signerFullName.trim() || (activeSignObject.type === "initial" ? "SJ" : "Sarah Jenkins");
+                    finalVal = signerFullName.trim();
                   } else if (signMethod === "import") {
                     finalVal = (window as any)._imported_sig || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='30'><text x='10' y='20' font-family='cursive' font-size='14' fill='%231F3557'>Imported</text></svg>";
                   }

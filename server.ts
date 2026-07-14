@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, AiAskRequest, ScanReceiptRequest } from './server/aiHandler';
+import { getClientIp } from './server/clientInfo';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,10 @@ app.post('/api/ai/scan-receipt', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'AI request failed' });
   }
+});
+
+app.get('/api/client-info', (req, res) => {
+  res.json({ ip: getClientIp(req) });
 });
 
 const distDir = path.join(__dirname, 'dist');

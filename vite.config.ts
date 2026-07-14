@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, Plugin, Connect} from 'vite';
 import {handleAiAsk, handleScanReceipt} from './server/aiHandler';
+import {getClientIp} from './server/clientInfo';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 // Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
@@ -37,6 +38,10 @@ function aiApiDevMiddleware(): Plugin {
     configureServer(server) {
       server.middlewares.use('/api/ai/ask', jsonRoute(handleAiAsk));
       server.middlewares.use('/api/ai/scan-receipt', jsonRoute(handleScanReceipt));
+      server.middlewares.use('/api/client-info', (req: IncomingMessage, res: ServerResponse) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ip: getClientIp(req) }));
+      });
     },
   };
 }
