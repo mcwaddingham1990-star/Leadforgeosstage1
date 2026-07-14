@@ -882,17 +882,6 @@ export default function App() {
     snapshots: "DEFAULT",
   });
   
-  // Context Selection States
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("cust_1");
-  const [selectedEmployeeName, setSelectedEmployeeName] = useState<string>("John Doe");
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState<string>("Copper Tubing 1/2-in x 50-ft");
-  const [selectedJobId, setSelectedJobId] = useState<string>("JOB-1024");
-  const [selectedEstimateId, setSelectedEstimateId] = useState<string>("E-1084");
-  const [selectedRouteId, setSelectedRouteId] = useState<string>("RT-A");
-  const [selectedScheduleEventId, setSelectedScheduleEventId] = useState<string>("evt_1");
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string>("doc_1");
-  const [currentFilters, setCurrentFilters] = useState<string>("Status: All | Priority: High");
-  const [currentSearchQuery, setCurrentSearchQuery] = useState<string>("");
 
   // Floating AI Widget UI States
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
@@ -1112,6 +1101,61 @@ export default function App() {
   const [aiIsLoading, setAiIsLoading] = useState(false);
   const [pendingAiAction, setPendingAiAction] = useState<{ type: "drawer" | "floating"; query: string; customText?: string } | null>(null);
 
+  // Grounded, confirmation-gated data actions for the floating AI widget. Unlike the old
+  // fake "autonomous actions" (which fabricated PO numbers/vendors and mutated data from
+  // keyword matching with zero confirmation), these are computed from real live data and
+  // require an explicit approval click before anything is written.
+  type PendingDataAction =
+    | { type: "reorder"; item: InventoryItem; suggestedQty: number }
+    | { type: "reschedule"; event: SchedulingEvent; newDate: string };
+  const [pendingDataAction, setPendingDataAction] = useState<PendingDataAction | null>(null);
+
+  const proposeReorderAction = () => {
+    const lowStock = inventoryList.filter(i => i.quantity <= i.minQuantity);
+    if (lowStock.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "No inventory items are currently at or below their minimum stock threshold — nothing needs reordering right now." }]);
+      return;
+    }
+    const item = lowStock[0];
+    const suggestedQty = Math.max(item.maxQuantity - item.quantity, 1);
+    setPendingDataAction({ type: "reorder", item, suggestedQty });
+  };
+
+  const proposeRescheduleAction = () => {
+    const upcoming = schedulingEvents
+      .filter(e => e.status === "Scheduled")
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (upcoming.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "There are no scheduled jobs to reschedule." }]);
+      return;
+    }
+    const event = upcoming[0];
+    const [y, m, d] = event.date.split("-").map(Number);
+    const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
+    const newDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    setPendingDataAction({ type: "reschedule", event, newDate });
+  };
+
+  const confirmPendingDataAction = () => {
+    if (!pendingDataAction) return;
+    if (pendingDataAction.type === "reorder") {
+      const { item, suggestedQty } = pendingDataAction;
+      logOperationalEvent(
+        "Reorder Flagged",
+        `${item.name}: ${item.quantity} on hand (min ${item.minQuantity}). Flagged for reorder of ${suggestedQty} units${item.vendor ? ` from ${item.vendor}` : " (no vendor on file)"}.`,
+        "📦"
+      );
+      triggerNotification(`Reorder flagged for ${item.name} (${suggestedQty} units)`);
+    } else {
+      const { event, newDate } = pendingDataAction;
+      setSchedulingEvents(prev => prev.map(e => (e.id === event.id ? { ...e, date: newDate } : e)));
+      logOperationalEvent("Job Rescheduled", `Moved ${event.customer}'s job from ${event.date} to ${newDate}.`, "📅");
+      triggerNotification(`Moved ${event.customer}'s job to ${newDate}`);
+    }
+    setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "✅ Done — approved and applied." }]);
+    setPendingDataAction(null);
+  };
+
   const openPageAIAnalysis = (pageId: string, pageName: string, customContext?: string) => {
     setAiPageId(pageId);
     setAiPageName(pageName);
@@ -1261,44 +1305,35 @@ export default function App() {
     executeConfirmedAIMessage(userMsgText);
   };
 
-  const executeConfirmedFloatingAiMessage = (query: string, customText?: string) => {
+  const executeConfirmedFloatingAiMessage = (query: string, _customText?: string) => {
     setFloatingAiLoading(true);
-    setTimeout(() => {
-      let aiResponseText = "";
-      const lowerText = query.toLowerCase();
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = floatingAiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
 
-      if (lowerText.includes("why did profit drop") && activeScreen.id === "revenue") {
-        aiResponseText = `### 📊 Profit Margin Diagnostic Analysis
-I have audited the ledger for the selected period. Profit margins dipped **4.2%** due to the following triggers:
-1. **Unpaid Invoices**: Cumulative outstanding balance of **$2,450.00** from past-due accounts.
-2. **Fuel Overruns**: Higher travel density on Route B added **$310.00** in auxiliary fuel charges.
-3. **Labor Allocation**: Peak dispatch overlaps led to **2.5 hours** of overtime billing.
-
-**Recommendation**: Activate the *Automatic Past-Due Balance Hold* workflow to protect estimate margins on active accounts.`;
-      } else if (lowerText.includes("highest") || lowerText.includes("top") || lowerText.includes("best")) {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Highest Customer Lifetime Value**: **$24,500.00** (Marcus Vance)
-- **Top Lead Pipeline Value**: **$48,900.00**
-
-Full financial database access has been confirmed and verified.`;
-      } else if (lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt")) {
-        aiResponseText = `### 📊 Outstanding Receivables Analysis
-The active past-due ledger tracks:
-- **Past Due Sum**: **$2,450.00** outstanding from **Oakridge Apartments**.
-- **LTV Exposure**: High risk. Recommend automated collection workflow.`;
-      } else {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Prompt**: "${query}"
-- **Outstanding Balance**: **$2,450.00** (Clara Oswald)
-- **LTV**: **$24,500.00** (Marcus Vance)
-- **Status**: Secure Financial Session Active`;
-      }
-
-      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
-      setFloatingAiLoading(false);
-    }, 1000);
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: activeScreen.id,
+        pageName: activeScreen.label,
+        businessSummary: buildBusinessSummary(activeScreen.id),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setFloatingAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setFloatingAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setFloatingAiLoading(false));
   };
 
   const handleSendFloatingAiMessage = (customText?: string) => {
@@ -1343,93 +1378,19 @@ Access to full financial telemetry is restricted.`;
       return;
     }
 
-    setFloatingAiLoading(true);
+    // Grounded, confirmation-gated actions: these PROPOSE a real change computed from live
+    // data and require an explicit Approve click (see pendingDataAction) before anything is
+    // written — no data mutation happens directly from parsing this text.
+    if (lowerText.includes("order more") && activeScreen.id === "inventory") {
+      proposeReorderAction();
+      return;
+    }
+    if (lowerText.includes("move") && lowerText.includes("tomorrow") && activeScreen.id === "scheduling") {
+      proposeRescheduleAction();
+      return;
+    }
 
-    setTimeout(() => {
-      let aiResponseText = "";
-
-      if (lowerText.includes("order more") && activeScreen.id === "inventory") {
-        aiResponseText = `### 📦 Purchase Order Generated - LeadForge Autonomous Inventory
-Based on your current context (**Selected Inventory Item: ${selectedInventoryItem}**), I have verified that stock level is critical.
-
-I have executed the following actions:
-1. **Purchase Order Drafted**: Created Draft PO #PO-2026-991 for **50 units** from vendor **Grainger Industrial**.
-2. **Unit Cost**: Adjusted to wholesale price of **$2.45 / unit** (savings of 12%).
-3. **Approval Status**: Sent to Sarah Jenkins for final mobile signature.
-
-*This action has been added to the AI Ledger and can be reversed in the Recent Actions tab.*`;
-        
-        const newAct = {
-          id: `act_${Date.now()}`,
-          date: new Date().toISOString().split("T")[0],
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          module: "Inventory",
-          action: "Order more inventory item",
-          reason: `Auto-ordered replenishment stock for item: ${selectedInventoryItem}`,
-          status: "Completed" as const,
-          approvedBy: "Sarah Jenkins (Owner)"
-        };
-        setRecentAiActions(prev => [newAct, ...prev]);
-        triggerNotification(`📦 PO-2026-991 generated for ${selectedInventoryItem}!`);
-
-      } else if (lowerText.includes("move him to tomorrow") && activeScreen.id === "scheduling") {
-        aiResponseText = `### 📅 Appointment Shift Completed
-Parsed request to shift schedules for technician on **Selected Schedule Event ID: ${selectedScheduleEventId}** (**Customer: Apex Plumb & Drain**).
-
-**System changes executed:**
-- **Previous date**: 2026-07-05
-- **New date**: 2026-07-06 (Tomorrow)
-- **Time Window**: Preserved (09:00 AM - 11:30 AM)
-- **Notification**: Automated SMS dispatch update sent to customer Marcus Vance.
-
-*Action logged in Recent Actions tab and fully reversible.*`;
-        
-        setSchedulingEvents(prev => prev.map(e => e.id === selectedScheduleEventId ? { ...e, date: "2026-07-06" } : e));
-
-        const newAct = {
-          id: `act_${Date.now()}`,
-          date: new Date().toISOString().split("T")[0],
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          module: "Scheduling",
-          action: "Shift schedule event",
-          reason: `Moved event ${selectedScheduleEventId} to tomorrow (2026-07-06)`,
-          status: "Completed" as const,
-          approvedBy: "Sarah Jenkins (Owner)"
-        };
-        setRecentAiActions(prev => [newAct, ...prev]);
-        triggerNotification(`📅 Moved schedule event to tomorrow successfully!`);
-
-      } else if (lowerText.includes("call him") && activeScreen.id === "customers") {
-        aiResponseText = `### 📞 RingCentral Dialer Activated
-Initiating outbound call to customer associated with current context:
-- **Customer**: Marcus Vance (Apex Plumb & Drain)
-- **Telephone**: (206) 555-0199
-- **Dialer Connection**: Active (Secure Line)
-
-*Outbound communication recorded in CRM customer timeline.*`;
-        triggerNotification(`📞 Outbound call dialed to Marcus Vance!`);
-      } else if (lowerText.includes("what should i do next") && activeScreen.id === "jobs") {
-        aiResponseText = `### 💼 Job Next-Step Optimizer
-Analyzing selected job context (**Job ID: ${selectedJobId}**):
-1. **Step 1**: Complete safety pre-inspection checklist.
-2. **Step 2**: Obtain digital signature for sewer line excavations.
-3. **Step 3**: Capture post-installation site photos inside the Snapshots Folder.
-
-*I have drafted a pre-inspection form for this job. Type 'approve' to execute.*`;
-      } else {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Prompt**: "${textToSend}"
-- **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
-- **Identified Page Context**: ${activeScreen.id}
-- **Active Selection**: ${selectedCustomerId || "Apex Plumb & Drain"}
-
-I have analyzed the current workspace parameters. Everything looks fully optimal. Let me know if you would like me to trigger a custom business flow or optimize this screen's parameters.`;
-      }
-
-      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
-      setFloatingAiLoading(false);
-    }, 1000);
+    executeConfirmedFloatingAiMessage(textToSend);
   };
 
   // TEAM BUILDER STATE - INITIALIZED WITH SCREENSHOT VALUES
@@ -6857,18 +6818,9 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
               ))}
             </div>
 
-            {/* LIVE CONTEXT MONITOR HUD */}
-            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex flex-col gap-1 text-left text-[9.5px] leading-relaxed text-[#855D00] font-sans font-bold uppercase tracking-wider">
-              <div className="flex items-center justify-between w-full">
-                <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Connected Viewport Context</span>
-                <span className="text-[8.5px] text-amber-500">Live Sync</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 pt-1 text-[8px] font-mono lowercase select-none">
-                <div className="truncate">Page: <span className="text-slate-700 font-sans font-bold uppercase">{activeScreen.label}</span></div>
-                <div className="truncate">Customer: <span className="text-slate-700 font-sans font-bold uppercase">{customers.find(c => c.id === selectedCustomerId)?.company || "Apex Plumb & Drain"}</span></div>
-                <div className="truncate">Employee: <span className="text-slate-700 font-sans font-bold uppercase">{selectedEmployeeName}</span></div>
-                <div className="truncate">Inventory: <span className="text-slate-700 font-sans font-bold uppercase">{selectedInventoryItem}</span></div>
-              </div>
+            {/* Current page context (real — reflects the actual active screen) */}
+            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex items-center justify-between text-left text-[9.5px] text-[#855D00] font-sans font-bold uppercase tracking-wider">
+              <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Viewing: {activeScreen.label}</span>
             </div>
 
             {/* PANEL BODY CONTENT AREA */}
@@ -6958,52 +6910,70 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     </div>
                   )}
 
+                  {/* Grounded data-action confirmation: shows the exact real record(s) affected and
+                      requires explicit approval before anything is written. */}
+                  {pendingDataAction && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-amber-100 rounded text-amber-700 font-bold text-xs">⚠️</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Confirm Action</h4>
+                          {pendingDataAction.type === "reorder" ? (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Flag <strong>{pendingDataAction.item.name}</strong> for reorder — currently <strong>{pendingDataAction.item.quantity}</strong> on hand (minimum {pendingDataAction.item.minQuantity}). Suggested reorder quantity: <strong>{pendingDataAction.suggestedQty} units</strong>{pendingDataAction.item.vendor ? ` from ${pendingDataAction.item.vendor}` : " (no vendor on file)"}.
+                            </p>
+                          ) : (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Move <strong>{pendingDataAction.event.customer}</strong>'s job from <strong>{pendingDataAction.event.date}</strong> to <strong>{pendingDataAction.newDate}</strong>.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={confirmPendingDataAction}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setPendingDataAction(null)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Smart suggestion chips based on active module */}
                   <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
                     <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
                     {activeScreen.id === "inventory" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Order more.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Order more.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Order more
                       </button>
                     )}
                     {activeScreen.id === "scheduling" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Move to tomorrow
                       </button>
                     )}
                     {activeScreen.id === "revenue" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Why did profit drop?")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Why did profit drop?")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Analyze drop
-                      </button>
-                    )}
-                    {activeScreen.id === "customers" && (
-                      <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Call him.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Dial customer
-                      </button>
-                    )}
-                    {activeScreen.id === "jobs" && (
-                      <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("What should I do next?")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Suggest next step
                       </button>
                     )}
                     <span className="text-[9px] text-slate-400 font-medium">Ask simple or complex queries using input below.</span>
@@ -7014,18 +6984,18 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     <input
                       type="text"
                       value={floatingAiInput}
-                      disabled={!!pendingAiAction}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
                       onChange={(e) => setFloatingAiInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !pendingAiAction) handleSendFloatingAiMessage();
+                        if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
                       }}
-                      placeholder={pendingAiAction ? "Clearance check active..." : `Ask LeadForge AI about ${activeScreen.label}...`}
-                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask LeadForge AI about ${activeScreen.label}...`}
+                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button
-                      onClick={() => !pendingAiAction && handleSendFloatingAiMessage()}
-                      disabled={!!pendingAiAction}
-                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
+                      onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage()}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction || pendingDataAction ? "opacity-55 cursor-not-allowed" : ""}`}
                     >
                       Send
                     </button>
@@ -7152,12 +7122,12 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           {act.status !== "Undone" && (
                             <button
                               onClick={() => {
+                                // NOTE: this only marks the log entry as undone (audit annotation).
+                                // Recent AI actions don't currently carry structured revert data, so
+                                // this deliberately does not attempt to reverse the underlying change —
+                                // doing that with guessed/hardcoded values would silently corrupt data.
                                 setRecentAiActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "Undone" } : a));
-                                if (act.action.includes("schedule")) {
-                                  // Revert appointment shift!
-                                  setSchedulingEvents(prev => prev.map(e => e.id === selectedScheduleEventId ? { ...e, date: "2026-07-05" } : e));
-                                }
-                                triggerNotification(`↩️ Undid action: ${act.action}`);
+                                triggerNotification(`Marked as undone: ${act.action}. Reverse the change manually on the relevant page if needed.`);
                               }}
                               className="px-1.5 py-0.5 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-100 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
                             >

@@ -47,6 +47,20 @@ import {
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 
+export interface ScannedReceipt {
+  name: string | null;
+  vendor: string | null;
+  sku: string | null;
+  barcode: string | null;
+  quantity: number | null;
+  unit: string | null;
+  unitCost: number | null;
+  category: string | null;
+  manufacturer: string | null;
+  purchaseDate: string | null;
+  unreadable: boolean;
+}
+
 export type { InventoryItem, PurchaseRecord } from "../types/domain";
 import type { InventoryItem, PurchaseRecord } from "../types/domain";
 
@@ -107,12 +121,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [reorderModalOpen, setReorderModalOpen] = useState(false);
   const [reorderCandidates, setReorderCandidates] = useState<InventoryItem[]>([]);
 
-  // Snapshot AI Simulator Modal
+  // Snapshot AI Camera — real OCR via Gemini vision (POST /api/ai/scan-receipt), not simulated.
   const [isSnapshotAIModalOpen, setIsSnapshotAIModalOpen] = useState(false);
-  const [snapshotStage, setSnapshotStage] = useState<"camera" | "processing" | "review" | " SPF_learn">("camera");
-  const [selectedSnapshotType, setSelectedSnapshotType] = useState("SPF 2x4x8 KD Receipt");
-  const [aiSuggestions, setAiSuggestions] = useState<any>(null);
-  const [userMappingSPF, setUserMappingSPF] = useState<string | null>(null);
+  const [snapshotStage, setSnapshotStage] = useState<"camera" | "processing" | "review" | "no_match_choice">("camera");
+  const [aiSuggestions, setAiSuggestions] = useState<ScannedReceipt | null>(null);
+  const [newItemChoice, setNewItemChoice] = useState<"new" | "ignore" | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
 
   // Barcode / QR Scanner Simulator Modal
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
@@ -564,136 +578,135 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
   const handleLocalCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      runCameraAI();
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1] || "";
+      runCameraAI(base64, file.type);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Real OCR via Gemini vision (server-side, see server/aiHandler.ts handleScanReceipt).
+  // Every field can come back null — the model is instructed not to guess, so this
+  // never fabricates data the way the old hardcoded mock did.
+  const runCameraAI = async (imageBase64: string, mimeType: string) => {
+    setSnapshotStage("processing");
+    setOcrError(null);
+    try {
+      const res = await fetch("/api/ai/scan-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scan failed");
+      if (data.unreadable) {
+        setOcrError("Couldn't read a receipt or label in that photo. Try a clearer, well-lit shot of the item's label, barcode, or receipt.");
+        setSnapshotStage("camera");
+        return;
+      }
+      setAiSuggestions(data as ScannedReceipt);
+      setSnapshotStage("review");
+    } catch (err) {
+      setOcrError(err instanceof Error ? err.message : "Scan failed. Make sure GEMINI_API_KEY is configured on the server.");
+      setSnapshotStage("camera");
     }
   };
 
-  // AI Camera Mock
-  const runCameraAI = () => {
-    setSnapshotStage("processing");
-    setTimeout(() => {
-      if (selectedSnapshotType === "SPF 2x4x8 KD Receipt") {
-        setSnapshotStage("review");
-        setAiSuggestions({
-          name: "SPF 2x4x8 KD",
-          vendor: "Home Depot Pro",
-          sku: "SPF-248-KD",
-          barcode: "032054110022",
-          qrCode: "QR-SPF-248",
-          quantity: 50,
-          unit: "pcs",
-          cost: 4.50,
-          tax: 18.00,
-          purchaseDate: "2026-07-06",
-          category: "Lumber",
-          manufacturer: "Weyerhaeuser",
-          serialNumber: "SN-9281-WEY",
-          isUnrecognized: true
-        });
-      } else {
-        setSnapshotStage("review");
-        setAiSuggestions({
-          name: "Copper Pipe Type L 3/4in x 10ft",
-          vendor: "Home Depot Pro",
-          sku: "COP-34-10",
-          barcode: "685711200155",
-          qrCode: "QR-COP-34",
-          quantity: 20,
-          unit: "ft",
-          cost: 23.50,
-          tax: 37.60,
-          purchaseDate: "2026-07-06",
-          category: "Plumbing",
-          manufacturer: "Mueller Streamline",
-          isUnrecognized: false
-        });
-      }
-    }, 1500);
-  };
+  const matchedExistingItem = useMemo(() => {
+    if (!aiSuggestions) return null;
+    return inventoryList.find(i =>
+      (!!aiSuggestions.barcode && i.barcode === aiSuggestions.barcode) ||
+      (!!aiSuggestions.sku && i.sku === aiSuggestions.sku)
+    ) || null;
+  }, [aiSuggestions, inventoryList]);
 
   const handleApproveAISuggestion = () => {
     if (!aiSuggestions) return;
 
-    // Apply the interpretation rule
-    if (aiSuggestions.isUnrecognized && !userMappingSPF) {
-      setSnapshotStage(" SPF_learn");
+    if (!matchedExistingItem && !newItemChoice) {
+      setSnapshotStage("no_match_choice");
       return;
     }
 
-    let matchId = "";
-    let updatedList = [...inventoryList];
-    const newItemId = `ai_${Date.now()}`;
+    const scannedQty = aiSuggestions.quantity ?? 0;
+    const scannedCost = aiSuggestions.unitCost ?? 0;
+    const today = new Date().toISOString().slice(0, 10);
 
-    const newItem: InventoryItem = {
-      id: newItemId,
-      name: aiSuggestions.name,
-      category: aiSuggestions.category,
-      vendor: aiSuggestions.vendor,
-      manufacturer: aiSuggestions.manufacturer,
-      sku: aiSuggestions.sku,
-      barcode: aiSuggestions.barcode,
-      qrCode: aiSuggestions.qrCode,
-      description: "Auto generated from scanned receipt",
-      quantity: aiSuggestions.quantity,
-      unit: aiSuggestions.unit,
-      minQuantity: 5,
-      maxQuantity: 100,
-      location: "Warehouse A",
-      unitCost: aiSuggestions.cost,
-      sellingPrice: aiSuggestions.cost * 1.5,
-      notes: "Created via Snapshot AI Camera OCR",
-      photo: "🪵",
-      isFavorite: false,
-      lastUpdated: new Date().toLocaleTimeString(),
-      quantityHistory: [{ date: "2026-07-06", type: "AI Scanned New", amount: aiSuggestions.quantity, previous: 0, current: aiSuggestions.quantity, notes: "Created new catalog entry" }],
-      purchaseHistory: [],
-      usageHistory: []
-    };
+    if (matchedExistingItem) {
+      const updated = {
+        ...matchedExistingItem,
+        quantity: matchedExistingItem.quantity + scannedQty,
+        quantityHistory: [
+          {
+            date: today,
+            type: "AI Receipt Scan",
+            amount: scannedQty,
+            previous: matchedExistingItem.quantity,
+            current: matchedExistingItem.quantity + scannedQty,
+            notes: aiSuggestions.vendor ? `Scanned at ${aiSuggestions.vendor}` : "Scanned via camera OCR"
+          },
+          ...matchedExistingItem.quantityHistory
+        ]
+      };
+      setInventoryList(prev => prev.map(i => (i.id === matchedExistingItem.id ? updated : i)));
+    } else if (newItemChoice === "new") {
+      const newItem: InventoryItem = {
+        id: `ai_${Date.now()}`,
+        name: aiSuggestions.name || "Unnamed scanned item",
+        category: aiSuggestions.category || "Uncategorized",
+        vendor: aiSuggestions.vendor || "",
+        manufacturer: aiSuggestions.manufacturer || "",
+        sku: aiSuggestions.sku || "",
+        barcode: aiSuggestions.barcode || "",
+        qrCode: "",
+        description: "Added from a scanned receipt/label photo",
+        quantity: scannedQty,
+        unit: aiSuggestions.unit || "pcs",
+        minQuantity: 5,
+        maxQuantity: Math.max(scannedQty * 2, 10),
+        location: "Warehouse A",
+        unitCost: scannedCost,
+        sellingPrice: scannedCost * 1.5,
+        notes: "Created via camera OCR scan",
+        photo: "📦",
+        isFavorite: false,
+        lastUpdated: new Date().toLocaleTimeString(),
+        quantityHistory: [{ date: today, type: "AI Scanned New", amount: scannedQty, previous: 0, current: scannedQty, notes: "Created from scanned receipt/label" }],
+        purchaseHistory: [],
+        usageHistory: []
+      };
+      setInventoryList(prev => [...prev, newItem]);
+    }
+    // newItemChoice === "ignore": no inventory mutation, but still log the purchase below if cost data was scanned.
 
-    if (userMappingSPF === "match" || !aiSuggestions.isUnrecognized) {
-      // match with existing lumber SPF
-      const match = inventoryList.find(e => e.sku === "SPF-248-KD");
-      if (match) {
-        matchId = match.id;
-        const updated = {
-          ...match,
-          quantity: match.quantity + aiSuggestions.quantity,
-          quantityHistory: [
-            { date: "2026-07-06", type: "AI Receipt Scan", amount: aiSuggestions.quantity, previous: match.quantity, current: match.quantity + aiSuggestions.quantity, notes: `Scanned at ${aiSuggestions.vendor} receipt` },
-            ...match.quantityHistory
-          ]
-        };
-        updatedList = inventoryList.map(e => e.id === match.id ? updated : e);
-        setInventoryList(updatedList);
-      }
-    } else if (userMappingSPF === "new") {
-      updatedList = [...inventoryList, newItem];
-      setInventoryList(updatedList);
+    if (newItemChoice !== "ignore") {
+      const newPurchase: PurchaseRecord = {
+        id: `P-${Math.floor(100 + Math.random() * 900)}`,
+        vendor: aiSuggestions.vendor || "Unknown vendor",
+        receiptNumber: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
+        date: aiSuggestions.purchaseDate || today,
+        employee: loggedInUser?.name || "Unknown",
+        itemsPurchased: `${aiSuggestions.name || "Scanned item"} (${scannedQty})`,
+        totalCost: scannedQty * scannedCost
+      };
+      setPurchases(prev => [newPurchase, ...prev]);
     }
 
-    // Add to local purchases
-    const newPurchase: PurchaseRecord = {
-      id: `P-${Math.floor(100 + Math.random() * 900)}`,
-      vendor: aiSuggestions.vendor,
-      receiptNumber: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
-      date: aiSuggestions.purchaseDate,
-      employee: loggedInUser?.name || "Marcus Vance",
-      itemsPurchased: `${aiSuggestions.name} (${aiSuggestions.quantity})`,
-      totalCost: (aiSuggestions.quantity * aiSuggestions.cost) + (aiSuggestions.tax || 0)
-    };
-    setPurchases(prev => [newPurchase, ...prev]);
+    const label = matchedExistingItem
+      ? `Restocked ${matchedExistingItem.name}: +${scannedQty} units.`
+      : newItemChoice === "new"
+      ? `Added new item from scan: ${aiSuggestions.name || "Unnamed item"}.`
+      : "Scan discarded — no changes made.";
 
     setIsSnapshotAIModalOpen(false);
     setSnapshotStage("camera");
     setAiSuggestions(null);
-    setUserMappingSPF(null);
-
-    // Calculate new stats
-    const newTotalQty = updatedList.reduce((acc, item) => acc + item.quantity, 0);
-    const newLedgerVal = updatedList.reduce((acc, item) => acc + (item.quantity * item.unitCost), 0);
-
-    triggerToast(`Inventory updated successfully. New total stock: ${newTotalQty} units, Ledger value: $${newLedgerVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
+    setNewItemChoice(null);
+    triggerToast(label);
   };
 
   // Generate a automatic Purchase order list from low stock items
@@ -1933,55 +1946,30 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   style={{ display: "none" }}
                 />
 
-                <div className="bg-slate-950 aspect-video rounded-2xl relative overflow-hidden flex items-center justify-center border-2 border-dashed border-[#A9CDEE]">
-                  {/* Camera view simulation */}
-                  <div className="absolute inset-x-0 h-0.5 bg-indigo-500/80 shadow-[0_0_8px_rgba(99,102,241,1)] animate-bounce" style={{ animationDuration: "3s" }} />
-                  <div className="absolute top-3 left-3 bg-red-600 text-white font-mono font-black text-[9px] px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" /> Live Camera Stream
+                {ocrError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-[11px] font-sans font-medium text-rose-700">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{ocrError}</span>
                   </div>
-                  
+                )}
+
+                <div
+                  onClick={() => localCameraInputRef.current?.click()}
+                  className="bg-slate-950 aspect-video rounded-2xl relative overflow-hidden flex items-center justify-center border-2 border-dashed border-[#A9CDEE] cursor-pointer hover:border-indigo-400 transition-colors"
+                >
                   <div className="text-center p-6 text-slate-500 space-y-1.5 z-10">
                     <Camera className="w-10 h-10 mx-auto text-slate-600" />
-                    <p className="text-xs font-bold font-sans text-slate-400">Position receipt, delivery pallet, shelf labels inside screen frame</p>
-                    <p className="text-[10px] font-mono text-slate-600">Inventory status checked and updated dynamically</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-2 text-xs font-semibold text-slate-700">
-                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Select Simulated Target</label>
-                    <select
-                      value={selectedSnapshotType}
-                      onChange={(e) => setSelectedSnapshotType(e.target.value)}
-                      className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl cursor-pointer font-bold"
-                    >
-                      <option value="SPF 2x4x8 KD Receipt">🧾 Store Receipt (Weyerhaeuser SPF 2x4x8 KD Studs)</option>
-                      <option value="Copper Pipe Delivery Receipt">🧾 Inbound Bill of Lading (3/4in x 10ft Copper Tube)</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (localCameraInputRef.current) {
-                          localCameraInputRef.current.click();
-                        } else {
-                          runCameraAI();
-                        }
-                      }}
-                      className="w-full py-2.5 bg-[#342D7E] hover:bg-indigo-950 text-white font-black text-[10.5px] uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Camera className="w-4 h-4 text-emerald-400 animate-pulse" /> Launch Phone Camera
-                    </button>
+                    <p className="text-xs font-bold font-sans text-slate-400">Tap to take a photo or upload an image</p>
+                    <p className="text-[10px] font-mono text-slate-600">Receipt, delivery slip, or product label/barcode</p>
                   </div>
                 </div>
 
                 <button
-                  onClick={runCameraAI}
-                  className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all hover:opacity-90"
+                  type="button"
+                  onClick={() => localCameraInputRef.current?.click()}
+                  className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-md transition-all hover:opacity-90 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  Process with LeadForge Snapshot AI
+                  <Camera className="w-4 h-4" /> Take or Upload Photo
                 </button>
               </div>
             )}
@@ -2003,49 +1991,53 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                 <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-2 text-[11px] font-sans font-medium">
                   <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold text-indigo-800 block">AI Snapshot Analysis Successful!</span>
-                    Found matching purchase coordinates from <strong className="text-slate-800">{aiSuggestions.vendor}</strong>. Review and confirm ledger changes.
+                    <span className="font-bold text-indigo-800 block">Scan complete</span>
+                    {matchedExistingItem ? (
+                      <>This matches an existing item — <strong className="text-slate-800">{matchedExistingItem.name}</strong> ({matchedExistingItem.quantity} on hand). Confirming will add stock to it.</>
+                    ) : (
+                      <>No existing catalog item matched this barcode/SKU. Review the fields below — anything the scan couldn't read is shown as "Not detected".</>
+                    )}
                   </div>
                 </div>
 
                 <div className="bg-[#F5FAFF] border border-[#A9CDEE]/50 p-4 rounded-xl space-y-3">
-                  <h4 className="text-[10px] uppercase font-bold text-[#342D7E] tracking-wider border-b border-[#A9CDEE]/30 pb-1.5">Extracted Structured Parameters</h4>
-                  
+                  <h4 className="text-[10px] uppercase font-bold text-[#342D7E] tracking-wider border-b border-[#A9CDEE]/30 pb-1.5">Extracted From Photo</h4>
+
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2.5 gap-x-4">
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Suggested Item Name</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.name}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">Item Name</span>
+                      <span className="text-slate-800 font-black">{aiSuggestions.name || "Not detected"}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Category Match</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.category}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">Category</span>
+                      <span className="text-slate-800 font-black">{aiSuggestions.category || "Not detected"}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Vendor Name</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.vendor}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">Vendor</span>
+                      <span className="text-slate-800 font-black">{aiSuggestions.vendor || "Not detected"}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Extracted SKU</span>
-                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.sku}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">SKU</span>
+                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.sku || "Not detected"}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Scanned Quantity</span>
-                      <span className="font-mono text-slate-800 font-black">+{aiSuggestions.quantity} {aiSuggestions.unit}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">Quantity</span>
+                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.quantity != null ? `+${aiSuggestions.quantity} ${aiSuggestions.unit || "units"}` : "Not detected"}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Extracted Cost</span>
-                      <span className="font-mono text-slate-800 font-black">${aiSuggestions.cost.toFixed(2)}</span>
+                      <span className="text-[9px] text-slate-400 block font-bold">Unit Cost</span>
+                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.unitCost != null ? `$${aiSuggestions.unitCost.toFixed(2)}` : "Not detected"}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex gap-2 justify-end pt-2">
                   <button
-                    onClick={() => { 
-                      setIsSnapshotAIModalOpen(false); 
-                      setSnapshotStage("camera"); 
-                      setAiSuggestions(null); 
-                      setUserMappingSPF(null);
+                    onClick={() => {
+                      setIsSnapshotAIModalOpen(false);
+                      setSnapshotStage("camera");
+                      setAiSuggestions(null);
+                      setNewItemChoice(null);
                       triggerToast("Inventory update canceled.");
                     }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold"
@@ -2068,62 +2060,46 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
               </div>
             )}
 
-            {snapshotStage === " SPF_learn" && aiSuggestions && (
+            {snapshotStage === "no_match_choice" && aiSuggestions && (
               <div className="space-y-4 text-xs text-slate-600 font-semibold">
-                
+
                 <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
                   <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <strong className="text-amber-800 font-black uppercase text-[10.5px] block">AI Interpretation Ambiguity Warning</strong>
+                    <strong className="text-amber-800 font-black uppercase text-[10.5px] block">No catalog match found</strong>
                     <p className="text-[11px] font-sans font-medium text-slate-600">
-                      The OCR extracted receipt abbreviation <strong className="text-slate-800">"SPF 2x4x8 KD"</strong> is unrecognized in your standard company catalog names. AI never guesses.
+                      "{aiSuggestions.name || "This item"}" doesn't match any existing item's SKU or barcode. Choose what to do:
                     </p>
                   </div>
                 </div>
 
                 <div className="p-4 bg-white border border-[#A9CDEE]/60 rounded-xl space-y-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#342D7E]">What is the correct mapping for SPF 2x4x8 KD?</p>
-                  
                   <div className="space-y-2">
                     <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-xl cursor-pointer">
                       <input
                         type="radio"
-                        name="spf_mapping"
-                        checked={userMappingSPF === "match"}
-                        onChange={() => setUserMappingSPF("match")}
-                        className="w-4 h-4 text-blue-500"
-                      />
-                      <div>
-                        <strong className="text-slate-800 text-[11px] block">Match to Existing Standard Stud Item</strong>
-                        <span className="text-[9.5px] text-slate-400 font-medium">Link "SPF 2x4x8 KD" to "2x4 Stud Spruce-Pine-Fir" catalog item.</span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-xl cursor-pointer">
-                      <input
-                        type="radio"
-                        name="spf_mapping"
-                        checked={userMappingSPF === "new"}
-                        onChange={() => setUserMappingSPF("new")}
+                        name="new_item_choice"
+                        checked={newItemChoice === "new"}
+                        onChange={() => setNewItemChoice("new")}
                         className="w-4 h-4 text-blue-500"
                       />
                       <div>
                         <strong className="text-slate-800 text-[11px] block">Create Brand New Catalog Item</strong>
-                        <span className="text-[9.5px] text-slate-400 font-medium">Establish a brand new ledger entry for SPF 2x4x8 KD Spruce.</span>
+                        <span className="text-[9.5px] text-slate-400 font-medium">Add "{aiSuggestions.name || "this item"}" as a new inventory entry with the scanned details.</span>
                       </div>
                     </label>
 
                     <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-xl cursor-pointer">
                       <input
                         type="radio"
-                        name="spf_mapping"
-                        checked={userMappingSPF === "ignore"}
-                        onChange={() => setUserMappingSPF("ignore")}
+                        name="new_item_choice"
+                        checked={newItemChoice === "ignore"}
+                        onChange={() => setNewItemChoice("ignore")}
                         className="w-4 h-4 text-blue-500"
                       />
                       <div>
-                        <strong className="text-slate-800 text-[11px] block">Ignore / Cancel Item Addition</strong>
-                        <span className="text-[9.5px] text-slate-400 font-medium">Skip adding this material on receipt. Add to cash spent ledger only.</span>
+                        <strong className="text-slate-800 text-[11px] block">Ignore / Cancel</strong>
+                        <span className="text-[9.5px] text-slate-400 font-medium">Don't add anything to inventory.</span>
                       </div>
                     </label>
                   </div>
@@ -2131,11 +2107,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => { 
-                      setIsSnapshotAIModalOpen(false); 
-                      setSnapshotStage("camera"); 
-                      setAiSuggestions(null); 
-                      setUserMappingSPF(null);
+                    onClick={() => {
+                      setIsSnapshotAIModalOpen(false);
+                      setSnapshotStage("camera");
+                      setAiSuggestions(null);
+                      setNewItemChoice(null);
                       triggerToast("Inventory update canceled.");
                     }}
                     className="px-4 py-2 bg-slate-100 text-rose-600 rounded-lg font-bold"
@@ -2143,17 +2119,17 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={() => { setSnapshotStage("review"); setUserMappingSPF(null); }}
+                    onClick={() => { setSnapshotStage("review"); setNewItemChoice(null); }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg"
                   >
                     Back
                   </button>
                   <button
-                    disabled={!userMappingSPF}
+                    disabled={!newItemChoice}
                     onClick={handleApproveAISuggestion}
                     className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-lg disabled:opacity-50"
                   >
-                    Learn Mapping & Update Stock
+                    Confirm
                   </button>
                 </div>
 
