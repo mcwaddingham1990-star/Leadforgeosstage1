@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { 
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
+import {
   Search, 
   MapPin, 
   User, 
@@ -74,23 +77,6 @@ export function geocodeAddress(address: string, id: string = ""): { lat: number;
 }
 
 export interface InteractiveMapPageProps {
-  customers: any[];
-  setCustomers: React.Dispatch<React.SetStateAction<any[]>>;
-  leads: any[];
-  setLeads: React.Dispatch<React.SetStateAction<any[]>>;
-  estimates: any[];
-  setEstimates: React.Dispatch<React.SetStateAction<any[]>>;
-  schedulingEvents: any[];
-  setSchedulingEvents: React.Dispatch<React.SetStateAction<any[]>>;
-  inventoryList: any[];
-  setInventoryList: React.Dispatch<React.SetStateAction<any[]>>;
-  documents: any[];
-  setDocuments: React.Dispatch<React.SetStateAction<any[]>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: any) => void;
-  activeRole?: string;
-  completedJobsRevenue?: number;
-  setCompletedJobsRevenue?: React.Dispatch<React.SetStateAction<number>>;
   businessAddresses?: string[];
 }
 
@@ -109,25 +95,27 @@ interface ServiceTerritory {
 }
 
 export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
-  customers,
-  setCustomers,
-  leads,
-  setLeads,
-  estimates,
-  setEstimates,
-  schedulingEvents,
-  setSchedulingEvents,
-  inventoryList,
-  setInventoryList,
-  documents,
-  setDocuments,
-  logOperationalEvent,
-  onNavigateToScreen,
-  activeRole = "Owner",
-  completedJobsRevenue = 0,
-  setCompletedJobsRevenue,
   businessAddresses
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    customers,
+    setCustomers,
+    leads,
+    setLeads,
+    estimates,
+    setEstimates,
+    schedulingEvents,
+    setSchedulingEvents,
+    inventoryList,
+    setInventoryList,
+    documents,
+    setDocuments,
+    completedJobsRevenue,
+    setCompletedJobsRevenue
+  } = useDomainData();
+  const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
   const map = useMap();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";

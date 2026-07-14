@@ -15,14 +15,21 @@ service cloud.firestore {
       return getUserProfile().businessEmail;
     }
 
+    // Fast path uses the auth token's own email directly (no cross-document
+    // lookup) to cover the common owner case; falls back to the profile
+    // lookup for employees whose businessId is their owner's email.
+    function isBusinessMember(businessId) {
+      return request.auth.token.email == businessId || getBusinessEmail() == businessId;
+    }
+
     // Profiles collection: users can read/write their own profiles
     match /user_profiles/{uid} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == getBusinessEmail()));
+      allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
     }
 
     // Business profiles: owners can read/write their business profile
     match /business_profiles/{email} {
-      allow read, write: if isAuthenticated() && (getBusinessEmail() == email);
+      allow read, write: if isAuthenticated() && isBusinessMember(email);
     }
 
     // Employee invites: can be read during signup/onboarding
@@ -33,18 +40,57 @@ service cloud.firestore {
     // Employees collection
     match /employees/{email} {
       allow read, write: if isAuthenticated() && (
-        (resource == null || resource.data.businessEmail == getBusinessEmail() || email == getBusinessEmail()) &&
-        (request.resource == null || request.resource.data.businessEmail == getBusinessEmail() || email == getBusinessEmail())
+        (resource == null || isBusinessMember(resource.data.businessEmail) || isBusinessMember(email)) &&
+        (request.resource == null || isBusinessMember(request.resource.data.businessEmail) || isBusinessMember(email))
       );
     }
 
-    // Generic multi-tenant rule for collections where the document has a businessId field
-    match /{collectionName}/{docId} {
-      allow read, write: if isAuthenticated() && (
-        // Allow if the new or existing document's businessId matches the user's business email
-        (resource == null || resource.data.businessId == getBusinessEmail()) &&
-        (request.resource == null || request.resource.data.businessId == getBusinessEmail())
-      );
+    // The 11 real multi-tenant business collections, matched explicitly
+    // (not via a generic /{collectionName}/{docId} wildcard, which does not
+    // reliably support get()-based read rules on this project/database).
+    match /customers/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /leads/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /estimates/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /scheduling_events/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /inventory/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /documents/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /roster/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /bulletins/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /notifications/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /recent_ai_actions/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /snapshots/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
   }
 }

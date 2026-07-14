@@ -28,38 +28,11 @@ import {
   ArrowRight
 } from "lucide-react";
 
-export interface SchedulingEvent {
-  id: string;
-  eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
-  customType?: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:MM (24-hour)
-  endTime: string; // HH:MM (24-hour)
-  customer: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  customerAddress?: string;
-  assignedEmployee: string;
-  assignedCrew?: string;
-  location?: string;
-  priority: "Low" | "Medium" | "High" | "Urgent";
-  notes?: string;
-  status: "Scheduled" | "Completed" | "Cancelled";
-}
-
-export interface SchedulingPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  events: SchedulingEvent[];
-  setEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  activeRole: string;
-  customersList?: Array<{ id: string; contact: string; phone?: string; email?: string; address?: string; company?: string }>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  preSelectedDate?: string;
-  preSelectedCustomerId?: string;
-  onNavigateToScreen?: (screenId: string) => void;
-}
+export type { SchedulingEvent } from "../types/domain";
+import type { SchedulingEvent } from "../types/domain";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -98,19 +71,23 @@ const CREWS = ["Crew Alpha", "Crew Beta", "Crew Gamma", "None"];
 
 const PRIORITIES: Array<"Low" | "Medium" | "High" | "Urgent"> = ["Low", "Medium", "High", "Urgent"];
 
-export const SchedulingPage: React.FC<SchedulingPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  events,
-  setEvents,
-  activeRole,
-  customersList = [],
-  logOperationalEvent,
-  preSelectedDate,
-  preSelectedCustomerId,
-  onNavigateToScreen
-}) => {
+export const SchedulingPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    schedulingEvents: events,
+    setSchedulingEvents: setEvents,
+    customers: customersList,
+    preSelectedDate,
+    preSelectedCustomerId
+  } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // Navigation states
   const [currentDate, setCurrentDate] = useState<Date>(() => {
     if (preSelectedDate) {
@@ -348,27 +325,22 @@ export const SchedulingPage: React.FC<SchedulingPageProps> = ({
       if (filterDateStart && evt.date < filterDateStart) return false;
       if (filterDateEnd && evt.date > filterDateEnd) return false;
 
-      // Role check for view restrictions:
-      // "Technicians, Drivers, Installers, and Employees can only view or update events assigned to them"
+      // Role check for view restrictions: Technicians, Drivers, Installers, and other
+      // non-privileged employees can only view events assigned to them. Previously this
+      // computed an `isAssigned` flag but never applied it (see git history) — every
+      // employee could see every customer's name/phone/email/address regardless of role.
+      // Real fix: compare against the actual logged-in user's name, not their role title
+      // (the old heuristic compared assignedEmployee to activeRole, which are different
+      // concepts — a job title isn't a person's name).
       if (!isHighPrivilege) {
-        // If they are an employee/technician, let's assume they only see events assigned to their name
-        // (For demo purposes we match the activeRole to employee name or restrict to their simulated name)
-        // Let's check if the assigned employee corresponds to the simulated identity
-        // We'll filter to see if assignedEmployee matches the current activeRole as a substring or contains it
-        const isAssigned = evt.assignedEmployee.toLowerCase().includes(activeRole.toLowerCase()) || 
-                           activeRole.toLowerCase() === "employee" || 
-                           activeRole.toLowerCase() === "technician" ||
-                           // if their name is "Sarah Jenkins" or similar in simulated identity:
-                           evt.assignedEmployee === "John Doe" && activeRole === "Driver" || 
-                           evt.assignedEmployee === "Pete Rogers" && activeRole === "Technician";
-        
-        // Let's be lenient but implement the filter: if they are restricted and not assigned, they can't see it (or they see it as locked)
-        // To be extremely user friendly, let's display all but tag the edit/save capability strictly!
+        const myName = (loggedInUser?.name || "").trim().toLowerCase();
+        const isAssigned = !!myName && evt.assignedEmployee.trim().toLowerCase() === myName;
+        if (!isAssigned) return false;
       }
 
       return true;
     });
-  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, isHighPrivilege, activeRole]);
+  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, isHighPrivilege, activeRole, loggedInUser]);
 
   // Month View Days Generation
   const monthDays = useMemo(() => {

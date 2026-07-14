@@ -6,7 +6,9 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import { 
   Mail, 
@@ -109,11 +111,12 @@ import {
   INITIAL_RECENT_AI_ACTIONS,
   INITIAL_SNAPSHOTS
 } from "./initialData";
-import {
-  syncArrayToFirestore,
-  subscribeToCollection,
-  validateConnection
-} from "./lib/firestoreService";
+import { validateConnection } from "./lib/firestoreService";
+import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
+import { AuthContext, AuthContextValue } from "./context/AuthContext";
+import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
+import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
+import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 
 export interface SelectedRole {
   id: string;
@@ -550,6 +553,13 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ value, onChange, option
   );
 };
 
+// Mounts the Event Engine's cascade subscribers (see src/hooks/useEventEngineSubscribers.ts).
+// Renders nothing — must be rendered inside DomainDataContext/NavTelemetryContext.
+const EventEngineEffects: React.FC = () => {
+  useEventEngineSubscribers();
+  return null;
+};
+
 export default function App() {
   // Logged in user profile (null if guest/default owner, or set when authenticated)
   const [loggedInUser, setLoggedInUser] = useState<{
@@ -634,15 +644,6 @@ export default function App() {
   const [liveTime, setLiveTime] = useState(new Date());
 
   // Notification system states
-  const [notifications, _setNotifications] = useState<Array<{
-    id: string;
-    category: "message" | "location" | "job" | "lead" | "other";
-    screenId?: string;
-    title: string;
-    description: string;
-    time: string;
-    isRead: boolean;
-  }>>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
   // Dashboard & Operational Interactive states
@@ -663,198 +664,47 @@ export default function App() {
     google_maps: true,
     gmail: false
   });
-  const [recentRoster, _setRecentRoster] = useState<Array<{
-    id?: string;
-    name: string;
-    role: string;
-    code: string;
-    status: string;
-  }>>([]);
   const [newRosterName, setNewRosterName] = useState("");
   const [newRosterRole, setNewRosterRole] = useState("Technician");
 
-  // Core Event Engine & CRM Shared States back-ended by Firestore
-  const [leads, _setLeads] = useState<Lead[]>([]);
-  const [estimates, _setEstimates] = useState<Estimate[]>([]);
-  const [inventoryList, _setInventoryList] = useState<InventoryItem[]>([]);
+  // Core Event Engine & CRM Shared States back-ended by Firestore.
+  // Each collection is backed by useFirestoreCollection, which centralizes the
+  // sync-to-Firestore + realtime-subscribe + clear-on-logout behavior that used
+  // to be hand-duplicated per collection (see src/hooks/useFirestoreCollection.ts).
+  const businessId = loggedInUser?.email;
+  const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId);
+  const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
+  const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
+  const [schedulingEvents, setSchedulingEvents] = useFirestoreCollection<SchedulingEvent>("scheduling_events", businessId);
+  const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
+  const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
+  const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
+    "roster",
+    businessId,
+    { normalize: (item) => ({ ...item, id: item.id || item.code }) }
+  );
+  const [bulletins, setBulletins] = useFirestoreCollection<any>("bulletins", businessId);
+  const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId);
+  const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
+  const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
+
   const [completedJobsRevenue, setCompletedJobsRevenue] = useState<number>(0);
-  const [customers, _setCustomers] = useState<Customer[]>([]);
-  const [documents, _setDocuments] = useState<DocumentItem[]>([]);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
-  const [schedulingEvents, _setSchedulingEvents] = useState<SchedulingEvent[]>([]);
-
-  // Intercepting setters to sync with Firestore
-  const setCustomers: React.Dispatch<React.SetStateAction<Customer[]>> = (value) => {
-    _setCustomers((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("customers", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setLeads: React.Dispatch<React.SetStateAction<Lead[]>> = (value) => {
-    _setLeads((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("leads", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setEstimates: React.Dispatch<React.SetStateAction<Estimate[]>> = (value) => {
-    _setEstimates((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("estimates", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setSchedulingEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>> = (value) => {
-    _setSchedulingEvents((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("scheduling_events", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setInventoryList: React.Dispatch<React.SetStateAction<InventoryItem[]>> = (value) => {
-    _setInventoryList((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("inventory", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>> = (value) => {
-    _setDocuments((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("documents", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setRecentRoster: React.Dispatch<React.SetStateAction<Array<{
-    id?: string;
-    name: string;
-    role: string;
-    code: string;
-    status: string;
-  }>>> = (value) => {
-    _setRecentRoster((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      const formattedList = nextList.map(item => ({
-        ...item,
-        id: item.id || item.code
-      }));
-      syncArrayToFirestore("roster", prev.map(p => ({ ...p, id: p.id || p.code })), formattedList, loggedInUser?.email);
-      return formattedList;
-    });
-  };
-
-  const setBulletins: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setBulletins((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("bulletins", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setNotifications: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setNotifications((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("notifications", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setRecentAiActions((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("recent_ai_actions", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
-
-  const setSnapshots: React.Dispatch<React.SetStateAction<any[]>> = (value) => {
-    _setSnapshots((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      syncArrayToFirestore("snapshots", prev, nextList, loggedInUser?.email);
-      return nextList;
-    });
-  };
 
   // Test connection on boot
   useEffect(() => {
     validateConnection();
   }, []);
 
-  // Sync state with Firestore in real-time when a user logs in
+  // Track the logged-in-user email in localStorage across login/logout
   useEffect(() => {
-    if (!loggedInUser?.email) return;
-
-    localStorage.setItem("leadforge_logged_in_user_email", loggedInUser.email);
-
-    const unsubCustomers = subscribeToCollection("customers", loggedInUser.email, (items) => {
-      _setCustomers(items);
-    });
-    const unsubLeads = subscribeToCollection("leads", loggedInUser.email, (items) => {
-      _setLeads(items);
-    });
-    const unsubEstimates = subscribeToCollection("estimates", loggedInUser.email, (items) => {
-      _setEstimates(items);
-    });
-    const unsubEvents = subscribeToCollection("scheduling_events", loggedInUser.email, (items) => {
-      _setSchedulingEvents(items);
-    });
-    const unsubInventory = subscribeToCollection("inventory", loggedInUser.email, (items) => {
-      _setInventoryList(items);
-    });
-    const unsubDocuments = subscribeToCollection("documents", loggedInUser.email, (items) => {
-      _setDocuments(items);
-    });
-    const unsubRoster = subscribeToCollection("roster", loggedInUser.email, (items) => {
-      _setRecentRoster(items);
-    });
-    const unsubBulletins = subscribeToCollection("bulletins", loggedInUser.email, (items) => {
-      _setBulletins(items);
-    });
-    const unsubNotifications = subscribeToCollection("notifications", loggedInUser.email, (items) => {
-      _setNotifications(items);
-    });
-    const unsubAiActions = subscribeToCollection("recent_ai_actions", loggedInUser.email, (items) => {
-      _setRecentAiActions(items);
-    });
-    const unsubSnapshots = subscribeToCollection("snapshots", loggedInUser.email, (items) => {
-      _setSnapshots(items);
-    });
-
-    return () => {
-      unsubCustomers();
-      unsubLeads();
-      unsubEstimates();
-      unsubEvents();
-      unsubInventory();
-      unsubDocuments();
-      unsubRoster();
-      unsubBulletins();
-      unsubNotifications();
-      unsubAiActions();
-      unsubSnapshots();
-    };
-  }, [loggedInUser]);
-
-  // Clear states upon logout to prevent cross-account leaking
-  useEffect(() => {
-    if (!isLoggedIn) {
-      _setCustomers([]);
-      _setLeads([]);
-      _setEstimates([]);
-      _setSchedulingEvents([]);
-      _setInventoryList([]);
-      _setDocuments([]);
+    if (businessId) {
+      localStorage.setItem("leadforge_logged_in_user_email", businessId);
+    } else {
       localStorage.removeItem("leadforge_logged_in_user_email");
     }
-  }, [isLoggedIn]);
+  }, [businessId]);
 
   // Timer for Clocked In Duration
   useEffect(() => {
@@ -980,7 +830,6 @@ export default function App() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
-  const [showGoogleDialog, setShowGoogleDialog] = useState(false);
   
   // Sign Up Instructions Modal States
   const [showSignUpInstructions, setShowSignUpInstructions] = useState(false);
@@ -1004,15 +853,6 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  const [bulletins, _setBulletins] = useState<Array<{
-    id: string;
-    title: string;
-    content: string;
-    author: string;
-    role: string;
-    date: string;
-    status: "approved" | "pending";
-  }>>([]);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -1043,28 +883,6 @@ export default function App() {
     snapshots: "DEFAULT",
   });
   
-  const [recentAiActions, _setRecentAiActions] = useState<Array<{
-    id: string;
-    date: string;
-    time: string;
-    module: string;
-    action: string;
-    reason: string;
-    status: "Approved" | "Pending Approval" | "Completed" | "Undone" | "Active";
-    approvedBy: string;
-  }>>([]);
-
-  // Context Selection States
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("cust_1");
-  const [selectedEmployeeName, setSelectedEmployeeName] = useState<string>("John Doe");
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState<string>("Copper Tubing 1/2-in x 50-ft");
-  const [selectedJobId, setSelectedJobId] = useState<string>("JOB-1024");
-  const [selectedEstimateId, setSelectedEstimateId] = useState<string>("E-1084");
-  const [selectedRouteId, setSelectedRouteId] = useState<string>("RT-A");
-  const [selectedScheduleEventId, setSelectedScheduleEventId] = useState<string>("evt_1");
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string>("doc_1");
-  const [currentFilters, setCurrentFilters] = useState<string>("Status: All | Priority: High");
-  const [currentSearchQuery, setCurrentSearchQuery] = useState<string>("");
 
   // Floating AI Widget UI States
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
@@ -1079,16 +897,6 @@ export default function App() {
   const [floatingAiLoading, setFloatingAiLoading] = useState(false);
 
   // SNAPSHOT ARCHIVES STATE & MUTATIONS
-  const [snapshots, _setSnapshots] = useState<Array<{
-    id: string;
-    pageId: string;
-    pageName: string;
-    timestamp: string;
-    filename: string;
-    fileSize: string;
-    meta: { recordCount: number; filters: string; details: string };
-  }>>([]);
-
   const [isFlashing, setIsFlashing] = useState(false);
 
   const createAndAddSnapshot = (pageId: string, pageName: string, metaData?: any, imageSrc?: string) => {
@@ -1294,6 +1102,61 @@ export default function App() {
   const [aiIsLoading, setAiIsLoading] = useState(false);
   const [pendingAiAction, setPendingAiAction] = useState<{ type: "drawer" | "floating"; query: string; customText?: string } | null>(null);
 
+  // Grounded, confirmation-gated data actions for the floating AI widget. Unlike the old
+  // fake "autonomous actions" (which fabricated PO numbers/vendors and mutated data from
+  // keyword matching with zero confirmation), these are computed from real live data and
+  // require an explicit approval click before anything is written.
+  type PendingDataAction =
+    | { type: "reorder"; item: InventoryItem; suggestedQty: number }
+    | { type: "reschedule"; event: SchedulingEvent; newDate: string };
+  const [pendingDataAction, setPendingDataAction] = useState<PendingDataAction | null>(null);
+
+  const proposeReorderAction = () => {
+    const lowStock = inventoryList.filter(i => i.quantity <= i.minQuantity);
+    if (lowStock.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "No inventory items are currently at or below their minimum stock threshold — nothing needs reordering right now." }]);
+      return;
+    }
+    const item = lowStock[0];
+    const suggestedQty = Math.max(item.maxQuantity - item.quantity, 1);
+    setPendingDataAction({ type: "reorder", item, suggestedQty });
+  };
+
+  const proposeRescheduleAction = () => {
+    const upcoming = schedulingEvents
+      .filter(e => e.status === "Scheduled")
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (upcoming.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "There are no scheduled jobs to reschedule." }]);
+      return;
+    }
+    const event = upcoming[0];
+    const [y, m, d] = event.date.split("-").map(Number);
+    const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
+    const newDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    setPendingDataAction({ type: "reschedule", event, newDate });
+  };
+
+  const confirmPendingDataAction = () => {
+    if (!pendingDataAction) return;
+    if (pendingDataAction.type === "reorder") {
+      const { item, suggestedQty } = pendingDataAction;
+      logOperationalEvent(
+        "Reorder Flagged",
+        `${item.name}: ${item.quantity} on hand (min ${item.minQuantity}). Flagged for reorder of ${suggestedQty} units${item.vendor ? ` from ${item.vendor}` : " (no vendor on file)"}.`,
+        "📦"
+      );
+      triggerNotification(`Reorder flagged for ${item.name} (${suggestedQty} units)`);
+    } else {
+      const { event, newDate } = pendingDataAction;
+      setSchedulingEvents(prev => prev.map(e => (e.id === event.id ? { ...e, date: newDate } : e)));
+      logOperationalEvent("Job Rescheduled", `Moved ${event.customer}'s job from ${event.date} to ${newDate}.`, "📅");
+      triggerNotification(`Moved ${event.customer}'s job to ${newDate}`);
+    }
+    setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "✅ Done — approved and applied." }]);
+    setPendingDataAction(null);
+  };
+
   const openPageAIAnalysis = (pageId: string, pageName: string, customContext?: string) => {
     setAiPageId(pageId);
     setAiPageName(pageName);
@@ -1303,88 +1166,100 @@ export default function App() {
     setAiIsLoading(true);
 
     const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const businessSummary = buildBusinessSummary(pageId);
 
-    setTimeout(() => {
-      let welcomeText = "";
-      if (pageId === "dashboard") {
-        welcomeText = `### 🤖 LeadForge OS — Dashboard Operational Intelligence Report
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId, pageName, customContext: resolvedContext, businessSummary, isOwnerOrAdmin })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages([{ sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages([{
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}. Make sure GEMINI_API_KEY is configured on the server.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
+  };
 
-I have executed a diagnostic scan of your **Dashboard Operating Space**. Here are my automated optimization recommendations:
+  // Builds a real (not fabricated) summary of live business data for the AI prompt, scoped to the page being analyzed.
+  const buildBusinessSummary = (pageId: string): string => {
+    const pastDue = customers.filter(c => c.status === "Past Due");
+    const totalPastDue = pastDue.reduce((sum, c) => sum + (c.outstandingBalance || 0), 0);
+    const topCustomer = [...customers].sort((a, b) => (b.lifetimeValue || 0) - (a.lifetimeValue || 0))[0];
 
-1. **Revenue Recovery**: Outstanding payments of **${isOwnerOrAdmin ? "$2,450.00" : "[REDACTED - OWNER ONLY]"}** are currently tracked in past-due logs. Suggest activating automated invoice workflows.
-2. **Technician Allocation**: Field telemetries indicate peak dispatcher density on **Tuesday mornings**.
-3. **Acquisition Trends**: Lead pipeline value has grown **14%** month-over-month.
-
-*Ask me any operational question about this Dashboard's live statistics!*`;
-      } else if (pageId === "customers") {
-        welcomeText = `### 🤖 LeadForge OS — CRM Customer Base Diagnosis
-
-I have compiled the CRM customer profile index. Here is the operational diagnosis:
-
-1. **VIP Loyalty Concentration**: **Marcus Vance (Apex Plumb & Drain)** holds your highest Lifetime Value of **${isOwnerOrAdmin ? "$24,500.00" : "[REDACTED - OWNER ONLY]"}**.
-2. **Outstanding Risk**: **Oakridge Apartments** has an active **${isOwnerOrAdmin ? "$2,450.00 past due balance" : "[REDACTED - OWNER ONLY] past due balance"}** spanning multiple billing cycles.
-3. **Follow-Up Efficiency**: 2 residential accounts are flagged as "Past Due". Immediate automated outreach recommended.
-
-*Ask me to summarize custom client metrics or analyze demographic performance!*`;
-      } else if (pageId === "leads") {
-        welcomeText = `### 🤖 LeadForge OS — Sales Pipeline Acquisition Audit
-
-The incoming sales opportunities pipeline has been audited successfully:
-
-1. **Pipeline Value**: Total pipeline value is modeled at **${isOwnerOrAdmin ? "$48,900.00" : "[REDACTED - OWNER ONLY]"}** across **10 active leads**.
-2. **Top Customer Acquisition Source**: **Website forms** are leading both in count and in high-intent value, followed closely by **Google Business Profile**.
-3. **Velocity Warning**: 3 leads have been in the "New" pipeline for over 48 hours without a dispatcher touchpoint.
-
-*Type any prompt below to query lead values, calculate conversion rates, or draft response templates!*`;
-      } else {
-        welcomeText = `### 🤖 LeadForge OS — Operational Module Assistant
-
-I have completed a snapshot capture of the **${pageName}** workspace.
-
-- **System Status**: Connected & verified.
-- **Analysis Mode**: Ready.
-- **Data Log**: Local state successfully cataloged.
-
-*Ask me any question about the operational configuration or data fields for the ${pageName} system!*`;
-      }
-
-      if (resolvedContext) {
-        welcomeText += `\n\n---\n**📋 Snapshot Context Analyzed:**\n*${resolvedContext}*`;
-      }
-
-      setAiMessages([
-        { sender: "ai", text: welcomeText }
-      ]);
-      setAiIsLoading(false);
-    }, 600);
+    switch (pageId) {
+      case "dashboard":
+        return [
+          `Customers: ${customers.length} total, ${pastDue.length} past due ($${totalPastDue.toLocaleString()} outstanding)`,
+          `Leads: ${leads.length} total, ${leads.filter(l => l.status === "New").length} new`,
+          `Estimates: ${estimates.length} total, ${estimates.filter(e => e.status === "Sent" || e.status === "Viewed").length} awaiting response`,
+          `Scheduled jobs: ${schedulingEvents.filter(e => e.status === "Scheduled").length} upcoming, ${schedulingEvents.filter(e => e.status === "Completed").length} completed`,
+          `Revenue recognized from completed jobs: $${completedJobsRevenue.toLocaleString()}`
+        ].join("\n");
+      case "customers":
+        return [
+          `Total customers: ${customers.length}`,
+          `Past due: ${pastDue.length} accounts, $${totalPastDue.toLocaleString()} total outstanding`,
+          `VIP customers: ${customers.filter(c => c.isVIP).length}`,
+          topCustomer ? `Highest lifetime value: ${topCustomer.company} at $${(topCustomer.lifetimeValue || 0).toLocaleString()}` : ""
+        ].filter(Boolean).join("\n");
+      case "leads":
+        return [
+          `Total leads: ${leads.length}`,
+          `By status: ${Object.entries(leads.reduce((acc: Record<string, number>, l) => { acc[l.status] = (acc[l.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total pipeline value: $${leads.reduce((sum, l) => sum + (l.estimatedValue || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "estimates":
+        return [
+          `Total estimates: ${estimates.length}`,
+          `By status: ${Object.entries(estimates.reduce((acc: Record<string, number>, e) => { acc[e.status] = (acc[e.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total estimate value: $${estimates.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "inventory":
+        return [
+          `Total inventory items: ${inventoryList.length}`,
+          `Low stock (below minimum): ${inventoryList.filter(i => i.quantity <= i.minQuantity).length}`
+        ].join("\n");
+      default:
+        return `${customers.length} customers, ${leads.length} leads, ${estimates.length} estimates, ${schedulingEvents.length} scheduled events on record.`;
+    }
   };
 
   const executeConfirmedAIMessage = (query: string) => {
     setAiIsLoading(true);
-    setTimeout(() => {
-      let responseText = "";
-      const lower = query.toLowerCase();
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = aiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
 
-      if (lower.includes("highest") || lower.includes("top") || lower.includes("best")) {
-        if (aiPageId === "customers") {
-          responseText = "Your highest value client is **Marcus Vance** representing **Apex Plumb & Drain** with an elegant Lifetime Value of **$24,500.00**. They have 3 open jobs currently.";
-        } else if (aiPageId === "leads") {
-          responseText = "The highest value lead is **Theresa W.** representing Facebook source with an estimated contract value of **$12,500.00** currently marked in 'New' status.";
-        } else {
-          responseText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer ($24,500 LTV), and **Website forms** is your most consistent acquisition source (4 leads, $34k total).";
-        }
-      } else if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
-        responseText = "You have **$2,450.00** past due from **Oakridge Apartments** (Clara Oswald). I recommend triggering an automated gentle SMS reminder to pay since they have a system maintenance appointment scheduled soon.";
-      } else {
-        responseText = `Based on the active **${aiPageName}** ledger, I have compiled your query with full financial access. 
-- Customer Outstanding: **$2,450.00** past due
-- Customer Lifetime Value (LTV): **$24,500.00** (Marcus Vance)
-- Active Opportunities pipeline: **$48,900.00**`;
-      }
-
-      setAiMessages(prev => [...prev, { sender: "ai", text: responseText }]);
-      setAiIsLoading(false);
-    }, 800);
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: aiPageId,
+        pageName: aiPageName,
+        businessSummary: buildBusinessSummary(aiPageId),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
   };
 
   const handleSendAIMessage = () => {
@@ -1428,64 +1303,38 @@ I have completed a snapshot capture of the **${pageName}** workspace.
       return;
     }
 
-    setAiIsLoading(true);
-
-    setTimeout(() => {
-      let responseText = "";
-
-      if (lower.includes("convert") || lower.includes("improve") || lower.includes("grow") || lower.includes("marketing")) {
-        responseText = "To maximize conversions:\n1. **Auto-Assign**: Immediately route Website leads to sales rep Sarah Connor (95% win-rate).\n2. **Commercial Focus**: Prioritize bids above $5,000; historical conversion data is 2.5x higher here than for under-$1,000 residential maintenance.";
-      } else if (lower.includes("help") || lower.includes("what is") || lower.includes("explain")) {
-        responseText = `I can help you monitor this page's activities. Currently, we are looking at the **${aiPageName}** screen. You can ask me to evaluate financial charts, calculate conversion averages, draft follow-up emails, or recommend crew dispatch times.`;
-      } else {
-        responseText = `Based on the active **${aiPageName}** ledger, I have compiled your query. We have tracked this state under checksum #LF${Math.random().toString(36).substring(2, 6).toUpperCase()}.
-
-To execute your request, I recommend assigning dispatcher Sarah to review the records. Let me know if you would like me to draft a professional client communication or prepare an export schema!`;
-      }
-
-      setAiMessages(prev => [...prev, { sender: "ai", text: responseText }]);
-      setAiIsLoading(false);
-    }, 800);
+    executeConfirmedAIMessage(userMsgText);
   };
 
-  const executeConfirmedFloatingAiMessage = (query: string, customText?: string) => {
+  const executeConfirmedFloatingAiMessage = (query: string, _customText?: string) => {
     setFloatingAiLoading(true);
-    setTimeout(() => {
-      let aiResponseText = "";
-      const lowerText = query.toLowerCase();
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = floatingAiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
 
-      if (lowerText.includes("why did profit drop") && activeScreen.id === "revenue") {
-        aiResponseText = `### 📊 Profit Margin Diagnostic Analysis
-I have audited the ledger for the selected period. Profit margins dipped **4.2%** due to the following triggers:
-1. **Unpaid Invoices**: Cumulative outstanding balance of **$2,450.00** from past-due accounts.
-2. **Fuel Overruns**: Higher travel density on Route B added **$310.00** in auxiliary fuel charges.
-3. **Labor Allocation**: Peak dispatch overlaps led to **2.5 hours** of overtime billing.
-
-**Recommendation**: Activate the *Automatic Past-Due Balance Hold* workflow to protect estimate margins on active accounts.`;
-      } else if (lowerText.includes("highest") || lowerText.includes("top") || lowerText.includes("best")) {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Highest Customer Lifetime Value**: **$24,500.00** (Marcus Vance)
-- **Top Lead Pipeline Value**: **$48,900.00**
-
-Full financial database access has been confirmed and verified.`;
-      } else if (lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt")) {
-        aiResponseText = `### 📊 Outstanding Receivables Analysis
-The active past-due ledger tracks:
-- **Past Due Sum**: **$2,450.00** outstanding from **Oakridge Apartments**.
-- **LTV Exposure**: High risk. Recommend automated collection workflow.`;
-      } else {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Prompt**: "${query}"
-- **Outstanding Balance**: **$2,450.00** (Clara Oswald)
-- **LTV**: **$24,500.00** (Marcus Vance)
-- **Status**: Secure Financial Session Active`;
-      }
-
-      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
-      setFloatingAiLoading(false);
-    }, 1000);
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: activeScreen.id,
+        pageName: activeScreen.label,
+        businessSummary: buildBusinessSummary(activeScreen.id),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setFloatingAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setFloatingAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setFloatingAiLoading(false));
   };
 
   const handleSendFloatingAiMessage = (customText?: string) => {
@@ -1530,93 +1379,19 @@ Access to full financial telemetry is restricted.`;
       return;
     }
 
-    setFloatingAiLoading(true);
+    // Grounded, confirmation-gated actions: these PROPOSE a real change computed from live
+    // data and require an explicit Approve click (see pendingDataAction) before anything is
+    // written — no data mutation happens directly from parsing this text.
+    if (lowerText.includes("order more") && activeScreen.id === "inventory") {
+      proposeReorderAction();
+      return;
+    }
+    if (lowerText.includes("move") && lowerText.includes("tomorrow") && activeScreen.id === "scheduling") {
+      proposeRescheduleAction();
+      return;
+    }
 
-    setTimeout(() => {
-      let aiResponseText = "";
-
-      if (lowerText.includes("order more") && activeScreen.id === "inventory") {
-        aiResponseText = `### 📦 Purchase Order Generated - LeadForge Autonomous Inventory
-Based on your current context (**Selected Inventory Item: ${selectedInventoryItem}**), I have verified that stock level is critical.
-
-I have executed the following actions:
-1. **Purchase Order Drafted**: Created Draft PO #PO-2026-991 for **50 units** from vendor **Grainger Industrial**.
-2. **Unit Cost**: Adjusted to wholesale price of **$2.45 / unit** (savings of 12%).
-3. **Approval Status**: Sent to Sarah Jenkins for final mobile signature.
-
-*This action has been added to the AI Ledger and can be reversed in the Recent Actions tab.*`;
-        
-        const newAct = {
-          id: `act_${Date.now()}`,
-          date: new Date().toISOString().split("T")[0],
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          module: "Inventory",
-          action: "Order more inventory item",
-          reason: `Auto-ordered replenishment stock for item: ${selectedInventoryItem}`,
-          status: "Completed" as const,
-          approvedBy: "Sarah Jenkins (Owner)"
-        };
-        setRecentAiActions(prev => [newAct, ...prev]);
-        triggerNotification(`📦 PO-2026-991 generated for ${selectedInventoryItem}!`);
-
-      } else if (lowerText.includes("move him to tomorrow") && activeScreen.id === "scheduling") {
-        aiResponseText = `### 📅 Appointment Shift Completed
-Parsed request to shift schedules for technician on **Selected Schedule Event ID: ${selectedScheduleEventId}** (**Customer: Apex Plumb & Drain**).
-
-**System changes executed:**
-- **Previous date**: 2026-07-05
-- **New date**: 2026-07-06 (Tomorrow)
-- **Time Window**: Preserved (09:00 AM - 11:30 AM)
-- **Notification**: Automated SMS dispatch update sent to customer Marcus Vance.
-
-*Action logged in Recent Actions tab and fully reversible.*`;
-        
-        setSchedulingEvents(prev => prev.map(e => e.id === selectedScheduleEventId ? { ...e, date: "2026-07-06" } : e));
-
-        const newAct = {
-          id: `act_${Date.now()}`,
-          date: new Date().toISOString().split("T")[0],
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          module: "Scheduling",
-          action: "Shift schedule event",
-          reason: `Moved event ${selectedScheduleEventId} to tomorrow (2026-07-06)`,
-          status: "Completed" as const,
-          approvedBy: "Sarah Jenkins (Owner)"
-        };
-        setRecentAiActions(prev => [newAct, ...prev]);
-        triggerNotification(`📅 Moved schedule event to tomorrow successfully!`);
-
-      } else if (lowerText.includes("call him") && activeScreen.id === "customers") {
-        aiResponseText = `### 📞 RingCentral Dialer Activated
-Initiating outbound call to customer associated with current context:
-- **Customer**: Marcus Vance (Apex Plumb & Drain)
-- **Telephone**: (206) 555-0199
-- **Dialer Connection**: Active (Secure Line)
-
-*Outbound communication recorded in CRM customer timeline.*`;
-        triggerNotification(`📞 Outbound call dialed to Marcus Vance!`);
-      } else if (lowerText.includes("what should i do next") && activeScreen.id === "jobs") {
-        aiResponseText = `### 💼 Job Next-Step Optimizer
-Analyzing selected job context (**Job ID: ${selectedJobId}**):
-1. **Step 1**: Complete safety pre-inspection checklist.
-2. **Step 2**: Obtain digital signature for sewer line excavations.
-3. **Step 3**: Capture post-installation site photos inside the Snapshots Folder.
-
-*I have drafted a pre-inspection form for this job. Type 'approve' to execute.*`;
-      } else {
-        aiResponseText = `### 🤖 LeadForge AI Solution
-Processed context query for **${activeScreen.label} Page**:
-- **Prompt**: "${textToSend}"
-- **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
-- **Identified Page Context**: ${activeScreen.id}
-- **Active Selection**: ${selectedCustomerId || "Apex Plumb & Drain"}
-
-I have analyzed the current workspace parameters. Everything looks fully optimal. Let me know if you would like me to trigger a custom business flow or optimize this screen's parameters.`;
-      }
-
-      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: aiResponseText }]);
-      setFloatingAiLoading(false);
-    }, 1000);
+    executeConfirmedFloatingAiMessage(textToSend);
   };
 
   // TEAM BUILDER STATE - INITIALIZED WITH SCREENSHOT VALUES
@@ -1765,6 +1540,19 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     triggerNotification(`Navigated to Placeholder for: ${label}`);
   };
 
+  // Canonical cross-page navigation: every page-to-page link (map pin, table
+  // row, dropdown, card) should route through this so "many roads lead to the
+  // same record" behaves identically everywhere, instead of each page call
+  // site redefining its own copy of this logic.
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string }) => {
+    setPreSelectedCustomerId(params?.customerId ?? undefined);
+    setPreSelectedDate(params?.date ?? undefined);
+    const matched = OS_SCREENS.find(s => s.id === screenId);
+    if (matched) {
+      setActiveScreen(matched);
+    }
+  };
+
   const handleOwnerSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = signUpInstructionsEmail.trim().toLowerCase();
@@ -1812,7 +1600,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
       // 3. Create owner business profile document in Firestore
       await setDoc(doc(db, "business_profiles", cleanEmail), {
-        password: cleanPass,
         businessNames: [cleanUser],
         ownerNames: [cleanOwner],
         businessPhones: [""],
@@ -2001,68 +1788,31 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       }
     } catch (err) {
       console.error("Error verifying invite:", err);
-      setEmpInviteCode(codeTrim);
-      setCurrentView("employee_onboarding");
-      triggerNotification("Entering onboarding flow.");
+      triggerNotification("Couldn't verify the invite code right now. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Google Sign In integration with Firestore
-  const handleGoogleSignIn = async (selectedEmail: string) => {
-    setShowGoogleDialog(false);
+  // Real Google OAuth via Firebase Auth. This used to be a fake account
+  // picker with 3 hardcoded emails that logged the user in as whichever
+  // identity was clicked, with zero verification — a full authentication
+  // bypass. signInWithPopup performs a real Google sign-in; the existing
+  // onAuthStateChanged listener above already loads the resulting user's
+  // real profile from user_profiles/{uid}, so no duplicate state-setting
+  // logic is needed here.
+  const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
     setLoginMethod("google");
-    setEmail(selectedEmail);
-    
     try {
-      // 1. Check if employee exists
-      const empSnap = await getDoc(doc(db, "employees", selectedEmail));
-      if (empSnap.exists()) {
-        const empData = empSnap.data();
-        setLoggedInUser({
-          email: selectedEmail,
-          role: empData.role || "Driver",
-          permissions: empData.permissions || ["dashboard", "routes"],
-          isEmployee: true,
-          name: `${empData.firstName || ""} ${empData.lastName || ""}`.trim() || "Employee",
-          goals: empData.goals
-        });
-        setIsLoggedIn(true);
-        const firstPermitted = OS_SCREENS.find(s => (empData.permissions || []).includes(s.id)) || OS_SCREENS[0];
-        setActiveScreen(firstPermitted);
-        triggerNotification(`Google Signed in as: ${empData.firstName || "User"} (${empData.role})`);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // 2. Check if owner business profile exists
-      const bizSnap = await getDoc(doc(db, "business_profiles", selectedEmail));
-      if (bizSnap.exists()) {
-        const bizData = bizSnap.data();
-        setLoggedInUser({
-          email: selectedEmail,
-          role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-        });
-        setIsLoggedIn(true);
-        setActiveScreen(OS_SCREENS[0]);
-        triggerNotification(`Google Signed in as Owner of ${bizData.businessNames?.[0] || "LeadForge Biz"}`);
-      } else {
-        // Owner doesn't have a profile yet
-        setLoggedInUser({
-          email: selectedEmail,
-          role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-        });
-        setCurrentView("placeholder_google");
-        triggerNotification(`Welcome Owner! Complete Step 1 of Onboarding.`);
-      }
-    } catch (err) {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
       console.error("Google sign in error:", err);
-      setCurrentView("placeholder_google");
-      triggerNotification("Authenticated via Google!");
+      if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+        setLoginError("Google sign-in failed. Please try again.");
+        triggerNotification("Google sign-in failed.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -2409,7 +2159,65 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
     );
   };
 
+  const authContextValue: AuthContextValue = {
+    loggedInUser,
+    isLoggedIn,
+    currentView,
+    setCurrentView,
+    simulatedRole,
+    setSimulatedRole,
+    businessId,
+    handleLogout
+  };
+
+  const domainDataContextValue: DomainDataContextValue = {
+    customers,
+    setCustomers,
+    leads,
+    setLeads,
+    estimates,
+    setEstimates,
+    schedulingEvents,
+    setSchedulingEvents,
+    inventoryList,
+    setInventoryList,
+    documents,
+    setDocuments,
+    recentRoster,
+    setRecentRoster,
+    bulletins,
+    setBulletins,
+    notifications,
+    setNotifications,
+    recentAiActions,
+    setRecentAiActions,
+    snapshots,
+    setSnapshots,
+    completedJobsRevenue,
+    setCompletedJobsRevenue,
+    preSelectedDate,
+    setPreSelectedDate,
+    preSelectedCustomerId,
+    setPreSelectedCustomerId
+  };
+
+  const navTelemetryContextValue: NavTelemetryContextValue = {
+    activeScreen,
+    setActiveScreen,
+    navigateToScreen,
+    logOperationalEvent,
+    takeSnapshot,
+    deleteSnapshot,
+    openPageAIAnalysis,
+    openPlaceholderPage,
+    triggerNotification
+  };
+
   return (
+    <AuthContext.Provider value={authContextValue}>
+    <DomainDataContext.Provider value={domainDataContextValue}>
+    <NavTelemetryContext.Provider value={navTelemetryContextValue}>
+    <EventEngineEffects />
     <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
       {/* Hidden device camera capture input */}
       <input
@@ -2488,7 +2296,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   >
                     <button
                       type="button"
-                      onClick={() => setShowGoogleDialog(true)}
+                      onClick={() => handleGoogleSignIn()}
                       style={{
                         borderRadius: `${14 * scale}px`,
                         gap: `${8 * scale}px`,
@@ -4322,51 +4130,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                 </div>
               )}
 
-              {/* SUB-MODAL 4: GOOGLE ACCOUNTS SIMULATION */}
-              {showGoogleDialog && (
-                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
-                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
-                    <h3 className="text-sm font-bold text-slate-900 tracking-tight text-center mb-1">
-                      Sign in with Google
-                    </h3>
-                    <p className="text-[11px] text-slate-400 text-center mb-4">
-                      to continue to <span className="font-bold text-blue-600">LeadForge</span>
-                    </p>
-                    
-                    <div className="space-y-2 mb-4">
-                      {[
-                        { name: "OwnersLocal Admin", email: "admin@ownerslocal.com", initials: "OA" },
-                        { name: "John Doe", email: "john.doe@gmail.com", initials: "JD" },
-                        { name: "LeadForge Guest Account", email: "guest@leadforge.ai", initials: "GA" }
-                      ].map((acc, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleGoogleSignIn(acc.email)}
-                          className="w-full p-2.5 hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-3 text-left transition-colors cursor-pointer"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-xs font-bold flex items-center justify-center">
-                            {acc.initials}
-                          </div>
-                          <div className="flex-1 overflow-hidden">
-                            <p className="text-xs font-bold text-slate-800 truncate">{acc.name}</p>
-                            <p className="text-[10px] text-slate-500 truncate">{acc.email}</p>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowGoogleDialog(false)}
-                      className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer text-center"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* SUB-MODAL 5: SIGN UP INSTRUCTIONS WITH REAL FIREBASE AUTH */}
               {showSignUpInstructions && (
                 <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
@@ -4977,7 +4740,11 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       ...item,
                       net: item.income - item.expenses - item.taxes
                     }));
-                    const totalHours = (48.5 + clockInDuration / 3600).toFixed(1);
+                    // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
+                    // individual clock in/out events but nothing here aggregates them into a
+                    // pay-period total) — this only reflects the current live clock-in session,
+                    // not fabricated baseline hours.
+                    const totalHours = (clockInDuration / 3600).toFixed(1);
                     const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
 
                     const getDashboardGraphData = () => {
@@ -5188,7 +4955,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                             </div>
                           );
                         case "scheduling": {
-                          const todayEvents = schedulingEvents.filter(e => e.date === "2026-07-05");
+                          const todayStr = `${liveTime.getFullYear()}-${String(liveTime.getMonth() + 1).padStart(2, "0")}-${String(liveTime.getDate()).padStart(2, "0")}`;
+                          const todayEvents = schedulingEvents.filter(e => e.date === todayStr);
                           return (
                             <div 
                               key={slotLabel}
@@ -5377,7 +5145,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                               <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
                             </h2>
                             <p className="text-[11px] font-sans font-bold text-[#5E7393]">
-                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Total Worked Hours in Pay Period: <strong className="text-[#1F3557]">{totalHours} hours</strong>
+                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Hours Clocked This Session: <strong className="text-[#1F3557]">{totalHours} hours</strong>
                             </p>
                           </div>
 
@@ -5592,8 +5360,6 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "customers" ? (
                     <CustomersPage
-                      customers={customers}
-                      setCustomers={setCustomers}
                       onOpenPlaceholder={(screenId) => {
                         const matched = OS_SCREENS.find(s => s.id === screenId);
                         if (matched) {
@@ -5601,95 +5367,16 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           triggerNotification(`Navigated to Placeholder for: ${matched.label}`);
                         }
                       }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
                     />
 
                   ) : activeScreen.id === "leads" ? (
-                    <LeadsPage
-                      leads={leads}
-                      setLeads={setLeads}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                    />
+                    <LeadsPage />
 
                   ) : activeScreen.id === "snapshots" ? (
-                    <SnapshotsPage
-                      snapshots={snapshots}
-                      onTakeSnapshot={takeSnapshot}
-                      onDeleteSnapshot={deleteSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                    />
+                    <SnapshotsPage />
 
                   ) : activeScreen.id === "estimates" ? (
-                    <EstimatesPage
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      loggedInUser={loggedInUser || undefined}
-                      recentRoster={recentRoster}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                          triggerNotification(`Navigated to page: ${matched.label}`);
-                        }
-                      }}
-                    />
+                    <EstimatesPage />
 
                   ) : activeScreen.id === "roster" ? (
                     
@@ -5799,221 +5486,39 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "timeclock" ? (
                     <TimeClockPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
                       isClockedIn={isClockedIn}
                       setIsClockedIn={setIsClockedIn}
                       clockInTime={clockInTime}
                       setClockInTime={setClockInTime}
                       clockInDuration={clockInDuration}
                       setClockInDuration={setClockInDuration}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
                     />
 
                   ) : activeScreen.id === "inventory" ? (
-                    <InventoryPage
-                      inventoryList={inventoryList}
-                      setInventoryList={setInventoryList}
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                    />
+                    <InventoryPage />
 
                   ) : activeScreen.id === "documents" ? (
-                    <DocumentsPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      customersList={customers}
-                    />
+                    <DocumentsPage />
 
                   ) : activeScreen.id === "messages" ? (
-                    <MessagesPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      customersList={customers}
-                    />
+                    <MessagesPage />
 
                   ) : activeScreen.id === "training" ? (
-                    <TrainingPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      recentRoster={recentRoster}
-                      setRecentRoster={setRecentRoster}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                    />
+                    <TrainingPage />
 
                   ) : activeScreen.id === "ai_assistant" ? (
                     <AIAssistantPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
                       globalAiSetting={globalAiSetting}
                       setGlobalAiSetting={setGlobalAiSetting}
                       moduleAiSettings={moduleAiSettings}
                       setModuleAiSettings={setModuleAiSettings}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
                     />
 
                   ) : activeScreen.id === "integrations" ? (
                     
                     <IntegrationsPage
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      triggerNotification={triggerNotification}
                     />
 
                   ) : activeScreen.id === "settings" ? (
@@ -6041,18 +5546,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       setGlobalAiSetting={setGlobalAiSetting}
                       moduleAiSettings={moduleAiSettings}
                       setModuleAiSettings={setModuleAiSettings}
-                      recentRoster={recentRoster}
-                      setRecentRoster={setRecentRoster}
                       selectedRoles={selectedRoles}
                       setSelectedRoles={setSelectedRoles}
-                      triggerNotification={triggerNotification}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      onNavigateToScreen={(screenId) => {
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
                     />
 
                   ) : activeScreen.id === "owner_console" ? (
@@ -6072,19 +5567,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                       </div>
                     ) : (
                       <OwnerConsolePage
-                        onTakeSnapshot={() => takeSnapshot("owner_console", "Owner Console")}
-                        onOpenAIAnalysis={(prompt) => openPageAIAnalysis("owner_console", "Owner Console", prompt)}
-                        activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                        loggedInUser={loggedInUser}
-                        triggerNotification={triggerNotification}
-                        customers={customers}
-                        setCustomers={setCustomers}
                         dashboardLeads={dashboardLeads}
                         setDashboardLeads={setDashboardLeads}
-                        schedulingEvents={schedulingEvents}
-                        setSchedulingEvents={setSchedulingEvents}
-                        recentAiActions={recentAiActions}
-                        setRecentAiActions={setRecentAiActions}
                         revenueResetInterval={revenueResetInterval}
                       />
                     )
@@ -6771,94 +6255,14 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     )
 
                   ) : activeScreen.id === "scheduling" ? (
-                    <SchedulingPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      customersList={customers}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      preSelectedDate={preSelectedDate}
-                      preSelectedCustomerId={preSelectedCustomerId}
-                      onNavigateToScreen={(screenId) => {
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                    />
+                    <SchedulingPage />
 
                   ) : activeScreen.id === "dispatch" ? (
-                    <DispatchPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      customersList={customers}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                    />
+                    <DispatchPage />
 
                   ) : activeScreen.id === "routes" ? (
                     <InteractiveMapPage
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      leads={leads}
-                      setLeads={setLeads}
-                      estimates={estimates}
-                      setEstimates={setEstimates}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      inventoryList={inventoryList}
-                      setInventoryList={setInventoryList}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       businessAddresses={businessAddresses}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const matched = OS_SCREENS.find(s => s.id === screenId);
-                        if (matched) {
-                          setActiveScreen(matched);
-                        }
-                      }}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      completedJobsRevenue={completedJobsRevenue}
-                      setCompletedJobsRevenue={setCompletedJobsRevenue}
                     />
 
                   ) : activeScreen.id === "bulletins" ? (
@@ -7013,38 +6417,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                   ) : activeScreen.id === "notifications" ? (
                     
                     <NotificationsPage
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={(type, desc, icon) => {
-                        triggerNotification(`${icon} ${type}: ${desc}`);
-                      }}
-                      onNavigateToScreen={(screenId, params) => {
-                        if (params?.customerId) {
-                          setPreSelectedCustomerId(params.customerId);
-                        } else {
-                          setPreSelectedCustomerId(undefined);
-                        }
-                        if (params?.date) {
-                          setPreSelectedDate(params.date);
-                        } else {
-                          setPreSelectedDate(undefined);
-                        }
-                        const scr = OS_SCREENS.find((s) => s.id === screenId);
-                        if (scr) setActiveScreen(scr);
-                      }}
-                      schedulingEvents={schedulingEvents}
-                      setSchedulingEvents={setSchedulingEvents}
-                      customers={customers}
-                      setCustomers={setCustomers}
-                      documents={documents}
-                      setDocuments={setDocuments}
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
-                      recentAiActions={recentAiActions}
-                      setRecentAiActions={setRecentAiActions}
-                      triggerNotification={triggerNotification}
                     />
 
                   ) : (
@@ -7367,18 +6741,9 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
               ))}
             </div>
 
-            {/* LIVE CONTEXT MONITOR HUD */}
-            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex flex-col gap-1 text-left text-[9.5px] leading-relaxed text-[#855D00] font-sans font-bold uppercase tracking-wider">
-              <div className="flex items-center justify-between w-full">
-                <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Connected Viewport Context</span>
-                <span className="text-[8.5px] text-amber-500">Live Sync</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 pt-1 text-[8px] font-mono lowercase select-none">
-                <div className="truncate">Page: <span className="text-slate-700 font-sans font-bold uppercase">{activeScreen.label}</span></div>
-                <div className="truncate">Customer: <span className="text-slate-700 font-sans font-bold uppercase">{customers.find(c => c.id === selectedCustomerId)?.name || "Apex Plumb & Drain"}</span></div>
-                <div className="truncate">Employee: <span className="text-slate-700 font-sans font-bold uppercase">{selectedEmployeeName}</span></div>
-                <div className="truncate">Inventory: <span className="text-slate-700 font-sans font-bold uppercase">{selectedInventoryItem}</span></div>
-              </div>
+            {/* Current page context (real — reflects the actual active screen) */}
+            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex items-center justify-between text-left text-[9.5px] text-[#855D00] font-sans font-bold uppercase tracking-wider">
+              <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Viewing: {activeScreen.label}</span>
             </div>
 
             {/* PANEL BODY CONTENT AREA */}
@@ -7468,52 +6833,70 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     </div>
                   )}
 
+                  {/* Grounded data-action confirmation: shows the exact real record(s) affected and
+                      requires explicit approval before anything is written. */}
+                  {pendingDataAction && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-amber-100 rounded text-amber-700 font-bold text-xs">⚠️</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Confirm Action</h4>
+                          {pendingDataAction.type === "reorder" ? (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Flag <strong>{pendingDataAction.item.name}</strong> for reorder — currently <strong>{pendingDataAction.item.quantity}</strong> on hand (minimum {pendingDataAction.item.minQuantity}). Suggested reorder quantity: <strong>{pendingDataAction.suggestedQty} units</strong>{pendingDataAction.item.vendor ? ` from ${pendingDataAction.item.vendor}` : " (no vendor on file)"}.
+                            </p>
+                          ) : (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Move <strong>{pendingDataAction.event.customer}</strong>'s job from <strong>{pendingDataAction.event.date}</strong> to <strong>{pendingDataAction.newDate}</strong>.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={confirmPendingDataAction}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setPendingDataAction(null)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Smart suggestion chips based on active module */}
                   <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
                     <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
                     {activeScreen.id === "inventory" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Order more.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Order more.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Order more
                       </button>
                     )}
                     {activeScreen.id === "scheduling" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Move to tomorrow
                       </button>
                     )}
                     {activeScreen.id === "revenue" && (
                       <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Why did profit drop?")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Why did profit drop?")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         ⚡ Analyze drop
-                      </button>
-                    )}
-                    {activeScreen.id === "customers" && (
-                      <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("Call him.")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Dial customer
-                      </button>
-                    )}
-                    {activeScreen.id === "jobs" && (
-                      <button
-                        onClick={() => !pendingAiAction && handleSendFloatingAiMessage("What should I do next?")}
-                        disabled={!!pendingAiAction}
-                        className={`px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Suggest next step
                       </button>
                     )}
                     <span className="text-[9px] text-slate-400 font-medium">Ask simple or complex queries using input below.</span>
@@ -7524,18 +6907,18 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     <input
                       type="text"
                       value={floatingAiInput}
-                      disabled={!!pendingAiAction}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
                       onChange={(e) => setFloatingAiInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !pendingAiAction) handleSendFloatingAiMessage();
+                        if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
                       }}
-                      placeholder={pendingAiAction ? "Clearance check active..." : `Ask LeadForge AI about ${activeScreen.label}...`}
-                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask LeadForge AI about ${activeScreen.label}...`}
+                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button
-                      onClick={() => !pendingAiAction && handleSendFloatingAiMessage()}
-                      disabled={!!pendingAiAction}
-                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
+                      onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage()}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction || pendingDataAction ? "opacity-55 cursor-not-allowed" : ""}`}
                     >
                       Send
                     </button>
@@ -7662,12 +7045,12 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                           {act.status !== "Undone" && (
                             <button
                               onClick={() => {
+                                // NOTE: this only marks the log entry as undone (audit annotation).
+                                // Recent AI actions don't currently carry structured revert data, so
+                                // this deliberately does not attempt to reverse the underlying change —
+                                // doing that with guessed/hardcoded values would silently corrupt data.
                                 setRecentAiActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "Undone" } : a));
-                                if (act.action.includes("schedule")) {
-                                  // Revert appointment shift!
-                                  setSchedulingEvents(prev => prev.map(e => e.id === selectedScheduleEventId ? { ...e, date: "2026-07-05" } : e));
-                                }
-                                triggerNotification(`↩️ Undid action: ${act.action}`);
+                                triggerNotification(`Marked as undone: ${act.action}. Reverse the change manually on the relevant page if needed.`);
                               }}
                               className="px-1.5 py-0.5 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-100 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
                             >
@@ -7713,5 +7096,8 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
       </footer>
 
     </div>
+    </NavTelemetryContext.Provider>
+    </DomainDataContext.Provider>
+    </AuthContext.Provider>
   );
 }

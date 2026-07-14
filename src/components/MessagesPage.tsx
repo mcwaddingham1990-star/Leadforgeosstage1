@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   MessageSquare,
   Users,
@@ -98,19 +101,6 @@ export interface Conversation {
   
   messages: Message[];
   createdDate: string;
-}
-
-interface MessagesPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  activeRole: string;
-  loggedInUser?: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  documents: DocumentItem[];
-  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
-  customersList: Customer[];
 }
 
 const INITIAL_CONVERSATIONS: Conversation[] = [
@@ -385,18 +375,17 @@ const INITIAL_CONVERSATIONS: Conversation[] = [
   }
 ];
 
-export const MessagesPage: React.FC<MessagesPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
-  onNavigateToScreen,
-  documents,
-  setDocuments,
-  customersList = []
-}) => {
+export const MessagesPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { documents, setDocuments, customers: customersList } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const currentUserName = loggedInUser?.name || "Sarah Jenkins";
   const currentUserEmail = loggedInUser?.email || "sarah@leadforge.com";
   const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
@@ -686,6 +675,21 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
     setDraftAttachments(prev => [...prev, newAtt]);
     setActivePicker(null);
     triggerRealTimeNotification(`Attached ${type}: ${name} to message draft.`);
+  };
+
+  // Real file attachment — reads the actual selected/captured file (name, size, content as a
+  // data URL) instead of the old hardcoded fake "Manual_Leak_Fix.pdf"/"Field_Inspection_Main.jpg".
+  const fileAttachInputRef = useRef<HTMLInputElement | null>(null);
+  const photoAttachInputRef = useRef<HTMLInputElement | null>(null);
+  const handleRealFileAttach = (e: React.ChangeEvent<HTMLInputElement>, type: "PDF" | "Photo" | "Document") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      attachItem(type, file.name, `${(file.size / 1024).toFixed(0)} KB`, { dataUrl: reader.result });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   // Sending active message
@@ -1603,24 +1607,40 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
               
               {/* Media tools shortcuts */}
               <div className="flex gap-1 shrink-0 bg-white p-1 rounded-xl border border-[#A9CDEE] h-10 items-center">
+                <input
+                  type="file"
+                  ref={fileAttachInputRef}
+                  onChange={(e) => handleRealFileAttach(e, "PDF")}
+                  className="hidden"
+                  style={{ display: "none" }}
+                />
+                <input
+                  type="file"
+                  ref={photoAttachInputRef}
+                  onChange={(e) => handleRealFileAttach(e, "Photo")}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  style={{ display: "none" }}
+                />
                 <button
-                  onClick={() => attachItem("PDF", "Manual_Leak_Fix.pdf", "1.4 MB")}
+                  onClick={() => fileAttachInputRef.current?.click()}
                   className="p-1 hover:bg-slate-100 rounded text-slate-500"
                   title="Attach File"
                 >
                   <Paperclip className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => attachItem("Photo", "Field_Inspection_Main.jpg", "850 KB")}
+                  onClick={() => photoAttachInputRef.current?.click()}
                   className="p-1 hover:bg-slate-100 rounded text-slate-500"
                   title="Attach Camera Photo"
                 >
                   <Camera className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => attachItem("Voice Note", "VoiceMemo_Status.mp3", "450 KB")}
-                  className="p-1 hover:bg-slate-100 rounded text-slate-500"
-                  title="Attach Voice Note"
+                  disabled
+                  className="p-1 rounded text-slate-300 cursor-not-allowed"
+                  title="Voice notes aren't available yet"
                 >
                   <Mic className="w-4 h-4" />
                 </button>

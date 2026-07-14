@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -34,46 +36,31 @@ import {
   Minus
 } from "lucide-react";
 
-export interface Customer {
-  id: string;
-  company: string;
-  contact: string;
-  phone: string;
-  email: string;
-  address: string;
-  openJobs: number;
-  outstandingBalance: number;
-  lifetimeValue: number;
-  status: "Active" | "Inactive" | "Past Due";
-  type: "Residential" | "Commercial";
-  isVIP: boolean;
-  recentlyAdded: boolean;
-  upcomingJobDate?: string;
-  requireFollowUp?: boolean;
-}
+export type { Customer } from "../types/domain";
+import type { Customer } from "../types/domain";
 
 export interface CustomersPageProps {
+  // NOTE: this page calls onOpenPlaceholder("estimates")/("scheduling", "icon")
+  // with real screen IDs, not (label, icon) placeholder pairs like every other
+  // page — App.tsx wires a special-cased closure for this one call site to
+  // compensate. Left as a distinct prop rather than folded into
+  // NavTelemetryContext's openPlaceholderPage to avoid changing behavior here.
   onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  customers?: Customer[];
-  setCustomers?: React.Dispatch<React.SetStateAction<Customer[]>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
 }
 
 // 10 high-quality realistic LeadForge customers
 export const INITIAL_CUSTOMERS: Customer[] = [];
 
 export const CustomersPage: React.FC<CustomersPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  customers: propCustomers,
-  setCustomers: propSetCustomers,
-  logOperationalEvent,
-  onNavigateToScreen
+  onOpenPlaceholder
 }) => {
+  const { customers: propCustomers, setCustomers: propSetCustomers } = useDomainData();
+  const {
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "All" | "Residential" | "Commercial" | "Active" | "Inactive" | "Past Due" | "VIP" | "Recently Added"
@@ -192,8 +179,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           id: "cust_csv_" + Math.random().toString(36).substring(2, 9),
           company: company || contact,
           contact: contact || company,
-          phone: phone || "(555) 555-0100",
-          email: email || `${(contact || company).toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+          phone: phone || "",
+          email: email || "",
           address: address || "No address supplied",
           openJobs: 0,
           outstandingBalance: 0,
@@ -300,15 +287,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleAddCustomer = () => {
     if (!formContact.trim()) return;
-    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
-    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ") || "100 Operational Way, Seattle, WA";
-    
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
+
     const newCust: Customer = {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
       company: formCompany.trim() || formContact.trim() + " Inc",
       contact: formContact.trim(),
       phone: phoneStr,
-      email: formEmail.trim() || `${formContact.toLowerCase().replace(/\s+/g, "")}@example.com`,
+      email: formEmail.trim(),
       address: combinedAddress,
       openJobs: 0,
       outstandingBalance: 0,

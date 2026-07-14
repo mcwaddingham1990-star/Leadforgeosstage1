@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from "react";
-import { SchedulingEvent } from "./SchedulingPage";
+import { useDomainActions } from "../hooks/useDomainActions";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -31,48 +34,23 @@ import {
   X
 } from "lucide-react";
 
-export interface Estimate {
-  id: string;
-  number: string;
-  customerName: string;
-  company: string;
-  status: "Draft" | "Pending" | "Sent" | "Viewed" | "Accepted" | "Declined" | "Expired" | "Completed";
-  salesRep: string;
-  amount: number;
-  createdDate: string;
-  expirationDate: string;
-}
-
-interface EstimatesPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  estimates?: Estimate[];
-  setEstimates?: React.Dispatch<React.SetStateAction<Estimate[]>>;
-  schedulingEvents?: SchedulingEvent[];
-  setSchedulingEvents?: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  loggedInUser?: { email: string; role: string; permissions: string[]; isEmployee?: boolean; name?: string };
-  recentRoster?: Array<{ name: string; role: string; code: string; status: string }>;
-}
+export type { Estimate } from "../types/domain";
+import type { Estimate } from "../types/domain";
 
 // 8 high-quality realistic Estimates
 export const INITIAL_ESTIMATES: Estimate[] = [];
 
-export const EstimatesPage: React.FC<EstimatesPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  estimates: propsEstimates,
-  setEstimates,
-  schedulingEvents,
-  setSchedulingEvents,
-  logOperationalEvent,
-  loggedInUser,
-  recentRoster
-}) => {
+export const EstimatesPage: React.FC = () => {
+  const { approveEstimateToJob } = useDomainActions();
+  const { loggedInUser } = useAuth();
+  const { estimates: propsEstimates, setEstimates, recentRoster } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [localEstimates, setLocalEstimates] = useState<Estimate[]>(INITIAL_ESTIMATES);
@@ -160,42 +138,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
 
   const handleApproveEstimate = () => {
     if (!selectedEstimate) return;
-
-    // Convert Estimate to a Scheduled Job!
-    const newJob = {
-      id: "job_" + Math.random().toString(36).substring(2, 9),
-      eventType: "Job",
-      date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      startTime: "09:00 AM",
-      endTime: "12:00 PM",
-      customer: selectedEstimate.customerName,
-      customerPhone: "(555) 123-4567",
-      customerEmail: "client@example.com",
-      customerAddress: "1024 Industrial Pkwy, Seattle WA", // Default Seallte bounds
-      assignedEmployee: "Theresa W.",
-      assignedCrew: "Crew Alpha",
-      location: "Seattle Area",
-      priority: "Medium",
-      notes: "Auto-generated from Approved Estimate " + selectedEstimate.number,
-      status: "Scheduled"
-    };
-
-    if (setSchedulingEvents) {
-      setSchedulingEvents(prev => [newJob, ...prev]);
-    }
-
-    // Set estimate status to Accepted
-    const updatedEst = { ...selectedEstimate, status: "Accepted" as const };
-    if (setEstimates) {
-      setEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
-    } else {
-      setLocalEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
-    }
-
-    if (logOperationalEvent) {
-      logOperationalEvent("Estimate Approved", `${selectedEstimate.number} converted to Scheduled Job`, "✅");
-    }
-
+    approveEstimateToJob(selectedEstimate.id);
     setSelectedEstimate(null);
   };
 

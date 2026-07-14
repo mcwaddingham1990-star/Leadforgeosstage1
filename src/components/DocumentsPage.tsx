@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { PDFEditor, EditorObject } from "./PDFEditor";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Plus,
@@ -52,55 +55,20 @@ import {
   QrCode
 } from "lucide-react";
 
-export interface DocumentItem {
-  id: string;
-  name: string;
-  customer: string;
-  employee: string;
-  vendor: string;
-  job: string;
-  type: string;
-  uploadedBy: string;
-  date: string;
-  size: string;
-  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
-  isFavorite: boolean;
-  isArchived: boolean;
-  notes: string;
-  tags: string[];
-  estimateId: string;
-  invoiceId: string;
-  receiptAmount?: number;
-  lastModified: string;
-  url?: string;
-  metaObjects?: any[];
-}
+export type { DocumentItem } from "../types/domain";
+import type { DocumentItem } from "../types/domain";
 
-interface DocumentsPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  activeRole: string;
-  loggedInUser?: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  documents: DocumentItem[];
-  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
-  customersList?: any[];
-}
-
-export const DocumentsPage: React.FC<DocumentsPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
-  onNavigateToScreen,
-  documents,
-  setDocuments,
-  customersList = []
-}) => {
+export const DocumentsPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { documents, setDocuments, customers: customersList } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // Navigation filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string | null>(null);

@@ -1,4 +1,7 @@
 import React, { useState, useMemo } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Bell,
   Search,
@@ -64,44 +67,33 @@ export interface DetailedNotification {
 }
 
 interface NotificationsPageProps {
-  onTakeSnapshot: () => void;
-  onOpenAIAnalysis: (prompt: string) => void;
-  activeRole: string;
-  loggedInUser: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen: (screenId: string, params?: any) => void;
-  schedulingEvents: any[];
-  setSchedulingEvents: React.Dispatch<React.SetStateAction<any[]>>;
-  customers: any[];
-  setCustomers: React.Dispatch<React.SetStateAction<any[]>>;
-  documents: any[];
-  setDocuments: React.Dispatch<React.SetStateAction<any[]>>;
   dashboardLeads: any[];
   setDashboardLeads: React.Dispatch<React.SetStateAction<any[]>>;
-  recentAiActions: any[];
-  setRecentAiActions: React.Dispatch<React.SetStateAction<any[]>>;
-  triggerNotification: (msg: string) => void;
 }
 
 export const NotificationsPage: React.FC<NotificationsPageProps> = ({
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
-  onNavigateToScreen,
-  schedulingEvents,
-  setSchedulingEvents,
-  customers,
-  setCustomers,
-  documents,
-  setDocuments,
   dashboardLeads,
-  setDashboardLeads,
-  recentAiActions,
-  setRecentAiActions,
-  triggerNotification
+  setDashboardLeads
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    schedulingEvents,
+    setSchedulingEvents,
+    customers,
+    setCustomers,
+    documents,
+    setDocuments,
+    recentAiActions,
+    setRecentAiActions
+  } = useDomainData();
+  const {
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent,
+    triggerNotification
+  } = useNavTelemetry();
   // 1. Core database of notifications
   const [notifList, setNotifList] = useState<DetailedNotification[]>([
     {

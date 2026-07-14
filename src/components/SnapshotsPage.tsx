@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Folder,
   FileText,
@@ -33,17 +35,9 @@ export interface Snapshot {
   image?: string;
 }
 
-interface SnapshotsPageProps {
-  snapshots: Snapshot[];
-  onDeleteSnapshot: (id: string) => void;
-  onOpenAIAnalysis: (pageId: string, pageName: string, customContext?: string) => void;
-}
-
-export const SnapshotsPage: React.FC<SnapshotsPageProps> = ({
-  snapshots,
-  onDeleteSnapshot,
-  onOpenAIAnalysis
-}) => {
+export const SnapshotsPage: React.FC = () => {
+  const { snapshots } = useDomainData();
+  const { deleteSnapshot: onDeleteSnapshot, openPageAIAnalysis: onOpenAIAnalysis } = useNavTelemetry();
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");

@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search,
   Filter,
@@ -51,18 +54,6 @@ export interface DispatchEvent {
   status: "Unassigned" | "Assigned" | "En Route" | "Arrived" | "Working" | "On Hold" | "Completed" | "Cancelled" | "Scheduled";
   estimatedDuration?: string; // New field for Dispatch
   department?: string; // e.g. Plumbing, HVAC, Electrical
-}
-
-interface DispatchPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  events: any[]; // shared events from Scheduling/App
-  setEvents: React.Dispatch<React.SetStateAction<any[]>>;
-  activeRole: string; // simulated or logged-in role
-  customersList?: Array<{ id: string; contact: string; phone?: string; email?: string; address?: string; company?: string }>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
 }
 
 // Preset systems data for assignment dropdowns
@@ -123,17 +114,17 @@ const MOCK_MAP_GRID = {
   "Van 3 (Mercedes Sprinter)": { x: 50, y: 70, type: "vehicle" }
 };
 
-export const DispatchPage: React.FC<DispatchPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  events,
-  setEvents,
-  activeRole,
-  customersList = [],
-  logOperationalEvent,
-  onNavigateToScreen
-}) => {
+export const DispatchPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // Current Selected Date in Dispatch view - Defaults to "2026-07-05" (Today in system context)
   const [selectedDate, setSelectedDate] = useState("2026-07-05");
   
