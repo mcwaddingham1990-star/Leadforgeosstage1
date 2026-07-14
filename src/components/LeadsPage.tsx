@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useDomainActions } from "../hooks/useDomainActions";
 import {
   Search,
   Plus,
@@ -60,6 +61,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
   estimates,
   setEstimates
 }) => {
+  const { convertLeadToCustomer, createEstimateFromLead } = useDomainActions();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [activeSourceFilter, setActiveSourceFilter] = useState<string>("All");
@@ -195,68 +197,13 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
 
   const handleConvertLead = () => {
     if (!selectedLead) return;
-    
-    // Create new customer
-    const newCust = {
-      id: "cust_" + Math.random().toString(36).substring(2, 9),
-      company: selectedLead.company || selectedLead.name + " Inc",
-      contact: selectedLead.name,
-      phone: selectedLead.phone,
-      email: selectedLead.email,
-      address: selectedLead.address || "100 Operational Way",
-      openJobs: 0,
-      outstandingBalance: 0,
-      lifetimeValue: selectedLead.estimatedValue || 0,
-      status: "Active" as const,
-      type: "Residential" as const,
-      isVIP: false,
-      recentlyAdded: true
-    };
-
-    if (setCustomers) {
-      setCustomers(prev => [newCust, ...prev]);
-    }
-
-    // Set lead status to Won
-    const updatedLead = { ...selectedLead, status: "Won" as const };
-    if (setLeads) {
-      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
-    } else {
-      setLocalLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
-    }
-
+    convertLeadToCustomer(selectedLead.id);
     setSelectedLead(null);
   };
 
   const handleCreateEstimate = () => {
     if (!selectedLead) return;
-
-    const newEst = {
-      id: "est_" + Math.random().toString(36).substring(2, 9),
-      number: "E-" + (1000 + Math.floor(Math.random() * 9000)),
-      company: selectedLead.company || selectedLead.name + " Inc",
-      customerName: selectedLead.name,
-      email: selectedLead.email,
-      phone: selectedLead.phone,
-      amount: selectedLead.estimatedValue || 1500,
-      status: "Draft" as const,
-      createdDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      notes: selectedLead.notes || "Estimate generated from sales lead."
-    };
-
-    if (setEstimates) {
-      setEstimates(prev => [newEst, ...prev]);
-    }
-
-    // Update lead status to Estimate Sent
-    const updatedLead = { ...selectedLead, status: "Estimate Sent" as const };
-    if (setLeads) {
-      setLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
-    } else {
-      setLocalLeads(prev => prev.map(l => l.id === selectedLead.id ? updatedLead : l));
-    }
-
+    createEstimateFromLead(selectedLead.id);
     setSelectedLead(null);
   };
 

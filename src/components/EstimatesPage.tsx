@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { SchedulingEvent } from "./SchedulingPage";
+import { useDomainActions } from "../hooks/useDomainActions";
 import {
   Search,
   Plus,
@@ -64,6 +65,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
   loggedInUser,
   recentRoster
 }) => {
+  const { approveEstimateToJob } = useDomainActions();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
   const [localEstimates, setLocalEstimates] = useState<Estimate[]>(INITIAL_ESTIMATES);
@@ -151,42 +153,7 @@ export const EstimatesPage: React.FC<EstimatesPageProps> = ({
 
   const handleApproveEstimate = () => {
     if (!selectedEstimate) return;
-
-    // Convert Estimate to a Scheduled Job!
-    const newJob = {
-      id: "job_" + Math.random().toString(36).substring(2, 9),
-      eventType: "Job",
-      date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      startTime: "09:00 AM",
-      endTime: "12:00 PM",
-      customer: selectedEstimate.customerName,
-      customerPhone: "(555) 123-4567",
-      customerEmail: "client@example.com",
-      customerAddress: "1024 Industrial Pkwy, Seattle WA", // Default Seallte bounds
-      assignedEmployee: "Theresa W.",
-      assignedCrew: "Crew Alpha",
-      location: "Seattle Area",
-      priority: "Medium",
-      notes: "Auto-generated from Approved Estimate " + selectedEstimate.number,
-      status: "Scheduled"
-    };
-
-    if (setSchedulingEvents) {
-      setSchedulingEvents(prev => [newJob, ...prev]);
-    }
-
-    // Set estimate status to Accepted
-    const updatedEst = { ...selectedEstimate, status: "Accepted" as const };
-    if (setEstimates) {
-      setEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
-    } else {
-      setLocalEstimates(prev => prev.map(e => e.id === selectedEstimate.id ? updatedEst : e));
-    }
-
-    if (logOperationalEvent) {
-      logOperationalEvent("Estimate Approved", `${selectedEstimate.number} converted to Scheduled Job`, "✅");
-    }
-
+    approveEstimateToJob(selectedEstimate.id);
     setSelectedEstimate(null);
   };
 
