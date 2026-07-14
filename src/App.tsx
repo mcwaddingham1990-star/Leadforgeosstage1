@@ -789,14 +789,14 @@ export default function App() {
     return OS_SCREENS.filter(s => perms.includes(s.id));
   };
 
-  // Onboarding Profile Settings States
-  const [ownerNames, setOwnerNames] = useState<string[]>(["waterdrops2001"]);
-  const [ownerPhones, setOwnerPhones] = useState<string[]>(["(206) 555-0199"]);
-  const [businessNames, setBusinessNames] = useState<string[]>(["LEADFORGELOCAL"]);
-  const [businessPhones, setBusinessPhones] = useState<string[]>(["(206) 565-0144"]);
-  const [businessAddresses, setBusinessAddresses] = useState<string[]>(["1102 Industrial Way, Seattle WA 98108"]);
+  // Onboarding Profile Settings States (start empty for every new account)
+  const [ownerNames, setOwnerNames] = useState<string[]>([""]);
+  const [ownerPhones, setOwnerPhones] = useState<string[]>([""]);
+  const [businessNames, setBusinessNames] = useState<string[]>([""]);
+  const [businessPhones, setBusinessPhones] = useState<string[]>([""]);
+  const [businessAddresses, setBusinessAddresses] = useState<string[]>([""]);
   const [businessLogos, setBusinessLogos] = useState<string[]>(["/branding/owners-logo.png"]);
-  const [companyLocations, setCompanyLocations] = useState<string[]>(["Seattle Headquarters"]);
+  const [companyLocations, setCompanyLocations] = useState<string[]>([""]);
 
   // Billing methods state
   const [billingMethods, setBillingMethods] = useState<Array<{
