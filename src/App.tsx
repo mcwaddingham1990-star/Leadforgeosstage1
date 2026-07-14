@@ -1789,15 +1789,12 @@ Access to full financial telemetry is restricted.`;
       }
     } catch (err) {
       console.error("Error verifying invite:", err);
-      setEmpInviteCode(codeTrim);
-      setCurrentView("employee_onboarding");
-      triggerNotification("Entering onboarding flow.");
+      triggerNotification("Couldn't verify the invite code right now. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Google Sign In integration with Firestore
   // Real Google OAuth via Firebase Auth. This used to be a fake account
   // picker with 3 hardcoded emails that logged the user in as whichever
   // identity was clicked, with zero verification — a full authentication
