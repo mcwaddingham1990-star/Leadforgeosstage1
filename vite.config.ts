@@ -1,11 +1,43 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, Plugin} from 'vite';
+import {handleAiAsk, AiAskRequest} from './server/aiHandler';
+
+// Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
+// serve /api/ai/ask the same way the production server.ts does. GEMINI_API_KEY
+// is read from process.env here (Node/server context) and is never bundled
+// into client code — do not add it to the `define` block below.
+function aiApiDevMiddleware(): Plugin {
+  return {
+    name: 'ai-api-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/ai/ask', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const body: AiAskRequest = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+          const result = await handleAiAsk(body);
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'AI request failed' }));
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), aiApiDevMiddleware()],
     define: {
       'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || '')
     },

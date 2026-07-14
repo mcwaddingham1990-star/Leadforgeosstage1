@@ -1121,88 +1121,100 @@ export default function App() {
     setAiIsLoading(true);
 
     const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const businessSummary = buildBusinessSummary(pageId);
 
-    setTimeout(() => {
-      let welcomeText = "";
-      if (pageId === "dashboard") {
-        welcomeText = `### 🤖 LeadForge OS — Dashboard Operational Intelligence Report
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId, pageName, customContext: resolvedContext, businessSummary, isOwnerOrAdmin })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages([{ sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages([{
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}. Make sure GEMINI_API_KEY is configured on the server.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
+  };
 
-I have executed a diagnostic scan of your **Dashboard Operating Space**. Here are my automated optimization recommendations:
+  // Builds a real (not fabricated) summary of live business data for the AI prompt, scoped to the page being analyzed.
+  const buildBusinessSummary = (pageId: string): string => {
+    const pastDue = customers.filter(c => c.status === "Past Due");
+    const totalPastDue = pastDue.reduce((sum, c) => sum + (c.outstandingBalance || 0), 0);
+    const topCustomer = [...customers].sort((a, b) => (b.lifetimeValue || 0) - (a.lifetimeValue || 0))[0];
 
-1. **Revenue Recovery**: Outstanding payments of **${isOwnerOrAdmin ? "$2,450.00" : "[REDACTED - OWNER ONLY]"}** are currently tracked in past-due logs. Suggest activating automated invoice workflows.
-2. **Technician Allocation**: Field telemetries indicate peak dispatcher density on **Tuesday mornings**.
-3. **Acquisition Trends**: Lead pipeline value has grown **14%** month-over-month.
-
-*Ask me any operational question about this Dashboard's live statistics!*`;
-      } else if (pageId === "customers") {
-        welcomeText = `### 🤖 LeadForge OS — CRM Customer Base Diagnosis
-
-I have compiled the CRM customer profile index. Here is the operational diagnosis:
-
-1. **VIP Loyalty Concentration**: **Marcus Vance (Apex Plumb & Drain)** holds your highest Lifetime Value of **${isOwnerOrAdmin ? "$24,500.00" : "[REDACTED - OWNER ONLY]"}**.
-2. **Outstanding Risk**: **Oakridge Apartments** has an active **${isOwnerOrAdmin ? "$2,450.00 past due balance" : "[REDACTED - OWNER ONLY] past due balance"}** spanning multiple billing cycles.
-3. **Follow-Up Efficiency**: 2 residential accounts are flagged as "Past Due". Immediate automated outreach recommended.
-
-*Ask me to summarize custom client metrics or analyze demographic performance!*`;
-      } else if (pageId === "leads") {
-        welcomeText = `### 🤖 LeadForge OS — Sales Pipeline Acquisition Audit
-
-The incoming sales opportunities pipeline has been audited successfully:
-
-1. **Pipeline Value**: Total pipeline value is modeled at **${isOwnerOrAdmin ? "$48,900.00" : "[REDACTED - OWNER ONLY]"}** across **10 active leads**.
-2. **Top Customer Acquisition Source**: **Website forms** are leading both in count and in high-intent value, followed closely by **Google Business Profile**.
-3. **Velocity Warning**: 3 leads have been in the "New" pipeline for over 48 hours without a dispatcher touchpoint.
-
-*Type any prompt below to query lead values, calculate conversion rates, or draft response templates!*`;
-      } else {
-        welcomeText = `### 🤖 LeadForge OS — Operational Module Assistant
-
-I have completed a snapshot capture of the **${pageName}** workspace.
-
-- **System Status**: Connected & verified.
-- **Analysis Mode**: Ready.
-- **Data Log**: Local state successfully cataloged.
-
-*Ask me any question about the operational configuration or data fields for the ${pageName} system!*`;
-      }
-
-      if (resolvedContext) {
-        welcomeText += `\n\n---\n**📋 Snapshot Context Analyzed:**\n*${resolvedContext}*`;
-      }
-
-      setAiMessages([
-        { sender: "ai", text: welcomeText }
-      ]);
-      setAiIsLoading(false);
-    }, 600);
+    switch (pageId) {
+      case "dashboard":
+        return [
+          `Customers: ${customers.length} total, ${pastDue.length} past due ($${totalPastDue.toLocaleString()} outstanding)`,
+          `Leads: ${leads.length} total, ${leads.filter(l => l.status === "New").length} new`,
+          `Estimates: ${estimates.length} total, ${estimates.filter(e => e.status === "Sent" || e.status === "Viewed").length} awaiting response`,
+          `Scheduled jobs: ${schedulingEvents.filter(e => e.status === "Scheduled").length} upcoming, ${schedulingEvents.filter(e => e.status === "Completed").length} completed`,
+          `Revenue recognized from completed jobs: $${completedJobsRevenue.toLocaleString()}`
+        ].join("\n");
+      case "customers":
+        return [
+          `Total customers: ${customers.length}`,
+          `Past due: ${pastDue.length} accounts, $${totalPastDue.toLocaleString()} total outstanding`,
+          `VIP customers: ${customers.filter(c => c.isVIP).length}`,
+          topCustomer ? `Highest lifetime value: ${topCustomer.company} at $${(topCustomer.lifetimeValue || 0).toLocaleString()}` : ""
+        ].filter(Boolean).join("\n");
+      case "leads":
+        return [
+          `Total leads: ${leads.length}`,
+          `By status: ${Object.entries(leads.reduce((acc: Record<string, number>, l) => { acc[l.status] = (acc[l.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total pipeline value: $${leads.reduce((sum, l) => sum + (l.estimatedValue || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "estimates":
+        return [
+          `Total estimates: ${estimates.length}`,
+          `By status: ${Object.entries(estimates.reduce((acc: Record<string, number>, e) => { acc[e.status] = (acc[e.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total estimate value: $${estimates.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "inventory":
+        return [
+          `Total inventory items: ${inventoryList.length}`,
+          `Low stock (below minimum): ${inventoryList.filter(i => i.quantity <= i.minQuantity).length}`
+        ].join("\n");
+      default:
+        return `${customers.length} customers, ${leads.length} leads, ${estimates.length} estimates, ${schedulingEvents.length} scheduled events on record.`;
+    }
   };
 
   const executeConfirmedAIMessage = (query: string) => {
     setAiIsLoading(true);
-    setTimeout(() => {
-      let responseText = "";
-      const lower = query.toLowerCase();
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = aiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
 
-      if (lower.includes("highest") || lower.includes("top") || lower.includes("best")) {
-        if (aiPageId === "customers") {
-          responseText = "Your highest value client is **Marcus Vance** representing **Apex Plumb & Drain** with an elegant Lifetime Value of **$24,500.00**. They have 3 open jobs currently.";
-        } else if (aiPageId === "leads") {
-          responseText = "The highest value lead is **Theresa W.** representing Facebook source with an estimated contract value of **$12,500.00** currently marked in 'New' status.";
-        } else {
-          responseText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer ($24,500 LTV), and **Website forms** is your most consistent acquisition source (4 leads, $34k total).";
-        }
-      } else if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
-        responseText = "You have **$2,450.00** past due from **Oakridge Apartments** (Clara Oswald). I recommend triggering an automated gentle SMS reminder to pay since they have a system maintenance appointment scheduled soon.";
-      } else {
-        responseText = `Based on the active **${aiPageName}** ledger, I have compiled your query with full financial access. 
-- Customer Outstanding: **$2,450.00** past due
-- Customer Lifetime Value (LTV): **$24,500.00** (Marcus Vance)
-- Active Opportunities pipeline: **$48,900.00**`;
-      }
-
-      setAiMessages(prev => [...prev, { sender: "ai", text: responseText }]);
-      setAiIsLoading(false);
-    }, 800);
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: aiPageId,
+        pageName: aiPageName,
+        businessSummary: buildBusinessSummary(aiPageId),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
   };
 
   const handleSendAIMessage = () => {
@@ -1246,24 +1258,7 @@ I have completed a snapshot capture of the **${pageName}** workspace.
       return;
     }
 
-    setAiIsLoading(true);
-
-    setTimeout(() => {
-      let responseText = "";
-
-      if (lower.includes("convert") || lower.includes("improve") || lower.includes("grow") || lower.includes("marketing")) {
-        responseText = "To maximize conversions:\n1. **Auto-Assign**: Immediately route Website leads to sales rep Sarah Connor (95% win-rate).\n2. **Commercial Focus**: Prioritize bids above $5,000; historical conversion data is 2.5x higher here than for under-$1,000 residential maintenance.";
-      } else if (lower.includes("help") || lower.includes("what is") || lower.includes("explain")) {
-        responseText = `I can help you monitor this page's activities. Currently, we are looking at the **${aiPageName}** screen. You can ask me to evaluate financial charts, calculate conversion averages, draft follow-up emails, or recommend crew dispatch times.`;
-      } else {
-        responseText = `Based on the active **${aiPageName}** ledger, I have compiled your query. We have tracked this state under checksum #LF${Math.random().toString(36).substring(2, 6).toUpperCase()}.
-
-To execute your request, I recommend assigning dispatcher Sarah to review the records. Let me know if you would like me to draft a professional client communication or prepare an export schema!`;
-      }
-
-      setAiMessages(prev => [...prev, { sender: "ai", text: responseText }]);
-      setAiIsLoading(false);
-    }, 800);
+    executeConfirmedAIMessage(userMsgText);
   };
 
   const executeConfirmedFloatingAiMessage = (query: string, customText?: string) => {
