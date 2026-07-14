@@ -255,7 +255,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
 };
 
 // Asset URLs from LeadForgeOS GitHub
-const LOGO_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Buttons/CutPaste_2026-07-04_09-47-21-356.png";
+const LOGO_URL = "/branding/owners-logo.png";
 const CARD_BG_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Login/lightmodecardbg.jpg";
 const SIGNIN_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Signinbuttom.png";
 const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Gobutton.png";
@@ -795,7 +795,7 @@ export default function App() {
   const [businessNames, setBusinessNames] = useState<string[]>(["LEADFORGELOCAL"]);
   const [businessPhones, setBusinessPhones] = useState<string[]>(["(206) 565-0144"]);
   const [businessAddresses, setBusinessAddresses] = useState<string[]>(["1102 Industrial Way, Seattle WA 98108"]);
-  const [businessLogos, setBusinessLogos] = useState<string[]>(["https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Buttons/CutPaste_2026-07-04_09-47-21-356.png"]);
+  const [businessLogos, setBusinessLogos] = useState<string[]>(["/branding/owners-logo.png"]);
   const [companyLocations, setCompanyLocations] = useState<string[]>(["Seattle Headquarters"]);
 
   // Billing methods state
@@ -2270,21 +2270,21 @@ Access to full financial telemetry is restricted.`;
               {currentView === "login" ? (
                 <>
                   {/* LOGO SECTION - Absolutely centered on top */}
-                  <div 
-                    style={{ 
-                      top: `${99.895 * scale}px`, 
-                      left: "50%", 
+                  <div
+                    style={{
+                      top: `${99.895 * scale}px`,
+                      left: "50%",
                       transform: "translateX(-50%)",
                       width: `${891 * 0.3348 * 1.2654386 * scale}px`,
-                      height: `${452 * 0.3348 * 1.2654386 * scale}px`
+                      height: `${891 * 0.3348 * 1.2654386 * scale * (240 / 870)}px`
                     }}
                     className="absolute flex justify-center pointer-events-none"
                   >
-                    <img 
-                      src={LOGO_URL} 
-                      alt="LeadForge Logo" 
+                    <img
+                      src={LOGO_URL}
+                      alt="Owner's Local OS Logo"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-contain drop-shadow-[0_2px_10px_rgba(30,144,255,0.2)]" 
+                      className="object-contain drop-shadow-[0_2px_10px_rgba(30,144,255,0.2)]"
                       referrerPolicy="no-referrer"
                     />
                   </div>
@@ -2668,7 +2668,7 @@ Access to full financial telemetry is restricted.`;
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}></span>
                       </span>
-                      <span>LeadForge AI</span>
+                      <span>Owner's AI</span>
                     </button>
                   </div>
                 </>
@@ -6686,7 +6686,7 @@ Access to full financial telemetry is restricted.`;
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-            <span>LeadForge AI</span>
+            <span>Owner's AI</span>
             <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
           </button>
         )}
