@@ -1600,7 +1600,6 @@ Access to full financial telemetry is restricted.`;
 
       // 3. Create owner business profile document in Firestore
       await setDoc(doc(db, "business_profiles", cleanEmail), {
-        password: cleanPass,
         businessNames: [cleanUser],
         ownerNames: [cleanOwner],
         businessPhones: [""],
