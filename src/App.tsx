@@ -6,7 +6,9 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import { 
   Mail, 
@@ -828,7 +830,6 @@ export default function App() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [showPrivacyDialog, setShowPrivacyDialog] = useState(false);
-  const [showGoogleDialog, setShowGoogleDialog] = useState(false);
   
   // Sign Up Instructions Modal States
   const [showSignUpInstructions, setShowSignUpInstructions] = useState(false);
@@ -1797,59 +1798,25 @@ Access to full financial telemetry is restricted.`;
   };
 
   // Google Sign In integration with Firestore
-  const handleGoogleSignIn = async (selectedEmail: string) => {
-    setShowGoogleDialog(false);
+  // Real Google OAuth via Firebase Auth. This used to be a fake account
+  // picker with 3 hardcoded emails that logged the user in as whichever
+  // identity was clicked, with zero verification — a full authentication
+  // bypass. signInWithPopup performs a real Google sign-in; the existing
+  // onAuthStateChanged listener above already loads the resulting user's
+  // real profile from user_profiles/{uid}, so no duplicate state-setting
+  // logic is needed here.
+  const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
     setLoginMethod("google");
-    setEmail(selectedEmail);
-    
     try {
-      // 1. Check if employee exists
-      const empSnap = await getDoc(doc(db, "employees", selectedEmail));
-      if (empSnap.exists()) {
-        const empData = empSnap.data();
-        setLoggedInUser({
-          email: selectedEmail,
-          role: empData.role || "Driver",
-          permissions: empData.permissions || ["dashboard", "routes"],
-          isEmployee: true,
-          name: `${empData.firstName || ""} ${empData.lastName || ""}`.trim() || "Employee",
-          goals: empData.goals
-        });
-        setIsLoggedIn(true);
-        const firstPermitted = OS_SCREENS.find(s => (empData.permissions || []).includes(s.id)) || OS_SCREENS[0];
-        setActiveScreen(firstPermitted);
-        triggerNotification(`Google Signed in as: ${empData.firstName || "User"} (${empData.role})`);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // 2. Check if owner business profile exists
-      const bizSnap = await getDoc(doc(db, "business_profiles", selectedEmail));
-      if (bizSnap.exists()) {
-        const bizData = bizSnap.data();
-        setLoggedInUser({
-          email: selectedEmail,
-          role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-        });
-        setIsLoggedIn(true);
-        setActiveScreen(OS_SCREENS[0]);
-        triggerNotification(`Google Signed in as Owner of ${bizData.businessNames?.[0] || "LeadForge Biz"}`);
-      } else {
-        // Owner doesn't have a profile yet
-        setLoggedInUser({
-          email: selectedEmail,
-          role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"]
-        });
-        setCurrentView("placeholder_google");
-        triggerNotification(`Welcome Owner! Complete Step 1 of Onboarding.`);
-      }
-    } catch (err) {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
       console.error("Google sign in error:", err);
-      setCurrentView("placeholder_google");
-      triggerNotification("Authenticated via Google!");
+      if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+        setLoginError("Google sign-in failed. Please try again.");
+        triggerNotification("Google sign-in failed.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -2333,7 +2300,7 @@ Access to full financial telemetry is restricted.`;
                   >
                     <button
                       type="button"
-                      onClick={() => setShowGoogleDialog(true)}
+                      onClick={() => handleGoogleSignIn()}
                       style={{
                         borderRadius: `${14 * scale}px`,
                         gap: `${8 * scale}px`,
@@ -4162,51 +4129,6 @@ Access to full financial telemetry is restricted.`;
                       className="w-full py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors cursor-pointer"
                     >
                       Acknowledge & Close
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* SUB-MODAL 4: GOOGLE ACCOUNTS SIMULATION */}
-              {showGoogleDialog && (
-                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
-                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
-                    <h3 className="text-sm font-bold text-slate-900 tracking-tight text-center mb-1">
-                      Sign in with Google
-                    </h3>
-                    <p className="text-[11px] text-slate-400 text-center mb-4">
-                      to continue to <span className="font-bold text-blue-600">LeadForge</span>
-                    </p>
-                    
-                    <div className="space-y-2 mb-4">
-                      {[
-                        { name: "OwnersLocal Admin", email: "admin@ownerslocal.com", initials: "OA" },
-                        { name: "John Doe", email: "john.doe@gmail.com", initials: "JD" },
-                        { name: "LeadForge Guest Account", email: "guest@leadforge.ai", initials: "GA" }
-                      ].map((acc, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleGoogleSignIn(acc.email)}
-                          className="w-full p-2.5 hover:bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-3 text-left transition-colors cursor-pointer"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 text-xs font-bold flex items-center justify-center">
-                            {acc.initials}
-                          </div>
-                          <div className="flex-1 overflow-hidden">
-                            <p className="text-xs font-bold text-slate-800 truncate">{acc.name}</p>
-                            <p className="text-[10px] text-slate-500 truncate">{acc.email}</p>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowGoogleDialog(false)}
-                      className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer text-center"
-                    >
-                      Cancel
                     </button>
                   </div>
                 </div>
