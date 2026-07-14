@@ -7,6 +7,14 @@ export interface LoggedInUser {
   isEmployee?: boolean;
   name?: string;
   goals?: string;
+  /**
+   * NOTE: this is never actually populated wherever loggedInUser gets
+   * constructed (sign-in/sign-up/onboarding) — declared here only so
+   * existing reads of it (e.g. TrainingPage's employee businessId
+   * derivation) keep their current, already-broken-for-employees runtime
+   * behavior instead of picking up a new type error. See TrainingPage.tsx.
+   */
+  businessEmail?: string;
 }
 
 export interface AuthContextValue {

@@ -144,6 +144,9 @@ export interface SchedulingEvent {
   customerAddress?: string;
   assignedEmployee: string;
   assignedCrew?: string;
+  assignedVehicle?: string;
+  estimatedDuration?: string;
+  department?: string;
   location?: string;
   priority: "Low" | "Medium" | "High" | "Urgent";
   notes?: string;

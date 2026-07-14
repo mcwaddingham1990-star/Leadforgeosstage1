@@ -5502,12 +5502,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     />
 
                   ) : activeScreen.id === "snapshots" ? (
-                    <SnapshotsPage
-                      snapshots={snapshots}
-                      onTakeSnapshot={takeSnapshot}
-                      onDeleteSnapshot={deleteSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                    />
+                    <SnapshotsPage />
 
                   ) : activeScreen.id === "estimates" ? (
                     <EstimatesPage
@@ -5631,21 +5626,12 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
 
                   ) : activeScreen.id === "timeclock" ? (
                     <TimeClockPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
                       isClockedIn={isClockedIn}
                       setIsClockedIn={setIsClockedIn}
                       clockInTime={clockInTime}
                       setClockInTime={setClockInTime}
                       clockInDuration={clockInDuration}
                       setClockInDuration={setClockInDuration}
-                      logOperationalEvent={logOperationalEvent}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      onNavigateToScreen={navigateToScreen}
                     />
 
                   ) : activeScreen.id === "inventory" ? (
@@ -5678,35 +5664,10 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     />
 
                   ) : activeScreen.id === "messages" ? (
-                    <MessagesPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      customersList={customers}
-                    />
+                    <MessagesPage />
 
                   ) : activeScreen.id === "training" ? (
-                    <TrainingPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      onNavigateToScreen={navigateToScreen}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      loggedInUser={loggedInUser}
-                      logOperationalEvent={logOperationalEvent}
-                      recentRoster={recentRoster}
-                      setRecentRoster={setRecentRoster}
-                      documents={documents}
-                      setDocuments={setDocuments}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                    />
+                    <TrainingPage />
 
                   ) : activeScreen.id === "ai_assistant" ? (
                     <AIAssistantPage
@@ -6513,17 +6474,7 @@ I have analyzed the current workspace parameters. Everything looks fully optimal
                     />
 
                   ) : activeScreen.id === "dispatch" ? (
-                    <DispatchPage
-                      onOpenPlaceholder={openPlaceholderPage}
-                      onTakeSnapshot={takeSnapshot}
-                      onOpenAIAnalysis={openPageAIAnalysis}
-                      events={schedulingEvents}
-                      setEvents={setSchedulingEvents}
-                      activeRole={simulatedRole || loggedInUser?.role || "Owner"}
-                      customersList={customers}
-                      logOperationalEvent={logOperationalEvent}
-                      onNavigateToScreen={navigateToScreen}
-                    />
+                    <DispatchPage />
 
                   ) : activeScreen.id === "routes" ? (
                     <InteractiveMapPage

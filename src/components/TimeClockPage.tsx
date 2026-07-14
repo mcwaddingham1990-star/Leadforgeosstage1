@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Clock,
   User,
@@ -68,21 +71,12 @@ export interface EmployeeClockState {
 }
 
 export interface TimeClockPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  activeRole: string;
-  loggedInUser: any;
   isClockedIn: boolean;
   setIsClockedIn: (val: boolean) => void;
   clockInTime: string | null;
   setClockInTime: (val: string | null) => void;
   clockInDuration: number;
   setClockInDuration: React.Dispatch<React.SetStateAction<number>>;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  events: SchedulingEvent[];
-  setEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
 }
 
 // Initial robust employee list
@@ -193,22 +187,23 @@ const INITIAL_EMPLOYEES: EmployeeClockState[] = [
 ];
 
 export const TimeClockPage: React.FC<TimeClockPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  activeRole,
-  loggedInUser,
   isClockedIn,
   setIsClockedIn,
   clockInTime,
   setClockInTime,
   clockInDuration,
-  setClockInDuration,
-  logOperationalEvent,
-  events,
-  setEvents
+  setClockInDuration
 }) => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const { schedulingEvents: events, setSchedulingEvents: setEvents } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   const [employees, setEmployees] = useState<EmployeeClockState[]>(INITIAL_EMPLOYEES);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSummaryFilter, setActiveSummaryFilter] = useState<string>("All");

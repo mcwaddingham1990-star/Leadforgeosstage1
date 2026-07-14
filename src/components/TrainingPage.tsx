@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
+import { useDomainData } from "../context/DomainDataContext";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   GraduationCap,
   Award,
@@ -94,22 +97,6 @@ export interface EmployeeTrainingProfile {
   quizScores: Record<string, number[]>; // courseId -> list of quiz scores
   certifications: Certification[];
   trainingHours: number;
-}
-
-interface TrainingPageProps {
-  onOpenPlaceholder: (label: string, icon: string) => void;
-  onTakeSnapshot?: (pageId: string, pageName: string, meta?: any) => void;
-  onOpenAIAnalysis?: (pageId: string, pageName: string, customContext?: string) => void;
-  onNavigateToScreen?: (screenId: string, params?: { customerId?: string; date?: string }) => void;
-  activeRole: string; // e.g. Owner, General Manager, Office Manager, Technician, Dispatcher, Sales
-  loggedInUser: any;
-  logOperationalEvent?: (type: string, desc: string, icon: string) => void;
-  recentRoster: Array<{ name: string; role: string; code: string; status: string }>;
-  setRecentRoster: React.Dispatch<React.SetStateAction<Array<{ name: string; role: string; code: string; status: string }>>>;
-  documents: DocumentItem[];
-  setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>;
-  events: SchedulingEvent[];
-  setEvents: React.Dispatch<React.SetStateAction<SchedulingEvent[]>>;
 }
 
 // Initial dummy courses
@@ -354,21 +341,24 @@ const INITIAL_PROFILES: EmployeeTrainingProfile[] = [
   }
 ];
 
-export const TrainingPage: React.FC<TrainingPageProps> = ({
-  onOpenPlaceholder,
-  onTakeSnapshot,
-  onOpenAIAnalysis,
-  onNavigateToScreen,
-  activeRole,
-  loggedInUser,
-  logOperationalEvent,
-  recentRoster,
-  setRecentRoster,
-  documents,
-  setDocuments,
-  events,
-  setEvents
-}) => {
+export const TrainingPage: React.FC = () => {
+  const { loggedInUser, simulatedRole } = useAuth();
+  const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const {
+    recentRoster,
+    setRecentRoster,
+    documents,
+    setDocuments,
+    schedulingEvents: events,
+    setSchedulingEvents: setEvents
+  } = useDomainData();
+  const {
+    openPlaceholderPage: onOpenPlaceholder,
+    takeSnapshot: onTakeSnapshot,
+    openPageAIAnalysis: onOpenAIAnalysis,
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent
+  } = useNavTelemetry();
   // State
   const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
 
