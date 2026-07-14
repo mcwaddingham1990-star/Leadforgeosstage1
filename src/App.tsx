@@ -4822,7 +4822,11 @@ Access to full financial telemetry is restricted.`;
                       ...item,
                       net: item.income - item.expenses - item.taxes
                     }));
-                    const totalHours = (48.5 + clockInDuration / 3600).toFixed(1);
+                    // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
+                    // individual clock in/out events but nothing here aggregates them into a
+                    // pay-period total) — this only reflects the current live clock-in session,
+                    // not fabricated baseline hours.
+                    const totalHours = (clockInDuration / 3600).toFixed(1);
                     const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
 
                     const getDashboardGraphData = () => {
@@ -5033,7 +5037,8 @@ Access to full financial telemetry is restricted.`;
                             </div>
                           );
                         case "scheduling": {
-                          const todayEvents = schedulingEvents.filter(e => e.date === "2026-07-05");
+                          const todayStr = `${liveTime.getFullYear()}-${String(liveTime.getMonth() + 1).padStart(2, "0")}-${String(liveTime.getDate()).padStart(2, "0")}`;
+                          const todayEvents = schedulingEvents.filter(e => e.date === todayStr);
                           return (
                             <div 
                               key={slotLabel}
@@ -5222,7 +5227,7 @@ Access to full financial telemetry is restricted.`;
                               <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
                             </h2>
                             <p className="text-[11px] font-sans font-bold text-[#5E7393]">
-                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Total Worked Hours in Pay Period: <strong className="text-[#1F3557]">{totalHours} hours</strong>
+                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Hours Clocked This Session: <strong className="text-[#1F3557]">{totalHours} hours</strong>
                             </p>
                           </div>
 

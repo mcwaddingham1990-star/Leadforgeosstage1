@@ -179,8 +179,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           id: "cust_csv_" + Math.random().toString(36).substring(2, 9),
           company: company || contact,
           contact: contact || company,
-          phone: phone || "(555) 555-0100",
-          email: email || `${(contact || company).toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+          phone: phone || "",
+          email: email || "",
           address: address || "No address supplied",
           openJobs: 0,
           outstandingBalance: 0,
@@ -287,15 +287,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleAddCustomer = () => {
     if (!formContact.trim()) return;
-    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
-    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ") || "100 Operational Way, Seattle, WA";
-    
+    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
+
     const newCust: Customer = {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
       company: formCompany.trim() || formContact.trim() + " Inc",
       contact: formContact.trim(),
       phone: phoneStr,
-      email: formEmail.trim() || `${formContact.toLowerCase().replace(/\s+/g, "")}@example.com`,
+      email: formEmail.trim(),
       address: combinedAddress,
       openJobs: 0,
       outstandingBalance: 0,

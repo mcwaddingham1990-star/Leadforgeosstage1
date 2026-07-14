@@ -246,8 +246,29 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [editDateStr, setEditDateStr] = useState("");
   const [editGpsStr, setEditGpsStr] = useState("");
 
-  // Simulated GPS Coordinates
-  const simulatedGPS = "47.6062° N, 122.3321° W (Seattle HQ)";
+  // Real GPS via the browser Geolocation API — no fabricated coordinates. Falls back to an
+  // honest "unavailable" string (not a fake location) when unsupported/denied/timed out.
+  const getCurrentGPSString = (): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve("Location unavailable (not supported by this browser)");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const latStr = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}`;
+          const lngStr = `${Math.abs(lng).toFixed(4)}°${lng >= 0 ? "E" : "W"}`;
+          resolve(`${latStr}, ${lngStr} (±${Math.round(pos.coords.accuracy)}m)`);
+        },
+        (err) => {
+          resolve(`Location unavailable (${err.code === err.PERMISSION_DENIED ? "permission denied" : "signal error"})`);
+        },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    });
+  };
 
   // Is current user allowed to edit records? (Owner, Manager, Office, Payroll)
   const canEditAllRecords = useMemo(() => {
@@ -294,12 +315,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           hourlyRate: 45,
           status: newStatus as any,
           hoursToday: isClockedIn ? parseFloat((clockInDuration / 3600).toFixed(2)) : 0,
-          hoursThisPayPeriod: 40.0,
+          hoursThisPayPeriod: 0.0,
           overtimeHours: 0.0,
           approved: false,
-          history: clockInTime ? [
-            { id: "log_user_1", employeeName: userName, type: "Clock In", date: "2026-07-06", time: clockInTime, gps: simulatedGPS }
-          ] : []
+          // No fabricated history entry: we don't actually know when/where a session that
+          // predates this effect running started, so an honest empty history beats a guess.
+          history: []
         };
         return [...prev, newRecord];
       }
@@ -385,11 +406,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   }, [employees]);
 
   // Action: Clock In
-  const handleClockIn = (jobId: string, route: string, vehicle: string) => {
+  const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
-    
+    const gps = await getCurrentGPSString();
+
     setIsClockedIn(true);
     setClockInTime(timeStr);
     setClockInDuration(0);
@@ -406,7 +428,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           type: "Clock In",
           date: dateStr,
           time: timeStr,
-          gps: simulatedGPS,
+          gps,
           jobId: jobId || undefined,
           jobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
           route: route || undefined,
@@ -437,11 +459,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   // Action: Clock Out
-  const handleClockOut = () => {
+  const handleClockOut = async () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
-    
+    const gps = await getCurrentGPSString();
+
     const userName = loggedInUser?.name || "Sarah Jenkins";
 
     setEmployees(prev => prev.map(e => {
@@ -452,7 +475,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           type: "Clock Out",
           date: dateStr,
           time: timeStr,
-          gps: simulatedGPS
+          gps
         };
         // Calculate accrued hours
         const sessionHours = parseFloat((clockInDuration / 3600).toFixed(2));
@@ -483,11 +506,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   // Action: Start Break
-  const handleStartBreak = () => {
+  const handleStartBreak = async () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
     const userName = loggedInUser?.name || "Sarah Jenkins";
+    const gps = await getCurrentGPSString();
 
     setEmployees(prev => prev.map(e => {
       if (e.name === userName) {
@@ -497,7 +521,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           type: "Break Start",
           date: dateStr,
           time: timeStr,
-          gps: simulatedGPS
+          gps
         };
         return {
           ...e,
@@ -515,11 +539,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   // Action: End Break
-  const handleEndBreak = () => {
+  const handleEndBreak = async () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
     const userName = loggedInUser?.name || "Sarah Jenkins";
+    const gps = await getCurrentGPSString();
 
     setEmployees(prev => prev.map(e => {
       if (e.name === userName) {
@@ -529,7 +554,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           type: "Break End",
           date: dateStr,
           time: timeStr,
-          gps: simulatedGPS
+          gps
         };
         return {
           ...e,
@@ -1352,13 +1377,13 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                 </select>
               </div>
 
-              {/* Simulated GPS Indicator */}
+              {/* Real GPS captured via the browser's Geolocation API at the moment of clock-in/out */}
               <div className="p-3 bg-[#E3F3FF] rounded-xl border border-[#A9CDEE] text-[10.5px] leading-tight space-y-1">
                 <p className="font-bold text-slate-700 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-[#4A9BFF]" />
-                  Geofenced Location Verification
+                  Location Verification
                 </p>
-                <p className="text-slate-500 font-medium">GPS Signal: {simulatedGPS}</p>
+                <p className="text-slate-500 font-medium">Your device location will be captured when you confirm this action. Requires location permission.</p>
               </div>
 
             </div>

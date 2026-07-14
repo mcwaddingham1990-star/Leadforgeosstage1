@@ -325,27 +325,22 @@ export const SchedulingPage: React.FC = () => {
       if (filterDateStart && evt.date < filterDateStart) return false;
       if (filterDateEnd && evt.date > filterDateEnd) return false;
 
-      // Role check for view restrictions:
-      // "Technicians, Drivers, Installers, and Employees can only view or update events assigned to them"
+      // Role check for view restrictions: Technicians, Drivers, Installers, and other
+      // non-privileged employees can only view events assigned to them. Previously this
+      // computed an `isAssigned` flag but never applied it (see git history) — every
+      // employee could see every customer's name/phone/email/address regardless of role.
+      // Real fix: compare against the actual logged-in user's name, not their role title
+      // (the old heuristic compared assignedEmployee to activeRole, which are different
+      // concepts — a job title isn't a person's name).
       if (!isHighPrivilege) {
-        // If they are an employee/technician, let's assume they only see events assigned to their name
-        // (For demo purposes we match the activeRole to employee name or restrict to their simulated name)
-        // Let's check if the assigned employee corresponds to the simulated identity
-        // We'll filter to see if assignedEmployee matches the current activeRole as a substring or contains it
-        const isAssigned = evt.assignedEmployee.toLowerCase().includes(activeRole.toLowerCase()) || 
-                           activeRole.toLowerCase() === "employee" || 
-                           activeRole.toLowerCase() === "technician" ||
-                           // if their name is "Sarah Jenkins" or similar in simulated identity:
-                           evt.assignedEmployee === "John Doe" && activeRole === "Driver" || 
-                           evt.assignedEmployee === "Pete Rogers" && activeRole === "Technician";
-        
-        // Let's be lenient but implement the filter: if they are restricted and not assigned, they can't see it (or they see it as locked)
-        // To be extremely user friendly, let's display all but tag the edit/save capability strictly!
+        const myName = (loggedInUser?.name || "").trim().toLowerCase();
+        const isAssigned = !!myName && evt.assignedEmployee.trim().toLowerCase() === myName;
+        if (!isAssigned) return false;
       }
 
       return true;
     });
-  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, isHighPrivilege, activeRole]);
+  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, isHighPrivilege, activeRole, loggedInUser]);
 
   // Month View Days Generation
   const monthDays = useMemo(() => {
