@@ -56,18 +56,6 @@ export interface DispatchEvent {
   department?: string; // e.g. Plumbing, HVAC, Electrical
 }
 
-// Preset systems data for assignment dropdowns
-const AVAILABLE_TECHNICIANS = [
-  "John Doe",
-  "Sarah Jenkins",
-  "Pete Rogers",
-  "Pete Moore",
-  "Clara Oswald",
-  "Clark Kent",
-  "Emma Watson",
-  "Theresa Williams"
-];
-
 const AVAILABLE_CREWS = [
   "Crew Alpha",
   "Crew Beta",
@@ -117,7 +105,8 @@ const MOCK_MAP_GRID = {
 export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList } = useDomainData();
+  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList, recentRoster } = useDomainData();
+  const AVAILABLE_TECHNICIANS = recentRoster.map(r => r.name);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,

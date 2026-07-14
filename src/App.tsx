@@ -4816,12 +4816,7 @@ Access to full financial telemetry is restricted.`;
                                   <p className="text-lg font-sans font-black text-[#1F3557] tracking-tight leading-none">
                                     {isFinAuthorized ? (
                                       <>
-                                        {revenuePageFilter === "Pay Period" && "$24,850.00"}
-                                        {revenuePageFilter === "Week" && "$5,820.00"}
-                                        {revenuePageFilter === "Month" && "$24,850.00"}
-                                        {revenuePageFilter === "Quarter" && "$74,550.00"}
-                                        {revenuePageFilter === "Year" && "$298,000.00"}
-                                        {revenuePageFilter === "Custom" && "$15,200.00"}
+                                        {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                       </>
                                     ) : (
                                       <span className="text-sm font-sans font-extrabold text-red-600 bg-red-100 px-2 py-0.5 rounded-md border border-red-200">
@@ -5684,12 +5679,7 @@ Access to full financial telemetry is restricted.`;
                         {/* Summary Display on Graph card */}
                         <div className="flex flex-wrap items-baseline gap-4">
                           <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
-                            {revenuePageFilter === "Pay Period" && "$24,850.00"}
-                            {revenuePageFilter === "Week" && "$5,820.00"}
-                            {revenuePageFilter === "Month" && "$24,850.00"}
-                            {revenuePageFilter === "Quarter" && "$74,550.00"}
-                            {revenuePageFilter === "Year" && "$298,000.00"}
-                            {revenuePageFilter === "Custom" && "$15,200.00"}
+                            {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </span>
                           <span className="text-xs font-bold text-emerald-600 flex items-center bg-emerald-500/10 px-2.5 py-1 rounded-lg">
                             <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" />
@@ -5843,10 +5833,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Total Revenue",
                             key: "revenue",
-                            val: revenuePageFilter === "Week" ? "$5,820.00" : revenuePageFilter === "Quarter" ? "$74,550.00" : revenuePageFilter === "Year" ? "$298,000.00" : revenuePageFilter === "Custom" ? "$15,200.00" : "$24,850.00",
-                            change: revenuePageFilter === "Week" ? "4.5%" : revenuePageFilter === "Quarter" ? "14.1%" : revenuePageFilter === "Year" ? "12.8%" : revenuePageFilter === "Custom" ? "8.7%" : "18.2%",
+                            val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                            change: null,
                             isUp: true,
-                            comp: revenuePageFilter === "Week" ? "vs prior week" : revenuePageFilter === "Quarter" ? "vs prior quarter" : revenuePageFilter === "Year" ? "vs prior year" : "vs prior period",
+                            comp: "Real revenue from completed jobs",
                             icon: DollarSign,
                             color: "text-emerald-500",
                             bgColor: "bg-emerald-500/10"
@@ -5854,10 +5844,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Net Profit",
                             key: "profit",
-                            val: revenuePageFilter === "Week" ? "$2,140.00" : revenuePageFilter === "Quarter" ? "$28,860.00" : revenuePageFilter === "Year" ? "$115,000.00" : revenuePageFilter === "Custom" ? "$5,850.00" : "$9,620.00",
-                            change: revenuePageFilter === "Week" ? "5.1%" : revenuePageFilter === "Quarter" ? "15.2%" : revenuePageFilter === "Year" ? "13.9%" : revenuePageFilter === "Custom" ? "9.4%" : "16.7%",
+                            val: "$0.00",
+                            change: null,
                             isUp: true,
-                            comp: revenuePageFilter === "Week" ? "vs prior week" : revenuePageFilter === "Quarter" ? "vs prior quarter" : revenuePageFilter === "Year" ? "vs prior year" : "vs prior period",
+                            comp: "Expense tracking not built yet",
                             icon: TrendingUp,
                             color: "text-blue-500",
                             bgColor: "bg-blue-500/10"
@@ -5865,10 +5855,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Total Expenses",
                             key: "expenses",
-                            val: revenuePageFilter === "Week" ? "$2,910.00" : revenuePageFilter === "Quarter" ? "$37,150.00" : revenuePageFilter === "Year" ? "$148,000.00" : revenuePageFilter === "Custom" ? "$7,600.00" : "$12,430.00",
-                            change: revenuePageFilter === "Week" ? "3.2%" : revenuePageFilter === "Quarter" ? "11.8%" : revenuePageFilter === "Year" ? "9.6%" : revenuePageFilter === "Custom" ? "6.5%" : "12.5%",
+                            val: "$0.00",
+                            change: null,
                             isUp: true,
-                            comp: revenuePageFilter === "Week" ? "vs prior week" : revenuePageFilter === "Quarter" ? "vs prior quarter" : revenuePageFilter === "Year" ? "vs prior year" : "vs prior period",
+                            comp: "Expense tracking not built yet",
                             icon: TrendingDown,
                             color: "text-rose-500",
                             bgColor: "bg-rose-500/10"
@@ -5876,10 +5866,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Gross Payroll",
                             key: "payroll",
-                            val: revenuePageFilter === "Week" ? "$1,420.00" : revenuePageFilter === "Quarter" ? "$18,690.00" : revenuePageFilter === "Year" ? "$72,000.00" : revenuePageFilter === "Custom" ? "$3,800.00" : "$6,230.00",
-                            change: revenuePageFilter === "Week" ? "2.0%" : revenuePageFilter === "Quarter" ? "7.4%" : revenuePageFilter === "Year" ? "6.1%" : revenuePageFilter === "Custom" ? "4.1%" : "8.9%",
+                            val: "$0.00",
+                            change: null,
                             isUp: true,
-                            comp: revenuePageFilter === "Week" ? "vs prior week" : revenuePageFilter === "Quarter" ? "vs prior quarter" : revenuePageFilter === "Year" ? "vs prior year" : "vs prior period",
+                            comp: "Payroll tracking not built yet",
                             icon: Users,
                             color: "text-purple-500",
                             bgColor: "bg-purple-500/10"
@@ -5887,10 +5877,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Accrued Taxes",
                             key: "taxes",
-                            val: revenuePageFilter === "Week" ? "$510.00" : revenuePageFilter === "Quarter" ? "$6,540.00" : revenuePageFilter === "Year" ? "$26,800.00" : revenuePageFilter === "Custom" ? "$1,350.00" : "$2,180.00",
-                            change: revenuePageFilter === "Week" ? "1.1%" : revenuePageFilter === "Quarter" ? "1.5%" : revenuePageFilter === "Year" ? "0.8%" : revenuePageFilter === "Custom" ? "0.5%" : "2.1%",
+                            val: "$0.00",
+                            change: null,
                             isUp: false,
-                            comp: revenuePageFilter === "Week" ? "vs prior week" : revenuePageFilter === "Quarter" ? "vs prior quarter" : revenuePageFilter === "Year" ? "vs prior year" : "vs prior period",
+                            comp: "Tax tracking not built yet",
                             icon: Landmark,
                             color: "text-amber-500",
                             bgColor: "bg-amber-500/10"
@@ -5907,9 +5897,11 @@ Access to full financial telemetry is restricted.`;
                             <div>
                               <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight">{card.val}</p>
                               <div className="flex items-center gap-1.5 mt-1">
-                                <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
-                                  {card.isUp ? "+" : "-"}{card.change}
-                                </span>
+                                {card.change && (
+                                  <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
+                                    {card.isUp ? "+" : "-"}{card.change}
+                                  </span>
+                                )}
                                 <span className="text-[9.5px] text-[#5E7393] font-sans font-medium">{card.comp}</span>
                               </div>
                             </div>
@@ -5926,21 +5918,20 @@ Access to full financial telemetry is restricted.`;
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                           {[
-                            { name: "Materials", baseVal: 3450, change: "+14.8%", isUp: true, target: "inventory", label: "Inventory" },
-                            { name: "Fuel", baseVal: 1250, change: "+11.3%", isUp: true, target: "placeholder_fuel", label: "Expenses" },
-                            { name: "Vehicle Maintenance", baseVal: 980, change: "+9.7%", isUp: true, target: "placeholder_vehicle", label: "Expenses" },
-                            { name: "Equipment", baseVal: 1870, change: "+7.4%", isUp: true, target: "inventory", label: "Inventory" },
-                            { name: "Tools", baseVal: 620, change: "+6.2%", isUp: true, target: "inventory", label: "Inventory" },
-                            { name: "Insurance", baseVal: 1200, change: "-1.3%", isUp: false, target: "documents", label: "Documents" },
-                            { name: "Taxes", baseVal: 2180, change: "-2.1%", isUp: false, target: "documents", label: "Documents" },
-                            { name: "Marketing", baseVal: 890, change: "+4.6%", isUp: true, target: "integrations", label: "Web Integration" },
-                            { name: "Software & Subs", baseVal: 460, change: "+3.1%", isUp: true, target: "integrations", label: "Integrations" },
-                            { name: "Utilities", baseVal: 310, change: "+2.4%", isUp: true, target: "placeholder_utilities", label: "Expenses" },
-                            { name: "Office Supplies", baseVal: 210, change: "+1.8%", isUp: true, target: "inventory", label: "Inventory" },
-                            { name: "Custom Expense", baseVal: 110, change: "+0.9%", isUp: true, target: "placeholder_custom", label: "Expenses" }
+                            { name: "Materials", target: "inventory", label: "Inventory" },
+                            { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
+                            { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
+                            { name: "Equipment", target: "inventory", label: "Inventory" },
+                            { name: "Tools", target: "inventory", label: "Inventory" },
+                            { name: "Insurance", target: "documents", label: "Documents" },
+                            { name: "Taxes", target: "documents", label: "Documents" },
+                            { name: "Marketing", target: "integrations", label: "Web Integration" },
+                            { name: "Software & Subs", target: "integrations", label: "Integrations" },
+                            { name: "Utilities", target: "placeholder_utilities", label: "Expenses" },
+                            { name: "Office Supplies", target: "inventory", label: "Inventory" },
+                            { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
                           ].map((cat, idx) => {
-                            const scale = revenuePageFilter === "Week" ? 0.23 : revenuePageFilter === "Quarter" ? 3.0 : revenuePageFilter === "Year" ? 12.0 : revenuePageFilter === "Custom" ? 0.61 : 1.0;
-                            const currentAmt = "$" + (cat.baseVal * scale).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            const currentAmt = "$0.00";
                             
                             return (
                               <div
@@ -5964,9 +5955,6 @@ Access to full financial telemetry is restricted.`;
                                 </div>
                                 
                                 <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2 mt-1">
-                                  <span className={`text-[9px] font-bold ${cat.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1 rounded`}>
-                                    {cat.change}
-                                  </span>
                                   <span className="text-[8.5px] font-bold text-[#315C9F] group-hover:underline flex items-center gap-0.5 shrink-0">
                                     {cat.label} ➔
                                   </span>
@@ -6014,13 +6002,8 @@ Access to full financial telemetry is restricted.`;
                         {payrollSearch && (
                           <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
                             Found {
-                              [
-                                { name: "Theresa W.", role: "Plumber", hours: "48.50", ot: "6.00", pay: "$1,620.00", date: "5/15/2025", status: "Active", avatar: "TW", color: "bg-blue-100 text-[#315C9F]" },
-                                { name: "Albert F.", role: "Technician", hours: "42.25", ot: "2.50", pay: "$1,235.00", date: "5/15/2025", status: "Active", avatar: "AF", color: "bg-green-100 text-green-600" },
-                                { name: "Esther H.", role: "Dispatcher", hours: "40.00", ot: "0.00", pay: "$960.00", date: "5/15/2025", status: "Active", avatar: "EH", color: "bg-purple-100 text-[#8b5cf6]" },
-                                { name: "James W.", role: "Helper", hours: "38.75", ot: "0.00", pay: "$756.00", date: "5/15/2025", status: "Active", avatar: "JW", color: "bg-amber-100 text-[#f59e0b]" },
-                                { name: "Brandon M.", role: "Plumber", hours: "44.00", ot: "4.00", pay: "$1,390.00", date: "5/15/2025", status: "Active", avatar: "BM", color: "bg-blue-100 text-blue-800" }
-                              ].filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase())).length
+                              (recentRoster as { name: string; role: string }[])
+                                .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase())).length
                             } employees matching "{payrollSearch}"
                           </div>
                         )}
@@ -6039,39 +6022,29 @@ Access to full financial telemetry is restricted.`;
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
-                              {[
-                                { name: "Theresa W.", role: "Plumber", hours: 48.5, ot: 6.0, pay: 1620, date: "5/15/2025", status: "Active", avatar: "TW", color: "bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF]" },
-                                { name: "Albert F.", role: "Technician", hours: 42.25, ot: 2.5, pay: 1235, date: "5/15/2025", status: "Active", avatar: "AF", color: "bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF]" },
-                                { name: "Esther H.", role: "Dispatcher", hours: 40.0, ot: 0.0, pay: 960, date: "5/15/2025", status: "Active", avatar: "EH", color: "bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF]" },
-                                { name: "James W.", role: "Helper", hours: 38.75, ot: 0.0, pay: 756, date: "5/15/2025", status: "Active", avatar: "JW", color: "bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF]" },
-                                { name: "Brandon M.", role: "Plumber", hours: 44.0, ot: 4.0, pay: 1390, date: "5/15/2025", status: "Active", avatar: "BM", color: "bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF]" }
-                              ]
+                              {recentRoster
                                 .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
                                 .map((emp, idx) => {
-                                  const scale = revenuePageFilter === "Week" ? 0.23 : revenuePageFilter === "Quarter" ? 3.0 : revenuePageFilter === "Year" ? 12.0 : revenuePageFilter === "Custom" ? 0.61 : 1.0;
-                                  const hoursStr = (emp.hours * (revenuePageFilter === "Custom" ? 0.8 : scale === 1.0 ? 1.0 : scale * 0.9)).toFixed(2);
-                                  const otStr = emp.ot > 0 ? (emp.ot * (revenuePageFilter === "Custom" ? 0.8 : scale === 1.0 ? 1.0 : scale * 0.9)).toFixed(2) : "0.00";
-                                  const payStr = "$" + (emp.pay * scale).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                  
+                                  const initials = emp.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
                                   return (
                                     <tr
-                                      key={idx}
+                                      key={emp.id || idx}
                                       onClick={() => openPlaceholderPage(`Roster Profile: ${emp.name}`, "👤")}
                                       className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
                                     >
                                       <td className="px-4 py-3 flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-full ${emp.color} font-black text-xs flex items-center justify-center border border-[#9EC8EF] shadow-sm`}>
-                                          {emp.avatar}
+                                        <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
+                                          {initials}
                                         </div>
                                         <div>
                                           <p className="font-extrabold text-[#1F3557]">{emp.name}</p>
                                           <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
                                         </div>
                                       </td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hoursStr}</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otStr}</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{payStr}</td>
-                                      <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{emp.date}</td>
+                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
+                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
+                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">$0.00</td>
+                                      <td className="px-4 py-3 text-center font-mono text-[#5E7393]">—</td>
                                       <td className="px-4 py-3 text-center">
                                         <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9.5px] font-bold rounded">
                                           {emp.status}

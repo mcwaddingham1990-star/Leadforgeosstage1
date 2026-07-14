@@ -276,10 +276,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     return rolesWithPermission.includes(activeRole);
   }, [activeRole]);
 
-  // Sync Logged-In User's state to Sarah Jenkins (or currently simulated profile)
   // We'll create or update the logged-in user in our employees array dynamically if clocked in
   useEffect(() => {
-    const userName = loggedInUser?.name || "Sarah Jenkins";
+    const userName = loggedInUser?.name || "Unknown User";
     const userRole = activeRole || "Owner";
     
     setEmployees(prev => {
@@ -416,7 +415,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     setClockInTime(timeStr);
     setClockInDuration(0);
 
-    const userName = loggedInUser?.name || "Sarah Jenkins";
+    const userName = loggedInUser?.name || "Unknown User";
     const selectedJob = activeJobs.find(j => j.id === jobId);
 
     // Add entry to state
@@ -465,7 +464,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const dateStr = now.toISOString().split('T')[0];
     const gps = await getCurrentGPSString();
 
-    const userName = loggedInUser?.name || "Sarah Jenkins";
+    const userName = loggedInUser?.name || "Unknown User";
 
     setEmployees(prev => prev.map(e => {
       if (e.name === userName) {
@@ -510,7 +509,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
-    const userName = loggedInUser?.name || "Sarah Jenkins";
+    const userName = loggedInUser?.name || "Unknown User";
     const gps = await getCurrentGPSString();
 
     setEmployees(prev => prev.map(e => {
@@ -543,7 +542,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
-    const userName = loggedInUser?.name || "Sarah Jenkins";
+    const userName = loggedInUser?.name || "Unknown User";
     const gps = await getCurrentGPSString();
 
     setEmployees(prev => prev.map(e => {

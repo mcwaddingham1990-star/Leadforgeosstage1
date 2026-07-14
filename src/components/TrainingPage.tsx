@@ -99,248 +99,6 @@ export interface EmployeeTrainingProfile {
   trainingHours: number;
 }
 
-// Initial dummy courses
-const INITIAL_COURSES: Course[] = [
-  {
-    id: "course_osha",
-    name: "OSHA 10-Hour Construction Safety",
-    category: "Safety",
-    description: "Essential safety awareness training for technicians and drivers. Covers fall protection, hazard communication, electrical safety, and personal protective equipment (PPE).",
-    thumbnail: "🚧",
-    estimatedTime: "10 hours",
-    difficulty: "Beginner",
-    requiredRoles: ["Technician", "Driver", "Owner"],
-    passingScore: 80,
-    isFavorite: true,
-    lessons: [
-      {
-        id: "osha_l1",
-        title: "Introduction to OSHA and Safety Standards",
-        content: "### OSHA Overview\nOSHA was created to encourage employers and employees to reduce workplace hazards and implement safety programs. This lesson details rights, responsibilities, and standards.\n\n### General Duty Clause\nEmployers must furnish a place of employment free from recognized hazards that are causing or are likely to cause death or serious physical harm.",
-        videos: ["https://example.com/videos/osha_intro.mp4"],
-        documents: ["OSHA_QuickCard_Safety.pdf"]
-      },
-      {
-        id: "osha_l2",
-        title: "Fall Hazard Identification & Prevention",
-        content: "### Focus Four Hazards: Falls\nFalls represent the leading cause of fatalities in construction. Always maintain a 3-point contact on ladders and inspect scaffolding prior to every shift.\n\n### Fall Protection Systems\n- Guardrails: 42 inches tall (+/- 3 inches)\n- Safety Nets\n- Personal Fall Arrest Systems (PFAS): Anchor points must support 5,000 lbs per employee attached.",
-        images: ["fall_prevention_diagram.png"]
-      }
-    ],
-    quizzes: [
-      {
-        id: "osha_q1",
-        question: "What is the leading cause of worker fatalities on construction and field service sites?",
-        type: "multiple_choice",
-        options: ["Falls", "Electrocution", "Struck-by equipment", "Caught-in-between"],
-        correctAnswer: "Falls"
-      },
-      {
-        id: "osha_q2",
-        question: "Anchor points for personal fall arrest systems must support how many pounds per attached employee?",
-        type: "multiple_choice",
-        options: ["1,000 lbs", "2,500 lbs", "5,000 lbs", "10,000 lbs"],
-        correctAnswer: "5,000 lbs"
-      }
-    ]
-  },
-  {
-    id: "course_epa",
-    name: "EPA Section 608 Refrigerant Recovery certification",
-    category: "HVAC",
-    description: "Technician HVAC prep for the EPA Section 608 core and Type I, II, and III equipment regulations. Essential for legal handling of chemical refrigerants.",
-    thumbnail: "❄️",
-    estimatedTime: "3 hours",
-    difficulty: "Advanced",
-    requiredRoles: ["Technician"],
-    passingScore: 85,
-    lessons: [
-      {
-        id: "epa_l1",
-        title: "Refrigerant Handling Legal Statutes",
-        content: "### Section 608 Rules\nIt is illegal to intentionally vent ozone-depleting substances or substitute refrigerants during maintenance, service, repair, or disposal.\n\n### Penalties\nViolations can result in massive fines (over $44,000 per day, per violation) and loss of specialized service licenses.",
-        documents: ["EPA_608_Regulation_Review.pdf"]
-      }
-    ],
-    quizzes: [
-      {
-        id: "epa_q1",
-        question: "It is legal to vent substitute HFC refrigerants directly into the atmosphere.",
-        type: "true_false",
-        options: ["True", "False"],
-        correctAnswer: "False"
-      }
-    ]
-  },
-  {
-    id: "course_electric",
-    name: "Residential Electrical Standards & Safety",
-    category: "Electrical",
-    description: "In-depth electrical diagnostics training covering grounding rules, circuit tracing, GFCI installations, and lockout-tagout procedures.",
-    thumbnail: "⚡",
-    estimatedTime: "4 hours",
-    difficulty: "Intermediate",
-    requiredRoles: ["Technician"],
-    passingScore: 80,
-    lessons: [
-      {
-        id: "elect_l1",
-        title: "Lockout/Tagout (LOTO) Procedures",
-        content: "### De-energizing Systems\nBefore beginning work on any electric service box or HVAC compressor, identify all energy sources, isolate them, apply lockout locks, and TAG OUT the switch."
-      }
-    ],
-    quizzes: [
-      {
-        id: "elect_q1",
-        question: "What is the very first step of a standard Lockout-Tagout (LOTO) sequence?",
-        type: "multiple_choice",
-        options: ["Isolate the energy sources", "Notify affected employees", "Apply lockout padlocks", "Verify isolation of systems"],
-        correctAnswer: "Notify affected employees"
-      }
-    ]
-  },
-  {
-    id: "course_cdl",
-    name: "CDL Class A Cargo Securing & Safe Operations",
-    category: "CDL",
-    description: "Driver training for commercial fleets. Covers federal motor carrier safety administration requirements, pre-trip vehicle checks, and load securement.",
-    thumbnail: "🚛",
-    estimatedTime: "2 hours",
-    difficulty: "Beginner",
-    requiredRoles: ["Driver"],
-    passingScore: 80,
-    lessons: [
-      {
-        id: "cdl_l1",
-        title: "Pre-Trip Inspection Protocol",
-        content: "### The 7-Step Inspection Method\nFederal regulations mandate checking tires, brakes, fluids, connections, air systems, lighting, and securing gear prior to moving any vehicle over 26,000 lbs."
-      }
-    ],
-    quizzes: [
-      {
-        id: "cdl_q1",
-        question: "A pre-trip vehicle inspection is optional if the driver is operating on local commercial routes under 150 miles.",
-        type: "true_false",
-        options: ["True", "False"],
-        correctAnswer: "False"
-      }
-    ]
-  },
-  {
-    id: "course_billing",
-    name: "Customer Relations & LeadForge Billing Protocols",
-    category: "Office",
-    description: "Teaches dispatchers, office managers, and sales reps how to execute billing runs, handle customer escalations, and log invoice revisions.",
-    thumbnail: "💳",
-    estimatedTime: "1.5 hours",
-    difficulty: "Beginner",
-    requiredRoles: ["Office Manager", "Salesperson", "Dispatcher"],
-    passingScore: 75,
-    lessons: [
-      {
-        id: "billing_l1",
-        title: "Logging and Confirming Work Orders",
-        content: "### CRM Invoicing Guide\nAlways capture the customer signature before requesting payment. Invoices must list specific materials used and labor hours logged with a Time Clock reference."
-      }
-    ],
-    quizzes: [
-      {
-        id: "billing_q1",
-        question: "Invoice billing runs must link directly to which validated reference?",
-        type: "multiple_choice",
-        options: ["Lead Source", "Time Clock logs", "Unrelated estimates", "Customer's LinkedIn profile"],
-        correctAnswer: "Time Clock logs"
-      }
-    ]
-  }
-];
-
-// Initial profiles
-const INITIAL_PROFILES: EmployeeTrainingProfile[] = [
-  {
-    employeeName: "John Doe",
-    role: "Driver",
-    department: "Field",
-    assignedCourseIds: ["course_cdl", "course_osha"],
-    completedCourseIds: ["course_cdl"],
-    courseProgress: {
-      course_cdl: 100,
-      course_osha: 25
-    },
-    currentLessonIndex: {
-      course_cdl: 0,
-      course_osha: 1
-    },
-    quizScores: {
-      course_cdl: [100]
-    },
-    certifications: [
-      { id: "cert_cdl", name: "CDL Class A General License", type: "CDL", status: "Active", issueDate: "2025-01-10", expirationDate: "2027-01-10" }
-    ],
-    trainingHours: 4.5
-  },
-  {
-    employeeName: "Jane Miller",
-    role: "Office Manager",
-    department: "Office",
-    assignedCourseIds: ["course_billing", "course_osha"],
-    completedCourseIds: [],
-    courseProgress: {
-      course_billing: 50,
-      course_osha: 0
-    },
-    currentLessonIndex: {
-      course_billing: 0,
-      course_osha: 0
-    },
-    quizScores: {},
-    certifications: [],
-    trainingHours: 0.75
-  },
-  {
-    employeeName: "David Vance",
-    role: "Technician",
-    department: "Field",
-    assignedCourseIds: ["course_osha", "course_epa", "course_electric"],
-    completedCourseIds: [],
-    courseProgress: {
-      course_osha: 80,
-      course_epa: 0,
-      course_electric: 10
-    },
-    currentLessonIndex: {
-      course_osha: 1,
-      course_epa: 0,
-      course_electric: 0
-    },
-    quizScores: {},
-    certifications: [
-      { id: "cert_osha_expired", name: "OSHA 10-Hour Safety Card", type: "OSHA", status: "Expired", issueDate: "2024-06-01", expirationDate: "2025-06-01" }
-    ],
-    trainingHours: 8.2
-  },
-  {
-    employeeName: "Sarah Jenkins",
-    role: "Owner",
-    department: "Management",
-    assignedCourseIds: ["course_osha"],
-    completedCourseIds: ["course_osha"],
-    courseProgress: {
-      course_osha: 100
-    },
-    currentLessonIndex: {
-      course_osha: 1
-    },
-    quizScores: {
-      course_osha: [100, 100]
-    },
-    certifications: [
-      { id: "cert_osha_owner", name: "OSHA Construction safety supervisor", type: "OSHA", status: "Active", issueDate: "2025-05-15", expirationDate: "2028-05-15" }
-    ],
-    trainingHours: 12.0
-  }
-];
-
 export const TrainingPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -450,47 +208,26 @@ export const TrainingPage: React.FC = () => {
   useEffect(() => {
     if (!businessId) return;
 
-    // 1. Subscribe to courses
+    // 1. Subscribe to courses (starts empty for every new account)
     const qCourses = query(collection(db, "courses"), where("businessId", "==", businessId));
     const unsubCourses = onSnapshot(qCourses, (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_COURSES.forEach(async (course) => {
-          await setDoc(doc(db, "courses", course.id), {
-            ...course,
-            businessId,
-            updatedAt: new Date().toISOString()
-          });
-        });
-      } else {
-        const items: Course[] = [];
-        snapshot.forEach((docSnap) => {
-          const { businessId: _, updatedAt: __, ...courseData } = docSnap.data();
-          items.push(courseData as Course);
-        });
-        _setCourses(items);
-      }
+      const items: Course[] = [];
+      snapshot.forEach((docSnap) => {
+        const { businessId: _, updatedAt: __, ...courseData } = docSnap.data();
+        items.push(courseData as Course);
+      });
+      _setCourses(items);
     });
 
-    // 2. Subscribe to profiles
+    // 2. Subscribe to profiles (starts empty for every new account)
     const qProfiles = query(collection(db, "training_profiles"), where("businessId", "==", businessId));
     const unsubProfiles = onSnapshot(qProfiles, (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_PROFILES.forEach(async (profile) => {
-          const profileId = profile.employeeName.replace(/\s+/g, "_").toLowerCase();
-          await setDoc(doc(db, "training_profiles", profileId), {
-            ...profile,
-            businessId,
-            updatedAt: new Date().toISOString()
-          });
-        });
-      } else {
-        const items: EmployeeTrainingProfile[] = [];
-        snapshot.forEach((docSnap) => {
-          const { businessId: _, updatedAt: __, ...profileData } = docSnap.data();
-          items.push(profileData as EmployeeTrainingProfile);
-        });
-        _setProfiles(items);
-      }
+      const items: EmployeeTrainingProfile[] = [];
+      snapshot.forEach((docSnap) => {
+        const { businessId: _, updatedAt: __, ...profileData } = docSnap.data();
+        items.push(profileData as EmployeeTrainingProfile);
+      });
+      _setProfiles(items);
     });
 
     return () => {
@@ -641,8 +378,8 @@ export const TrainingPage: React.FC = () => {
 
     // Update Profile state
     setProfiles(prev => prev.map(p => {
-      // Find matching profile for current simulated user or Sarah Jenkins
-      const targetUser = loggedInUser?.name || "Sarah Jenkins";
+      // Find matching profile for the current logged-in user
+      const targetUser = loggedInUser?.name || "Unknown User";
       if (p.employeeName === targetUser) {
         const scores = p.quizScores[course.id] ? [...p.quizScores[course.id], scorePct] : [scorePct];
         const newQuizScores = { ...p.quizScores, [course.id]: scores };
@@ -1131,7 +868,7 @@ export const TrainingPage: React.FC = () => {
             ) : (
               filteredCourses.map(course => {
                 // Find simulated completion %
-                const userProfile = profiles.find(p => p.employeeName === (loggedInUser?.name || "Sarah Jenkins"));
+                const userProfile = profiles.find(p => p.employeeName === (loggedInUser?.name || "Unknown User"));
                 const progress = userProfile?.courseProgress[course.id] || 0;
                 const isRequired = course.requiredRoles.includes(activeRole || loggedInUser?.role || "Owner");
 
