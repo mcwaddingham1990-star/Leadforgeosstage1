@@ -2284,7 +2284,7 @@ Access to full financial telemetry is restricted.`;
                       src={LOGO_URL}
                       alt="Owner's Local OS Logo"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-contain drop-shadow-[0_2px_10px_rgba(30,144,255,0.2)]"
+                      className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
                       referrerPolicy="no-referrer"
                     />
                   </div>
