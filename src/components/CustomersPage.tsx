@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { useAuth } from "../context/AuthContext";
+import { hasPermission } from "../types/permissions";
 import {
   Search,
   Plus,
@@ -59,8 +61,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
     navigateToScreen: onNavigateToScreen,
-    logOperationalEvent
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
+  const { loggedInUser } = useAuth();
+  const canCreateCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "create");
+  const canDeleteCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "delete");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<
     "All" | "Residential" | "Commercial" | "Active" | "Inactive" | "Past Due" | "VIP" | "Recently Added"
@@ -287,6 +293,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleAddCustomer = () => {
     if (!formContact.trim()) return;
+    if (!canCreateCustomer) {
+      triggerNotification("You don't have permission to add customers.");
+      return;
+    }
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
 
@@ -342,6 +352,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleDeleteCustomer = () => {
     if (!selectedCustomer) return;
+    if (!canDeleteCustomer) {
+      triggerNotification("You don't have permission to delete customers.");
+      setIsDeleteConfirmOpen(false);
+      return;
+    }
     setCustomers(prev => prev.filter(c => c.id !== selectedCustomer.id));
     setIsDeleteConfirmOpen(false);
     setSelectedCustomer(null);
@@ -469,13 +484,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
-            <button
-              onClick={openAddModal}
-              className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#9EC8EF] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Customer
-            </button>
+            {canCreateCustomer && (
+              <button
+                onClick={openAddModal}
+                className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#9EC8EF] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Customer
+              </button>
+            )}
             <button
               onClick={() => {
                 setImportFileError(null);
@@ -1664,14 +1681,16 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
                 {/* Footer */}
                 <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between items-center shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsDeleteConfirmOpen(true)}
-                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 hover:text-rose-800 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete Record
-                  </button>
+                  {canDeleteCustomer && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDeleteConfirmOpen(true)}
+                      className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 hover:text-rose-800 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete Record
+                    </button>
+                  )}
                   <div className="flex gap-2">
                     <button
                       type="button"

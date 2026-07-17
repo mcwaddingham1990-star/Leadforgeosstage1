@@ -1,9 +1,13 @@
 import { createContext, useContext } from "react";
 
+import { GranularPermissions } from "../types/permissions";
+
 export interface LoggedInUser {
   email: string;
   role: string;
   permissions: string[];
+  /** Per-module, per-action permissions (view/create/edit/delete/approve/export/manage). */
+  granularPermissions?: GranularPermissions;
   isEmployee?: boolean;
   name?: string;
   goals?: string;
