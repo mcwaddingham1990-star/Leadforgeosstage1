@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { hasPermission } from "../types/permissions";
 import {
   Search,
   Plus,
@@ -161,8 +162,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   // Role permissions checking
   const canEdit = useMemo(() => {
     const role = activeRole || "Owner";
-    return ["Owner", "General Manager", "Office Manager", "Operations Manager", "Warehouse / Inventory Manager", "Inventory Manager", "Warehouse Manager"].includes(role);
-  }, [activeRole]);
+    const legacyRoleCheck = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Warehouse / Inventory Manager", "Inventory Manager", "Warehouse Manager"].includes(role);
+    return legacyRoleCheck || hasPermission(loggedInUser?.granularPermissions, "inventory", "delete");
+  }, [activeRole, loggedInUser]);
+  const canCreateInventory = hasPermission(loggedInUser?.granularPermissions, "inventory", "create") || canEdit;
 
   // Calculations
   const stats = useMemo(() => {
@@ -323,8 +326,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   // Add Item Submit
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEdit) {
-      triggerToast("Access Denied: Technicians can only request or consume inventory.");
+    if (isEditMode ? !canEdit : !canCreateInventory) {
+      triggerToast("Access Denied: you don't have permission to do that.");
       return;
     }
     if (!formName.trim()) return;

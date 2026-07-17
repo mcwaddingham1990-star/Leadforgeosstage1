@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import { buildGranularFromCapabilities, fullAccessGranular, defaultGranularFromModuleList, GranularPermissions } from "./types/permissions";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -945,10 +946,12 @@ export default function App() {
             const isOnboarded = profileData.isOnboarded ?? false;
 
             if (isEmployee || isOnboarded) {
+              const resolvedPermissions = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
               setLoggedInUser({
                 email: user.email || "",
                 role: profileData.role || "Owner",
-                permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+                permissions: resolvedPermissions,
+                granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "standard") : fullAccessGranular(resolvedPermissions)),
                 isEmployee: isEmployee,
                 name: profileData.name || user.displayName || "Owner",
                 goals: profileData.goals || ""
@@ -985,6 +988,7 @@ export default function App() {
                 email: user.email || "",
                 role: "Owner",
                 permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+                granularPermissions: profileData.granularPermissions || fullAccessGranular(profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
                 isEmployee: false,
                 name: profileData.name || "Owner",
                 goals: ""
@@ -997,6 +1001,7 @@ export default function App() {
               email: user.email || "",
               role: "Owner",
               permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+              granularPermissions: fullAccessGranular(["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
               isEmployee: false,
               name: user.displayName || "Owner",
               goals: ""
@@ -1446,7 +1451,7 @@ Access to full financial telemetry is restricted.`;
   const [roleIdPendingDelete, setRoleIdPendingDelete] = useState<string | null>(null);
   
   // Generated invites state for modal
-  const [generatedInvites, setGeneratedInvites] = useState<Array<{ code: string; role: string; permissions: string[] }>>([]);
+  const [generatedInvites, setGeneratedInvites] = useState<Array<{ code: string; role: string; permissions: string[]; granularPermissions?: GranularPermissions }>>([]);
   const [showInvitesModal, setShowInvitesModal] = useState(false);
 
   useEffect(() => {
@@ -1585,11 +1590,13 @@ Access to full financial telemetry is restricted.`;
       const user = userCredential.user;
 
       // 2. Create owner user profile document
+      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
       const userProfile = {
         uid: user.uid,
         email: cleanEmail,
         role: "Owner",
-        permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"],
+        permissions: ownerPermissions,
+        granularPermissions: fullAccessGranular(ownerPermissions),
         name: cleanOwner,
         isEmployee: false,
         businessEmail: cleanEmail,
@@ -1621,6 +1628,7 @@ Access to full financial telemetry is restricted.`;
         email: cleanEmail,
         role: "Owner",
         permissions: userProfile.permissions,
+        granularPermissions: userProfile.granularPermissions,
         isEmployee: false,
         name: cleanOwner,
         goals: ""
@@ -1686,11 +1694,14 @@ Access to full financial telemetry is restricted.`;
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
       if (profileSnap.exists()) {
         const profileData = profileSnap.data();
+        const isEmployeeAcct = profileData.isEmployee ?? false;
+        const resolvedPerms = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
         setLoggedInUser({
           email: user.email || "",
           role: profileData.role || "Owner",
-          permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
-          isEmployee: profileData.isEmployee ?? false,
+          permissions: resolvedPerms,
+          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "standard") : fullAccessGranular(resolvedPerms)),
+          isEmployee: isEmployeeAcct,
           name: profileData.name || user.displayName || "Owner",
           goals: profileData.goals || ""
         });
@@ -1706,10 +1717,12 @@ Access to full financial telemetry is restricted.`;
           triggerNotification(`Signed in as Owner`);
         }
       } else {
+        const fallbackPerms = ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
         setLoggedInUser({
           email: user.email || "",
           role: "Owner",
-          permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
+          permissions: fallbackPerms,
+          granularPermissions: fullAccessGranular(fallbackPerms),
           isEmployee: false,
           name: user.displayName || "Owner",
           goals: ""
@@ -1998,16 +2011,23 @@ Access to full financial telemetry is restricted.`;
 
   // Launch Local OS: generates invites, saves to db, triggers invites modal
   const handleLaunchOS = async () => {
+    if (!email) {
+      triggerNotification("Missing your business email — please sign in again.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       // 1. Save owner business profile
       await saveProfileToFirestore();
       
       // 2. Generate invite codes for all staff
-      const generated: Array<{ code: string; role: string; permissions: string[] }> = [];
+      const generated: Array<{ code: string; role: string; permissions: string[]; granularPermissions: GranularPermissions }> = [];
       for (const r of selectedRoles) {
         // Skip main owner seat (count = 1) since owner is already logged in
         const startIndex = r.id === "owner" ? 1 : 0;
+        const granularPermissions = r.id === "owner"
+          ? fullAccessGranular(r.permissions)
+          : buildGranularFromCapabilities(r.permissions, r.capabilities);
         for (let i = startIndex; i < r.count; i++) {
           const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
           const cleanRolePrefix = r.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8);
@@ -2015,18 +2035,20 @@ Access to full financial telemetry is restricted.`;
           generated.push({
             code,
             role: r.name,
-            permissions: r.permissions
+            permissions: r.permissions,
+            granularPermissions
           });
         }
       }
-      
+
       // 3. Save codes to Firestore
       for (const inv of generated) {
         await setDoc(doc(db, "employee_invites", inv.code), {
           code: inv.code,
           role: inv.role,
-          businessEmail: email || "admin@ownerslocal.com",
+          businessEmail: email,
           permissions: inv.permissions,
+          granularPermissions: inv.granularPermissions,
           status: "pending",
           createdAt: new Date().toISOString()
         });
@@ -2037,13 +2059,7 @@ Access to full financial telemetry is restricted.`;
       triggerNotification("Generated secure team invite codes!");
     } catch (err) {
       console.error("Error launching OS:", err);
-      // Fallback
-      setGeneratedInvites([
-        { code: "OFFICEMANAGER-X9M22A", role: "Office Manager", permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"] },
-        { code: "DRIVER-83J4KQ", role: "Driver", permissions: ["dashboard", "routes", "jobs", "timeclock", "messages"] }
-      ]);
-      setShowInvitesModal(true);
-      triggerNotification("Invite codes generated (offline fallback).");
+      triggerNotification("Couldn't generate invite codes — check your connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -2060,25 +2076,44 @@ Access to full financial telemetry is restricted.`;
     
     setIsSubmitting(true);
     
-    // Look up role & permissions from invite
+    // Look up role & permissions from the real invite record. This must
+    // succeed and resolve a real businessEmail — falling back to a fake
+    // default here would attach a new employee to a business that doesn't
+    // exist, or worse, to whichever fake default every failed lookup shares.
     let inviteRole = "Driver";
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
-    let businessEmail = email || "admin@ownerslocal.com";
-    
+    let inviteGranularPermissions: GranularPermissions = buildGranularFromCapabilities(invitePermissions, { view: true, create: false, edit: false, delete: false, approve: false, export: false });
+    let businessEmail: string | null = null;
+
     try {
-      if (empInviteCode) {
-        const inviteSnap = await getDoc(doc(db, "employee_invites", empInviteCode));
-        if (inviteSnap.exists()) {
-          const inviteData = inviteSnap.data();
-          inviteRole = inviteData.role || inviteRole;
-          invitePermissions = inviteData.permissions || invitePermissions;
-          businessEmail = inviteData.businessEmail || businessEmail;
-        }
+      if (!empInviteCode) {
+        triggerNotification("No invite code found. Please start from the invite code screen.");
+        setIsSubmitting(false);
+        return;
+      }
+      const inviteSnap = await getDoc(doc(db, "employee_invites", empInviteCode));
+      if (!inviteSnap.exists()) {
+        triggerNotification("This invite code is no longer valid. Please request a new one.");
+        setIsSubmitting(false);
+        return;
+      }
+      const inviteData = inviteSnap.data();
+      inviteRole = inviteData.role || inviteRole;
+      invitePermissions = inviteData.permissions || invitePermissions;
+      inviteGranularPermissions = inviteData.granularPermissions || inviteGranularPermissions;
+      businessEmail = inviteData.businessEmail || null;
+      if (!businessEmail) {
+        triggerNotification("This invite is missing a business account. Please ask your owner for a new invite.");
+        setIsSubmitting(false);
+        return;
       }
     } catch (lookupErr) {
-      console.warn("Invite lookup failed (offline/network):", lookupErr);
+      console.error("Invite lookup failed:", lookupErr);
+      triggerNotification("Couldn't verify your invite code right now. Please try again.");
+      setIsSubmitting(false);
+      return;
     }
-    
+
     try {
       // 1. Create real Auth User
       const authResult = await createUserWithEmailAndPassword(auth, cleanEmail, empPassword);
@@ -2088,6 +2123,7 @@ Access to full financial telemetry is restricted.`;
       await setDoc(doc(db, "user_profiles", user.uid), {
         role: inviteRole,
         permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
         isEmployee: true,
         businessEmail,
         isOnboarded: true,
@@ -2103,25 +2139,27 @@ Access to full financial telemetry is restricted.`;
         lastName: empLastName,
         address: empAddress,
         phone: empPhone,
-        photo: empPhoto || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+        photo: empPhoto || "",
         goals: empGoals,
         role: inviteRole,
         permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
         businessEmail,
         createdAt: new Date().toISOString()
       };
       await setDoc(doc(db, "employees", cleanEmail), newEmployee);
-      
+
       // 4. Update invite status
       if (empInviteCode && empInviteCode !== "DRIVER-X4F91") {
         await setDoc(doc(db, "employee_invites", empInviteCode), { status: "completed", usedBy: cleanEmail }, { merge: true });
       }
-      
+
       // 5. Update UI local state
       setLoggedInUser({
         email: cleanEmail,
         role: inviteRole,
         permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
         isEmployee: true,
         name: `${empFirstName} ${empLastName}`,
         goals: empGoals
@@ -3974,15 +4012,17 @@ Access to full financial telemetry is restricted.`;
                               } catch (err) {
                                 console.error("Error setting onboarded flag:", err);
                               }
+                              const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
                               setLoggedInUser({
                                 email,
                                 role: "Owner",
-                                permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
+                                permissions: ownerDashboardPerms,
+                                granularPermissions: fullAccessGranular(ownerDashboardPerms)
                               });
                               setIsLoggedIn(true);
                               setActiveScreen(OS_SCREENS[0]); // Go to dashboard
                               setShowInvitesModal(false);
-                              triggerNotification("Welcome to LeadForge Local OS Dashboard!");
+                              triggerNotification("Welcome to Owner's Local OS Dashboard!");
                             }}
                             className="w-full py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:brightness-105 active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer text-center block font-sans uppercase tracking-wider"
                           >
