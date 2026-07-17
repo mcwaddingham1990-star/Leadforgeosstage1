@@ -2306,46 +2306,27 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO SECTION - Absolutely centered on top. Real HTML/CSS
-                      instead of a flat cropped image, so sizing, spacing,
-                      and color are each independently controllable. */}
+                  {/* LOGO SECTION - Absolutely centered on top. Real transparent
+                      PNG asset (from the source repo, not a screenshot crop) at
+                      its real aspect ratio (1053x371) so nothing is stretched
+                      or squashed; top edge position is unchanged. */}
                   <div
                     style={{
                       top: `${99.895 * scale}px`,
                       left: "50%",
-                      transform: "translateX(-50%)"
+                      transform: "translateX(-50%)",
+                      width: `${357.5 * scale}px`,
+                      height: `${357.5 * scale * (371 / 1053)}px`
                     }}
-                    className="absolute flex items-center justify-center gap-2.5 pointer-events-none whitespace-nowrap"
+                    className="absolute flex justify-center pointer-events-none"
                   >
                     <img
-                      src="/branding/owners-icon.png"
+                      src="/branding/owners-logo.png"
                       alt="Owner's Local OS"
-                      style={{ width: `${58 * scale}px`, height: `${58 * scale}px` }}
-                      className="rounded-2xl object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)] shrink-0"
+                      style={{ width: "100%", height: "100%" }}
+                      className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="flex flex-col items-start">
-                      <div className="flex items-baseline gap-1.5">
-                        <span
-                          style={{ fontSize: `${25 * scale}px` }}
-                          className="font-sans font-black text-white drop-shadow-[0_0_14px_rgba(30,144,255,0.7)] tracking-tight leading-none"
-                        >
-                          Owner's
-                        </span>
-                        <span
-                          style={{ fontSize: `${9.5 * scale}px` }}
-                          className="font-mono font-bold text-cyan-100 bg-[#0B3A66] border border-cyan-200 rounded-md px-1.5 py-0.5 tracking-wider shadow-[0_0_8px_rgba(103,232,249,0.5)] leading-none"
-                        >
-                          LOCAL OS
-                        </span>
-                      </div>
-                      <span
-                        style={{ fontSize: `${9 * scale}px`, marginTop: `${3 * scale}px` }}
-                        className="font-sans font-bold text-fuchsia-300 tracking-wide drop-shadow-[0_0_6px_rgba(232,121,249,0.6)] leading-tight"
-                      >
-                        The AI-Powered Operating System For Local Businesses
-                      </span>
-                    </div>
                   </div>
 
                   {/* CONTINUE WITH GOOGLE BUTTON */}
