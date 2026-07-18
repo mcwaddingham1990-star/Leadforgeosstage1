@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -75,38 +77,43 @@ export interface SettingsPageProps {
   setSelectedRoles: React.Dispatch<React.SetStateAction<SelectedRole[]>>;
 }
 
-// Initial defaults for fields not in parent state
+// Initial defaults for fields not in parent state. Generic system-behavior
+// defaults (frequencies, thresholds, toggles) are fine as sensible starting
+// points; anything that asserts a specific fact about *this* business
+// (an EIN, an insurance policy #, a supplier name, a real person's device)
+// must start blank/zero — a fabricated fact left untouched gets saved as
+// if it were real.
 const INITIAL_DEFAULTS = {
   company: {
-    dba: "LEADFORGELOCAL",
-    website: "www.leadforgelocal.com",
-    email: "waterdrops2001@gmail.com",
+    dba: "",
+    website: "",
+    email: "",
     businessHours: "08:00 AM - 05:00 PM",
     timeZone: "Pacific Standard Time (PST)",
     currency: "USD ($)",
-    taxId: "EIN-88-2910394",
-    licenseNumbers: "LIC-PLUMB-981",
-    insuranceInfo: "Allstate Liability Policy #AL-42442"
+    taxId: "",
+    licenseNumbers: "",
+    insuranceInfo: ""
   },
   payroll: {
     basis: "Hourly",
     overtimeThreshold: 40,
     overtimeMultiplier: 1.5,
     frequency: "Bi-Weekly",
-    nextPayday: "2026-07-10"
+    nextPayday: ""
   },
   taxes: {
-    stateTaxRate: 6.5,
-    countyTaxRate: 2.0,
+    stateTaxRate: 0,
+    countyTaxRate: 0,
     taxOnServices: true,
     taxOnMaterials: true,
     filingSchedule: "Quarterly"
   },
   inventory: {
     lowStockThreshold: 10,
-    defaultLocation: "Seattle Warehouse A",
+    defaultLocation: "",
     autoPoGeneration: true,
-    preferredSupplier: "Grainger"
+    preferredSupplier: ""
   },
   customer: {
     netTerms: "Net 30",
@@ -115,14 +122,14 @@ const INITIAL_DEFAULTS = {
     portalAccess: true
   },
   lead: {
-    source: "Google Local",
+    source: "",
     slaResponseTime: 15,
     autoRouting: "Round-Robin",
     followUpCadence: "3 touches"
   },
   estimate: {
     validityPeriod: 30,
-    footerDisclaimer: "Estimate valid for 30 days. 10% deposit required on approval.",
+    footerDisclaimer: "",
     depositPercentage: 10,
     digitalSignatureReq: true
   },
@@ -139,7 +146,7 @@ const INITIAL_DEFAULTS = {
     liveTrackingExpiry: 120
   },
   route: {
-    startDepot: "Seattle Headquarters",
+    startDepot: "",
     deviationThreshold: 15,
     trafficCompensation: true,
     avoidTolls: false
@@ -148,19 +155,19 @@ const INITIAL_DEFAULTS = {
     requirePhoto: true,
     requireSignature: true,
     requireSafetyCheck: true,
-    standardLaborRate: 95,
+    standardLaborRate: 0,
     defaultType: "Service",
     postCleanupDuration: 15
   },
   document: {
-    invoiceHeader: "Thank you for choosing LeadForge!",
+    invoiceHeader: "",
     maxSizeLimit: 10,
     pdfAutoGeneration: true,
     backupFolderFormat: "YYYY-MM-Customer"
   },
   message: {
-    smsSenderName: "LeadForge",
-    autoReplyText: "Thanks for contacting us! We've received your request.",
+    smsSenderName: "",
+    autoReplyText: "",
     quietHoursStart: "22:00",
     quietHoursEnd: "07:00",
     transcriptRetention: 180
@@ -182,15 +189,11 @@ const INITIAL_DEFAULTS = {
     twoFactorAuth: false,
     sessionTimeout: "1 hr",
     passwordRules: "Strong",
-    loginHistory: [
-      { date: "2026-07-06", time: "18:24", ip: "192.168.1.52", device: "Chrome / Windows 11", location: "Seattle, WA" },
-      { date: "2026-07-06", time: "09:12", ip: "172.56.21.99", device: "Safari / iPhone 15", location: "Seattle, WA" }
-    ],
-    trustedDevices: ["Sarah's iPad Pro", "Seattle Dispatch Terminal #1"],
-    apiTokens: [
-      { name: "QuickBooks Sync", token: "lf_tok_••••••••a3e9", created: "2026-04-12" },
-      { name: "Stripe Gateway", token: "lf_tok_••••••••00fc", created: "2026-05-18" }
-    ]
+    // No real audit-log pipeline exists yet to populate these — stay
+    // honestly empty rather than showing fabricated login/device history.
+    loginHistory: [] as Array<{ date: string; time: string; ip: string; device: string; location: string }>,
+    trustedDevices: [] as string[],
+    apiTokens: [] as Array<{ name: string; token: string; created: string }>
   },
   appearance: {
     theme: "Corporate Blue (Default)",
@@ -202,10 +205,9 @@ const INITIAL_DEFAULTS = {
   },
   backup: {
     autoBackupFrequency: "Daily",
-    backupHistory: [
-      { date: "2026-07-06", time: "03:00", status: "Successful", size: "142.5 MB", type: "Scheduled" },
-      { date: "2026-07-05", time: "03:00", status: "Successful", size: "141.2 MB", type: "Scheduled" }
-    ],
+    // No real backup system exists yet — stay honestly empty rather than
+    // showing fabricated "Successful" backup runs that never happened.
+    backupHistory: [] as Array<{ date: string; time: string; status: string; size: string; type: string }>,
     cloudStorage: "Google Drive"
   }
 };
@@ -236,7 +238,7 @@ export default function SettingsPage({
   selectedRoles,
   setSelectedRoles
 }: SettingsPageProps) {
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions } = useDomainData();
   const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
@@ -244,6 +246,37 @@ export default function SettingsPage({
   // Local settings state combining parent states and auxiliary defaults
   const [localConfig, setLocalConfig] = useState(INITIAL_DEFAULTS);
   const [savedConfig, setSavedConfig] = useState(INITIAL_DEFAULTS);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Load this business's real saved settings from Firestore. Falls back to
+  // INITIAL_DEFAULTS (merged in per-category, so a category added after a
+  // business already saved once still gets a sane starting value) rather
+  // than leaving fields undefined.
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "business_profiles", businessId));
+        if (cancelled) return;
+        const stored = snap.exists() ? snap.data().companySettings : null;
+        if (stored) {
+          const merged = Object.fromEntries(
+            Object.entries(INITIAL_DEFAULTS).map(([category, defaults]) => [
+              category,
+              { ...defaults, ...(stored[category] || {}) }
+            ])
+          ) as typeof INITIAL_DEFAULTS;
+          setLocalConfig(merged);
+          setSavedConfig(merged);
+        }
+      } catch (err) {
+        console.error("Error loading company settings:", err);
+        triggerNotification("Couldn't load saved settings — check your connection.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [businessId]);
 
   // Search filter for settings
   const [searchQuery, setSearchQuery] = useState("");
@@ -367,7 +400,22 @@ export default function SettingsPage({
   };
 
   // Actions
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!businessId) {
+      triggerNotification("Missing business account — please sign in again.");
+      return;
+    }
+    setIsSavingSettings(true);
+    try {
+      await setDoc(doc(db, "business_profiles", businessId), { companySettings: localConfig }, { merge: true });
+    } catch (err) {
+      console.error("Error saving company settings:", err);
+      triggerNotification("Couldn't save settings — check your connection and try again.");
+      setIsSavingSettings(false);
+      return;
+    }
+    setIsSavingSettings(false);
+
     // Log the changes to Audit Logs
     const timestamp = new Date();
     const formattedDate = timestamp.toISOString().split("T")[0];
@@ -402,7 +450,7 @@ export default function SettingsPage({
 
     setSavedConfig(JSON.parse(JSON.stringify(localConfig)));
     setHasUnsavedChanges(false);
-    triggerNotification("⚙️ Settings saved successfully! Every connected module updated instantly.");
+    triggerNotification("⚙️ Settings saved to your business profile.");
   };
 
   const handleUndo = () => {
@@ -698,13 +746,14 @@ export default function SettingsPage({
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <button
               onClick={handleSave}
-              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer uppercase tracking-wider border ${
+              disabled={isSavingSettings}
+              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer uppercase tracking-wider border disabled:opacity-60 disabled:cursor-not-allowed ${
                 hasUnsavedChanges
                   ? "bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 animate-pulse"
                   : "bg-[#E3F3FF] text-[#315C9F] border-[#A9CDEE] hover:bg-white"
               }`}
             >
-              <Save className="w-3.5 h-3.5" /> Save
+              <Save className="w-3.5 h-3.5" /> {isSavingSettings ? "Saving..." : "Save"}
             </button>
             <button
               onClick={handleUndo}
