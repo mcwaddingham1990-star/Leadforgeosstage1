@@ -106,7 +106,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions } = useDomainData();
+  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents } = useDomainData();
   const { triggerNotification } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
@@ -197,15 +197,46 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   ]);
 
   // --- 4. DATABASE CENTER RECORDS & CHECKS ---
-  const [dbCollections, setDbCollections] = useState<Array<{ name: string; docCount: number; indexStatus: "Indexed" | "Stale"; sizeKb: number }>>([
-    { name: "Customers", docCount: 42, indexStatus: "Indexed", sizeKb: 254 },
-    { name: "Leads", docCount: 18, indexStatus: "Indexed", sizeKb: 110 },
-    { name: "Estimates", docCount: 29, indexStatus: "Indexed", sizeKb: 180 },
-    { name: "Scheduling", docCount: 12, indexStatus: "Indexed", sizeKb: 95 },
-    { name: "Messages", docCount: 114, indexStatus: "Indexed", sizeKb: 512 },
-    { name: "Inventory", docCount: 65, indexStatus: "Indexed", sizeKb: 140 },
-    { name: "Documents", docCount: 21, indexStatus: "Indexed", sizeKb: 2048 }
+  // Index status and storage footprint have no real client-accessible
+  // source (that needs the Firebase Admin SDK, not available here), so
+  // those stay illustrative -- but doc counts are the one number an owner
+  // would actually notice is wrong, so those are real, live counts from
+  // the same Firestore-backed collections the rest of the app uses.
+  const [dbCollectionMeta] = useState<Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>>([
+    { name: "Customers", indexStatus: "Indexed", sizeKb: 254 },
+    { name: "Leads", indexStatus: "Indexed", sizeKb: 110 },
+    { name: "Estimates", indexStatus: "Indexed", sizeKb: 180 },
+    { name: "Scheduling", indexStatus: "Indexed", sizeKb: 95 },
+    { name: "Messages", indexStatus: "Indexed", sizeKb: 512 },
+    { name: "Inventory", indexStatus: "Indexed", sizeKb: 140 },
+    { name: "Documents", indexStatus: "Indexed", sizeKb: 2048 }
   ]);
+  const [dbCollectionSizes, setDbCollectionSizes] = useState<Record<string, number>>(
+    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.sizeKb]))
+  );
+  const [dbCollectionIndexStatus, setDbCollectionIndexStatus] = useState<Record<string, "Indexed" | "Stale">>(
+    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.indexStatus]))
+  );
+  const realDocCounts: Record<string, number | null> = useMemo(() => ({
+    Customers: customers.length,
+    Leads: leads.length,
+    Estimates: estimates.length,
+    Scheduling: schedulingEvents.length,
+    Messages: null, // not exposed through the shared domain context yet
+    Inventory: inventoryList.length,
+    Documents: documents.length
+  }), [customers, leads, estimates, schedulingEvents, inventoryList, documents]);
+  const dbCollections = dbCollectionMeta.map(c => ({
+    name: c.name,
+    docCount: realDocCounts[c.name],
+    indexStatus: dbCollectionIndexStatus[c.name],
+    sizeKb: dbCollectionSizes[c.name]
+  }));
+  const setDbCollections = (updater: (prev: typeof dbCollectionMeta) => Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>) => {
+    const updated = updater(dbCollectionMeta);
+    setDbCollectionSizes(Object.fromEntries(updated.map(c => [c.name, c.sizeKb])));
+    setDbCollectionIndexStatus(Object.fromEntries(updated.map(c => [c.name, c.indexStatus])));
+  };
 
   const [dbDiagnosticResult, setDbDiagnosticResult] = useState<{
     brokenReferences: number;
@@ -1107,7 +1138,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                     {dbCollections.map((col, i) => (
                       <tr key={i} className="hover:bg-slate-50/50">
                         <td className="p-3 font-bold text-slate-800">📂 {col.name}</td>
-                        <td className="p-3 text-center font-mono font-bold">{col.docCount} records</td>
+                        <td className="p-3 text-center font-mono font-bold">{col.docCount === null ? "—" : `${col.docCount} records`}</td>
                         <td className="p-3 text-center font-sans font-medium text-slate-500">Many-to-Many</td>
                         <td className="p-3 text-center">
                           <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-widest">

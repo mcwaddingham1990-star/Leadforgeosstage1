@@ -112,7 +112,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setInventoryList,
     documents,
     setDocuments,
-    completedJobsRevenue
+    completedJobsRevenue,
+    employees,
+    timeClockLogs
   } = useDomainData();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
   const map = useMap();
@@ -205,7 +207,13 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     { id: "veh_4", name: "HVAC Sprinter #412", driver: "Marcus Vance", fuel: 42, speed: 28, eta: 22, currentRoute: "Eastlake Ave Eastbound", assignedJobs: 1 }
   ]);
 
-  // Active Simulated Technicians
+  // Real technicians — one per real employee. Name and clocked-in/on-break/
+  // off-duty status come from the real employees + time_clock_logs
+  // collections; a real last-known GPS fix (captured at their last clock
+  // event) anchors their starting position when one exists. There is no
+  // real live GPS feed, so once placed they still animate via the jitter
+  // simulation below rather than actual tracked movement — that part
+  // remains a known limitation, not something faked as real.
   const [activeTechnicians, setActiveTechnicians] = useState<Array<{
     id: string;
     name: string;
@@ -216,12 +224,44 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     jobId?: string;
     routeProgress?: number; // 0 to 100
     routePath?: Array<{ lat: number; lng: number }>;
-  }>>([
-    { id: "tech_1", name: "John Doe", vehicle: "Rapid Response Van #102", status: "Traveling", lat: 47.6150, lng: -122.3400 },
-    { id: "tech_2", name: "David Vance", vehicle: "Heavy Duty Truck #205", status: "Available", lat: 47.5950, lng: -122.3150 },
-    { id: "tech_3", name: "Sarah Connor", vehicle: "Elite Service SUV #310", status: "Traveling", lat: 47.6520, lng: -122.3520 },
-    { id: "tech_4", name: "Marcus Vance", vehicle: "HVAC Sprinter #412", status: "Offline", lat: 47.5800, lng: -122.3380 }
-  ]);
+  }>>([]);
+
+  const parseGpsString = (gps: string): { lat: number; lng: number } | null => {
+    const match = gps.match(/(\d+(?:\.\d+)?)\s*°\s*([NS])\s*,\s*(\d+(?:\.\d+)?)\s*°\s*([EW])/);
+    if (!match) return null;
+    const [, latStr, latDir, lngStr, lngDir] = match;
+    return {
+      lat: parseFloat(latStr) * (latDir === "S" ? -1 : 1),
+      lng: parseFloat(lngStr) * (lngDir === "W" ? -1 : 1)
+    };
+  };
+
+  useEffect(() => {
+    setActiveTechnicians(prev => employees.map(er => {
+      const existing = prev.find(t => t.id === er.email);
+      const myLogs = timeClockLogs.filter(l => l.employeeEmail === er.email);
+      const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      const realStatus: "Available" | "Lunch" | "Offline" =
+        !lastLog || lastLog.type === "Clock Out" ? "Offline" :
+        lastLog.type === "Break Start" ? "Lunch" : "Available";
+      const lastRealFix = lastLog ? parseGpsString(lastLog.gps) : null;
+      const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Seattle, WA", er.email);
+      return {
+        id: er.email,
+        name: `${er.firstName} ${er.lastName}`.trim(),
+        vehicle: existing?.vehicle || "Unassigned",
+        // Preserve an in-progress local dispatch ("Traveling" to a job)
+        // rather than overwrite it with the plain clocked-in state.
+        status: existing?.jobId ? "Traveling" : realStatus,
+        lat: existing?.jobId ? existing.lat : (lastRealFix?.lat ?? existing?.lat ?? fallbackFix.lat),
+        lng: existing?.jobId ? existing.lng : (lastRealFix?.lng ?? existing?.lng ?? fallbackFix.lng),
+        jobId: existing?.jobId,
+        routeProgress: existing?.routeProgress,
+        routePath: existing?.routePath
+      };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees, timeClockLogs, businessAddresses]);
 
   // Editable Service Territories with Polygons
   const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([
