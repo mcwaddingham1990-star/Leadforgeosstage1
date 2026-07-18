@@ -160,7 +160,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   // --- Event Node definition & placement for SVG flow diagram ---
   const EVENT_NODES: EventEngineNode[] = [
-    { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "LeadForge Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
+    { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "Owner's Local OS Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
     { id: "lead_created", label: "Lead Created", category: "leads", description: "Sales funnel registers a new pipeline prospect.", origin: "Customers Intake Engine", destination: "Estimates Compiler", changesMade: "Initialized closing probability vector & conversion trackers.", triggeredModules: ["Leads", "AI Optimizer"], x: 260, y: 50 },
     { id: "est_created", label: "Estimate Created", category: "estimates", description: "Quote or service bid generated.", origin: "Leads AI Analyzer", destination: "Scheduling Dispatcher", changesMade: "Saved price quotes, materials array, and signature hooks.", triggeredModules: ["Estimates", "Revenue Matrix"], x: 460, y: 50 },
     { id: "sched_updated", label: "Schedule Updated", category: "scheduling", description: "Appointment allocated on central scheduling board.", origin: "Estimates Approval Pipeline", destination: "Dispatch Controller", changesMade: "Pinned block on Gantt dispatch layout, reserved Crew Alpha.", triggeredModules: ["Scheduling", "Notifications Center"], x: 60, y: 180 },
@@ -300,9 +300,9 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   // --- 9. BACKUP MATRIX ---
   const [backupHistory, setBackupHistory] = useState<Array<{ id: string; name: string; date: string; sizeMb: number; verified: boolean; type: "Manual" | "Automatic" }>>([
-    { id: "bk_1", name: "LeadForge_Backup_Production_20260706_040000.tar.gz", date: "2026-07-06 04:00", sizeMb: 14.8, verified: true, type: "Automatic" },
-    { id: "bk_2", name: "LeadForge_Backup_Production_20260705_040000.tar.gz", date: "2026-07-05 04:00", sizeMb: 14.5, verified: true, type: "Automatic" },
-    { id: "bk_3", name: "LeadForge_Backup_Manual_20260706_150022.tar.gz", date: "2026-07-06 15:00", sizeMb: 15.1, verified: true, type: "Manual" }
+    { id: "bk_1", name: "OwnersLocal_Backup_Production_20260706_040000.tar.gz", date: "2026-07-06 04:00", sizeMb: 14.8, verified: true, type: "Automatic" },
+    { id: "bk_2", name: "OwnersLocal_Backup_Production_20260705_040000.tar.gz", date: "2026-07-05 04:00", sizeMb: 14.5, verified: true, type: "Automatic" },
+    { id: "bk_3", name: "OwnersLocal_Backup_Manual_20260706_150022.tar.gz", date: "2026-07-06 15:00", sizeMb: 15.1, verified: true, type: "Manual" }
   ]);
 
   // --- 10. AI BUSINESS INSIGHT DIAGNOSTICS & SCORE COPIES ---
@@ -391,7 +391,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(telemetryBundle, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `LeadForge_OS_Telemetry_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `OwnersLocal_OS_Telemetry_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -405,7 +405,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     setTimeout(() => {
       const newBackup = {
         id: `bk_${Date.now()}`,
-        name: `LeadForge_Backup_Manual_${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}.tar.gz`,
+        name: `OwnersLocal_Backup_Manual_${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}.tar.gz`,
         date: new Date().toISOString().replace("T", " ").slice(0, 16),
         sizeMb: Number((14.5 + Math.random()).toFixed(1)),
         verified: true,

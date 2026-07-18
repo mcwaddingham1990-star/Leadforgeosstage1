@@ -291,13 +291,13 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     setTimeout(() => {
       let result = "";
       if (type === "Daily Summary") {
-        result = "📋 **LeadForge AI Daily Business Summary (July 6, 2026)**\n\n" +
+        result = "📋 **Owner's AI Daily Business Summary (July 6, 2026)**\n\n" +
           "• **Financial Highlights**: One invoice PAID today ($4,850.00 for Drainage Project) and Theresa Webb's estimate approved ($6,200.00).\n" +
           "• **Operational Alerts**: Crew Alpha scheduling conflict detected at 11:30. Crew Beta is running 25 minutes late to 1420 Pine St due to I-5 traffic.\n" +
           "• **Inventory & Logistics**: Low stock warning active on PVC 3-inch pressure pipes (8 remaining). Suggest immediate restock approval.\n" +
           "• **AI Recommendations**: Customer David Miller has been inactive for 72 hours since Estimate Sent. Recommendation: Dispatch promotional follow-up sequence.";
       } else if (type === "Morning Brief") {
-        result = "☀️ **LeadForge Morning Dispatch Brief**\n\n" +
+        result = "☀️ **Owner's Local OS Morning Dispatch Brief**\n\n" +
           "• 3 scheduled appointments active today starting at 09:00.\n" +
           "• Double booking flag active: Crew Alpha is overlapping. Please adjust dispatch grid.\n" +
           "• Stock limits checked: Auto-generated PO candidates ready for warehouse review.";
@@ -325,7 +325,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
       let explanation = "";
       if (notif.category === "scheduling" && notif.priority === "Critical") {
         explanation = "🚨 **AI Diagnosis & Recommended Dispatch Solution**:\n\n" +
-          "• **Core Cause**: Both appointments require 'Crew Alpha'. LeadForge telemetry indicates Crew Alpha is physically located at site A, making B physically impossible.\n" +
+          "• **Core Cause**: Both appointments require 'Crew Alpha'. Owner's Local OS telemetry indicates Crew Alpha is physically located at site A, making B physically impossible.\n" +
           "• **Next Best Action**: Shift the Site Survey to 14:00 PM (open slot detected). Open the Scheduling Page to perform the swap instantly.\n" +
           "• **Automated Assistance**: Click 'Open Related Record' to navigate, or assign Crew Beta who is currently nearby and unallocated.";
       } else if (notif.category === "revenue") {

@@ -284,7 +284,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
           groupId: null,
           zIndex: 2,
           props: {
-            text: "LeadForge Operational Systems • Field Service Standard Template",
+            text: "Owner's Local OS Operational Systems • Field Service Standard Template",
             fontFamily: "Inter",
             fontSize: 12,
             color: "#5E7393"
@@ -552,12 +552,12 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
         h = 55;
         break;
       case "hyperlink":
-        defaultProps = { url: "https://leadforge.local" };
+        defaultProps = { url: "https://ownerslocal.local" };
         w = 150;
         h = 30;
         break;
       case "qrcode":
-        defaultProps = { text: "https://leadforge.local/docs/signed_master" };
+        defaultProps = { text: "https://ownerslocal.local/docs/signed_master" };
         w = 100;
         h = 100;
         break;
@@ -3028,7 +3028,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
 
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`https://leadforge.local/shared/docs/${documentId || "doc_blank"}`);
+                    navigator.clipboard.writeText(`https://ownerslocal.local/shared/docs/${documentId || "doc_blank"}`);
                     triggerNotification("📋 Secure copy-link copied to clipboard!");
                     setIsShareModalOpen(false);
                   }}

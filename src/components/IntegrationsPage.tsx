@@ -145,8 +145,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 15 Minutes",
       apiKey: "AIzaSyD_gBusiness2026KeyX",
       apiSecret: "sec_g_business_prod_99x",
-      webhookUrl: "https://leadforge.api.local/webhooks/google_business",
-      redirectUri: "https://leadforge.local/oauth/google_business/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/google_business",
+      redirectUri: "https://ownerslocal.local/oauth/google_business/callback"
     },
     {
       id: "google_calendar",
@@ -166,8 +166,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "AIzaSyB_gCalendar2026KeyY",
       apiSecret: "sec_g_cal_prod_44w",
-      webhookUrl: "https://leadforge.api.local/webhooks/google_calendar",
-      redirectUri: "https://leadforge.local/oauth/google_calendar/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/google_calendar",
+      redirectUri: "https://ownerslocal.local/oauth/google_calendar/callback"
     },
     {
       id: "google_maps",
@@ -187,8 +187,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "AIzaSyC_gMaps2026KeyZ",
       apiSecret: "sec_g_maps_prod_11a",
-      webhookUrl: "https://leadforge.api.local/webhooks/google_maps",
-      redirectUri: "https://leadforge.local/oauth/google_maps/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/google_maps",
+      redirectUri: "https://ownerslocal.local/oauth/google_maps/callback"
     },
     {
       id: "google_drive",
@@ -208,8 +208,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every Hour",
       apiKey: "AIzaSyD_gDrive2026KeyW",
       apiSecret: "sec_g_drive_prod_55q",
-      webhookUrl: "https://leadforge.api.local/webhooks/google_drive",
-      redirectUri: "https://leadforge.local/oauth/google_drive/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/google_drive",
+      redirectUri: "https://ownerslocal.local/oauth/google_drive/callback"
     },
     {
       id: "gmail",
@@ -229,8 +229,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "",
       apiSecret: "",
-      webhookUrl: "https://leadforge.api.local/webhooks/gmail",
-      redirectUri: "https://leadforge.local/oauth/gmail/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/gmail",
+      redirectUri: "https://ownerslocal.local/oauth/gmail/callback"
     },
     {
       id: "google_contacts",
@@ -323,7 +323,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Facebook",
       apiType: "REST",
       logo: "💬",
-      description: "Inject customer direct-messages directly into the LeadForge unified Message center.",
+      description: "Inject customer direct-messages directly into the Owner's Local OS unified Message center.",
       connected: false,
       lastSync: "Never",
       aiEnabled: true,
@@ -397,7 +397,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "ACtwilioAccountSid2026X",
       apiSecret: "sec_twilio_auth_token_9x",
-      webhookUrl: "https://leadforge.api.local/webhooks/twilio",
+      webhookUrl: "https://ownerslocal.api.local/webhooks/twilio",
       redirectUri: ""
     },
     {
@@ -418,7 +418,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "sk_test_leadForgeStripe2026KeyX",
       apiSecret: "whsec_stripe_signing_key_44y",
-      webhookUrl: "https://leadforge.api.local/webhooks/stripe",
+      webhookUrl: "https://ownerslocal.api.local/webhooks/stripe",
       redirectUri: ""
     },
     {
@@ -460,8 +460,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every Hour",
       apiKey: "qb_auth_accessToken2026X",
       apiSecret: "qb_client_secret_xyz112",
-      webhookUrl: "https://leadforge.api.local/webhooks/quickbooks",
-      redirectUri: "https://leadforge.local/oauth/quickbooks/callback"
+      webhookUrl: "https://ownerslocal.api.local/webhooks/quickbooks",
+      redirectUri: "https://ownerslocal.local/oauth/quickbooks/callback"
     },
     {
       id: "xero",
@@ -628,7 +628,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Manual",
       apiKey: "",
       apiSecret: "",
-      webhookUrl: "https://leadforge.api.local/webhooks/zapier",
+      webhookUrl: "https://ownerslocal.api.local/webhooks/zapier",
       redirectUri: ""
     },
     {
@@ -649,7 +649,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Manual",
       apiKey: "",
       apiSecret: "",
-      webhookUrl: "https://leadforge.api.local/webhooks/make",
+      webhookUrl: "https://ownerslocal.api.local/webhooks/make",
       redirectUri: ""
     },
     {
@@ -659,7 +659,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Custom",
       apiType: "REST",
       logo: "🔗",
-      description: "Direct server-to-server HTTP request endpoints for custom LeadForge automation.",
+      description: "Direct server-to-server HTTP request endpoints for custom Owner's Local OS automation.",
       connected: true,
       lastSync: "2026-07-06 18:35",
       aiEnabled: false,
@@ -670,7 +670,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Every 5 Minutes",
       apiKey: "wh_endpoint_signing_token_abc123",
       apiSecret: "sec_webhook_secret_77u",
-      webhookUrl: "https://leadforge.api.local/webhooks/custom_receiver",
+      webhookUrl: "https://ownerslocal.api.local/webhooks/custom_receiver",
       redirectUri: ""
     },
     {
@@ -808,7 +808,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     { id: "log_3", date: "2026-07-06", time: "18:40", integrationId: "twilio", integrationName: "Twilio", recordsUpdated: 3, warnings: 1, errors: 0, status: "Warning", message: "Received 3 inbound customer SMS logs. 1 delivery receipt warning." },
     { id: "log_4", date: "2026-07-06", time: "18:35", integrationId: "webhook", integrationName: "Webhook", recordsUpdated: 0, warnings: 0, errors: 1, status: "Failed", message: "Connection refused (503 Service Unavailable) on external receiver. Will retry." },
     { id: "log_5", date: "2026-07-06", time: "18:30", integrationId: "google_business", integrationName: "Google Business Profile", recordsUpdated: 2, warnings: 0, errors: 0, status: "Success", message: "Imported 2 new leads from search profile: Albert F., Theresa W." },
-    { id: "log_6", date: "2026-07-06", time: "18:15", integrationId: "google_drive", integrationName: "Google Drive", recordsUpdated: 12, warnings: 0, errors: 0, status: "Success", message: "Backed up 12 documents to folder '/LeadForge_Backups'." },
+    { id: "log_6", date: "2026-07-06", time: "18:15", integrationId: "google_drive", integrationName: "Google Drive", recordsUpdated: 12, warnings: 0, errors: 0, status: "Success", message: "Backed up 12 documents to folder '/OwnersLocal_Backups'." },
     { id: "log_7", date: "2026-07-06", time: "18:00", integrationId: "quickbooks", integrationName: "QuickBooks", recordsUpdated: 1, warnings: 0, errors: 0, status: "Success", message: "Sent completed job E-1084 ledger updates to bookkeeping ledger." }
   ]);
 
@@ -1153,7 +1153,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
   // Import Settings Handler
   const handleImportSettings = () => {
-    triggerNotification("📥 Upload config trigger: Selected 'LeadForge_Settings_v4_Backup.json' configuration blueprint.");
+    triggerNotification("📥 Upload config trigger: Selected 'OwnersLocal_Settings_v4_Backup.json' configuration blueprint.");
     setTimeout(() => {
       triggerNotification("✅ System settings file successfully imported and merged with current Event Engine.");
     }, 500);
@@ -1164,7 +1164,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ integrations, syncLogs, date: "2026-07-06" }));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `LeadForge_LocalOS_Integrations_Backup_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `OwnersLocal_LocalOS_Integrations_Backup_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -1183,7 +1183,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Custom Client",
       apiType: "REST",
       logo: "📡",
-      description: newIntegrationDesc || "User specified REST endpoint mapped securely to LeadForge internal JSON schemas.",
+      description: newIntegrationDesc || "User specified REST endpoint mapped securely to Owner's Local OS internal JSON schemas.",
       connected: true,
       lastSync: new Date().toISOString().replace("T", " ").substring(0, 16),
       aiEnabled: false,
@@ -1194,7 +1194,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       syncFrequency: "Manual",
       apiKey: "custom_key_temp_token_val_99",
       apiSecret: "",
-      webhookUrl: "https://leadforge.api.local/webhooks/custom_" + newIntegrationName.toLowerCase().replace(/[^a-z]/g, ""),
+      webhookUrl: "https://ownerslocal.api.local/webhooks/custom_" + newIntegrationName.toLowerCase().replace(/[^a-z]/g, ""),
       redirectUri: ""
     };
 
@@ -1232,7 +1232,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                 Integrations Control Node
               </h1>
               <p className="text-xs text-slate-500 font-sans font-medium">
-                LeadForge Local OS Central API Bridge & Real-Time Event Engine Sync
+                Owner's Local OS Central API Bridge & Real-Time Event Engine Sync
               </p>
             </div>
           </div>
@@ -1673,7 +1673,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
-                  LeadForge API Hook Registries & Handlers
+                  Owner's Local OS API Hook Registries & Handlers
                 </h3>
                 <p className="text-xs text-slate-500 font-sans mt-0.5">
                   Listen to inbound lead captures or push billing and diagnostic records externally.
@@ -1702,7 +1702,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   Send POST JSON payloads from external builders to update your CRM.
                 </p>
                 <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
-                  https://api.leadforge.local/webhooks/incoming_leads?token=wh_2026_xyz
+                  https://api.ownerslocal.local/webhooks/incoming_leads?token=wh_2026_xyz
                 </div>
               </div>
 
@@ -1711,7 +1711,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   Outgoing Delivery Webhooks
                 </span>
                 <p className="text-[11px] text-slate-500 leading-normal">
-                  LeadForge triggers POST queries to Zapier or internal endpoints when jobs finish.
+                  Owner's Local OS triggers POST queries to Zapier or internal endpoints when jobs finish.
                 </p>
                 <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
                   https://hooks.zapier.com/hooks/catch/91845/leads_sync_endpoint
@@ -2028,7 +2028,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                       </label>
                       <input
                         type="text"
-                        value={selectedIntegration.redirectUri || "https://leadforge.local/oauth/callback"}
+                        value={selectedIntegration.redirectUri || "https://ownerslocal.local/oauth/callback"}
                         disabled
                         className="w-full px-3 py-1.5 bg-slate-100 border border-[#A9CDEE] rounded-lg text-xs font-mono text-slate-500"
                       />
@@ -2086,7 +2086,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     <h4 className="font-bold text-slate-800 uppercase text-[9.5px] tracking-wider mb-1">
                       Payload Guidelines
                     </h4>
-                    All inbound webhooks trigger structural sync queries directly within our LeadForge Shared Event Engine. Every completed module automatically updates when external data changes. There is never duplicate data.
+                    All inbound webhooks trigger structural sync queries directly within our Owner's Local OS Shared Event Engine. Every completed module automatically updates when external data changes. There is never duplicate data.
                   </div>
                 </div>
               )}

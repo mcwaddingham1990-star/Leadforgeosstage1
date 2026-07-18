@@ -39,7 +39,7 @@ import {
 export type { Lead } from "../types/domain";
 import type { Lead } from "../types/domain";
 
-// 10 high-quality realistic LeadForge leads
+// 10 high-quality realistic Owner's Local OS leads
 export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC = () => {

@@ -252,7 +252,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   }
 };
 
-// Asset URLs from LeadForgeOS GitHub
+// Asset URLs from Owner's Local OS GitHub
 const CARD_BG_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Login/lightmodecardbg.jpg";
 const SIGNIN_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Signinbuttom.png";
 const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Gobutton.png";
@@ -800,9 +800,9 @@ export default function App() {
   // Track the logged-in-user email in localStorage across login/logout
   useEffect(() => {
     if (businessId) {
-      localStorage.setItem("leadforge_logged_in_user_email", businessId);
+      localStorage.setItem("ownerslocal_logged_in_user_email", businessId);
     } else {
-      localStorage.removeItem("leadforge_logged_in_user_email");
+      localStorage.removeItem("ownerslocal_logged_in_user_email");
     }
   }, [businessId]);
 
@@ -998,7 +998,7 @@ export default function App() {
   const [floatingAiMessages, setFloatingAiMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([
     {
       sender: "ai",
-      text: "### 🤖 LeadForge AI Companion\n\nI am connected to your live Local OS viewport. Ask me anything, or run automated actions for this workspace module!\n\n*Try asking me to perform an action, or select one from the Page Actions tab.*"
+      text: "### 🤖 Owner's AI Companion\n\nI am connected to your live Local OS viewport. Ask me anything, or run automated actions for this workspace module!\n\n*Try asking me to perform an action, or select one from the Page Actions tab.*"
     }
   ]);
   const [floatingAiLoading, setFloatingAiLoading] = useState(false);
@@ -1019,7 +1019,7 @@ export default function App() {
 
     const dateSlug = now.toISOString().slice(0, 10).replace(/-/g, '_');
     const timeSlug = now.toTimeString().slice(0, 5).replace(/:/g, '');
-    const filenameStr = `leadforge_snap_${pageId}_${dateSlug}_${timeSlug}.png`;
+    const filenameStr = `ownerslocal_snap_${pageId}_${dateSlug}_${timeSlug}.png`;
 
     const newSnapshot = {
       id: "snap_" + Math.random().toString(36).substring(2, 9),
@@ -1480,7 +1480,7 @@ export default function App() {
           if (lowerText.includes("why did profit drop") || lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("invoice")) {
             blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
           } else {
-            blockedText = `### 🤖 LeadForge AI Solution
+            blockedText = `### 🤖 Owner's AI Solution
 Processed context query for **${activeScreen.label} Page**:
 - **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
 - **Lifetime Value**: **[REDACTED - OWNER ONLY]**
@@ -1964,7 +1964,7 @@ Access to full financial telemetry is restricted.`;
       setCurrentView("login");
       setLoginMethod(null);
       setPassword("••••••••••••••••");
-      triggerNotification("Logged out of LeadForge.");
+      triggerNotification("Logged out of Owner's Local OS.");
     } catch (err) {
       console.error("Logout error:", err);
       // Fallback
@@ -2414,7 +2414,7 @@ Access to full financial telemetry is restricted.`;
         <header className="hidden sm:flex w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex-col sm:flex-row items-center justify-between gap-3 border-b border-blue-200/50 bg-white/45 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">
             <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">LEADFORGE CLOUD GATEWAY v2.8.4</span>
+            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">OWNER'S LOCAL OS CLOUD GATEWAY v2.8.4</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-xs text-[#342D7E]/75 font-mono bg-blue-100/60 px-2 py-1 rounded">
@@ -3849,7 +3849,7 @@ Access to full financial telemetry is restricted.`;
                               <Info className="w-4 h-4 text-blue-600 animate-pulse" />
                             </div>
                             <h3 className="text-sm font-extrabold text-blue-950 uppercase tracking-tight font-sans">
-                              LeadForge Role Matrix
+                              Owner's Local OS Role Matrix
                             </h3>
                           </div>
                           <p style={getFontSize(11.5)} className="text-slate-600 leading-relaxed font-sans mb-3.5">
@@ -4131,7 +4131,7 @@ Access to full financial telemetry is restricted.`;
                 <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
                   <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
                     <h3 className="text-sm font-bold text-blue-950 tracking-tight flex items-center gap-1.5 mb-2">
-                      <HelpCircle className="w-4 h-4 text-blue-600" /> LeadForge Support Desk
+                      <HelpCircle className="w-4 h-4 text-blue-600" /> Owner's Local OS Support Desk
                     </h3>
                     <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
                       Need help accessing the Local OS platform? Here are your secure options:
@@ -4347,7 +4347,7 @@ Access to full financial telemetry is restricted.`;
                       <div className="w-8 h-8 rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md shrink-0">
                         <Activity className="w-5 h-5 stroke-[2.5]" />
                       </div>
-                      <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">LeadForge</span>
+                      <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">Owner's Local OS</span>
                       <span className="text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider select-none">Local OS</span>
                     </div>
                   ) : (
@@ -4374,7 +4374,7 @@ Access to full financial telemetry is restricted.`;
                 {!isSidebarCollapsed && (
                   <div className="mt-2.5 px-0.5 animate-fade-in text-left">
                     <p className="font-sans font-black text-xs text-[#1F3557] tracking-wider uppercase leading-normal">
-                      {businessNames?.[0] || "LEADFORGELOCAL"}
+                      {businessNames?.[0] || "Your Business"}
                     </p>
                   </div>
                 )}
@@ -4546,7 +4546,7 @@ Access to full financial telemetry is restricted.`;
                               const scr = OS_SCREENS.find((s) => s.id === "owner_console");
                               if (scr) {
                                 setActiveScreen(scr);
-                                triggerNotification("🔑 Secure shortcut activated: Entering LeadForge Owner Control Console.");
+                                triggerNotification("🔑 Secure shortcut activated: Entering Owner Control Console.");
                               }
                             }
                           }}
@@ -4691,7 +4691,7 @@ Access to full financial telemetry is restricted.`;
                   <div className="relative w-full aspect-[16/10] bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-white/5 group">
                     <img
                       src={activeScreen.url}
-                      alt={`LeadForge OS ${activeScreen.label}`}
+                      alt={`Owner's Local OS ${activeScreen.label}`}
                       className="w-full h-full object-cover select-none"
                       referrerPolicy="no-referrer"
                     />
@@ -4732,7 +4732,7 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 text-[10.5px] text-slate-400 flex justify-between items-center">
-                    <span>Comparing layout with LeadForgeOS master screenshot asset.</span>
+                    <span>Comparing layout with Owner's Local OS master screenshot asset.</span>
                     <button
                       onClick={() => setCompareMockupMode(false)}
                       className="text-blue-400 hover:text-blue-300 font-bold"
@@ -6387,7 +6387,7 @@ Access to full financial telemetry is restricted.`;
                 </div>
                 <div className="text-left">
                   <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-                    LeadForge AI Option
+                    Owner's AI Option
                   </h3>
                   <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
                     Workspace diagnostic assistant • {aiPageName}
@@ -6412,7 +6412,7 @@ Access to full financial telemetry is restricted.`;
                   }`}
                 >
                   <span className="text-[9px] uppercase tracking-wider font-bold text-[#5E7393] mb-1">
-                    {msg.sender === "user" ? "You" : "LeadForge AI"}
+                    {msg.sender === "user" ? "You" : "Owner's AI"}
                   </span>
                   <div
                     className={`p-3.5 rounded-2xl text-xs leading-relaxed border shadow-sm ${
@@ -6561,7 +6561,7 @@ Access to full financial telemetry is restricted.`;
                   🤖
                 </div>
                 <div className="text-left">
-                  <h3 className="text-xs font-black uppercase tracking-wider">LeadForge Local OS AI</h3>
+                  <h3 className="text-xs font-black uppercase tracking-wider">Owner's Local OS AI</h3>
                   <p className="text-[9.5px] text-slate-300 font-mono">Module: {activeScreen.label}</p>
                 </div>
               </div>
@@ -6615,7 +6615,7 @@ Access to full financial telemetry is restricted.`;
                     {floatingAiMessages.map((m, idx) => (
                       <div key={idx} className={`flex flex-col max-w-[85%] ${m.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}>
                         <span className="text-[8.5px] font-bold text-slate-400 uppercase mb-0.5 tracking-wider">
-                          {m.sender === "user" ? "You" : "LeadForge AI"}
+                          {m.sender === "user" ? "You" : "Owner's AI"}
                         </span>
                         <div className={`p-3 rounded-2xl text-[11px] leading-relaxed border shadow-xs ${
                           m.sender === "user"
@@ -6771,7 +6771,7 @@ Access to full financial telemetry is restricted.`;
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
                       }}
-                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask LeadForge AI about ${activeScreen.label}...`}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask Owner's AI about ${activeScreen.label}...`}
                       className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button

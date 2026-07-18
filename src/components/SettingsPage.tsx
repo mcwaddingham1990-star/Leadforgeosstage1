@@ -496,7 +496,7 @@ export default function SettingsPage({
     )}`;
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", jsonString);
-    downloadAnchor.setAttribute("download", `leadforge_local_os_settings.json`);
+    downloadAnchor.setAttribute("download", `ownerslocal_local_os_settings.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -1069,7 +1069,7 @@ export default function SettingsPage({
                         required
                         value={newUser.email}
                         onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="richard@leadforgelocal.com"
+                        placeholder="richard@ownerslocal.com"
                         className="w-full px-2.5 py-1.5 bg-white border border-[#A9CDEE] rounded-lg text-xs font-bold text-slate-800 focus:outline-none"
                       />
                     </div>
@@ -1858,7 +1858,7 @@ export default function SettingsPage({
               {/* AI SETTINGS SECTION */}
               {activeCategory === "ai_settings" && (
                 <div className="space-y-4">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">LeadForge Master AI Engine Configuration</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Master AI Engine Configuration</h3>
                   
                   <div className="space-y-2 bg-white p-4 rounded-xl border border-[#A9CDEE]">
                     <div className="flex items-center justify-between pb-2 border-b border-[#A9CDEE]/30">
@@ -2162,7 +2162,7 @@ export default function SettingsPage({
                     {/* OWNER CONSOLE SECURE LINK */}
                     <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE]/30">
                       <div>
-                        <p className="font-extrabold text-slate-800">LeadForge Owner Control Console</p>
+                        <p className="font-extrabold text-slate-800">Owner Control Console</p>
                         <p className="text-[10px] text-slate-400 font-sans mt-0.5">God-Mode Operating System administration deck.</p>
                       </div>
                       {activeRole === "Owner" ? (
@@ -2170,7 +2170,7 @@ export default function SettingsPage({
                           onClick={() => {
                             if (onNavigateToScreen) {
                               onNavigateToScreen("owner_console");
-                              triggerNotification("🔑 Entering LeadForge Owner Control Console. God Mode Active.");
+                              triggerNotification("🔑 Entering Owner Control Console. God Mode Active.");
                             }
                           }}
                           className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-lg transition-all cursor-pointer uppercase tracking-wider shadow-sm border border-amber-400 text-[10px]"
@@ -2284,7 +2284,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-3">
                 <Sparkles className="w-6 h-6 text-[#4A9BFF] animate-pulse" />
                 <div>
-                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">LeadForge Artificial Intelligence Audit</h3>
+                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Artificial Intelligence Audit</h3>
                   <p className="text-xs text-[#5E7393] font-sans font-semibold">Instant settings optimization diagnostics based on active business parameters</p>
                 </div>
               </div>

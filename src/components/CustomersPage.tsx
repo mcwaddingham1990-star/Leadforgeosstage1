@@ -50,7 +50,7 @@ export interface CustomersPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;
 }
 
-// 10 high-quality realistic LeadForge customers
+// 10 high-quality realistic Owner's Local OS customers
 export const INITIAL_CUSTOMERS: Customer[] = [];
 
 export const CustomersPage: React.FC<CustomersPageProps> = ({
@@ -73,7 +73,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   >("All");
 
   const [localCustomers, setLocalCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem("leadforge_customers");
+    const saved = localStorage.getItem("ownerslocal_customers");
     return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
   });
 
@@ -82,7 +82,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   useEffect(() => {
     if (!propCustomers) {
-      localStorage.setItem("leadforge_customers", JSON.stringify(localCustomers));
+      localStorage.setItem("ownerslocal_customers", JSON.stringify(localCustomers));
     }
   }, [localCustomers, propCustomers]);
 
@@ -128,7 +128,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "leadforge_customer_database.csv");
+    link.setAttribute("download", "ownerslocal_customer_database.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

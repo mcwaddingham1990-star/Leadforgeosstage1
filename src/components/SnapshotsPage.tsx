@@ -429,7 +429,7 @@ export const SnapshotsPage: React.FC = () => {
                       <div className="flex justify-between items-center pb-2 border-b border-blue-200/50">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-wider text-[#315C9F]">{selectedSnapshot.pageName}</p>
-                          <p className="text-[8px] text-[#5E7393]">LeadForge LocalOS Terminal Session</p>
+                          <p className="text-[8px] text-[#5E7393]">Owner's Local OS Terminal Session</p>
                         </div>
                         <span className="text-[8px] font-mono px-1 bg-emerald-100 text-emerald-800 rounded font-bold">VERIFIED STATE</span>
                       </div>

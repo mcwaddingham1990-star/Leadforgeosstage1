@@ -964,7 +964,7 @@ export const EstimatesPage: React.FC = () => {
         </div>
 
         <p className="text-slate-600 text-[11px] leading-relaxed font-sans font-semibold">
-          💡 <strong>Simulated Workflow Pipeline:</strong> When an estimate is marked as <strong className="text-emerald-600 uppercase font-mono">Accepted</strong> by a residential customer, the LeadForge core engine is engineered to automatically spawn a corresponding <strong>Job</strong>, add it to the live schedule ledger, transmit dispatch alerts to the nearest crew member, and write pending receivables into your Revenue database module.
+          💡 <strong>Simulated Workflow Pipeline:</strong> When an estimate is marked as <strong className="text-emerald-600 uppercase font-mono">Accepted</strong> by a residential customer, the Owner's Local OS core engine is engineered to automatically spawn a corresponding <strong>Job</strong>, add it to the live schedule ledger, transmit dispatch alerts to the nearest crew member, and write pending receivables into your Revenue database module.
         </p>
 
         {/* CLICKABLE CONNECTION NODES */}

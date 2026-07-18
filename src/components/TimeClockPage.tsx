@@ -1482,7 +1482,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       {/* FRAMEWORK CONNECTIONS (As required by the guideline exactly) */}
       <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 text-left">
         <h4 className="text-[10px] font-black uppercase tracking-wider text-[#342D7E] mb-2">
-          LeadForgeOS Framework Connections
+          Owner's Local OS Framework Connections
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-sans">
           <div>

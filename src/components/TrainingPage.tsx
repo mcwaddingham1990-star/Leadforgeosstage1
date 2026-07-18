@@ -421,7 +421,7 @@ export const TrainingPage: React.FC = () => {
               name: `Official Certificate - ${course.name} (${targetUser}).pdf`,
               customer: "Internal Operations",
               employee: targetUser,
-              vendor: "LeadForge Academy",
+              vendor: "Owner's Local OS Academy",
               job: "Professional Certification",
               type: "Training",
               uploadedBy: "System Onboarding",
@@ -495,7 +495,7 @@ export const TrainingPage: React.FC = () => {
       } else if (aiSelectedType === "quiz") {
         result = `### AI Generated Quiz: ${aiRoleSubject} Onboarding\n\n#### Question 1 (Multiple Choice)\nWhich safety tool must be verified before performing diagnostic isolation?\n- [ ] Visual verification of tags\n- [ ] Multi-point voltage meter\n- [ ] Standard pliers\n- [ ] Customer confirmation\n*Correct Answer: Multi-point voltage meter*\n\n#### Question 2 (True/False)\nIt is fully acceptable to bypass breaker systems for diagnostic triage under 5 minutes.\n- [ ] True\n- [ ] False\n*Correct Answer: False*`;
       } else if (aiSelectedType === "policy") {
-        result = `### Official Corporate Policy: LeadForge ${aiRoleSubject} Code of Conduct\n\n**Published**: July 2026\n**Regulatory Scope**: Nationwide Administrative Compliance\n\n1. All dispatch lines must receive direct client confirmations before technicians mobilize.\n2. Field teams are strictly required to log GPS vehicle snapshots for all invoicing compliance audits.\n3. Fuel vouchers require supervisor timestamps within 24 hours of expenditure.`;
+        result = `### Official Corporate Policy: Owner's Local OS ${aiRoleSubject} Code of Conduct\n\n**Published**: July 2026\n**Regulatory Scope**: Nationwide Administrative Compliance\n\n1. All dispatch lines must receive direct client confirmations before technicians mobilize.\n2. Field teams are strictly required to log GPS vehicle snapshots for all invoicing compliance audits.\n3. Fuel vouchers require supervisor timestamps within 24 hours of expenditure.`;
       } else {
         result = `### AI Operations Manual: ${aiRoleSubject} Equipment Troubleshooting Guide\n\n**Topic**: ${aiCustomTopic || "High Pressure Fluid Pumps"}\n\n#### Section A: Safe Purging Protocols\nAlways exhaust high static lines slowly through secondary exhaust valves to prevent liquid backflow issues.\n\n#### Section B: Pressure Troubleshooting\nVerify pump head casing is running cool (<140°F) before testing flow thresholds. Check the inlet pipe gasket for structural stress cracks.`;
       }
@@ -704,7 +704,7 @@ export const TrainingPage: React.FC = () => {
                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ courses, profiles }));
                 const downloadAnchor = document.createElement('a');
                 downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", "leadforge_training_backup.json");
+                downloadAnchor.setAttribute("download", "ownerslocal_training_backup.json");
                 document.body.appendChild(downloadAnchor);
                 downloadAnchor.click();
                 downloadAnchor.remove();
@@ -1317,7 +1317,7 @@ export const TrainingPage: React.FC = () => {
                   
                   <button
                     onClick={() => {
-                      setAiResponseText(prev => `### RESUMEN EN ESPAÑOL\nEste módulo cubre pautas operativas y de seguridad clave para el personal de LeadForge.\n\n` + prev);
+                      setAiResponseText(prev => `### RESUMEN EN ESPAÑOL\nEste módulo cubre pautas operativas y de seguridad clave para el personal de Owner's Local OS.\n\n` + prev);
                       triggerNotification("Translated content summary to Spanish.");
                     }}
                     className="px-2.5 py-2 bg-white hover:bg-slate-50 border border-[#A9CDEE] text-slate-600 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"

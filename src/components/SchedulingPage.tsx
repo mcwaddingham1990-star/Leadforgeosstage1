@@ -1296,7 +1296,7 @@ export const SchedulingPage: React.FC = () => {
                   {isEditingEvent ? "Modify Scheduled Event" : "Schedule New Operational Event"}
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  {isEditingEvent ? "Update details of this shared event instance" : "Add an appointment slot to the core LeadForge shared ledger"}
+                  {isEditingEvent ? "Update details of this shared event instance" : "Add an appointment slot to the core Owner's Local OS shared ledger"}
                 </p>
               </div>
               <button

@@ -711,15 +711,15 @@ export const DocumentsPage: React.FC = () => {
 
     if (format === "json") {
       content = JSON.stringify(documents, null, 2);
-      fileName = "leadforge_documents_database.json";
+      fileName = "ownerslocal_documents_database.json";
       mimeType = "application/json";
     } else if (format === "tsv") {
       content = convertToTSV(documents);
-      fileName = "leadforge_documents_database.tsv";
+      fileName = "ownerslocal_documents_database.tsv";
       mimeType = "text/tab-separated-values";
     } else {
       content = convertToCSV(documents);
-      fileName = "leadforge_documents_database.csv";
+      fileName = "ownerslocal_documents_database.csv";
       mimeType = "text/csv";
     }
 
@@ -791,7 +791,7 @@ export const DocumentsPage: React.FC = () => {
       vendor: resolvedVendor || "None",
       job: "Job #1024",
       type: scannedDocType,
-      uploadedBy: "LeadForge AI Scanner",
+      uploadedBy: "Owner's AI Scanner",
       date: new Date().toISOString().slice(0, 10),
       size: "240 KB",
       status: scannedDocType === "Contracts" ? "Signed" : "Signed",
@@ -1639,7 +1639,7 @@ export const DocumentsPage: React.FC = () => {
                       triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
                     } else {
                       // Create simulated plain text file download for seed data
-                      const textContent = `LeadForge Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
+                      const textContent = `Owner's Local OS Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
                       const blob = new Blob([textContent], { type: 'text/plain' });
                       const blobUrl = URL.createObjectURL(blob);
                       const link = document.createElement('a');
