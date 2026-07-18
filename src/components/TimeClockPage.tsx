@@ -231,7 +231,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   
   // Manual Time fields
   const [manualEmpId, setManualEmpId] = useState("emp_1");
-  const [manualDate, setManualDate] = useState("2026-07-06");
+  const [manualDate, setManualDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [manualType, setManualType] = useState<"Clock In" | "Clock Out" | "Break Start" | "Break End">("Clock In");
   const [manualHours, setManualHours] = useState("8.0");
   const [manualTimeStr, setManualTimeStr] = useState("08:00 AM");

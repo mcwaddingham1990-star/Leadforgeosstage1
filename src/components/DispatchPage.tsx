@@ -115,7 +115,10 @@ export const DispatchPage: React.FC = () => {
     logOperationalEvent
   } = useNavTelemetry();
   // Current Selected Date in Dispatch view - Defaults to "2026-07-05" (Today in system context)
-  const [selectedDate, setSelectedDate] = useState("2026-07-05");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   
   // Search query
   const [searchQuery, setSearchQuery] = useState("");

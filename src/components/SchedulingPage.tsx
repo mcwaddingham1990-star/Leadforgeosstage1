@@ -85,8 +85,7 @@ export const SchedulingPage: React.FC = () => {
     if (preSelectedDate) {
       return new Date(preSelectedDate);
     }
-    // Set to July 5, 2026 to match the system local time
-    return new Date("2026-07-05");
+    return new Date();
   });
 
   const [activeView, setActiveView] = useState<"month" | "week" | "day">("month");
@@ -114,7 +113,10 @@ export const SchedulingPage: React.FC = () => {
   // New/Edit Event Form Fields
   const [formType, setFormType] = useState("Job");
   const [formCustomType, setFormCustomType] = useState("");
-  const [formDate, setFormDate] = useState("2026-07-05");
+  const [formDate, setFormDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [formStartHour, setFormStartHour] = useState("09");
   const [formStartMin, setFormStartMin] = useState("00");
   const [formStartAmPm, setFormStartAmPm] = useState("AM");
