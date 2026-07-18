@@ -430,44 +430,28 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     return customers.filter((c) => c.requireFollowUp);
   }, [customers]);
 
-  // Sample activities
-  const activities = [
-    {
-      id: "act_1",
-      type: "Estimate Sent",
-      desc: "Estimate #E-1084 sent to Apex Plumb & Drain",
-      time: "2 hours ago",
-      customer: "Apex Plumb & Drain"
-    },
-    {
-      id: "act_2",
-      type: "Invoice Paid",
-      desc: "Invoice #I-2049 paid by Chevron Logistics - $4,500.00",
-      time: "5 hours ago",
-      customer: "Chevron Logistics"
-    },
-    {
-      id: "act_3",
-      type: "Job Completed",
-      desc: "Sewer Line Inspection completed for Oakridge Apartments",
-      time: "Yesterday",
-      customer: "Oakridge Apartments"
-    },
-    {
-      id: "act_4",
-      type: "Review Received",
-      desc: "5-Star review received from Sarah Connor: 'Fast service!'",
-      time: "2 days ago",
-      customer: "Sarah Connor"
-    },
-    {
-      id: "act_5",
-      type: "Appointment Scheduled",
-      desc: "System Maintenance scheduled for Emma Watson",
-      time: "3 days ago",
-      customer: "Emma Watson"
-    }
-  ];
+  // Real customer flags instead of a fabricated activity log -- there's
+  // no real per-customer event-history collection to derive individual
+  // "invoice paid"/"review received" timestamped events from, so this
+  // surfaces real, currently-true facts about real customers instead.
+  const activities = useMemo(() => {
+    const items: Array<{ id: string; type: string; desc: string; time: string; customer: string }> = [];
+    customers.forEach((c) => {
+      if (c.recentlyAdded) {
+        items.push({ id: `${c.id}_new`, type: "New Customer", desc: `${c.contact} (${c.company}) added to your customer list`, time: "New", customer: c.contact });
+      }
+      if (c.requireFollowUp) {
+        items.push({ id: `${c.id}_followup`, type: "Follow-Up Needed", desc: `${c.contact} (${c.company}) is flagged for follow-up`, time: "Open", customer: c.contact });
+      }
+      if (c.upcomingJobDate) {
+        items.push({ id: `${c.id}_job`, type: "Upcoming Job", desc: `${c.contact} (${c.company}) has a job scheduled ${c.upcomingJobDate}`, time: c.upcomingJobDate, customer: c.contact });
+      }
+      if (c.status === "Past Due") {
+        items.push({ id: `${c.id}_pastdue`, type: "Past Due", desc: `${c.contact} (${c.company}) has an outstanding balance of $${c.outstandingBalance.toLocaleString()}`, time: "Past Due", customer: c.contact });
+      }
+    });
+    return items.slice(0, 6);
+  }, [customers]);
 
   return (
     <div className="space-y-6 animate-fade-in text-left">
@@ -953,7 +937,9 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         </h3>
         
         <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm divide-y divide-[#9EC8EF]/40">
-          {activities.map((act) => (
+          {activities.length === 0 ? (
+            <p className="text-xs text-[#5E7393] font-medium py-3 text-center">Nothing needs attention right now.</p>
+          ) : activities.map((act) => (
             <div
               key={act.id}
               onClick={() => onOpenPlaceholder("estimates")}
@@ -961,10 +947,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             >
               <div className="flex items-center gap-3">
                 <span className="text-base select-none">
-                  {act.type === "Estimate Sent" ? "📝" :
-                   act.type === "Invoice Paid" ? "💳" :
-                   act.type === "Job Completed" ? "💼" :
-                   act.type === "Review Received" ? "⭐" : "📅"}
+                  {act.type === "New Customer" ? "🆕" :
+                   act.type === "Past Due" ? "💳" :
+                   act.type === "Upcoming Job" ? "💼" :
+                   act.type === "Follow-Up Needed" ? "📅" : "📌"}
                 </span>
                 <div>
                   <p className="text-xs font-bold text-[#1F3557]">{act.desc}</p>

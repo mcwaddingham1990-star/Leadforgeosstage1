@@ -202,15 +202,30 @@ export const EstimatesPage: React.FC = () => {
     "Completed"
   ];
 
-  // Activities logs for the bottom section
-  const activities = [
-    { id: "act_1", type: "Estimate Accepted", desc: "Estimate #EST-2026-001 by Marcus Vance accepted ($12,500.00)", time: "2 hours ago", icon: "✅" },
-    { id: "act_2", type: "Estimate Sent", desc: "Estimate #EST-2026-002 sent to Diana Prince ($8,900.00)", time: "5 hours ago", icon: "📨" },
-    { id: "act_3", type: "Customer Viewed Estimate", desc: "Clark Kent viewed Estimate #EST-2026-004 on mobile portal", time: "1 day ago", icon: "👁️" },
-    { id: "act_4", type: "Estimate Created", desc: "New draft Estimate #EST-2026-005 created for Bruce Wayne", time: "1 day ago", icon: "📝" },
-    { id: "act_5", type: "Estimate Declined", desc: "Estimate #EST-2026-006 declined by Arthur Curry (Scope adjustment requested)", time: "3 days ago", icon: "❌" },
-    { id: "act_6", type: "Estimate Converted to Job", desc: "Estimate #EST-2026-008 converted to Job #JOB-5912 and dispatched", time: "5 days ago", icon: "🛠️" }
-  ];
+  // Real recent estimates instead of a fabricated activity log — there's
+  // no real per-estimate change-history collection to derive individual
+  // "sent"/"viewed" events from, so this shows real estimates by real
+  // current status rather than inventing fake historical events.
+  const STATUS_ICON: Record<string, string> = {
+    Draft: "📝",
+    Pending: "⏳",
+    Sent: "📨",
+    Viewed: "👁️",
+    Accepted: "✅",
+    Declined: "❌",
+    Expired: "⌛",
+    Completed: "🛠️"
+  };
+  const activities = [...estimates]
+    .sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime())
+    .slice(0, 6)
+    .map((est) => ({
+      id: est.id,
+      type: `Estimate ${est.status}`,
+      desc: `Estimate #${est.number} for ${est.customerName} — ${est.status} ($${est.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+      time: est.createdDate,
+      icon: STATUS_ICON[est.status] || "📄"
+    }));
 
   // Handle navigation with safety checks
   const handleLinkNavigation = (screenId: string, fallbackLabel: string, icon: string) => {
@@ -893,10 +908,10 @@ export const EstimatesPage: React.FC = () => {
           </span>
           <div>
             <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">
-              Recent Estimate Activity Logs
+              Recent Estimates
             </h3>
             <p className="text-[10px] text-[#5E7393] font-semibold">
-              Live tracking log of proposal creation, email triggers, client views, and job translations
+              Your most recently created estimates and their current status
             </p>
           </div>
         </div>
