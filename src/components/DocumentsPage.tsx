@@ -2009,40 +2009,41 @@ export const DocumentsPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-[#5E7393]">Selected Photos to Compile (Drag-order or Click to Select)</label>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  {[
-                    { id: "p1", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400", title: "Drain Jetting Site Rig" },
-                    { id: "p2", url: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400", title: "Excavation Layout" },
-                    { id: "p3", url: "https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?w=400", title: "Inspected Mainline Valve" },
-                    { id: "p4", url: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400", title: "Technician Dispatch Rig" }
-                  ].map((photo, index) => {
-                    const isSel = selectedPhotos.includes(photo.url);
-                    return (
-                      <button
-                        key={photo.id}
-                        onClick={() => {
-                          if (isSel) {
-                            setSelectedPhotos(prev => prev.filter(u => u !== photo.url));
-                          } else {
-                            setSelectedPhotos(prev => [...prev, photo.url]);
-                          }
-                        }}
-                        className={`relative rounded-xl border p-1 transition-all text-left ${
-                          isSel ? "border-[#315C9F] bg-white ring-2 ring-[#315C9F]" : "border-slate-300 bg-slate-100"
-                        }`}
-                      >
-                        <img src={photo.url} alt="Compile asset" className="w-full h-24 object-cover rounded-lg" referrerPolicy="no-referrer" />
-                        <div className="p-1 text-[9px] truncate">{photo.title}</div>
-                        {isSel && (
-                          <div className="absolute top-2 right-2 bg-[#315C9F] text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[9px] font-black">
-                            {selectedPhotos.indexOf(photo.url) + 1}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                <label className="text-[10px] uppercase text-[#5E7393]">Selected Photos to Compile (Click to Select)</label>
+                {documents.filter(d => d.type === "Photos" && d.url).length === 0 ? (
+                  <p className="text-[10px] text-[#5E7393]/70 italic py-2">
+                    No real photos uploaded yet — upload a photo document first to compile it into a PDF.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    {documents.filter(d => d.type === "Photos" && d.url).map((photo) => {
+                      const isSel = selectedPhotos.includes(photo.url!);
+                      return (
+                        <button
+                          key={photo.id}
+                          onClick={() => {
+                            if (isSel) {
+                              setSelectedPhotos(prev => prev.filter(u => u !== photo.url));
+                            } else {
+                              setSelectedPhotos(prev => [...prev, photo.url!]);
+                            }
+                          }}
+                          className={`relative rounded-xl border p-1 transition-all text-left ${
+                            isSel ? "border-[#315C9F] bg-white ring-2 ring-[#315C9F]" : "border-slate-300 bg-slate-100"
+                          }`}
+                        >
+                          <img src={photo.url} alt={photo.name} className="w-full h-24 object-cover rounded-lg" referrerPolicy="no-referrer" />
+                          <div className="p-1 text-[9px] truncate">{photo.name}</div>
+                          {isSel && (
+                            <div className="absolute top-2 right-2 bg-[#315C9F] text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[9px] font-black">
+                              {selectedPhotos.indexOf(photo.url!) + 1}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
