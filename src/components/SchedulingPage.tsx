@@ -131,7 +131,7 @@ export const SchedulingPage: React.FC = () => {
   const [formCustomCityState, setFormCustomCityState] = useState("");
   const [formCustomZip, setFormCustomZip] = useState("");
 
-  const [formEmployee, setFormEmployee] = useState("John Doe");
+  const [formEmployee, setFormEmployee] = useState("");
   const [formCrew, setFormCrew] = useState("Crew Alpha");
   const [formLocation, setFormLocation] = useState("");
   const [formPriority, setFormPriority] = useState<"Low" | "Medium" | "High" | "Urgent">("Medium");
@@ -210,7 +210,7 @@ export const SchedulingPage: React.FC = () => {
     setFormCustomAddress("");
     setFormCustomCityState("");
     setFormCustomZip("");
-    setFormEmployee(EMPLOYEES[0]);
+    setFormEmployee(EMPLOYEES[0] || "");
     setFormCrew(CREWS[0]);
     setFormLocation("");
     setFormPriority("Medium");
@@ -429,6 +429,11 @@ export const SchedulingPage: React.FC = () => {
 
     if (!customerName) {
       alert("Please select or enter a customer name.");
+      return;
+    }
+
+    if (!formEmployee) {
+      alert("Please assign an employee. Add team members in Settings first if none are available yet.");
       return;
     }
 
@@ -1544,6 +1549,8 @@ export const SchedulingPage: React.FC = () => {
                     onChange={(e) => setFormEmployee(e.target.value)}
                     className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 font-semibold"
                   >
+                    {EMPLOYEES.length === 0 && <option value="">No team members yet</option>}
+                    {formEmployee === "" && EMPLOYEES.length > 0 && <option value="" disabled>Select employee...</option>}
                     {EMPLOYEES.map(emp => (
                       <option key={emp} value={emp}>{emp}</option>
                     ))}
