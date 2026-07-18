@@ -2101,15 +2101,12 @@ export const DocumentsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => {
-                    const email = prompt("Enter recipient email address:");
-                    if (email) {
-                      triggerNotification(`📧 Document shared via secure email link to ${email}`);
-                      setIsMainShareModalOpen(false);
-                      setShareDocItem(null);
-                      if (logOperationalEvent) {
-                        logOperationalEvent("Document Shared", `Document emailed to ${email}`, "📧");
-                      }
-                    }
+                    // No real email-sending provider is connected yet (needs
+                    // a service like SendGrid/Postmark wired up server-side)
+                    // — say so honestly instead of claiming it was sent.
+                    triggerNotification("📧 Email sending isn't connected to a real provider yet.");
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
@@ -2119,15 +2116,12 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    const phone = prompt("Enter recipient phone number:");
-                    if (phone) {
-                      triggerNotification(`💬 Document link shared via SMS to ${phone}`);
-                      setIsMainShareModalOpen(false);
-                      setShareDocItem(null);
-                      if (logOperationalEvent) {
-                        logOperationalEvent("Document Shared", `Document text-messaged to ${phone}`, "💬");
-                      }
-                    }
+                    // No real SMS provider is connected yet (needs Twilio
+                    // or similar wired up server-side) — say so honestly
+                    // instead of claiming a text was sent.
+                    triggerNotification("💬 SMS sending isn't connected to a real provider yet.");
+                    setIsMainShareModalOpen(false);
+                    setShareDocItem(null);
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
@@ -2137,8 +2131,11 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`https://ownerslocal.local/shared/docs/${shareDocItem.id}`);
-                    triggerNotification("📋 Secure copy-link copied to clipboard!");
+                    // No real public document-hosting/share-link backend
+                    // exists yet, so there is nothing real to link to —
+                    // copying a URL that resolves nowhere would be worse
+                    // than saying so plainly.
+                    triggerNotification("🔗 Public share links aren't available yet — this needs real file hosting to be wired up.");
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2150,7 +2147,20 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    triggerNotification(`📥 PDF Download initialized: ${shareDocItem.name}`);
+                    if (shareDocItem.url) {
+                      const link = document.createElement("a");
+                      link.href = shareDocItem.url;
+                      link.download = shareDocItem.name;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      triggerNotification(`📥 Downloading: ${shareDocItem.name}`);
+                      if (logOperationalEvent) {
+                        logOperationalEvent("Document Downloaded", shareDocItem.name, "📥");
+                      }
+                    } else {
+                      triggerNotification("No file is attached to this document record yet.");
+                    }
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2162,9 +2172,9 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    triggerNotification("🖨️ Spooling printing protocol service...");
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
+                    window.print();
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
@@ -2173,10 +2183,23 @@ export const DocumentsPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    triggerNotification("📲 Triggering phone system universal transfer protocols...");
+                  onClick={async () => {
+                    const docName = shareDocItem.name;
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: docName,
+                          text: `Document: ${docName}`,
+                          url: window.location.href
+                        });
+                      } catch {
+                        // User cancelled the native share sheet — no error to surface.
+                      }
+                    } else {
+                      triggerNotification("Native sharing isn't supported by this browser.");
+                    }
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >
