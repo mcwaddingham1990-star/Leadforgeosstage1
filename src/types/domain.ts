@@ -148,6 +148,46 @@ export interface RevenueEvent {
   estimateId: string;
 }
 
+/** A real employee record, written once at employee-onboarding completion (see handleCompleteEmployeeOnboarding in App.tsx). Doc id is the employee's email. */
+export interface EmployeeRecord {
+  id: string; // employee's email
+  email: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  phone: string;
+  photo: string;
+  goals: string;
+  hourlyRate: number;
+  role: string;
+  businessEmail: string;
+  createdAt: string;
+}
+
+/**
+ * One real clock in/out/break event, written the moment it actually
+ * happens — by the employee themselves (self clock-in/out) or by an
+ * authorized manager via manual time entry. This is the only source of
+ * truth for hours worked, overtime, and payroll on the Time Clock page;
+ * nothing there is ever a running counter kept separately from this log.
+ */
+export interface TimeClockLog {
+  id: string;
+  employeeEmail: string;
+  employeeName: string;
+  type: "Clock In" | "Clock Out" | "Break Start" | "Break End";
+  date: string; // YYYY-MM-DD, local to whoever logged it
+  time: string; // e.g. "08:00 AM"
+  timestamp: string; // ISO timestamp, real ordering/aggregation key
+  gps: string;
+  jobId?: string;
+  jobTitle?: string;
+  route?: string;
+  vehicle?: string;
+  approved?: boolean;
+  enteredManually?: boolean;
+}
+
 export interface SchedulingEvent {
   id: string;
   eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom

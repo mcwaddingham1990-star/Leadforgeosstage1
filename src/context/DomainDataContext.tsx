@@ -1,5 +1,5 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
-import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent } from "../types/domain";
+import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog } from "../types/domain";
 
 export interface RosterEntry {
   id?: string;
@@ -36,6 +36,10 @@ export interface DomainDataContextValue {
   setRevenueEvents: Dispatch<SetStateAction<RevenueEvent[]>>;
   /** Derived sum of revenueEvents — provided so consumers don't each re-implement the reduce. */
   completedJobsRevenue: number;
+  employees: EmployeeRecord[];
+  setEmployees: Dispatch<SetStateAction<EmployeeRecord[]>>;
+  timeClockLogs: TimeClockLog[];
+  setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
   preSelectedDate: string | undefined;
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;

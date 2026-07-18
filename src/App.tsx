@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
-import { RevenueEvent } from "./types/domain";
+import { RevenueEvent, EmployeeRecord, TimeClockLog } from "./types/domain";
 import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
 import {
   signInWithEmailAndPassword,
@@ -782,6 +782,8 @@ export default function App() {
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
+  const [employees, setEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
+  const [timeClockLogs, setTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
 
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
@@ -1642,6 +1644,7 @@ Access to full financial telemetry is restricted.`;
   const [empPhone, setEmpPhone] = useState("");
   const [empPhoto, setEmpPhoto] = useState("");
   const [empGoals, setEmpGoals] = useState("");
+  const [empHourlyRate, setEmpHourlyRate] = useState("");
 
   // Trigger brief floating notifications
   const triggerNotification = (message: string) => {
@@ -2264,10 +2267,15 @@ Access to full financial telemetry is restricted.`;
         phone: empPhone,
         photo: empPhoto || "",
         goals: empGoals,
+        hourlyRate: parseFloat(empHourlyRate) || 0,
         role: inviteRole,
         permissions: invitePermissions,
         granularPermissions: inviteGranularPermissions,
         businessEmail,
+        // Also tagged as businessId (same value) so this collection is
+        // queryable through the same convention every other Firestore
+        // collection uses (see subscribeToCollection).
+        businessId: businessEmail,
         createdAt: new Date().toISOString()
       };
       await setDoc(doc(db, "employees", cleanEmail), newEmployee);
@@ -2358,6 +2366,10 @@ Access to full financial telemetry is restricted.`;
     revenueEvents,
     setRevenueEvents,
     completedJobsRevenue,
+    employees,
+    setEmployees,
+    timeClockLogs,
+    setTimeClockLogs,
     preSelectedDate,
     setPreSelectedDate,
     preSelectedCustomerId,
@@ -3496,6 +3508,22 @@ Access to full financial telemetry is restricted.`;
                               onChange={(e) => setEmpAddress(e.target.value)}
                               placeholder="123 Maple St, Seattle WA"
                               required
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Hourly Pay Rate (Optional)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={empHourlyRate}
+                              onChange={(e) => setEmpHourlyRate(e.target.value)}
+                              placeholder="e.g. 28.50"
                               style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
                               className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
                             />
