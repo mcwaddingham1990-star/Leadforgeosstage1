@@ -784,6 +784,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 1. Update Estimate Status
     setEstimates(prev => prev.map(e => e.id === estId ? { ...e, status: "Accepted" } : e));
 
+    // Cross-reference the real customer record for real contact info --
+    // an estimate itself only stores a customer name/company, not phone/
+    // email. No real match means honestly blank fields, not fabricated
+    // placeholder contact details.
+    const matchedCustomer = customers.find(
+      c => c.contact === est.customerName || c.company === est.company
+    );
+
     // 2. Automatically dispatch schedule event
     const newJobId = `job_gen_${Date.now()}`;
     const newJob = {
@@ -793,12 +801,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       startTime: "10:30",
       endTime: "13:00",
       customer: est.customerName,
-      customerPhone: "(206) 555-8933",
-      customerEmail: "contact@seattleclient.net",
-      customerAddress: est.company || "Seattle, WA",
-      assignedEmployee: "John Doe",
-      assignedCrew: "Unit 1",
-      location: est.company || "Seattle, WA",
+      customerPhone: matchedCustomer?.phone || "",
+      customerEmail: matchedCustomer?.email || "",
+      customerAddress: matchedCustomer?.address || est.address || est.company || "",
+      // No real rule exists for which employee should get an
+      // auto-created job -- unassigned for a real dispatcher to pick is
+      // honest; a hardcoded name never matching a real employee is not.
+      assignedEmployee: "",
+      location: matchedCustomer?.address || est.address || est.company || "",
       priority: "Medium" as const,
       notes: `Generated automatically via approved estimate ${est.number}. Amount: $${est.amount}`,
       status: "Scheduled" as const
@@ -811,7 +821,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       id: newJobId,
       type: "Job",
       title: `Job: ${newJob.customer}`,
-      subtitle: `Assigned: John Doe | Priority: Medium | Status: Scheduled`,
+      subtitle: `Assigned: Unassigned | Priority: Medium | Status: Scheduled`,
       address: newJob.location,
       lat: geocodeAddress(newJob.location, newJobId).lat,
       lng: geocodeAddress(newJob.location, newJobId).lng,
@@ -1167,13 +1177,16 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const handleDispatchOptimizedRoute = () => {
     if (selectedBasketIds.length < 2) return;
 
-    // Dispatch all selected basket jobs to "John Doe"
+    // There's no real rule for which technician should get a batch of
+    // jobs from a one-click action -- mark them ready for dispatch
+    // (Scheduled, not the fake "Traveling") rather than fake-assigning
+    // them to a hardcoded name that isn't a real employee. A real
+    // dispatcher assigns each one via handleAssignTechnician.
     setSchedulingEvents(prev => prev.map(evt => {
       if (selectedBasketIds.includes(evt.id)) {
         return {
           ...evt,
-          assignedEmployee: "John Doe",
-          status: "Traveling"
+          status: "Scheduled"
         };
       }
       return evt;
@@ -1181,8 +1194,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
     if (logOperationalEvent) {
       logOperationalEvent(
-        "Route Dispatched",
-        `One-Click Route optimized. ${selectedBasketIds.length} stops dispatched to John Doe. ETA reduced by 24%!`,
+        "Route Grouped",
+        `${selectedBasketIds.length} stops grouped for dispatch — assign a technician to each to send them out.`,
         "⚡"
       );
     }
