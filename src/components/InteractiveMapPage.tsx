@@ -112,8 +112,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setInventoryList,
     documents,
     setDocuments,
-    completedJobsRevenue,
-    setCompletedJobsRevenue
+    completedJobsRevenue
   } = useDomainData();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
   const map = useMap();
@@ -898,20 +897,23 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       return evt;
     }));
 
-    const jobAmount = 1450; // standard job value to update financials
-    if (setCompletedJobsRevenue) {
-      setCompletedJobsRevenue(prev => prev + jobAmount);
-    }
+    // Real revenue recognition already happens via the Event Engine's
+    // job-completion cascade (useEventEngineSubscribers), triggered by the
+    // setSchedulingEvents status change above — it looks up the job's real
+    // linked estimate amount instead of guessing a flat number here.
+    const activeJob = schedulingEvents.find(e => e.id === jobId);
+    const linkedEstimate = activeJob?.sourceEstimateId
+      ? estimates.find(e => e.id === activeJob.sourceEstimateId)
+      : undefined;
 
     // Update matching customer's stats
-    const activeJob = schedulingEvents.find(e => e.id === jobId);
     if (activeJob) {
       setCustomers(prev => prev.map(c => {
         if (c.company === activeJob.customer || c.contact === activeJob.customer) {
           return {
             ...c,
             openJobs: Math.max(0, c.openJobs - 1),
-            lifetimeValue: c.lifetimeValue + jobAmount
+            lifetimeValue: c.lifetimeValue + (linkedEstimate?.amount || 0)
           };
         }
         return c;
@@ -932,7 +934,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     if (logOperationalEvent) {
       logOperationalEvent(
         "Job Completed",
-        `Job Completed successfully. $${jobAmount.toLocaleString()} generated as profit.`,
+        linkedEstimate
+          ? `Job completed successfully. $${linkedEstimate.amount.toLocaleString()} revenue recognized.`
+          : "Job completed successfully.",
         "✅"
       );
     }

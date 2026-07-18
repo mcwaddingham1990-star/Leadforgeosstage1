@@ -132,6 +132,22 @@ export interface DocumentItem {
   metaObjects?: any[];
 }
 
+/**
+ * One real, timestamped revenue recognition — written by the Event
+ * Engine's job-completion cascade (useEventEngineSubscribers) when a job
+ * with a linked estimate is marked Completed. This is the only source of
+ * truth for both the running revenue total and the dashboard revenue
+ * graph — nothing here is ever synthesized or estimated.
+ */
+export interface RevenueEvent {
+  id: string;
+  date: string; // ISO timestamp, when the job was marked Completed
+  amount: number;
+  customer: string;
+  jobId: string;
+  estimateId: string;
+}
+
 export interface SchedulingEvent {
   id: string;
   eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom

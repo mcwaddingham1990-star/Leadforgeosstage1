@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
+import { RevenueEvent } from "./types/domain";
 import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
 import {
   signInWithEmailAndPassword,
@@ -281,6 +282,95 @@ const OS_SCREENS = [
   { id: "notifications", label: "Notifications", url: "", icon: "🔔", top: "82%", bottom: "87%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
+
+/**
+ * Buckets the real revenueEvents log (written by the Event Engine's
+ * job-completion cascade — see useEventEngineSubscribers) into real
+ * calendar periods for the revenue chart, plus a real prior-period total
+ * for the "vs prior period" comparison badge. Only real Revenue is
+ * returned — no Profit/Expenses/Payroll/Taxes, since no real expense,
+ * payroll, or tax tracking exists anywhere in the app yet to derive them
+ * from; inventing figures there would just be smarter-looking fake data.
+ */
+function getRevenueChartData(
+  filter: string,
+  revenueEvents: RevenueEvent[]
+): { series: Array<{ time: string; Revenue: number }>; currentTotal: number; priorTotal: number } {
+  const now = new Date();
+  const sumInRange = (start: Date, end: Date) =>
+    revenueEvents
+      .filter((e) => {
+        const d = new Date(e.date);
+        return d >= start && d < end;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+
+  const buildDays = (count: number, labelFn: (d: Date) => string) => {
+    const days: Array<{ time: string; Revenue: number }> = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+      days.push({ time: labelFn(dayStart), Revenue: sumInRange(dayStart, dayEnd) });
+    }
+    return days;
+  };
+
+  if (filter === "Week") {
+    const series = buildDays(7, (d) => d.toLocaleDateString(undefined, { weekday: "short" }));
+    const currentTotal = series.reduce((s, d) => s + d.Revenue, 0);
+    const priorTotal = sumInRange(
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+    );
+    return { series, currentTotal, priorTotal };
+  }
+
+  if (filter === "Quarter") {
+    const months: Array<{ time: string; Revenue: number }> = [];
+    for (let i = 2; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      months.push({ time: monthStart.toLocaleDateString(undefined, { month: "short" }), Revenue: sumInRange(monthStart, monthEnd) });
+    }
+    const currentTotal = months.reduce((s, d) => s + d.Revenue, 0);
+    const priorTotal = sumInRange(
+      new Date(now.getFullYear(), now.getMonth() - 5, 1),
+      new Date(now.getFullYear(), now.getMonth() - 2, 1)
+    );
+    return { series: months, currentTotal, priorTotal };
+  }
+
+  if (filter === "Year") {
+    const quarters: Array<{ time: string; Revenue: number }> = [];
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    for (let i = 3; i >= 0; i--) {
+      const qIndex = currentQuarter - i;
+      const qYear = now.getFullYear() + Math.floor(qIndex / 4);
+      const qNum = ((qIndex % 4) + 4) % 4;
+      const qStart = new Date(qYear, qNum * 3, 1);
+      const qEnd = new Date(qYear, qNum * 3 + 3, 1);
+      quarters.push({ time: `Q${qNum + 1} ${qYear}`, Revenue: sumInRange(qStart, qEnd) });
+    }
+    const currentTotal = quarters.reduce((s, d) => s + d.Revenue, 0);
+    const priorQIndex = currentQuarter - 4;
+    const priorYear = now.getFullYear() + Math.floor(priorQIndex / 4);
+    const priorQNum = ((priorQIndex % 4) + 4) % 4;
+    const priorTotal = sumInRange(
+      new Date(priorYear, priorQNum * 3, 1),
+      new Date(priorYear, priorQNum * 3 + 3, 1)
+    );
+    return { series: quarters, currentTotal, priorTotal };
+  }
+
+  // "Pay Period"/"Custom"/anything else: real trailing 30 days by day.
+  const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
+  const currentTotal = series.reduce((s, d) => s + d.Revenue, 0);
+  const priorTotal = sumInRange(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
+  );
+  return { series, currentTotal, priorTotal };
+}
 
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   switch (screenId) {
@@ -684,8 +774,12 @@ export default function App() {
   const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId);
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
+  const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
 
-  const [completedJobsRevenue, setCompletedJobsRevenue] = useState<number>(0);
+  // Derived, never a separately-tracked number — a running total kept in
+  // its own useState would silently reset to 0 on every reload/re-login
+  // instead of reflecting what's actually been recognized.
+  const completedJobsRevenue = revenueEvents.reduce((sum, e) => sum + e.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
 
@@ -2240,8 +2334,9 @@ Access to full financial telemetry is restricted.`;
     setRecentAiActions,
     snapshots,
     setSnapshots,
+    revenueEvents,
+    setRevenueEvents,
     completedJobsRevenue,
-    setCompletedJobsRevenue,
     preSelectedDate,
     setPreSelectedDate,
     preSelectedCustomerId,
@@ -4604,46 +4699,6 @@ Access to full financial telemetry is restricted.`;
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
                   
                   {activeScreen.id === "dashboard" ? ( (() => {
-                    // Local helper for revenue data
-                    const getRevenueData = () => {
-                      switch (revenueResetInterval) {
-                        case "Monthly":
-                          return [
-                            { name: "Wk 1", income: 8400, expenses: 3100, taxes: 1200 },
-                            { name: "Wk 2", income: 10500, expenses: 3200, taxes: 1500 },
-                            { name: "Wk 3", income: 12400, expenses: 4000, taxes: 1800 },
-                            { name: "Wk 4", income: 15200, expenses: 4100, taxes: 2200 },
-                            { name: "Wk 5", income: 18900, expenses: 4500, taxes: 2700 }
-                          ];
-                        case "Quarterly":
-                          return [
-                            { name: "Mth 1", income: 35000, expenses: 14000, taxes: 5200 },
-                            { name: "Mth 2", income: 42000, expenses: 16200, taxes: 6300 },
-                            { name: "Mth 3", income: 48500, expenses: 18100, taxes: 7200 }
-                          ];
-                        case "Annually":
-                          return [
-                            { name: "Q1", income: 124000, expenses: 45000, taxes: 18000 },
-                            { name: "Q2", income: 148000, expenses: 48000, taxes: 22000 },
-                            { name: "Q3", income: 165000, expenses: 52000, taxes: 24000 },
-                            { name: "Q4", income: 198000, expenses: 58000, taxes: 29000 }
-                          ];
-                        case "Pay Period":
-                        default:
-                          return [
-                            { name: "Day 1", income: 1500, expenses: 450, taxes: 220 },
-                            { name: "Day 4", income: 3200, expenses: 800, taxes: 480 },
-                            { name: "Day 7", income: 4800, expenses: 1100, taxes: 720 },
-                            { name: "Day 10", income: 6900, expenses: 1600, taxes: 1030 },
-                            { name: "Day 14", income: 8550, expenses: 2100, taxes: 1280 }
-                          ];
-                      }
-                    };
-
-                    const revenueData = getRevenueData().map(item => ({
-                      ...item,
-                      net: item.income - item.expenses - item.taxes
-                    }));
                     // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
                     // individual clock in/out events but nothing here aggregates them into a
                     // pay-period total) — this only reflects the current live clock-in session,
@@ -4651,38 +4706,10 @@ Access to full financial telemetry is restricted.`;
                     const totalHours = (clockInDuration / 3600).toFixed(1);
                     const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
 
-                    const getDashboardGraphData = () => {
-                      return revenuePageFilter === "Week" ? [
-                        { time: "Mon", Revenue: 1200, Profit: 450, Expenses: 750, Payroll: 400, Taxes: 120 },
-                        { time: "Tue", Revenue: 2400, Profit: 900, Expenses: 1500, Payroll: 800, Taxes: 240 },
-                        { time: "Wed", Revenue: 3800, Profit: 1400, Expenses: 2400, Payroll: 1200, Taxes: 380 },
-                        { time: "Thu", Revenue: 4900, Profit: 1850, Expenses: 3050, Payroll: 1600, Taxes: 490 },
-                        { time: "Fri", Revenue: 6200, Profit: 2300, Expenses: 3900, Payroll: 2000, Taxes: 620 },
-                        { time: "Sat", Revenue: 6800, Profit: 2550, Expenses: 4250, Payroll: 2200, Taxes: 680 },
-                        { time: "Sun", Revenue: 7420, Profit: 2920, Expenses: 4500, Payroll: 2400, Taxes: 740 }
-                      ] : revenuePageFilter === "Quarter" ? [
-                        { time: "Month 1", Revenue: 21000, Profit: 8200, Expenses: 12800, Payroll: 6000, Taxes: 1900 },
-                        { time: "Month 2", Revenue: 45000, Profit: 17500, Expenses: 27500, Payroll: 12000, Taxes: 4100 },
-                        { time: "Month 3", Revenue: 74550, Profit: 28860, Expenses: 45690, Payroll: 18690, Taxes: 6540 }
-                      ] : revenuePageFilter === "Year" ? [
-                        { time: "Q1", Revenue: 68000, Profit: 26000, Expenses: 42000, Payroll: 18000, Taxes: 6100 },
-                        { time: "Q2", Revenue: 142000, Profit: 55000, Expenses: 87000, Payroll: 36000, Taxes: 12800 },
-                        { time: "Q3", Revenue: 215000, Profit: 83000, Expenses: 132000, Payroll: 54000, Taxes: 19500 },
-                        { time: "Q4", Revenue: 298000, Profit: 115000, Expenses: 183000, Payroll: 72000, Taxes: 26800 }
-                      ] : revenuePageFilter === "Custom" ? [
-                        { time: "Period A", Revenue: 15000, Profit: 5800, Expenses: 9200, Payroll: 4500, Taxes: 1350 },
-                        { time: "Period B", Revenue: 32000, Profit: 12400, Expenses: 19600, Payroll: 9000, Taxes: 2880 },
-                        { time: "Period C", Revenue: 48500, Profit: 18700, Expenses: 29800, Payroll: 13500, Taxes: 4360 }
-                      ] : [
-                        { time: "May 1", Revenue: 3500, Profit: 1200, Expenses: 2300, Payroll: 1800, Taxes: 500 },
-                        { time: "May 6", Revenue: 5800, Profit: 2100, Expenses: 3700, Payroll: 2400, Taxes: 800 },
-                        { time: "May 11", Revenue: 7200, Profit: 2800, Expenses: 4400, Payroll: 2600, Taxes: 950 },
-                        { time: "May 16", Revenue: 9500, Profit: 3600, Expenses: 5900, Payroll: 3200, Taxes: 1100 },
-                        { time: "May 21", Revenue: 12400, Profit: 4800, Expenses: 7600, Payroll: 4500, Taxes: 1300 },
-                        { time: "May 26", Revenue: 16800, Profit: 6200, Expenses: 10600, Payroll: 5200, Taxes: 1700 },
-                        { time: "May 31", Revenue: 24850, Profit: 9620, Expenses: 12430, Payroll: 6230, Taxes: 2180 }
-                      ];
-                    };
+                    // Real Revenue only, bucketed by real completed-job data — see
+                    // getRevenueChartData for why Profit/Expenses/Payroll/Taxes
+                    // aren't part of this.
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents).series;
 
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
@@ -4759,42 +4786,6 @@ Access to full financial telemetry is restricted.`;
                                           dot={{ r: 1 }}
                                           activeDot={{ r: 3 }}
                                           name="Revenue"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Profit"
-                                          stroke="#3B82F6"
-                                          strokeWidth={1.5}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Profit"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Expenses"
-                                          stroke="#EF4444"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Expenses"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Payroll"
-                                          stroke="#8B5CF6"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Payroll"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Taxes"
-                                          stroke="#F59E0B"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Taxes"
                                         />
                                       </LineChart>
                                     </ResponsiveContainer>
@@ -5585,10 +5576,18 @@ Access to full financial telemetry is restricted.`;
                           <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
                             {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </span>
-                          <span className="text-xs font-bold text-emerald-600 flex items-center bg-emerald-500/10 px-2.5 py-1 rounded-lg">
-                            <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" />
-                            {revenuePageFilter === "Week" ? "+4.5%" : revenuePageFilter === "Quarter" ? "+14.1%" : revenuePageFilter === "Year" ? "+12.8%" : revenuePageFilter === "Custom" ? "+8.7%" : "+18.2%"}
-                          </span>
+                          {(() => {
+                            const { currentTotal, priorTotal } = getRevenueChartData(revenuePageFilter, revenueEvents);
+                            const hasPrior = priorTotal > 0;
+                            const pct = hasPrior ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
+                            const isUp = pct === null ? currentTotal > 0 : pct >= 0;
+                            return (
+                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
+                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
+                                {pct === null ? (currentTotal > 0 ? "New" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                              </span>
+                            );
+                          })()}
                           <span className="text-xs text-[#5E7393] font-sans font-medium">vs prior period</span>
                         </div>
 
@@ -5596,38 +5595,7 @@ Access to full financial telemetry is restricted.`;
                         <div className="h-[280px] w-full pt-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
-                              data={
-                                revenuePageFilter === "Week" ? [
-                                  { time: "Mon", Revenue: 1200, Profit: 450, Expenses: 750, Payroll: 400, Taxes: 120 },
-                                  { time: "Tue", Revenue: 2400, Profit: 900, Expenses: 1500, Payroll: 800, Taxes: 240 },
-                                  { time: "Wed", Revenue: 3800, Profit: 1400, Expenses: 2400, Payroll: 1200, Taxes: 380 },
-                                  { time: "Thu", Revenue: 4900, Profit: 1850, Expenses: 3050, Payroll: 1600, Taxes: 490 },
-                                  { time: "Fri", Revenue: 6200, Profit: 2300, Expenses: 3900, Payroll: 2000, Taxes: 620 },
-                                  { time: "Sat", Revenue: 6800, Profit: 2550, Expenses: 4250, Payroll: 2200, Taxes: 680 },
-                                  { time: "Sun", Revenue: 7420, Profit: 2920, Expenses: 4500, Payroll: 2400, Taxes: 740 }
-                                ] : revenuePageFilter === "Quarter" ? [
-                                  { time: "Month 1", Revenue: 21000, Profit: 8200, Expenses: 12800, Payroll: 6000, Taxes: 1900 },
-                                  { time: "Month 2", Revenue: 45000, Profit: 17500, Expenses: 27500, Payroll: 12000, Taxes: 4100 },
-                                  { time: "Month 3", Revenue: 74550, Profit: 28860, Expenses: 45690, Payroll: 18690, Taxes: 6540 }
-                                ] : revenuePageFilter === "Year" ? [
-                                  { time: "Q1", Revenue: 68000, Profit: 26000, Expenses: 42000, Payroll: 18000, Taxes: 6100 },
-                                  { time: "Q2", Revenue: 142000, Profit: 55000, Expenses: 87000, Payroll: 36000, Taxes: 12800 },
-                                  { time: "Q3", Revenue: 215000, Profit: 83000, Expenses: 132000, Payroll: 54000, Taxes: 19500 },
-                                  { time: "Q4", Revenue: 298000, Profit: 115000, Expenses: 183000, Payroll: 72000, Taxes: 26800 }
-                                ] : revenuePageFilter === "Custom" ? [
-                                  { time: "Period A", Revenue: 15000, Profit: 5800, Expenses: 9200, Payroll: 4500, Taxes: 1350 },
-                                  { time: "Period B", Revenue: 32000, Profit: 12400, Expenses: 19600, Payroll: 9000, Taxes: 2880 },
-                                  { time: "Period C", Revenue: 48500, Profit: 18700, Expenses: 29800, Payroll: 13500, Taxes: 4360 }
-                                ] : [
-                                  { time: "May 1", Revenue: 3500, Profit: 1200, Expenses: 2300, Payroll: 1800, Taxes: 500 },
-                                  { time: "May 6", Revenue: 5800, Profit: 2100, Expenses: 3700, Payroll: 2400, Taxes: 800 },
-                                  { time: "May 11", Revenue: 7200, Profit: 2800, Expenses: 4400, Payroll: 2600, Taxes: 950 },
-                                  { time: "May 16", Revenue: 9500, Profit: 3600, Expenses: 5900, Payroll: 3200, Taxes: 1100 },
-                                  { time: "May 21", Revenue: 12400, Profit: 4800, Expenses: 7600, Payroll: 4500, Taxes: 1300 },
-                                  { time: "May 26", Revenue: 16800, Profit: 6200, Expenses: 10600, Payroll: 5200, Taxes: 1700 },
-                                  { time: "May 31", Revenue: 24850, Profit: 9620, Expenses: 12430, Payroll: 6230, Taxes: 2180 }
-                                ]
-                              }
+                              data={getRevenueChartData(revenuePageFilter, revenueEvents).series}
                               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
@@ -5689,42 +5657,6 @@ Access to full financial telemetry is restricted.`;
                                 dot={{ r: 4, strokeWidth: 1 }}
                                 activeDot={{ r: 6 }}
                                 name="Revenue"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Profit"
-                                stroke="#3B82F6"
-                                strokeWidth={3}
-                                dot={{ r: 4, strokeWidth: 1 }}
-                                activeDot={{ r: 6 }}
-                                name="Profit"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Expenses"
-                                stroke="#EF4444"
-                                strokeWidth={2.5}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Expenses"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Payroll"
-                                stroke="#8B5CF6"
-                                strokeWidth={2.5}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Payroll"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Taxes"
-                                stroke="#F59E0B"
-                                strokeWidth={2.5}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Taxes"
                               />
                             </LineChart>
                           </ResponsiveContainer>

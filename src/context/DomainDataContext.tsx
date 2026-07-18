@@ -1,5 +1,5 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
-import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent } from "../types/domain";
+import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent } from "../types/domain";
 
 export interface RosterEntry {
   id?: string;
@@ -32,8 +32,10 @@ export interface DomainDataContextValue {
   setRecentAiActions: Dispatch<SetStateAction<any[]>>;
   snapshots: any[];
   setSnapshots: Dispatch<SetStateAction<any[]>>;
+  revenueEvents: RevenueEvent[];
+  setRevenueEvents: Dispatch<SetStateAction<RevenueEvent[]>>;
+  /** Derived sum of revenueEvents — provided so consumers don't each re-implement the reduce. */
   completedJobsRevenue: number;
-  setCompletedJobsRevenue: Dispatch<SetStateAction<number>>;
   preSelectedDate: string | undefined;
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
@@ -43,11 +45,11 @@ export interface DomainDataContextValue {
 export const DomainDataContext = createContext<DomainDataContextValue | undefined>(undefined);
 
 /**
- * The 11 Firestore-backed business collections (customers, leads, estimates,
+ * The 12 Firestore-backed business collections (customers, leads, estimates,
  * scheduling events, inventory, documents, roster, bulletins, notifications,
- * recent AI actions, snapshots) plus the handful of cross-page scalars that
- * travel with them. Page components should use this instead of taking each
- * collection as a pair of props.
+ * recent AI actions, snapshots, revenue events) plus the handful of
+ * cross-page scalars that travel with them. Page components should use this
+ * instead of taking each collection as a pair of props.
  */
 export function useDomainData(): DomainDataContextValue {
   const ctx = useContext(DomainDataContext);
