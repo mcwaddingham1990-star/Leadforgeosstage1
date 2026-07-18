@@ -9,7 +9,8 @@ export type PermissionAction =
   | "delete"
   | "approve"
   | "export"
-  | "manage";
+  | "manage"
+  | "ai";
 
 export const PERMISSION_ACTIONS: PermissionAction[] = [
   "view",
@@ -18,7 +19,8 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
   "delete",
   "approve",
   "export",
-  "manage"
+  "manage",
+  "ai"
 ];
 
 export type ModulePermissions = Record<PermissionAction, boolean>;
@@ -32,7 +34,8 @@ const NO_ACCESS: ModulePermissions = {
   delete: false,
   approve: false,
   export: false,
-  manage: false
+  manage: false,
+  ai: false
 };
 
 export function hasPermission(
@@ -68,9 +71,9 @@ export function defaultGranularFromModuleList(
     if (tier === "view-only") {
       result[moduleId] = { ...NO_ACCESS, view: true };
     } else if (tier === "full") {
-      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true, export: true };
+      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true, export: true, ai: true };
     } else {
-      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true };
+      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true, ai: true };
     }
   }
   return result;
@@ -80,37 +83,10 @@ export function emptyModulePermissions(): ModulePermissions {
   return { ...NO_ACCESS };
 }
 
-/**
- * Builds a real per-module GranularPermissions object by applying one flat
- * set of action toggles (the existing role-editor checkboxes: view/create/
- * edit/delete/approve/export) uniformly across every module the role can
- * see. Not yet independently configurable per module — that's the next
- * step — but this makes the existing checkboxes real (they previously set
- * state that was never saved or enforced) instead of decorative.
- */
-export function buildGranularFromCapabilities(
-  modules: string[],
-  capabilities: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean; export: boolean }
-): GranularPermissions {
-  const result: GranularPermissions = {};
-  for (const moduleId of modules) {
-    result[moduleId] = {
-      view: !!capabilities.view,
-      create: !!capabilities.create,
-      edit: !!capabilities.edit,
-      delete: !!capabilities.delete,
-      approve: !!capabilities.approve,
-      export: !!capabilities.export,
-      manage: false
-    };
-  }
-  return result;
-}
-
 export function fullAccessGranular(modules: string[]): GranularPermissions {
   const result: GranularPermissions = {};
   for (const moduleId of modules) {
-    result[moduleId] = { view: true, create: true, edit: true, delete: true, approve: true, export: true, manage: true };
+    result[moduleId] = { view: true, create: true, edit: true, delete: true, approve: true, export: true, manage: true, ai: true };
   }
   return result;
 }

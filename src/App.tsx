@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { buildGranularFromCapabilities, fullAccessGranular, defaultGranularFromModuleList, GranularPermissions } from "./types/permissions";
+import { fullAccessGranular, defaultGranularFromModuleList, GranularPermissions } from "./types/permissions";
+import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -126,15 +127,10 @@ export interface SelectedRole {
   description: string;
   isCustom?: boolean;
   permissions: string[];
-  capabilities: {
-    view: boolean;
-    create: boolean;
-    edit: boolean;
-    delete: boolean;
-    approve: boolean;
-    export: boolean;
-    ai: boolean;
-  };
+  // Real per-module capabilities — e.g. this role can have Routes: Edit
+  // while another role has Routes: View only, instead of one flat
+  // view/create/edit/... set applied uniformly across every module.
+  modulePermissions: GranularPermissions;
 }
 
 export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: string; permissions: string[] }> = {
@@ -1406,7 +1402,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: "Everything",
       permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"],
-      capabilities: { view: true, create: true, edit: true, delete: true, approve: true, export: true, ai: true }
+      modulePermissions: fullAccessGranular(["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"])
     },
     {
       id: "office_manager",
@@ -1414,7 +1410,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: "Dashboard, CRM, Sched, Msg, Docs, etc.",
       permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: true, export: true, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"], "standard")
     },
     {
       id: "dispatcher",
@@ -1422,7 +1418,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: "Dispatch, Routes, Map, Jobs, Sched",
       permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"], "standard")
     },
     {
       id: "sales_representative",
@@ -1430,7 +1426,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: "Leads, CRM, Estimates, Docs",
       permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"], "standard")
     },
     {
       id: "estimator",
@@ -1438,7 +1434,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: "Estimates, Bids, Takeoffs, Reports",
       permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"], "standard")
     }
   ]);
   
@@ -1956,7 +1952,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: defaultData.description,
       permissions: [...defaultData.permissions],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      modulePermissions: defaultGranularFromModuleList(defaultData.permissions, "standard")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     triggerNotification(`Added role: ${defaultData.name}`);
@@ -1970,7 +1966,8 @@ Access to full financial telemetry is restricted.`;
       id: randomId,
       name: `${role.name} Copy`,
       isCustom: true,
-      count: 1
+      count: 1,
+      modulePermissions: JSON.parse(JSON.stringify(role.modulePermissions))
     };
     setSelectedRoles(prev => [...prev, newRole]);
     triggerNotification(`Duplicated ${role.name}`);
@@ -1992,7 +1989,7 @@ Access to full financial telemetry is restricted.`;
       description: "Custom user defined role",
       isCustom: true,
       permissions: ["dashboard", "messages"],
-      capabilities: { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view-only")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     setShowCustomRoleModal(false);
@@ -2026,7 +2023,12 @@ Access to full financial telemetry is restricted.`;
         const startIndex = r.id === "owner" ? 1 : 0;
         const granularPermissions = r.id === "owner"
           ? fullAccessGranular(r.permissions)
-          : buildGranularFromCapabilities(r.permissions, r.capabilities);
+          // Only keep entries for currently-authorized modules — a module
+          // toggled off after being configured shouldn't leave a stale
+          // permission entry behind.
+          : Object.fromEntries(
+              Object.entries(r.modulePermissions).filter(([moduleId]) => r.permissions.includes(moduleId))
+            ) as GranularPermissions;
         for (let i = startIndex; i < r.count; i++) {
           const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
           const cleanRolePrefix = r.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8);
@@ -2081,7 +2083,7 @@ Access to full financial telemetry is restricted.`;
     // exist, or worse, to whichever fake default every failed lookup shares.
     let inviteRole = "Driver";
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
-    let inviteGranularPermissions: GranularPermissions = buildGranularFromCapabilities(invitePermissions, { view: true, create: false, edit: false, delete: false, approve: false, export: false });
+    let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view-only");
     let businessEmail: string | null = null;
 
     try {
@@ -3784,160 +3786,12 @@ Access to full financial telemetry is restricted.`;
 
                   {/* STEP 2 MODAL 3: GRANULAR ROLE PERMISSION CUSTOMIZER MATRIX */}
                   {customizingRole && (
-                    <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-3 z-30 animate-fade-in">
-                      <div className="bg-white text-slate-800 rounded-3xl p-5 w-[95%] max-w-[420px] max-h-[92%] shadow-2xl border border-blue-100 flex flex-col justify-between overflow-hidden">
-                        
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-                          <div>
-                            <h3 className="text-xs font-extrabold text-blue-950 uppercase tracking-tight flex items-center gap-1.5">
-                              <Settings className="w-4 h-4 text-blue-600 animate-spin-slow" />
-                              <span>Custom Permissions Template</span>
-                            </h3>
-                            <p style={getFontSize(9.5)} className="text-blue-600 font-sans font-bold block">
-                              Editing Profile: {customizingRole.name}
-                            </p>
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => setCustomizingRole(null)}
-                            className="text-slate-400 hover:text-slate-600 font-sans font-bold text-lg select-none cursor-pointer"
-                          >
-                            ×
-                          </button>
-                        </div>
-
-                        {/* MATRIX CHECKLIST SCROLL CONTAINER */}
-                        <div className="flex-1 overflow-y-auto my-3 pr-1 space-y-3.5 scrollbar-thin scrollbar-thumb-blue-100">
-                          
-                          {/* Navigation Screens Checkboxes */}
-                          <div className="space-y-1.5">
-                            <p style={getFontSize(10.5)} className="font-sans font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                              <CheckSquare className="w-3.5 h-3.5 text-blue-500" /> Authorized OS Screens
-                            </p>
-                            <p style={getFontSize(9)} className="text-slate-400 font-sans leading-normal">
-                              Toggle screens that are rendered in this employee's sidebar navigation menu.
-                            </p>
-                            <div className="grid grid-cols-2 gap-1.5 pt-1">
-                              {[
-                                { id: "dashboard", label: "Dashboard" },
-                                { id: "leads", label: "Leads / CRM" },
-                                { id: "jobs", label: "Jobs List" },
-                                { id: "customers", label: "Customers" },
-                                { id: "messages", label: "Messages" },
-                                { id: "scheduling", label: "Scheduling" },
-                                { id: "dispatch", label: "Dispatch Board" },
-                                { id: "timeclock", label: "Time Clock" },
-                                { id: "routes", label: "Routes & Stops" },
-                                { id: "estimates", label: "Estimates" },
-                                { id: "documents", label: "Documents" },
-                                { id: "ai_assistant", label: "AI Assistant" },
-                                { id: "inventory", label: "Inventory" },
-                                { id: "settings", label: "Settings" },
-                                { id: "training", label: "Employee Training" }
-                              ].map((screen) => {
-                                const isPermitted = customizingRole.permissions.includes(screen.id);
-                                return (
-                                  <label 
-                                    key={screen.id} 
-                                    className={`flex items-center gap-2 p-1.5 rounded-lg border text-[10.5px] cursor-pointer transition-all ${
-                                      isPermitted ? "bg-blue-50/50 border-blue-200 text-blue-900 font-bold" : "bg-slate-50/50 border-transparent text-slate-500 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isPermitted}
-                                      onChange={(e) => {
-                                        let updatedPerms = [...customizingRole.permissions];
-                                        if (e.target.checked) {
-                                          updatedPerms.push(screen.id);
-                                        } else {
-                                          updatedPerms = updatedPerms.filter(p => p !== screen.id);
-                                        }
-                                        setCustomizingRole({
-                                          ...customizingRole,
-                                          permissions: updatedPerms
-                                        });
-                                      }}
-                                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span className="truncate">{screen.label}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Action Level Capabilities */}
-                          <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                            <p style={getFontSize(10.5)} className="font-sans font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                              <Shield className="w-3.5 h-3.5 text-blue-500" /> Action-Level Capabilities
-                            </p>
-                            <p style={getFontSize(9)} className="text-slate-400 font-sans leading-normal">
-                              Define granular execution privileges allowed within accessible modules.
-                            </p>
-                            
-                            <div className="grid grid-cols-2 gap-1.5 pt-1">
-                              {[
-                                { key: "view", label: "Read-Only View Mode" },
-                                { key: "create", label: "Create Records" },
-                                { key: "edit", label: "Edit / Update" },
-                                { key: "delete", label: "Delete Records" },
-                                { key: "approve", label: "Approve Estimates" },
-                                { key: "export", label: "Export CSV / PDF" },
-                                { key: "ai", label: "Trigger Gemini AI" }
-                              ].map((cap) => {
-                                const hasCap = customizingRole.capabilities?.[cap.key as keyof SelectedRole["capabilities"]] ?? false;
-                                return (
-                                  <label 
-                                    key={cap.key}
-                                    className={`flex items-center gap-2 p-1.5 rounded-lg border text-[10.5px] cursor-pointer transition-all ${
-                                      hasCap ? "bg-indigo-50/50 border-indigo-200 text-indigo-900 font-bold" : "bg-slate-50/50 border-transparent text-slate-500 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={hasCap}
-                                      onChange={(e) => {
-                                        const updatedCapabilities = {
-                                          ...(customizingRole.capabilities || { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }),
-                                          [cap.key]: e.target.checked
-                                        };
-                                        setCustomizingRole({
-                                          ...customizingRole,
-                                          capabilities: updatedCapabilities
-                                        });
-                                      }}
-                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span>{cap.label}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                        </div>
-
-                        {/* FOOTER ACTIONS */}
-                        <div className="flex gap-2.5 pt-2 border-t border-slate-100 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setCustomizingRole(null)}
-                            className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveCustomPermissions(customizingRole)}
-                            className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md transition-all cursor-pointer font-sans"
-                          >
-                            Save Template
-                          </button>
-                        </div>
-
-                      </div>
-                    </div>
+                    <RolePermissionEditorModal
+                      role={customizingRole}
+                      onSave={handleSaveCustomPermissions}
+                      onClose={() => setCustomizingRole(null)}
+                      position="absolute"
+                    />
                   )}
 
                   {/* STEP 2 MODAL 4: SECURE GENERATED INVITE CODES PANEL */}

@@ -43,6 +43,9 @@ import {
   ArrowRight,
   UserPlus
 } from "lucide-react";
+import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
+import { defaultGranularFromModuleList } from "../types/permissions";
+import type { SelectedRole } from "../App";
 
 // Types for SettingsPage
 export interface SettingsPageProps {
@@ -68,8 +71,8 @@ export interface SettingsPageProps {
   setGlobalAiSetting: (val: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO") => void;
   moduleAiSettings: Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">;
   setModuleAiSettings: React.Dispatch<React.SetStateAction<Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">>>;
-  selectedRoles: any[];
-  setSelectedRoles: React.Dispatch<React.SetStateAction<any[]>>;
+  selectedRoles: SelectedRole[];
+  setSelectedRoles: React.Dispatch<React.SetStateAction<SelectedRole[]>>;
 }
 
 // Initial defaults for fields not in parent state
@@ -254,6 +257,7 @@ export default function SettingsPage({
 
   // Custom role add state
   const [newRoleName, setNewRoleName] = useState("");
+  const [editingRole, setEditingRole] = useState<SelectedRole | null>(null);
 
   // Audit Logs state (starts with some historical entries, appends changes live)
   const [auditLogs, setAuditLogs] = useState<Array<{
@@ -643,13 +647,14 @@ export default function SettingsPage({
     const cleanRoleName = newRoleName.trim();
     const newId = cleanRoleName.toLowerCase().replace(/\s+/g, "_");
 
-    const customRoleObj = {
+    const customRoleObj: SelectedRole = {
       id: newId,
       name: cleanRoleName,
       count: 0,
       description: "Custom user-defined profile permissions",
+      isCustom: true,
       permissions: ["dashboard", "messages"],
-      capabilities: { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view-only")
     };
 
     setSelectedRoles(prev => [...prev, customRoleObj]);
@@ -670,25 +675,15 @@ export default function SettingsPage({
     }, ...prev]);
   };
 
-  // Update role capability matrix
-  const handleToggleCapability = (roleId: string, capKey: string) => {
-    setSelectedRoles(prev => prev.map(r => {
-      if (r.id === roleId) {
-        return {
-          ...r,
-          capabilities: {
-            ...r.capabilities,
-            [capKey]: !r.capabilities[capKey]
-          }
-        };
-      }
-      return r;
-    }));
-    triggerNotification(`🛡️ Updated capability "${capKey}" on role "${roleId}"`);
+  // Save edited per-module permissions for a role
+  const handleSaveRolePermissions = (updated: SelectedRole) => {
+    setSelectedRoles(prev => prev.map(r => r.id === updated.id ? updated : r));
+    setEditingRole(null);
+    triggerNotification(`🛡️ Updated permissions for role "${updated.name}"`);
   };
 
   return (
-    <div className="space-y-6 text-left animate-fade-in font-sans">
+    <div className="relative space-y-6 text-left animate-fade-in font-sans">
       
       {/* TOP HEADER CARD & CONTROL CENTER */}
       <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-4">
@@ -1055,23 +1050,27 @@ export default function SettingsPage({
                             <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-sans">{role.description}</p>
                           </div>
                           <div className="flex flex-wrap gap-1 pt-1.5 border-t border-[#A9CDEE]/30">
-                            {Object.keys(role.capabilities || {}).map((cap) => {
-                              const isEnabled = role.capabilities[cap];
-                              return (
-                                <button
-                                  key={cap}
-                                  onClick={() => handleToggleCapability(role.id, cap)}
-                                  className={`px-1.5 py-0.5 text-[8.5px] font-black rounded border cursor-pointer select-none transition-all uppercase ${
-                                    isEnabled
-                                      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                                      : "bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {cap}
-                                </button>
-                              );
-                            })}
+                            {role.permissions.slice(0, 4).map((moduleId) => (
+                              <span
+                                key={moduleId}
+                                className="px-1.5 py-0.5 text-[8.5px] font-black rounded border bg-slate-50 text-slate-400 border-slate-100 uppercase"
+                              >
+                                {moduleId}
+                              </span>
+                            ))}
+                            {role.permissions.length > 4 && (
+                              <span className="px-1.5 py-0.5 text-[8.5px] font-black rounded border bg-slate-50 text-slate-400 border-slate-100">
+                                +{role.permissions.length - 4}
+                              </span>
+                            )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingRole(role)}
+                            className="w-full py-1.5 text-[9.5px] font-bold bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] hover:bg-white rounded-lg cursor-pointer uppercase tracking-wider transition-all"
+                          >
+                            Edit Per-Module Permissions
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -2318,6 +2317,14 @@ export default function SettingsPage({
 
           </div>
         </div>
+      )}
+
+      {editingRole && (
+        <RolePermissionEditorModal
+          role={editingRole}
+          onSave={handleSaveRolePermissions}
+          onClose={() => setEditingRole(null)}
+        />
       )}
 
     </div>
