@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { fullAccessGranular, defaultGranularFromModuleList, GranularPermissions } from "./types/permissions";
+import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
 import {
   signInWithEmailAndPassword,
@@ -562,6 +562,7 @@ export default function App() {
     email: string;
     role: string;
     permissions: string[];
+    granularPermissions?: GranularPermissions;
     isEmployee?: boolean;
     name?: string;
     goals?: string;
@@ -733,32 +734,39 @@ export default function App() {
 
   const getVisibleScreens = () => {
     if (!loggedInUser) return [];
-    
+
     // Determine which role we are currently viewing/simulating
     const activeRole = simulatedRole || loggedInUser.role;
-    
+
     if (activeRole === "Owner") {
       return OS_SCREENS;
     }
-    
-    // Look up role in custom roles or default roles
-    const normalizedRoleKey = activeRole.toLowerCase().replace(/ /g, "_");
-    
+
     let perms: string[] = [];
-    
-    // Check if the role matches one of our SelectedRoles in team builder state
-    const customRoleMatch = selectedRoles.find(r => r.name === activeRole || r.id === normalizedRoleKey);
-    if (customRoleMatch) {
-      perms = [...customRoleMatch.permissions];
-    } else {
-      // Check in DEFAULT_ROLES_DATA
-      const defaultRoleMatch = DEFAULT_ROLES_DATA[normalizedRoleKey];
-      if (defaultRoleMatch) {
-        perms = [...defaultRoleMatch.permissions];
+
+    if (simulatedRole) {
+      // Owner is previewing a role template before any real employee is
+      // using it yet — there's no real employee profile to read, so fall
+      // back to the template's own module list.
+      const normalizedRoleKey = activeRole.toLowerCase().replace(/ /g, "_");
+      const customRoleMatch = selectedRoles.find(r => r.name === activeRole || r.id === normalizedRoleKey);
+      if (customRoleMatch) {
+        perms = [...customRoleMatch.permissions];
       } else {
-        // Fallback to user's direct permissions or default to dashboard
-        perms = [...(loggedInUser.permissions || ["dashboard"])];
+        const defaultRoleMatch = DEFAULT_ROLES_DATA[normalizedRoleKey];
+        perms = defaultRoleMatch ? [...defaultRoleMatch.permissions] : [...(loggedInUser.permissions || ["dashboard"])];
       }
+    } else if (loggedInUser.granularPermissions) {
+      // Real logged-in employee — their own stored per-module View
+      // permission is authoritative. This is what the owner actually
+      // configured for this person, not a role-name lookup against a
+      // generic template that may have since changed or never applied.
+      perms = OS_SCREENS
+        .map(s => s.id)
+        .filter(id => hasPermission(loggedInUser.granularPermissions, id, "view"));
+    } else {
+      // Legacy account from before granular permissions existed.
+      perms = [...(loggedInUser.permissions || ["dashboard"])];
     }
 
     // Always allow bulletins to be viewed by everyone
