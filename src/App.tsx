@@ -656,6 +656,8 @@ export default function App() {
     isEmployee?: boolean;
     name?: string;
     goals?: string;
+    /** The owner's business email — the real multi-tenant scoping key for employee sessions (an employee's own `email` is not it). */
+    businessEmail?: string;
   } | null>(null);
 
   // Authentication & Form States
@@ -758,7 +760,12 @@ export default function App() {
   // Each collection is backed by useFirestoreCollection, which centralizes the
   // sync-to-Firestore + realtime-subscribe + clear-on-logout behavior that used
   // to be hand-duplicated per collection (see src/hooks/useFirestoreCollection.ts).
-  const businessId = loggedInUser?.email;
+  // The real multi-tenant scoping key. For an owner this is their own
+  // email; for an employee it must be the owner's businessEmail — an
+  // employee's own email is a different tenant and would resolve every
+  // collection to empty. (TrainingPage.tsx already used this exact
+  // ternary, anticipating businessEmail would be populated here.)
+  const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
   const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId);
   const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
   const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
@@ -1051,7 +1058,8 @@ export default function App() {
                 granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "standard") : fullAccessGranular(resolvedPermissions)),
                 isEmployee: isEmployee,
                 name: profileData.name || user.displayName || "Owner",
-                goals: profileData.goals || ""
+                goals: profileData.goals || "",
+                businessEmail: isEmployee ? profileData.businessEmail : (user.email || "")
               });
               setIsLoggedIn(true);
               
@@ -1811,7 +1819,8 @@ Access to full financial telemetry is restricted.`;
           granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "standard") : fullAccessGranular(resolvedPerms)),
           isEmployee: isEmployeeAcct,
           name: profileData.name || user.displayName || "Owner",
-          goals: profileData.goals || ""
+          goals: profileData.goals || "",
+          businessEmail: isEmployeeAcct ? profileData.businessEmail : (user.email || "")
         });
         setIsLoggedIn(true);
 
@@ -2276,7 +2285,8 @@ Access to full financial telemetry is restricted.`;
         granularPermissions: inviteGranularPermissions,
         isEmployee: true,
         name: `${empFirstName} ${empLastName}`,
-        goals: empGoals
+        goals: empGoals,
+        businessEmail
       });
       setIsLoggedIn(true);
       
