@@ -1384,12 +1384,23 @@ export default function App() {
           if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
             blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
           } else {
+            const topCustomer = customers.length > 0 ? [...customers].sort((a, b) => b.lifetimeValue - a.lifetimeValue)[0] : null;
+            const topLead = leads.length > 0 ? [...leads].sort((a, b) => b.estimatedValue - a.estimatedValue)[0] : null;
             if (aiPageId === "customers") {
-              blockedText = "Your highest value client is **Marcus Vance** representing **Apex Plumb & Drain** with an elegant Lifetime Value of **[REDACTED - OWNER ONLY]**. They have 3 open jobs currently.";
+              blockedText = topCustomer
+                ? `Your highest value client is **${topCustomer.contact}** representing **${topCustomer.company}** with a Lifetime Value of **[REDACTED - OWNER ONLY]**. They have ${topCustomer.openJobs} open jobs currently.`
+                : "No customers on record yet.";
             } else if (aiPageId === "leads") {
-              blockedText = "The highest value lead is **Theresa W.** representing Facebook source with an estimated contract value of **[REDACTED - OWNER ONLY]** currently marked in 'New' status.";
+              blockedText = topLead
+                ? `The highest value lead is **${topLead.name}** representing **${topLead.source}** source with an estimated contract value of **[REDACTED - OWNER ONLY]**, currently marked in '${topLead.status}' status.`
+                : "No leads on record yet.";
+            } else if (topCustomer) {
+              const sourceCounts: Record<string, number> = {};
+              leads.forEach((l) => { sourceCounts[l.source] = (sourceCounts[l.source] || 0) + 1; });
+              const topSourceEntry = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+              blockedText = `Based on our operational ledger, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
             } else {
-              blockedText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer (**[REDACTED - OWNER ONLY]** LTV), and your most consistent acquisition source is Website forms.";
+              blockedText = "No customer or lead data on record yet.";
             }
           }
           setAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
@@ -4818,23 +4829,24 @@ Access to full financial telemetry is restricted.`;
                               
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
-                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{dashboardLeads.length} Leads</p>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{leads.length} Leads</p>
                                   <p className="text-[9px] text-[#5E7393] font-bold mt-1">Adjusted from connected sources</p>
                                 </div>
-                                
+
                                 <div className="space-y-1 my-3 text-[10px] text-[#1F3557]/85 font-semibold">
-                                  <div className="flex items-center justify-between border-b border-blue-200/40 pb-1">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Theresa W.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Facebook</span>
-                                  </div>
-                                  <div className="flex items-center justify-between border-b border-blue-200/40 pb-1">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Albert F.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Google (GBP)</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Esther H.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Website</span>
-                                  </div>
+                                  {leads.length === 0 ? (
+                                    <p className="text-[9px] text-[#5E7393]/70 italic">No active leads yet.</p>
+                                  ) : (
+                                    [...leads]
+                                      .sort((a, b) => (a.addedDaysAgo ?? 0) - (b.addedDaysAgo ?? 0))
+                                      .slice(0, 3)
+                                      .map((lead) => (
+                                        <div key={lead.id} className="flex items-center justify-between border-b border-blue-200/40 pb-1 last:border-b-0">
+                                          <span className="flex items-center gap-1 text-[#1F3557]/90 truncate">👤 {lead.name}</span>
+                                          <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold shrink-0">{lead.source}</span>
+                                        </div>
+                                      ))
+                                  )}
                                 </div>
 
                                 <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
