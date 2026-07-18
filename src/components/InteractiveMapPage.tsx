@@ -120,6 +120,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const map = useMap();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
+  // Map IDs are tied to a specific Google Cloud project — falls back to the
+  // original demo project's Map ID only if a real business hasn't set
+  // their own yet (which won't work with their own API key/project).
+  const mapId = (process.env.GOOGLE_MAPS_MAP_ID || "").trim() || "61f65bb1969a473a";
 
   // Map Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -1298,7 +1302,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               id="gmp_mcp_codeassist_v1_aistudio"
               defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
               defaultZoom={11}
-              mapId="61f65bb1969a473a"
+              mapId={mapId}
               style={{ width: "100%", height: "100%", borderRadius: "24px" }}
             >
               {/* Google maps overlays */}
@@ -1397,6 +1401,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </p>
                   <p>
                     <strong className="text-white">3. Or Manually:</strong> Open <span className="text-white font-bold">Settings</span> (⚙️ gear icon, top-right corner) → <span className="text-white font-bold">Secrets</span> → Add secret name <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code> → paste key.
+                  </p>
+                  <p>
+                    <strong className="text-white">4. Map ID (required too):</strong> In the same Google Cloud project, go to <span className="text-white font-bold">Maps → Map Management</span>, create a Map ID, then add secret <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_MAP_ID</code> with that value. A Map ID from a different project than your key won't work.
                   </p>
                 </div>
               </div>
@@ -1899,7 +1906,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   id="gmp_mcp_codeassist_v1_aistudio"
                   defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
                   defaultZoom={11}
-                  mapId="61f65bb1969a473a"
+                  mapId={mapId}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
                   {/* Google maps overlays */}
@@ -1998,6 +2005,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       </p>
                       <p>
                         <strong className="text-white">3. Or Manually:</strong> Open <span className="text-white font-bold">Settings</span> (⚙️ gear icon, top-right corner) → <span className="text-white font-bold">Secrets</span> → Add secret name <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code> → paste key.
+                      </p>
+                      <p>
+                        <strong className="text-white">4. Map ID (required too):</strong> In the same Google Cloud project, go to <span className="text-white font-bold">Maps → Map Management</span>, create a Map ID, then add secret <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_MAP_ID</code> with that value. A Map ID from a different project than your key won't work.
                       </p>
                     </div>
                   </div>

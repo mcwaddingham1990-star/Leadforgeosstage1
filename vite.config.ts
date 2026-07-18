@@ -50,7 +50,12 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aiApiDevMiddleware()],
     define: {
-      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || '')
+      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || ''),
+      // Map IDs are tied to a specific Google Cloud project — a Map ID from
+      // a different project than the one the API key belongs to will fail
+      // to render Advanced Markers. Configurable per-deployment instead of
+      // hardcoded so each real business's own key/Map ID pair actually match.
+      'process.env.GOOGLE_MAPS_MAP_ID': JSON.stringify(process.env.GOOGLE_MAPS_MAP_ID || '')
     },
     resolve: {
       alias: {
