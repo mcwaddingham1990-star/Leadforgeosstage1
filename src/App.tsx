@@ -918,6 +918,16 @@ export default function App() {
     // Determine which role we are currently viewing/simulating
     const activeRole = simulatedRole || loggedInUser.role;
 
+    // The real owner account is never an employee record (only invited
+    // staff get isEmployee: true) -- that's the reliable signal for full
+    // access, not a role-string match. An older/inconsistent stored
+    // `role` value must never silently lock the actual owner out of
+    // screens. Workspace Simulator previews still go through the
+    // restricted logic below on purpose.
+    if (!simulatedRole && !loggedInUser.isEmployee) {
+      return OS_SCREENS;
+    }
+
     if (activeRole === "Owner") {
       return OS_SCREENS;
     }
@@ -4579,7 +4589,7 @@ Access to full financial telemetry is restricted.`;
                 })}
 
                 {/* Workspace Simulator Card - Styled with soft outline and NO solid white card */}
-                {!isSidebarCollapsed && loggedInUser?.role === "Owner" && (
+                {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
                   <div className="mx-1 my-3 p-4 bg-[#1F3557]/5 border border-[#1F3557]/10 rounded-2xl flex flex-col gap-1.5 text-left animate-fade-in">
                     <p className="text-[8.5px] font-black text-[#1F3557]/80 uppercase tracking-wider">WORKSPACE SIMULATOR</p>
                     <div className="flex items-center justify-between">
@@ -4888,7 +4898,23 @@ Access to full financial telemetry is restricted.`;
 
                 /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
-                  
+
+                  {simulatedRole && (
+                    <div className="sticky top-0 z-40 bg-amber-500 text-amber-950 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 font-bold text-xs">
+                      <span>⚠️ PREVIEWING AS "{simulatedRole}" — some tabs and data are hidden to match that role's real permissions. This is not your real Owner view.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSimulatedRole(null);
+                          triggerNotification("Exited simulation — back to your real Owner view.");
+                        }}
+                        className="shrink-0 px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-[10.5px] uppercase tracking-wide cursor-pointer hover:bg-amber-900"
+                      >
+                        Exit Simulation
+                      </button>
+                    </div>
+                  )}
+
                   {activeScreen.id === "dashboard" ? ( (() => {
                     // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
                     // individual clock in/out events but nothing here aggregates them into a
