@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { handleAiAsk, handleScanReceipt, AiAskRequest, ScanReceiptRequest } from './server/aiHandler';
+import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +25,16 @@ app.post('/api/ai/scan-receipt', async (req, res) => {
   try {
     const body = req.body as ScanReceiptRequest;
     const result = await handleScanReceipt(body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'AI request failed' });
+  }
+});
+
+app.post('/api/ai/scan-financial-document', async (req, res) => {
+  try {
+    const body = req.body as ScanFinancialDocumentRequest;
+    const result = await handleScanFinancialDocument(body);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'AI request failed' });

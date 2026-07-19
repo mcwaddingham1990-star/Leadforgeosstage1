@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
-import { RevenueEvent, EmployeeRecord, TimeClockLog } from "./types/domain";
+import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
+import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -285,91 +286,156 @@ const OS_SCREENS = [
 
 /**
  * Buckets the real revenueEvents log (written by the Event Engine's
- * job-completion cascade — see useEventEngineSubscribers) into real
- * calendar periods for the revenue chart, plus a real prior-period total
- * for the "vs prior period" comparison badge. Only real Revenue is
- * returned — no Profit/Expenses/Payroll/Taxes, since no real expense,
- * payroll, or tax tracking exists anywhere in the app yet to derive them
- * from; inventing figures there would just be smarter-looking fake data.
+ * job-completion cascade) and real transactions log (manual/scanned/payroll
+ * entries — see LogTransactionModal + handleRunPayroll) into real calendar
+ * periods for the revenue chart, plus real prior-period/current-period
+ * totals for the comparison badge and summary cards. Accrued Taxes is
+ * deliberately not derived here — there's no real tax engine anywhere in
+ * the app to compute a real liability from.
  */
 function getRevenueChartData(
   filter: string,
-  revenueEvents: RevenueEvent[]
-): { series: Array<{ time: string; Revenue: number }>; currentTotal: number; priorTotal: number } {
+  revenueEvents: RevenueEvent[],
+  transactions: Transaction[] = []
+): {
+  series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>;
+  currentTotal: number;
+  priorTotal: number;
+  currentExpenseTotal: number;
+  currentPayrollTotal: number;
+} {
   const now = new Date();
-  const sumInRange = (start: Date, end: Date) =>
-    revenueEvents
+  const expenseTx = transactions.filter((t) => t.type === "expense");
+  const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
+
+  const sumInRange = (items: Array<{ amount: number; date: string }>, start: Date, end: Date) =>
+    items
       .filter((e) => {
         const d = new Date(e.date);
         return d >= start && d < end;
       })
       .reduce((sum, e) => sum + e.amount, 0);
 
+  const buildRow = (time: string, start: Date, end: Date) => {
+    const Revenue = sumInRange(revenueEvents, start, end);
+    const Expenses = sumInRange(expenseTx, start, end);
+    return { time, Revenue, Expenses, Profit: Revenue - Expenses };
+  };
+
   const buildDays = (count: number, labelFn: (d: Date) => string) => {
-    const days: Array<{ time: string; Revenue: number }> = [];
+    const days: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
     for (let i = count - 1; i >= 0; i--) {
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
-      days.push({ time: labelFn(dayStart), Revenue: sumInRange(dayStart, dayEnd) });
+      days.push(buildRow(labelFn(dayStart), dayStart, dayEnd));
     }
     return days;
   };
 
+  const withTotals = (
+    series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>,
+    periodStart: Date,
+    periodEnd: Date,
+    priorTotal: number
+  ) => ({
+    series,
+    currentTotal: series.reduce((s, d) => s + d.Revenue, 0),
+    priorTotal,
+    currentExpenseTotal: series.reduce((s, d) => s + d.Expenses, 0),
+    currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd)
+  });
+
   if (filter === "Week") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const series = buildDays(7, (d) => d.toLocaleDateString(undefined, { weekday: "short" }));
-    const currentTotal = series.reduce((s, d) => s + d.Revenue, 0);
     const priorTotal = sumInRange(
+      revenueEvents,
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
     );
-    return { series, currentTotal, priorTotal };
+    return withTotals(series, periodStart, periodEnd, priorTotal);
   }
 
   if (filter === "Quarter") {
-    const months: Array<{ time: string; Revenue: number }> = [];
+    const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
     for (let i = 2; i >= 0; i--) {
       const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      months.push({ time: monthStart.toLocaleDateString(undefined, { month: "short" }), Revenue: sumInRange(monthStart, monthEnd) });
+      months.push(buildRow(monthStart.toLocaleDateString(undefined, { month: "short" }), monthStart, monthEnd));
     }
-    const currentTotal = months.reduce((s, d) => s + d.Revenue, 0);
+    const periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const priorTotal = sumInRange(
+      revenueEvents,
       new Date(now.getFullYear(), now.getMonth() - 5, 1),
       new Date(now.getFullYear(), now.getMonth() - 2, 1)
     );
-    return { series: months, currentTotal, priorTotal };
+    return withTotals(months, periodStart, periodEnd, priorTotal);
   }
 
   if (filter === "Year") {
-    const quarters: Array<{ time: string; Revenue: number }> = [];
+    const quarters: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
     const currentQuarter = Math.floor(now.getMonth() / 3);
+    let periodStart = now;
+    let periodEnd = now;
     for (let i = 3; i >= 0; i--) {
       const qIndex = currentQuarter - i;
       const qYear = now.getFullYear() + Math.floor(qIndex / 4);
       const qNum = ((qIndex % 4) + 4) % 4;
       const qStart = new Date(qYear, qNum * 3, 1);
       const qEnd = new Date(qYear, qNum * 3 + 3, 1);
-      quarters.push({ time: `Q${qNum + 1} ${qYear}`, Revenue: sumInRange(qStart, qEnd) });
+      if (i === 3) periodStart = qStart;
+      if (i === 0) periodEnd = qEnd;
+      quarters.push(buildRow(`Q${qNum + 1} ${qYear}`, qStart, qEnd));
     }
-    const currentTotal = quarters.reduce((s, d) => s + d.Revenue, 0);
     const priorQIndex = currentQuarter - 4;
     const priorYear = now.getFullYear() + Math.floor(priorQIndex / 4);
     const priorQNum = ((priorQIndex % 4) + 4) % 4;
     const priorTotal = sumInRange(
+      revenueEvents,
       new Date(priorYear, priorQNum * 3, 1),
       new Date(priorYear, priorQNum * 3 + 3, 1)
     );
-    return { series: quarters, currentTotal, priorTotal };
+    return withTotals(quarters, periodStart, periodEnd, priorTotal);
   }
 
   // "Pay Period"/"Custom"/anything else: real trailing 30 days by day.
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+  const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
-  const currentTotal = series.reduce((s, d) => s + d.Revenue, 0);
   const priorTotal = sumInRange(
+    revenueEvents,
     new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
     new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
   );
-  return { series, currentTotal, priorTotal };
+  return withTotals(series, periodStart, periodEnd, priorTotal);
+}
+
+/**
+ * Real hours worked in the trailing `sinceDaysAgo` days, computed by
+ * pairing Clock In/Break End with Clock Out/Break Start the same way
+ * TimeClockPage and handleRunPayroll do. Shared here so the Revenue page's
+ * Payroll Overview table shows the same real numbers Run Payroll acts on.
+ */
+function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number {
+  const since = new Date(Date.now() - sinceDaysAgo * 24 * 60 * 60 * 1000);
+  const sorted = [...logs]
+    .filter((l) => new Date(l.timestamp) >= since)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  let totalMs = 0;
+  let segmentStart: number | null = null;
+  for (const log of sorted) {
+    const ts = new Date(log.timestamp).getTime();
+    if (log.type === "Clock In" || log.type === "Break End") {
+      segmentStart = ts;
+    } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
+      totalMs += ts - segmentStart;
+      segmentStart = null;
+    }
+  }
+  if (segmentStart !== null) totalMs += Date.now() - segmentStart;
+  return totalMs / 3600000;
 }
 
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
@@ -784,6 +850,7 @@ export default function App() {
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
   const [employees, setEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
   const [timeClockLogs, setTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
+  const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
 
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
@@ -965,6 +1032,8 @@ export default function App() {
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
   const [payrollSearch, setPayrollSearch] = useState("");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
+  const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(null);
+  const [isRunningPayroll, setIsRunningPayroll] = useState(false);
 
   // Global AI Widget States
   const [globalAiSetting, setGlobalAiSetting] = useState<"OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO">("ASSIST");
@@ -2130,6 +2199,67 @@ Access to full financial telemetry is restricted.`;
     triggerNotification(`Updated permissions for ${updated.name}`);
   };
 
+  // Save a real income/expense transaction -- typed manually or scanned via
+  // real Gemini vision, always confirmed/edited by the user before saving.
+  const handleSaveTransaction = async (t: Omit<Transaction, "id">) => {
+    try {
+      setTransactions(prev => [...prev, { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }]);
+      setLogTransactionType(null);
+      triggerNotification(`${t.type === "income" ? "Income" : "Expense"} logged: $${t.amount.toLocaleString()}`);
+    } catch (err) {
+      console.error("Error saving transaction:", err);
+      triggerNotification("Couldn't save that — check your connection and try again.");
+    }
+  };
+
+  // Runs payroll for the trailing 14-day pay period: real hours from
+  // time_clock_logs x each real employee's real hourlyRate. The
+  // calculation is fully automatic and real -- there's no real background
+  // cron infrastructure in a client-side app, so a manual click is what
+  // starts it, same as any payroll software's "Run Payroll" action.
+  const handleRunPayroll = async () => {
+    setIsRunningPayroll(true);
+    try {
+      const newPayrollTransactions: Array<Omit<Transaction, "id">> = [];
+      let totalPayroll = 0;
+      for (const emp of employees) {
+        const hours = computeRecentHours(timeClockLogs.filter(l => l.employeeEmail === emp.email), 14);
+        if (hours <= 0 || !emp.hourlyRate) continue;
+        const regHours = Math.min(hours, 80); // 40/wk x 2 weeks before OT
+        const otHours = Math.max(0, hours - 80);
+        const pay = regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5;
+        if (pay <= 0) continue;
+        totalPayroll += pay;
+        newPayrollTransactions.push({
+          type: "expense",
+          source: "payroll",
+          amount: Math.round(pay * 100) / 100,
+          description: `${emp.firstName} ${emp.lastName}`.trim(),
+          category: "Payroll",
+          date: new Date().toISOString().split("T")[0],
+          createdAt: new Date().toISOString(),
+          createdBy: loggedInUser?.email
+        });
+      }
+
+      if (newPayrollTransactions.length === 0) {
+        triggerNotification("No real hours logged in the last 14 days — nothing to run payroll on.");
+        return;
+      }
+
+      setTransactions(prev => [
+        ...prev,
+        ...newPayrollTransactions.map((t) => ({ ...t, id: `txn_payroll_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }))
+      ]);
+      triggerNotification(`Payroll run: $${totalPayroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} across ${newPayrollTransactions.length} employee${newPayrollTransactions.length === 1 ? "" : "s"}, based on real logged hours.`);
+    } catch (err) {
+      console.error("Error running payroll:", err);
+      triggerNotification("Couldn't run payroll — check your connection and try again.");
+    } finally {
+      setIsRunningPayroll(false);
+    }
+  };
+
   // Launch Local OS: generates invites, saves to db, triggers invites modal
   const handleLaunchOS = async () => {
     if (!email) {
@@ -2370,6 +2500,8 @@ Access to full financial telemetry is restricted.`;
     setEmployees,
     timeClockLogs,
     setTimeClockLogs,
+    transactions,
+    setTransactions,
     preSelectedDate,
     setPreSelectedDate,
     preSelectedCustomerId,
@@ -5587,12 +5719,13 @@ Access to full financial telemetry is restricted.`;
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
                             <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
                               Period: <strong className="text-[#315C9F]">
-                                {revenuePageFilter === "Pay Period" && "May 1 – May 31, 2025"}
-                                {revenuePageFilter === "Week" && "May 25 – May 31, 2025"}
-                                {revenuePageFilter === "Month" && "May 1 – May 31, 2025"}
-                                {revenuePageFilter === "Quarter" && "Q2 2025 (Apr 1 – Jun 30)"}
-                                {revenuePageFilter === "Year" && "FY 2025 (Jan 1 – Dec 31)"}
-                                {revenuePageFilter === "Custom" && "Custom Range (Last 45 Days)"}
+                                {(() => {
+                                  const now = new Date();
+                                  if (revenuePageFilter === "Week") return "Last 7 days";
+                                  if (revenuePageFilter === "Quarter") return "Last 3 months";
+                                  if (revenuePageFilter === "Year") return "Last 4 quarters";
+                                  return `Last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                })()}
                               </strong>
                             </p>
                           </div>
@@ -5627,7 +5760,7 @@ Access to full financial telemetry is restricted.`;
                             {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </span>
                           {(() => {
-                            const { currentTotal, priorTotal } = getRevenueChartData(revenuePageFilter, revenueEvents);
+                            const { currentTotal, priorTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
                             const hasPrior = priorTotal > 0;
                             const pct = hasPrior ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
                             const isUp = pct === null ? currentTotal > 0 : pct >= 0;
@@ -5641,11 +5774,46 @@ Access to full financial telemetry is restricted.`;
                           <span className="text-xs text-[#5E7393] font-sans font-medium">vs prior period</span>
                         </div>
 
+                        {/* Log real income/expenses, run real payroll */}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setLogTransactionType("income")}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Income
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLogTransactionType("expense")}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Expense
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isRunningPayroll}
+                            onClick={handleRunPayroll}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isRunningPayroll ? "Running Payroll..." : "Run Payroll (last 14 days)"}
+                          </button>
+                        </div>
+
+                        {logTransactionType && (
+                          <LogTransactionModal
+                            type={logTransactionType}
+                            createdBy={loggedInUser?.email}
+                            onSave={handleSaveTransaction}
+                            onClose={() => setLogTransactionType(null)}
+                          />
+                        )}
+
                         {/* Recharts Live Multi-line Graph Container */}
                         <div className="h-[280px] w-full pt-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
-                              data={getRevenueChartData(revenuePageFilter, revenueEvents).series}
+                              data={getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series}
                               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
@@ -5708,6 +5876,24 @@ Access to full financial telemetry is restricted.`;
                                 activeDot={{ r: 6 }}
                                 name="Revenue"
                               />
+                              <Line
+                                type="monotone"
+                                dataKey="Expenses"
+                                stroke="#F43F5E"
+                                strokeWidth={2}
+                                dot={{ r: 3, strokeWidth: 1 }}
+                                activeDot={{ r: 5 }}
+                                name="Expenses"
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="Profit"
+                                stroke="#4A86F7"
+                                strokeWidth={2}
+                                dot={{ r: 3, strokeWidth: 1 }}
+                                activeDot={{ r: 5 }}
+                                name="Profit"
+                              />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
@@ -5715,7 +5901,11 @@ Access to full financial telemetry is restricted.`;
 
                       {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {[
+                        {(() => {
+                          const { currentExpenseTotal, currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                          const netProfit = completedJobsRevenue - currentExpenseTotal;
+                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                          return [
                           {
                             label: "Total Revenue",
                             key: "revenue",
@@ -5730,10 +5920,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Net Profit",
                             key: "profit",
-                            val: "$0.00",
+                            val: fmt(netProfit),
                             change: null,
-                            isUp: true,
-                            comp: "Expense tracking not built yet",
+                            isUp: netProfit >= 0,
+                            comp: "Revenue minus logged expenses",
                             icon: TrendingUp,
                             color: "text-blue-500",
                             bgColor: "bg-blue-500/10"
@@ -5741,10 +5931,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Total Expenses",
                             key: "expenses",
-                            val: "$0.00",
+                            val: fmt(currentExpenseTotal),
                             change: null,
                             isUp: true,
-                            comp: "Expense tracking not built yet",
+                            comp: "Real logged income/expense entries",
                             icon: TrendingDown,
                             color: "text-rose-500",
                             bgColor: "bg-rose-500/10"
@@ -5752,10 +5942,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Gross Payroll",
                             key: "payroll",
-                            val: "$0.00",
+                            val: fmt(currentPayrollTotal),
                             change: null,
                             isUp: true,
-                            comp: "Payroll tracking not built yet",
+                            comp: "Real payroll runs, this period",
                             icon: Users,
                             color: "text-purple-500",
                             bgColor: "bg-purple-500/10"
@@ -5771,7 +5961,8 @@ Access to full financial telemetry is restricted.`;
                             color: "text-amber-500",
                             bgColor: "bg-amber-500/10"
                           }
-                        ].map((card, idx) => (
+                          ];
+                        })().map((card, idx) => (
                           <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
                             <div className="flex justify-between items-start">
                               <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
@@ -5817,8 +6008,11 @@ Access to full financial telemetry is restricted.`;
                             { name: "Office Supplies", target: "inventory", label: "Inventory" },
                             { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
                           ].map((cat, idx) => {
-                            const currentAmt = "$0.00";
-                            
+                            const categoryTotal = transactions
+                              .filter((t) => t.type === "expense" && t.category === cat.name)
+                              .reduce((sum, t) => sum + t.amount, 0);
+                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
                             return (
                               <div
                                 key={idx}
@@ -5884,64 +6078,90 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
-                        {/* Search Result Statistics */}
-                        {payrollSearch && (
-                          <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
-                            Found {
-                              (recentRoster as { name: string; role: string }[])
-                                .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase())).length
-                            } employees matching "{payrollSearch}"
-                          </div>
-                        )}
+                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
+                            same trailing-14-day math as Run Payroll above. recentRoster is a separate
+                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
+                            to real hours — this table uses the real `employees` collection instead. */}
+                        {(() => {
+                          const rows = employees
+                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
+                            .map((emp) => {
+                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
+                              const hours = computeRecentHours(myLogs, 14);
+                              const regHours = Math.min(hours, 80);
+                              const otHours = Math.max(0, hours - 80);
+                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
+                              const lastPayroll = transactions
+                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
+                              return { emp, hours, otHours, pay, lastPayroll, status };
+                            });
+                          return (
+                            <>
+                              {payrollSearch && (
+                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
+                                  Found {rows.length} employees matching "{payrollSearch}"
+                                </div>
+                              )}
 
-                        {/* Searchable Responsive Table */}
-                        <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
-                                <th className="px-4 py-3">Employee</th>
-                                <th className="px-4 py-3 text-right">Current Hours</th>
-                                <th className="px-4 py-3 text-right">Overtime Hours</th>
-                                <th className="px-4 py-3 text-right">Current Pay</th>
-                                <th className="px-4 py-3 text-center">Last Payroll Date</th>
-                                <th className="px-4 py-3 text-center">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
-                              {recentRoster
-                                .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
-                                .map((emp, idx) => {
-                                  const initials = emp.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
-                                  return (
-                                    <tr
-                                      key={emp.id || idx}
-                                      onClick={() => openPlaceholderPage(`Roster Profile: ${emp.name}`, "👤")}
-                                      className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
-                                    >
-                                      <td className="px-4 py-3 flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
-                                          {initials}
-                                        </div>
-                                        <div>
-                                          <p className="font-extrabold text-[#1F3557]">{emp.name}</p>
-                                          <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">$0.00</td>
-                                      <td className="px-4 py-3 text-center font-mono text-[#5E7393]">—</td>
-                                      <td className="px-4 py-3 text-center">
-                                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9.5px] font-bold rounded">
-                                          {emp.status}
-                                        </span>
-                                      </td>
+                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
+                                      <th className="px-4 py-3">Employee</th>
+                                      <th className="px-4 py-3 text-right">Current Hours</th>
+                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
+                                      <th className="px-4 py-3 text-right">Current Pay</th>
+                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
+                                      <th className="px-4 py-3 text-center">Status</th>
                                     </tr>
-                                  );
-                                })}
-                            </tbody>
-                          </table>
-                        </div>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
+                                    {rows.length === 0 && (
+                                      <tr>
+                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
+                                          No real employees onboarded yet.
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
+                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
+                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+                                      return (
+                                        <tr
+                                          key={emp.email}
+                                          onClick={() => openPlaceholderPage(`Roster Profile: ${emp.firstName} ${emp.lastName}`, "👤")}
+                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
+                                        >
+                                          <td className="px-4 py-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
+                                              {initials}
+                                            </div>
+                                            <div>
+                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
+                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
+                                          <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
+                                              {status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          );
+                        })()}
                         
                         <div className="text-center pt-2">
                           <button
@@ -5965,59 +6185,90 @@ Access to full financial telemetry is restricted.`;
                           </div>
                           
                           <div className="space-y-3">
-                            {[
-                              {
-                                text: "Payroll increased 8.9% compared to last pay period due to plumbing overtime demands.",
-                                link: "Review payroll details ➔",
-                                color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
-                                icon: Users,
-                                action: "Payroll Ledger Analysis"
-                              },
-                              {
-                                text: "Fuel expenses are 11.3% higher than last period. Route consolidation is recommended.",
-                                link: "Review fuel expenses ➔",
-                                color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
-                                icon: Landmark,
-                                action: "Fuel Receipts & Fleet Usage"
-                              },
-                              {
-                                text: "You have 3 overdue invoices totaling $4,250. Automated payment triggers scheduled.",
-                                link: "View overdue invoices ➔",
-                                color: "border-[#9EC8EF] bg-rose-500/5 text-rose-700",
-                                icon: DollarSign,
-                                action: "Overdue Invoices Ledger"
-                              },
-                              {
-                                text: "Estimated quarterly tax payment of $6,540.00 is due. Automated reserve generated.",
-                                link: "View tax summary ➔",
-                                color: "border-[#9EC8EF] bg-blue-500/5 text-blue-700",
-                                icon: Landmark,
-                                action: "Quarterly Tax Projections"
-                              },
-                              {
-                                text: "Profit margin this period is 38.7%, exceeding targeted baseline by 3.7%.",
-                                link: "View profit report ➔",
-                                color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
-                                icon: TrendingUp,
-                                action: "Net Profitability Margin Analyzer"
+                            {(() => {
+                              // Real insights only, each gated on having a real prior period to
+                              // compare against — no invoice or tax-liability system exists in the
+                              // app to back "overdue invoices" / "quarterly tax due" style claims,
+                              // so those insight types were removed rather than left fabricated.
+                              const now = new Date();
+                              const periodDays = 14;
+                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
+                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
+                              const priorEnd = curStart;
+                              const sumBetween = (category: string | null, start: Date, end: Date) =>
+                                transactions
+                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
+                                  .reduce((s, t) => s + t.amount, 0);
+                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
+
+                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
+
+                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
+                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
+                              if (curPayroll > 0 && priorPayroll > 0) {
+                                const pct = pctChange(curPayroll, priorPayroll);
+                                insights.push({
+                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review payroll details ➔",
+                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
+                                  icon: Users,
+                                  action: "Payroll Ledger Analysis"
+                                });
                               }
-                            ].map((insight, idx) => (
-                              <div
-                                key={idx}
-                                onClick={() => openPlaceholderPage(insight.action, "🔍")}
-                                className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
-                              >
-                                <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
-                                  <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
-                                </span>
-                                <div>
-                                  <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
-                                  <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
-                                    {insight.link}
-                                  </p>
+
+                              const curFuel = sumBetween("Fuel", curStart, curEnd);
+                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
+                              if (curFuel > 0 && priorFuel > 0) {
+                                const pct = pctChange(curFuel, priorFuel);
+                                insights.push({
+                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review fuel expenses ➔",
+                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
+                                  icon: Landmark,
+                                  action: "Fuel Receipts & Fleet Usage"
+                                });
+                              }
+
+                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0);
+                              const curExpenses = sumBetween(null, curStart, curEnd);
+                              if (curRevenue > 0) {
+                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
+                                insights.push({
+                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
+                                  link: "View profit report ➔",
+                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
+                                  icon: TrendingUp,
+                                  action: "Net Profitability Margin Analyzer"
+                                });
+                              }
+
+                              if (insights.length === 0) {
+                                return (
+                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
+                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
+                                  </div>
+                                );
+                              }
+
+                              return insights.map((insight, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
+                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
+                                >
+                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
+                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
+                                  </span>
+                                  <div>
+                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
+                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
+                                      {insight.link}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ));
+                            })()}
                           </div>
                         </div>
 

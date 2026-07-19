@@ -1,5 +1,5 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
-import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog } from "../types/domain";
+import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
 
 export interface RosterEntry {
   id?: string;
@@ -40,6 +40,8 @@ export interface DomainDataContextValue {
   setEmployees: Dispatch<SetStateAction<EmployeeRecord[]>>;
   timeClockLogs: TimeClockLog[];
   setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
+  transactions: Transaction[];
+  setTransactions: Dispatch<SetStateAction<Transaction[]>>;
   preSelectedDate: string | undefined;
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;

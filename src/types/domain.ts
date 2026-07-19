@@ -188,6 +188,26 @@ export interface TimeClockLog {
   enteredManually?: boolean;
 }
 
+/**
+ * One real income or expense record. Entered either by typing it in
+ * directly or by scanning a photo (receipt/check) through real Gemini
+ * vision OCR (see handleScanFinancialDocument) — manual entry is always
+ * available and never blocked behind the scan path. Payroll runs also
+ * write real expense transactions here, computed from real time_clock_logs
+ * hours x real employee hourlyRate, never a fabricated number.
+ */
+export interface Transaction {
+  id: string;
+  type: "income" | "expense";
+  source: "manual" | "ai_scan" | "payroll";
+  amount: number;
+  description: string; // vendor/payer name, or a payroll period label
+  category?: string;
+  date: string; // YYYY-MM-DD
+  createdAt: string; // ISO timestamp
+  createdBy?: string; // real logged-in user's email
+}
+
 export interface SchedulingEvent {
   id: string;
   eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
