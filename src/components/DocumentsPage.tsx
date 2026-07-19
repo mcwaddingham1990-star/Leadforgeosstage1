@@ -1747,16 +1747,16 @@ export const DocumentsPage: React.FC = () => {
                 <span className="text-[#5E7393] uppercase text-[9.5px] font-extrabold block">Digital Actions</span>
                 <div className="grid grid-cols-2 gap-1">
                   {[
-                    { label: "Generate PDF", icon: "📑" },
-                    { label: "Merge PDFs", icon: "🔗" },
-                    { label: "Email Document", icon: "✉️" },
-                    { label: "Print Document", icon: "🖨️" },
-                    { label: "Share Access", icon: "🤝" },
-                    { label: "Sign Packet", icon: "✍️" }
+                    { label: "Generate PDF", icon: "📑", onClick: () => handleOpenPDFEditor(activeDoc) },
+                    { label: "Merge PDFs", icon: "🔗", onClick: () => triggerNotification("Merging multiple PDFs into one isn't built yet.") },
+                    { label: "Email Document", icon: "✉️", onClick: () => triggerNotification("Email sending isn't connected to a real provider yet.") },
+                    { label: "Print Document", icon: "🖨️", onClick: () => window.print() },
+                    { label: "Share Access", icon: "🤝", onClick: () => { setShareDocItem(activeDoc); setIsMainShareModalOpen(true); } },
+                    { label: "Sign Packet", icon: "✍️", onClick: () => handleOpenPDFEditor(activeDoc) }
                   ].map((act) => (
                     <button
                       key={act.label}
-                      onClick={() => triggerNotification(`⚡ Triggered: ${act.label} on ${activeDoc.name}`)}
+                      onClick={act.onClick}
                       className="px-2 py-1.5 bg-white/50 hover:bg-[#BDDDF8] border border-[#9EC8EF]/50 rounded-lg text-[10px] font-bold text-[#1F3557] transition-all flex items-center gap-1 cursor-pointer"
                     >
                       <span>{act.icon}</span>
