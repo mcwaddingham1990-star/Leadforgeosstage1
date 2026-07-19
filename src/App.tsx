@@ -3,7 +3,7 @@ import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
-import { RolePermissionEditorModal } from "./components/RolePermissionEditorModal";
+import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
   signInWithEmailAndPassword,
@@ -959,6 +959,13 @@ export default function App() {
       perms = [...(loggedInUser.permissions || ["dashboard"])];
     }
 
+    // Always allow the Dashboard to be viewed by everyone -- it isn't part
+    // of the configurable module permission catalog (MODULE_CATALOG), same
+    // as bulletins/snapshots/notifications below.
+    if (!perms.includes("dashboard")) {
+      perms.push("dashboard");
+    }
+
     // Always allow bulletins to be viewed by everyone
     if (!perms.includes("bulletins")) {
       perms.push("bulletins");
@@ -1146,7 +1153,7 @@ export default function App() {
                 email: user.email || "",
                 role: profileData.role || "Owner",
                 permissions: resolvedPermissions,
-                granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "standard") : fullAccessGranular(resolvedPermissions)),
+                granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "edit") : fullAccessGranular(resolvedPermissions)),
                 isEmployee: isEmployee,
                 name: profileData.name || user.displayName || "Owner",
                 goals: profileData.goals || "",
@@ -1606,47 +1613,90 @@ Access to full financial telemetry is restricted.`;
     executeConfirmedFloatingAiMessage(textToSend);
   };
 
-  // TEAM BUILDER STATE - INITIALIZED WITH SCREENSHOT VALUES
+  // TEAM BUILDER STATE - Owner always gets every module at full access;
+  // every other starter role gets an independent per-module level, not one
+  // tier applied blanket -- managers default to Create & Edit on their
+  // department's modules, base employees default to View except on the
+  // handful of modules their job actually requires editing.
   const [selectedRoles, setSelectedRoles] = useState<SelectedRole[]>([
     {
       id: "owner",
       name: "Owner",
       count: 1,
-      description: "Everything",
-      permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"],
-      modulePermissions: fullAccessGranular(["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"])
+      description: "Full access to every module",
+      permissions: MODULE_CATALOG.map(m => m.id),
+      modulePermissions: fullAccessGranular(MODULE_CATALOG.map(m => m.id))
     },
     {
       id: "office_manager",
       name: "Office Manager",
       count: 1,
-      description: "Dashboard, CRM, Sched, Msg, Docs, etc.",
-      permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"], "standard")
+      description: "Manager tier -- Create & Edit across office operations",
+      permissions: ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+      modulePermissions: defaultGranularFromModuleList(
+        ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+        "edit"
+      )
     },
     {
       id: "dispatcher",
       name: "Dispatcher",
       count: 1,
-      description: "Dispatch, Routes, Map, Jobs, Sched",
-      permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"], "standard")
+      description: "Dispatch, Routes, Scheduling, Jobs",
+      permissions: ["dispatch", "routes", "scheduling", "jobs", "customers"],
+      modulePermissions: {
+        dispatch: "edit",
+        routes: "edit",
+        scheduling: "edit",
+        jobs: "edit",
+        customers: "view"
+      }
+    },
+    {
+      id: "field_technician",
+      name: "Field Technician",
+      count: 1,
+      description: "Jobs, Inventory, Documents, PDF Editor, eSign",
+      permissions: ["jobs", "customers", "inventory", "documents", "pdf_editor", "esign", "routes", "scheduling"],
+      modulePermissions: {
+        jobs: "edit",
+        customers: "view",
+        inventory: "edit",
+        documents: "edit",
+        pdf_editor: "edit",
+        esign: "edit",
+        routes: "view",
+        scheduling: "view"
+      }
     },
     {
       id: "sales_representative",
       name: "Sales Representative",
       count: 1,
-      description: "Leads, CRM, Estimates, Docs",
-      permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"], "standard")
+      description: "Leads, Customers, Estimates",
+      permissions: ["leads", "customers", "estimates", "messages", "ai_assistant"],
+      modulePermissions: {
+        leads: "edit",
+        customers: "view",
+        estimates: "edit",
+        messages: "view",
+        ai_assistant: "view"
+      }
     },
     {
       id: "estimator",
       name: "Estimator",
       count: 1,
-      description: "Estimates, Bids, Takeoffs, Reports",
-      permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"], "standard")
+      description: "Leads, Estimates, Documents, PDF Editor, eSign",
+      permissions: ["leads", "customers", "estimates", "documents", "pdf_editor", "esign"],
+      modulePermissions: {
+        leads: "edit",
+        customers: "view",
+        estimates: "edit",
+        documents: "edit",
+        pdf_editor: "edit",
+        esign: "edit"
+      }
     }
   ]);
   
@@ -1908,7 +1958,7 @@ Access to full financial telemetry is restricted.`;
           email: user.email || "",
           role: profileData.role || "Owner",
           permissions: resolvedPerms,
-          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "standard") : fullAccessGranular(resolvedPerms)),
+          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "edit") : fullAccessGranular(resolvedPerms)),
           isEmployee: isEmployeeAcct,
           name: profileData.name || user.displayName || "Owner",
           goals: profileData.goals || "",
@@ -2166,7 +2216,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: defaultData.description,
       permissions: [...defaultData.permissions],
-      modulePermissions: defaultGranularFromModuleList(defaultData.permissions, "standard")
+      modulePermissions: defaultGranularFromModuleList(defaultData.permissions, "edit")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     triggerNotification(`Added role: ${defaultData.name}`);
@@ -2203,7 +2253,7 @@ Access to full financial telemetry is restricted.`;
       description: "Custom user defined role",
       isCustom: true,
       permissions: ["dashboard", "messages"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view-only")
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     setShowCustomRoleModal(false);
@@ -2358,7 +2408,7 @@ Access to full financial telemetry is restricted.`;
     // exist, or worse, to whichever fake default every failed lookup shares.
     let inviteRole = "Driver";
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
-    let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view-only");
+    let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view");
     let businessEmail: string | null = null;
 
     try {

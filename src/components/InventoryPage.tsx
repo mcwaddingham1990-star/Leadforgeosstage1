@@ -165,7 +165,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     const legacyRoleCheck = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Warehouse / Inventory Manager", "Inventory Manager", "Warehouse Manager"].includes(role);
     return legacyRoleCheck || hasPermission(loggedInUser?.granularPermissions, "inventory", "delete");
   }, [activeRole, loggedInUser]);
-  const canCreateInventory = hasPermission(loggedInUser?.granularPermissions, "inventory", "create") || canEdit;
+  const canCreateInventory = hasPermission(loggedInUser?.granularPermissions, "inventory", "edit") || canEdit;
 
   // Calculations
   const stats = useMemo(() => {

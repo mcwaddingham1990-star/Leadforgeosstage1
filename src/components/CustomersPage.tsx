@@ -65,7 +65,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     triggerNotification
   } = useNavTelemetry();
   const { loggedInUser } = useAuth();
-  const canCreateCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "create");
+  const canCreateCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "edit");
   const canDeleteCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "delete");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<

@@ -702,7 +702,7 @@ export default function SettingsPage({
       description: "Custom user-defined profile permissions",
       isCustom: true,
       permissions: ["dashboard", "messages"],
-      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view-only")
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view")
     };
 
     setSelectedRoles(prev => [...prev, customRoleObj]);
