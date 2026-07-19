@@ -116,6 +116,11 @@ export interface DocumentItem {
   vendor: string;
   job: string;
   type: string;
+  // Top-level cabinet folder this document lives in (Company, Customers,
+  // Leads, Jobs, Payroll, etc. -- see FOLDER_TAXONOMY in DocumentsPage).
+  // Optional because documents created before this taxonomy existed don't
+  // have one yet; DocumentsPage backfills a real inferred value for those.
+  folder?: string;
   uploadedBy: string;
   date: string;
   size: string;

@@ -58,10 +58,57 @@ import {
 export type { DocumentItem } from "../types/domain";
 import type { DocumentItem } from "../types/domain";
 
+// The real, standard filing-cabinet structure every account starts with.
+// Top-level folders marked `perEntity` also get a real dynamic sub-list of
+// every customer/job/employee/vendor (Fleet has no real vehicle collection
+// yet, so it stays an honest empty state rather than fabricated entries).
+export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; perEntity?: "customer" | "employee" | "job" | "vendor" | "fleet"; subfolders: string[] }> = [
+  { id: "Company", icon: "🏢", subfolders: ["Business Licenses", "Permits", "Insurance", "Tax Documents", "Business Certificates", "Company Logo", "Brand Assets", "Policies", "Employee Handbook", "Training Material", "General Documents"] },
+  { id: "Customers", icon: "👥", perEntity: "customer", subfolders: ["Contracts", "Estimates", "Invoices", "Photos", "Videos", "Service History", "Inspection Reports", "Equipment", "Warranty Information", "Emails", "Text Messages", "Signed Documents", "Customer Notes", "Attachments"] },
+  { id: "Leads", icon: "🎯", subfolders: ["New Leads", "Qualified Leads", "Quoted", "Follow-Up", "Waiting", "Won", "Lost", "Archived", "Lead Attachments", "Site Photos", "Voice Notes"] },
+  { id: "Estimates & Quotes", icon: "📝", subfolders: ["Draft", "Sent", "Accepted", "Rejected", "Templates", "Signed Estimates", "Photos"] },
+  { id: "Jobs", icon: "💼", perEntity: "job", subfolders: ["Work Orders", "Before Photos", "Progress Photos", "After Photos", "Inspection Reports", "Materials Used", "Equipment Used", "Employee Notes", "Customer Notes", "Permits", "Completion Forms", "Invoices", "Warranty"] },
+  { id: "Employees", icon: "👤", perEntity: "employee", subfolders: ["Application", "Resume", "Interview Notes", "Employment Agreement", "Emergency Contacts", "Driver License", "Licenses", "Certifications", "Background Check", "Drug Test", "W-4", "I-9", "1099", "Direct Deposit", "Handbook Acknowledgement", "NDA", "Performance Reviews", "Training Certificates", "Attendance", "Payroll Reports", "Time Clock Reports", "Vacation Requests", "PTO Requests", "Workers Compensation", "Incident Reports", "Disciplinary Records", "Termination Documents", "General Documents"] },
+  { id: "Payroll", icon: "💵", subfolders: ["Pay Periods", "Payroll Reports", "Pay Stubs", "Payroll Exports", "Tax Reports", "1099 Reports", "Adjustments"] },
+  { id: "Revenue", icon: "📈", subfolders: ["Paid Invoices", "Revenue Reports", "Deposits", "Sales Reports", "Monthly", "Quarterly", "Yearly", "Profit Reports"] },
+  { id: "Expenses", icon: "🧾", subfolders: ["Fuel", "Materials", "Equipment", "Office Supplies", "Advertising", "Utilities", "Subscriptions", "Vehicle Expenses", "Travel", "Meals", "Repairs", "Receipts", "Expense Reports"] },
+  { id: "Bills", icon: "📄", subfolders: ["Outstanding Bills", "Paid Bills", "Utilities", "Rent", "Insurance", "Phone", "Internet", "Vendor Bills", "Credit Cards", "Loans"] },
+  { id: "Inventory", icon: "📦", subfolders: ["Purchase Orders", "Receiving Reports", "Inventory Audits", "Product Photos", "Supplier Documents", "Vendor Contracts", "Warranty Information"] },
+  { id: "Vendors & Suppliers", icon: "🤝", perEntity: "vendor", subfolders: ["Contracts", "Invoices", "Purchase Orders", "Price Lists", "Insurance", "Certificates", "Communications"] },
+  { id: "Fleet", icon: "🚚", perEntity: "fleet", subfolders: ["Registration", "Insurance", "Maintenance", "Oil Changes", "Repairs", "Fuel Logs", "GPS Reports", "Photos"] },
+  { id: "Marketing", icon: "📣", subfolders: ["Google Business Profile", "Facebook", "Instagram", "Website", "Advertising", "Reviews", "Analytics", "Campaign Reports", "Photos", "Videos"] },
+  { id: "Accounting", icon: "🧮", subfolders: ["Bank Statements", "Sales Tax", "Income Tax", "Financial Statements", "Budgets", "Loans", "CPA Documents", "Reconciliations"] },
+  { id: "AI Generated", icon: "🤖", subfolders: ["Reports", "Business Analysis", "Summaries", "Emails", "Letters", "Marketing", "Images", "Documents"] },
+  { id: "PDF Editor", icon: "🖊️", subfolders: ["Draft PDFs", "Edited PDFs", "Merged PDFs", "Split PDFs", "Compressed PDFs", "OCR Documents", "Templates", "Fillable Forms", "Scanned Documents"] },
+  { id: "eSign", icon: "✍️", subfolders: ["Pending", "Sent", "Viewed", "Completed", "Rejected", "Expired", "Signature Templates", "Saved Employee Signatures", "Saved Initials", "Audit Logs", "Certificates of Completion"] },
+  { id: "Reports", icon: "📊", subfolders: ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Custom Reports", "Exports"] }
+];
+
+/**
+ * Real, deterministic best-effort folder assignment for documents that
+ * predate this taxonomy (folder is undefined) -- so nothing a real user
+ * already uploaded silently disappears from the new cabinet view. Priority
+ * mirrors how the fields are actually populated elsewhere in this file.
+ */
+export function inferFolderForDoc(doc: DocumentItem): string {
+  if (doc.type === "Payroll Documents") return "Payroll";
+  if (doc.type === "Vehicle Records") return "Fleet";
+  if (doc.type === "Employee Files") return "Employees";
+  if (doc.vendor && doc.vendor !== "None") return "Vendors & Suppliers";
+  if (doc.job && doc.job !== "None") return "Jobs";
+  if (doc.customer && doc.customer !== "None") return "Customers";
+  if (doc.tags.includes("AI Scanned") || doc.tags.includes("AI Generated")) return "AI Generated";
+  if (doc.type === "Receipts") return "Expenses";
+  if (doc.type === "Invoices") return "Revenue";
+  if (doc.type === "Estimates") return "Estimates & Quotes";
+  if (doc.type === "Insurance" || doc.type === "Licenses" || doc.type === "Permits") return "Company";
+  return "Company";
+}
+
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -99,9 +146,10 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorInitialObjects, setPdfEditorInitialObjects] = useState<any[]>([]);
 
   // Dynamic directory lists for Create Folder action
-  const [foldersList, setFoldersList] = useState<string[]>([
-    "Inventory", "Fleet", "Insurance", "Legal", "Training", "Templates", "Standard Templates", "Custom Folders"
-  ]);
+  // Custom folders the owner adds on top of the standard FOLDER_TAXONOMY
+  // cabinet -- starts empty since every one of those 19 folders is already
+  // real and covered above; nothing here is a pre-made stand-in anymore.
+  const [foldersList, setFoldersList] = useState<string[]>([]);
 
   // Secondary high-fidelity interactive modals
   const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState(false);
@@ -130,6 +178,7 @@ export const DocumentsPage: React.FC = () => {
           vendor: "None",
           job: "None",
           type: "Contracts",
+          folder: "Customers",
           uploadedBy: "System admin",
           date: "2026-07-01",
           size: "450 KB",
@@ -149,7 +198,8 @@ export const DocumentsPage: React.FC = () => {
           employee: "System Core",
           vendor: "None",
           job: "None",
-          type: "Estimates",
+          type: "Templates",
+          folder: "Estimates & Quotes",
           uploadedBy: "System admin",
           date: "2026-07-01",
           size: "320 KB",
@@ -164,6 +214,17 @@ export const DocumentsPage: React.FC = () => {
         }
       ];
       setDocuments(prev => [...prev, ...standardTemplates]);
+    }
+  }, [documents, setDocuments]);
+
+  // Real one-time migration: any document uploaded/scanned/generated before
+  // the folder taxonomy existed has no `folder` field. Backfill a real,
+  // deterministic inferred folder for each so nothing a user already saved
+  // silently vanishes from the new cabinet view.
+  useEffect(() => {
+    const needsBackfill = documents.some(d => !d.folder);
+    if (needsBackfill) {
+      setDocuments(prev => prev.map(d => (d.folder ? d : { ...d, folder: inferFolderForDoc(d) })));
     }
   }, [documents, setDocuments]);
 
@@ -292,6 +353,7 @@ export const DocumentsPage: React.FC = () => {
 
   // Form states
   const [uploadName, setUploadName] = useState("");
+  const [uploadFolder, setUploadFolder] = useState("Customers");
   const [uploadType, setUploadType] = useState("Contracts");
   const [uploadCustomer, setUploadCustomer] = useState("None");
   const [uploadEmployee, setUploadEmployee] = useState("None");
@@ -312,11 +374,8 @@ export const DocumentsPage: React.FC = () => {
 
   // Folder sidebar state
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    "eSignStatus": true,
     "Customers": true,
-    "Jobs": true,
-    "Employees": false,
-    "Finance": false
+    "Jobs": true
   });
 
   const toggleFolder = (folderName: string) => {
@@ -332,7 +391,7 @@ export const DocumentsPage: React.FC = () => {
     return ["All", "None", ...Array.from(list)];
   }, [documents]);
 
-  const employees = useMemo(() => {
+  const employeeDocNames = useMemo(() => {
     const list = new Set(documents.map(d => d.employee).filter(e => e !== "None"));
     return ["All", "None", ...Array.from(list)];
   }, [documents]);
@@ -347,13 +406,14 @@ export const DocumentsPage: React.FC = () => {
     return ["All", "None", ...Array.from(list)];
   }, [documents]);
 
-  // Document Types List
-  const docTypes = [
-    "Contracts", "Estimates", "Invoices", "Receipts", "Purchase Orders",
-    "Packing Slips", "Warranties", "Insurance", "Licenses", "Permits",
-    "Blueprints", "Photos", "Videos", "Employee Files", "Payroll Documents",
-    "Vehicle Records", "Custom"
-  ];
+  // Document Types List -- every real subfolder name across the whole
+  // taxonomy, flattened and deduped (some names like "Photos"/"Insurance"
+  // repeat across folders; this list is for the flat cross-folder
+  // "Document Type" advanced filter, not folder navigation).
+  const docTypes = useMemo(
+    () => Array.from(new Set(FOLDER_TAXONOMY.flatMap(f => f.subfolders))).concat("Custom"),
+    []
+  );
 
   // Role permissions check
   const hasManagePermission = useMemo(() => {
@@ -375,37 +435,26 @@ export const DocumentsPage: React.FC = () => {
         }
       }
 
-      // Sidebar Folder Filter
+      // Sidebar Folder Filter -- real cabinet taxonomy (FOLDER_TAXONOMY)
       if (selectedFolderFilter) {
         if (selectedFolderFilter === "Favorites") {
           if (!doc.isFavorite) return false;
         } else if (selectedFolderFilter === "Archived") {
           if (!doc.isArchived) return false;
+        } else if (selectedFolderFilter === "Standard Templates") {
+          if (!doc.tags.includes("Template") && !doc.tags.includes("Standard")) return false;
+        } else if (FOLDER_TAXONOMY.some(f => f.id === selectedFolderFilter)) {
+          if ((doc.folder || inferFolderForDoc(doc)) !== selectedFolderFilter) return false;
         } else {
-          // Check if folder constraint fits
-          const lowerFolder = selectedFolderFilter.toLowerCase();
-          if (lowerFolder === "customers" && doc.customer === "None") return false;
-          if (lowerFolder === "employees" && doc.employee === "None") return false;
-          if (lowerFolder === "jobs" && doc.job === "None") return false;
-          if (lowerFolder === "inventory" && !doc.tags.includes("Materials") && !doc.name.toLowerCase().includes("inventory") && doc.type !== "Purchase Orders") return false;
-          if (lowerFolder === "revenue" && doc.type !== "Invoices" && doc.type !== "Receipts") return false;
-          if (lowerFolder === "payroll" && doc.type !== "Payroll Documents") return false;
-          if (lowerFolder === "vendors" && doc.vendor === "None") return false;
-          if (lowerFolder === "fleet" && doc.type !== "Vehicle Records" && !doc.tags.includes("Fleet")) return false;
-          if (lowerFolder === "insurance" && doc.type !== "Insurance") return false;
-          if (lowerFolder === "legal" && doc.type !== "Contracts" && !doc.tags.includes("Legal")) return false;
-          if (lowerFolder === "training" && !doc.tags.includes("Training")) return false;
-          if (lowerFolder === "templates" && !doc.tags.includes("Template")) return false;
-          if (lowerFolder === "awaiting" && doc.status !== "Awaiting Signature") return false;
-          if (lowerFolder === "sent" && doc.status !== "Sent") return false;
-          if (lowerFolder === "signed" && doc.status !== "Signed") return false;
-          if (lowerFolder === "declined" && doc.status !== "Declined") return false;
-          if (lowerFolder === "expired" && doc.status !== "Expired") return false;
-          if (lowerFolder === "draft" && doc.status !== "Draft") return false;
+          // A custom folder created via "Add Custom Folder" -- real tag
+          // match. Nothing is auto-filed into it, so it's honestly empty
+          // until a document is uploaded/tagged with that folder name,
+          // rather than silently showing every document like before.
+          if (!doc.tags.includes(selectedFolderFilter)) return false;
         }
       }
 
-      // Summary Card Type Filter
+      // Summary Card / Subfolder Type Filter
       if (selectedTypeFilter) {
         if (selectedTypeFilter === "Recently Added") {
           // Simulated last 5 days
@@ -414,6 +463,11 @@ export const DocumentsPage: React.FC = () => {
           if (docDate < limitDate) return false;
         } else if (selectedTypeFilter === "Employee Documents") {
           if (doc.type !== "Employee Files" && doc.type !== "Payroll Documents") return false;
+        } else if (selectedFolderFilter === "eSign" && ["Pending", "Sent", "Viewed", "Rejected", "Expired"].includes(selectedTypeFilter)) {
+          // eSign subfolders track real signature status, not doc.type.
+          if (doc.status !== selectedTypeFilter) return false;
+        } else if (selectedFolderFilter === "eSign" && selectedTypeFilter === "Completed") {
+          if (doc.status !== "Signed") return false;
         } else {
           if (doc.type !== selectedTypeFilter) return false;
         }
@@ -554,6 +608,7 @@ export const DocumentsPage: React.FC = () => {
       vendor: uploadVendor,
       job: uploadJob,
       type: uploadType,
+      folder: uploadFolder,
       uploadedBy: uName,
       date: new Date().toISOString().slice(0, 10),
       size: sizeStr,
@@ -997,6 +1052,7 @@ export const DocumentsPage: React.FC = () => {
             <button
               onClick={() => {
                 setUploadName("");
+                setUploadFolder("Customers");
                 setUploadType("Contracts");
                 setIsUploadModalOpen(true);
               }}
@@ -1092,7 +1148,7 @@ export const DocumentsPage: React.FC = () => {
                 onChange={(e) => setFilterEmployee(e.target.value)}
                 className="bg-[#F5FAFF] border border-[#9EC8EF] rounded-xl px-2.5 py-2 focus:outline-none"
               >
-                {employees.map((emp) => (
+                {employeeDocNames.map((emp) => (
                   <option key={emp} value={emp}>{emp}</option>
                 ))}
               </select>
@@ -1302,50 +1358,124 @@ export const DocumentsPage: React.FC = () => {
 
             <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
 
-            {/* Expandable Folder Groups */}
-            {[
-              { id: "eSignStatus", label: "eSignature Folders", icon: "✍️", items: ["Awaiting Signature", "Sent", "Signed", "Declined", "Expired", "Draft"] },
-              { id: "Customers", label: "Customers", icon: "👥", items: customersList.map(c => c.company) },
-              { id: "Employees", label: "Employees", icon: "👤", items: recentRoster.map(r => r.name) },
-              { id: "Finance", label: "Finance & Accounting", icon: "📈", items: ["Revenue Folder", "Payroll Folder", "Vendors Folder"] }
-            ].map((grp) => {
-              const isExpanded = expandedFolders[grp.id];
+            {/* The real, standard filing cabinet -- every account starts with these
+                20 folders already organized, per FOLDER_TAXONOMY. */}
+            {FOLDER_TAXONOMY.map((f) => {
+              const isExpanded = expandedFolders[f.id];
+              const folderCount = documents.filter(d => (d.folder || inferFolderForDoc(d)) === f.id).length;
+              const isActive = selectedFolderFilter === f.id && !selectedTypeFilter;
+
+              let entityNames: string[] = [];
+              if (f.perEntity === "customer") entityNames = customersList.map(c => c.company);
+              else if (f.perEntity === "employee") entityNames = employees.map(e => `${e.firstName} ${e.lastName}`.trim());
+              else if (f.perEntity === "job") entityNames = jobs.filter(j => j !== "All" && j !== "None");
+              else if (f.perEntity === "vendor") entityNames = vendors.filter(v => v !== "All" && v !== "None");
+
               return (
-                <div key={grp.id} className="space-y-1 text-left">
+                <div key={f.id} className="space-y-1 text-left">
                   <button
-                    onClick={() => toggleFolder(grp.id)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-[#EAF5FF]/30 text-[#1F3557] text-xs font-bold rounded-lg transition-colors"
+                    onClick={() => toggleFolder(f.id)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-xs font-bold ${
+                      isActive ? "bg-[#EAF5FF] text-[#1F3557]" : "hover:bg-[#EAF5FF]/30 text-[#1F3557]"
+                    }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <Folder className="w-4 h-4 text-[#315C9F]" />
-                      {grp.label}
+                    <span
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFolderFilter(isActive ? null : f.id);
+                        setSelectedTypeFilter(null);
+                        triggerNotification(`Showing ${f.id} folder (${folderCount} document${folderCount === 1 ? "" : "s"})`);
+                      }}
+                    >
+                      <span>{f.icon}</span>
+                      {f.id}
                     </span>
-                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] bg-[#EAF5FF] px-1.5 py-0.5 rounded border border-[#9EC8EF]/30 text-[#1F3557]">
+                        {folderCount}
+                      </span>
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </span>
                   </button>
 
                   {isExpanded && (
                     <div className="pl-6 space-y-0.5 border-l border-[#9EC8EF] ml-4 mt-0.5">
-                      {grp.items.map((sub) => {
-                        const folderSlug = sub.split(" ")[0];
-                        const isActive = selectedFolderFilter === folderSlug;
+                      {f.subfolders.map((sub) => {
+                        const subCount = documents.filter(d =>
+                          (d.folder || inferFolderForDoc(d)) === f.id &&
+                          (f.id === "eSign" && ["Pending", "Sent", "Viewed", "Rejected", "Expired"].includes(sub)
+                            ? d.status === sub
+                            : f.id === "eSign" && sub === "Completed"
+                            ? d.status === "Signed"
+                            : d.type === sub)
+                        ).length;
+                        const isSubActive = selectedFolderFilter === f.id && selectedTypeFilter === sub;
                         return (
                           <button
                             key={sub}
                             onClick={() => {
-                              setSelectedFolderFilter(isActive ? null : folderSlug);
-                              triggerNotification(`Showing files connected with ${sub}`);
+                              setSelectedFolderFilter(f.id);
+                              setSelectedTypeFilter(isSubActive ? null : sub);
+                              triggerNotification(`Showing ${f.id} / ${sub} (${subCount} document${subCount === 1 ? "" : "s"})`);
                             }}
-                            className={`w-full text-left text-[11px] py-1 px-1.5 rounded font-medium flex items-center gap-1.5 transition-colors ${
-                              isActive
-                                ? "bg-[#EAF5FF] text-[#1F3557] font-bold"
-                                : "text-[#5E7393] hover:text-[#1F3557]"
+                            className={`w-full text-left text-[11px] py-1 px-1.5 rounded font-medium flex items-center justify-between gap-1.5 transition-colors ${
+                              isSubActive ? "bg-[#EAF5FF] text-[#1F3557] font-bold" : "text-[#5E7393] hover:text-[#1F3557]"
                             }`}
                           >
-                            <ChevronRight className="w-2.5 h-2.5" />
-                            {sub}
+                            <span className="flex items-center gap-1.5 truncate">
+                              <ChevronRight className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">{sub}</span>
+                            </span>
+                            <span className="text-[9.5px] text-[#5E7393] shrink-0">{subCount}</span>
                           </button>
                         );
                       })}
+
+                      {f.perEntity && (
+                        <div className="pt-1.5 mt-1.5 border-t border-[#9EC8EF]/40">
+                          <p className="text-[9px] uppercase tracking-wider text-[#5E7393] font-black px-1.5 pb-1">
+                            By {f.perEntity === "job" ? "Job" : f.perEntity[0].toUpperCase() + f.perEntity.slice(1)}
+                          </p>
+                          {f.perEntity === "fleet" ? (
+                            <p className="text-[10px] text-[#5E7393] font-sans font-medium px-1.5 py-1">
+                              No real vehicles added yet -- this will populate once your Fleet module has vehicles.
+                            </p>
+                          ) : entityNames.length === 0 ? (
+                            <p className="text-[10px] text-[#5E7393] font-sans font-medium px-1.5 py-1">
+                              None yet.
+                            </p>
+                          ) : (
+                            entityNames.map((name) => {
+                              const isEntityActive =
+                                (f.perEntity === "customer" && filterCustomer === name) ||
+                                (f.perEntity === "employee" && filterEmployee === name) ||
+                                (f.perEntity === "job" && filterJob === name) ||
+                                (f.perEntity === "vendor" && filterVendor === name);
+                              return (
+                                <button
+                                  key={name}
+                                  onClick={() => {
+                                    setSelectedFolderFilter(f.id);
+                                    setSelectedTypeFilter(null);
+                                    if (f.perEntity === "customer") setFilterCustomer(isEntityActive ? "All" : name);
+                                    else if (f.perEntity === "employee") setFilterEmployee(isEntityActive ? "All" : name);
+                                    else if (f.perEntity === "job") setFilterJob(isEntityActive ? "All" : name);
+                                    else if (f.perEntity === "vendor") setFilterVendor(isEntityActive ? "All" : name);
+                                    triggerNotification(`Showing ${f.id} for ${name}`);
+                                  }}
+                                  className={`w-full text-left text-[11px] py-1 px-1.5 rounded font-medium flex items-center gap-1.5 transition-colors truncate ${
+                                    isEntityActive ? "bg-[#EAF5FF] text-[#1F3557] font-bold" : "text-[#5E7393] hover:text-[#1F3557]"
+                                  }`}
+                                >
+                                  <ChevronRight className="w-2.5 h-2.5 shrink-0" />
+                                  <span className="truncate">{name}</span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1354,7 +1484,7 @@ export const DocumentsPage: React.FC = () => {
 
             <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
 
-            {/* Folder targets listed in requirements */}
+            {/* Custom folders the owner has created */}
             {foldersList.map((fld) => {
               const isActive = selectedFolderFilter === fld;
               return (
@@ -1362,6 +1492,7 @@ export const DocumentsPage: React.FC = () => {
                   key={fld}
                   onClick={() => {
                     setSelectedFolderFilter(isActive ? null : fld);
+                    setSelectedTypeFilter(null);
                     triggerNotification(`Showing ${fld} Folder`);
                   }}
                   className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-bold text-left transition-colors ${
@@ -1670,6 +1801,7 @@ export const DocumentsPage: React.FC = () => {
                 <button
                   onClick={() => {
                     setUploadName(activeDoc.name);
+                    setUploadFolder(activeDoc.folder || inferFolderForDoc(activeDoc));
                     setUploadType(activeDoc.type);
                     setUploadCustomer(activeDoc.customer);
                     setUploadEmployee(activeDoc.employee);
@@ -2298,30 +2430,48 @@ export const DocumentsPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1 flex flex-col">
-                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Doc Type</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Folder</label>
                   <select
-                    value={uploadType}
-                    onChange={(e) => setUploadType(e.target.value)}
+                    value={uploadFolder}
+                    onChange={(e) => {
+                      const newFolder = e.target.value;
+                      setUploadFolder(newFolder);
+                      const match = FOLDER_TAXONOMY.find(f => f.id === newFolder);
+                      if (match) setUploadType(match.subfolders[0]);
+                    }}
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
-                    {docTypes.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                    {FOLDER_TAXONOMY.map((f) => (
+                      <option key={f.id} value={f.id}>{f.icon} {f.id}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="space-y-1 flex flex-col">
-                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Signed Status</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Subfolder</label>
                   <select
-                    value={uploadStatus}
-                    onChange={(e) => setUploadStatus(e.target.value as any)}
+                    value={uploadType}
+                    onChange={(e) => setUploadType(e.target.value)}
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
-                    <option value="Signed">Signed</option>
-                    <option value="Unsigned">Unsigned</option>
-                    <option value="Pending">Pending</option>
+                    {(FOLDER_TAXONOMY.find(f => f.id === uploadFolder)?.subfolders || docTypes).map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-1 flex flex-col">
+                <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Signed Status</label>
+                <select
+                  value={uploadStatus}
+                  onChange={(e) => setUploadStatus(e.target.value as any)}
+                  className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
+                >
+                  <option value="Signed">Signed</option>
+                  <option value="Unsigned">Unsigned</option>
+                  <option value="Pending">Pending</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2333,9 +2483,9 @@ export const DocumentsPage: React.FC = () => {
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
                     <option value="None">None</option>
-                    <option value="Apex Plumb & Drain">Apex Plumb & Drain</option>
-                    <option value="Chevron Logistics">Chevron Logistics</option>
-                    <option value="Oakridge Apartments">Oakridge Apartments</option>
+                    {customersList.map(c => (
+                      <option key={c.id} value={c.company}>{c.company}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -2347,9 +2497,9 @@ export const DocumentsPage: React.FC = () => {
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
                     <option value="None">None</option>
-                    <option value="Job #1024">Job #1024</option>
-                    <option value="Job #1085">Job #1085</option>
-                    <option value="Job #1022">Job #1022</option>
+                    {schedulingEvents.filter(e => e.eventType === "Job").map(e => (
+                      <option key={e.id} value={`${e.customer} - ${e.date}`}>{e.customer} - {e.date}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -2371,16 +2521,21 @@ export const DocumentsPage: React.FC = () => {
 
                 <div className="space-y-1 flex flex-col">
                   <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Vendor Link</label>
-                  <select
-                    value={uploadVendor}
-                    onChange={(e) => setUploadVendor(e.target.value)}
+                  {/* No dedicated Vendor CRM exists yet -- free text instead of a
+                      hardcoded closed list, so a real vendor name always works. */}
+                  <input
+                    type="text"
+                    list="vendor-link-options"
+                    value={uploadVendor === "None" ? "" : uploadVendor}
+                    onChange={(e) => setUploadVendor(e.target.value.trim() === "" ? "None" : e.target.value)}
+                    placeholder="None"
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
-                  >
-                    <option value="None">None</option>
-                    <option value="Home Depot">Home Depot</option>
-                    <option value="Progressive Commercial">Progressive Commercial</option>
-                    <option value="Seattle Real Estate Partners">Seattle Real Estate Partners</option>
-                  </select>
+                  />
+                  <datalist id="vendor-link-options">
+                    {vendors.filter(v => v !== "All" && v !== "None").map(v => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
