@@ -2699,25 +2699,26 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO SECTION - Absolutely centered on top. Real transparent
-                      PNG asset (from the source repo, not a screenshot crop) at
-                      its real aspect ratio (1053x371) so nothing is stretched
-                      or squashed; top edge position is unchanged. */}
+                  {/* LOGO BANNER - Flush against the card's top/left/right edges
+                      (the card itself clips to its rounded corners via
+                      overflow-hidden, so this naturally follows them). Real
+                      transparent PNG asset at its real aspect ratio (947x593)
+                      via CSS aspect-ratio, not a hardcoded pixel height, so it
+                      never stretches regardless of card width. */}
                   <div
                     style={{
-                      top: `${99.895 * scale}px`,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: `${357.5 * scale}px`,
-                      height: `${357.5 * scale * (371 / 1053)}px`
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      aspectRatio: "947 / 593"
                     }}
-                    className="absolute flex justify-center pointer-events-none"
+                    className="absolute pointer-events-none"
                   >
                     <img
-                      src="/branding/owners-logo.png"
+                      src="/branding/owners-logo1.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
+                      className="object-cover"
                       referrerPolicy="no-referrer"
                     />
                   </div>
