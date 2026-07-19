@@ -3,6 +3,8 @@ import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
+import { postTransactionEntry } from "./lib/accountingEngine";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
@@ -100,6 +102,7 @@ import { TimeClockPage } from "./components/TimeClockPage";
 import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
+import { AccountingPage } from "./components/AccountingPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
 import { AIAssistantPage } from "./components/AIAssistantPage";
@@ -262,6 +265,7 @@ const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/L
 const OS_SCREENS = [
   { id: "dashboard", label: "Dashboard", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdashboard.jpg", icon: "📊", top: "12%", bottom: "17%" },
   { id: "revenue", label: "Revenue", url: "", icon: "📈", top: "12%", bottom: "17%" },
+  { id: "accounting", label: "Accounting", url: "", icon: "🧮", top: "12%", bottom: "17%" },
   { id: "customers", label: "Customers", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightcustomers.jpg", icon: "👥", top: "27%", bottom: "32%" },
   { id: "leads", label: "Leads", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightleads.jpg", icon: "🎯", top: "17%", bottom: "22%" },
   { id: "estimates", label: "Estimates & Bids", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightestimatesbids.jpg", icon: "📝", top: "57%", bottom: "62%" },
@@ -451,6 +455,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <LayoutDashboard className={className} />;
     case "revenue":
       return <Activity className={className} />;
+    case "accounting":
+      return <Landmark className={className} />;
     case "customers":
       return <Users className={className} />;
     case "leads":
@@ -856,6 +862,26 @@ export default function App() {
   const [employees, setEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
   const [timeClockLogs, setTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
   const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
+  const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
+  const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
+  const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
+  const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
+  const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
+  const [bankAccounts, setBankAccounts] = useFirestoreCollection<BankAccount>("bank_accounts", businessId);
+  const [recurringTransactions, setRecurringTransactions] = useFirestoreCollection<RecurringTransaction>("recurring_transactions", businessId);
+  const [mileageLogs, setMileageLogs] = useFirestoreCollection<MileageLog>("mileage_logs", businessId);
+  const [budgets, setBudgets] = useFirestoreCollection<Budget>("budgets", businessId);
+  const [salesTaxRates, setSalesTaxRates] = useFirestoreCollection<SalesTaxRate>("sales_tax_rates", businessId);
+
+  // Seed the standard Chart of Accounts once per business -- every account
+  // the app's own event-posting logic writes to must already exist so
+  // journal entries never get silently dropped for lacking a target
+  // account. Owners can still add unlimited custom accounts afterward.
+  useEffect(() => {
+    if (!businessId || accounts.length > 0) return;
+    const seeded: Account[] = DEFAULT_CHART_OF_ACCOUNTS.map(a => ({ ...a, createdAt: new Date().toISOString() }));
+    setAccounts(seeded);
+  }, [businessId, accounts.length, setAccounts]);
 
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
@@ -981,10 +1007,11 @@ export default function App() {
       perms.push("notifications");
     }
 
-    // Allow revenue for specific management/accounting roles
+    // Allow revenue & accounting for specific management/accounting roles
     const highPrivilegeRoles = ["Owner", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"];
-    if (highPrivilegeRoles.includes(activeRole) && !perms.includes("revenue")) {
-      perms.push("revenue");
+    if (highPrivilegeRoles.includes(activeRole)) {
+      if (!perms.includes("revenue")) perms.push("revenue");
+      if (!perms.includes("accounting")) perms.push("accounting");
     }
 
     return OS_SCREENS.filter(s => perms.includes(s.id));
@@ -2273,7 +2300,12 @@ Access to full financial telemetry is restricted.`;
   // real Gemini vision, always confirmed/edited by the user before saving.
   const handleSaveTransaction = async (t: Omit<Transaction, "id">) => {
     try {
-      setTransactions(prev => [...prev, { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }]);
+      const newTxn: Transaction = { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+      setTransactions(prev => [...prev, newTxn]);
+      // Real double-entry posting -- every logged transaction moves the
+      // real ledger (Cash + Revenue or Cash + the matching expense
+      // account), not just a line in a list. See accountingEngine.ts.
+      setJournalEntries(prev => [...prev, postTransactionEntry(newTxn)]);
       setLogTransactionType(null);
       triggerNotification(`${t.type === "income" ? "Income" : "Expense"} logged: $${t.amount.toLocaleString()}`);
     } catch (err) {
@@ -2317,10 +2349,11 @@ Access to full financial telemetry is restricted.`;
         return;
       }
 
-      setTransactions(prev => [
-        ...prev,
-        ...newPayrollTransactions.map((t) => ({ ...t, id: `txn_payroll_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }))
-      ]);
+      const finalizedPayrollTransactions: Transaction[] = newPayrollTransactions.map((t) => ({ ...t, id: `txn_payroll_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }));
+      setTransactions(prev => [...prev, ...finalizedPayrollTransactions]);
+      // Real double-entry posting for every payroll transaction -- Debit
+      // Payroll Expense, Credit Cash, same as any other logged expense.
+      setJournalEntries(prev => [...prev, ...finalizedPayrollTransactions.map(postTransactionEntry)]);
       triggerNotification(`Payroll run: $${totalPayroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} across ${newPayrollTransactions.length} employee${newPayrollTransactions.length === 1 ? "" : "s"}, based on real logged hours.`);
     } catch (err) {
       console.error("Error running payroll:", err);
@@ -2572,6 +2605,26 @@ Access to full financial telemetry is restricted.`;
     setTimeClockLogs,
     transactions,
     setTransactions,
+    accounts,
+    setAccounts,
+    journalEntries,
+    setJournalEntries,
+    invoices,
+    setInvoices,
+    bills,
+    setBills,
+    vendors,
+    setVendors,
+    bankAccounts,
+    setBankAccounts,
+    recurringTransactions,
+    setRecurringTransactions,
+    mileageLogs,
+    setMileageLogs,
+    budgets,
+    setBudgets,
+    salesTaxRates,
+    setSalesTaxRates,
     preSelectedDate,
     setPreSelectedDate,
     preSelectedCustomerId,
@@ -5657,6 +5710,9 @@ Access to full financial telemetry is restricted.`;
 
                   ) : activeScreen.id === "documents" ? (
                     <DocumentsPage />
+
+                  ) : activeScreen.id === "accounting" ? (
+                    <AccountingPage />
 
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />

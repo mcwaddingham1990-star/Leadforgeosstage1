@@ -1,5 +1,6 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
 import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
 
 export interface RosterEntry {
   id?: string;
@@ -42,6 +43,26 @@ export interface DomainDataContextValue {
   setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
   transactions: Transaction[];
   setTransactions: Dispatch<SetStateAction<Transaction[]>>;
+  accounts: Account[];
+  setAccounts: Dispatch<SetStateAction<Account[]>>;
+  journalEntries: JournalEntry[];
+  setJournalEntries: Dispatch<SetStateAction<JournalEntry[]>>;
+  invoices: Invoice[];
+  setInvoices: Dispatch<SetStateAction<Invoice[]>>;
+  bills: Bill[];
+  setBills: Dispatch<SetStateAction<Bill[]>>;
+  vendors: Vendor[];
+  setVendors: Dispatch<SetStateAction<Vendor[]>>;
+  bankAccounts: BankAccount[];
+  setBankAccounts: Dispatch<SetStateAction<BankAccount[]>>;
+  recurringTransactions: RecurringTransaction[];
+  setRecurringTransactions: Dispatch<SetStateAction<RecurringTransaction[]>>;
+  mileageLogs: MileageLog[];
+  setMileageLogs: Dispatch<SetStateAction<MileageLog[]>>;
+  budgets: Budget[];
+  setBudgets: Dispatch<SetStateAction<Budget[]>>;
+  salesTaxRates: SalesTaxRate[];
+  setSalesTaxRates: Dispatch<SetStateAction<SalesTaxRate[]>>;
   preSelectedDate: string | undefined;
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
