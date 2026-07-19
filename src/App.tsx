@@ -2699,26 +2699,25 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO BANNER - Flush against the card's top/left/right edges
-                      (the card itself clips to its rounded corners via
-                      overflow-hidden, so this naturally follows them). Real
-                      transparent PNG asset at its real aspect ratio (947x593)
-                      via CSS aspect-ratio, not a hardcoded pixel height, so it
-                      never stretches regardless of card width. */}
+                  {/* LOGO SECTION - Absolutely centered on top, same place/size
+                      as before. Real transparent PNG asset at its real aspect
+                      ratio (947x593) so nothing is stretched or squashed;
+                      only the file changed (owners-logo.png -> owners-logo1.png). */}
                   <div
                     style={{
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      aspectRatio: "947 / 593"
+                      top: `${99.895 * scale}px`,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: `${357.5 * scale}px`,
+                      height: `${357.5 * scale * (593 / 947)}px`
                     }}
-                    className="absolute pointer-events-none"
+                    className="absolute flex justify-center pointer-events-none"
                   >
                     <img
                       src="/branding/owners-logo1.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-cover"
+                      className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
                       referrerPolicy="no-referrer"
                     />
                   </div>
