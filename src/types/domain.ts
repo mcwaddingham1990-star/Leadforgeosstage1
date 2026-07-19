@@ -135,6 +135,25 @@ export interface DocumentItem {
   lastModified: string;
   url?: string;
   metaObjects?: any[];
+  // Real per-signing-event log (timestamp, signer name/role, device, IP
+  // when available, SHA-256 hash) written by PDFEditor's eSign system —
+  // see ESignLegalInfoModal for what each field means and why.
+  auditTrail?: Array<{
+    id: string;
+    signerName: string;
+    role: string;
+    action: string;
+    timestamp: string;
+    ipAddress?: string;
+    device?: string;
+    documentVersion?: string;
+    hash?: string;
+  }>;
+  signingOptions?: {
+    signingOption?: "in_person" | "remote";
+    enforceSigningOrder?: boolean;
+    requireWitness?: boolean;
+  };
 }
 
 /**

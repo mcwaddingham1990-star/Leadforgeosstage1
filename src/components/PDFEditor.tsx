@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { ESignComplianceFooter, ESignLegalInfoModal } from "./ESignLegalInfoModal";
 import {
   Type,
   Image as ImageIcon,
@@ -165,6 +166,11 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
   const [signerFullName, setSignerFullName] = useState("");
   const [signerRole, setSignerRole] = useState<"customer" | "employee" | "owner" | "witness">("customer");
   const [typedFont, setTypedFont] = useState("Pacifico");
+  // Real ESIGN Act / UETA "consent to sign electronically" requirement --
+  // must be explicitly checked before a signature can be applied. Resets
+  // for every new signature field opened, not remembered across fields.
+  const [signerConsent, setSignerConsent] = useState(false);
+  const [showESignLegalInfo, setShowESignLegalInfo] = useState(false);
   
   const [isESignSidebarOpen, setIsESignSidebarOpen] = useState(false);
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState(false);
@@ -618,6 +624,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
       setSignerFullName((obj.props as any).signedBy || "");
     }
     setSignMethod("draw");
+    setSignerConsent(false);
     setIsSignModalOpen(true);
   };
 
@@ -2602,6 +2609,8 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
               Reset Signatures
             </button>
           </div>
+
+          <ESignComplianceFooter onLearnMore={() => setShowESignLegalInfo(true)} />
         </div>
       )}
     </div>
@@ -3338,15 +3347,28 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
                 </div>
               )}
 
-              {/* Terms Checkbox */}
-              <div className="bg-[#EAF5FF]/80 p-3 rounded-2xl border border-[#9EC8EF]/30 text-[9px] font-medium text-slate-700 leading-relaxed text-left">
-                ℹ️ By clicking <strong>Apply Signature</strong>, I agree that this e-signature holds the same legal standing, weight, and enforceability as a handwritten signature on a paper document under the ESIGN Act and UETA regulations.
-              </div>
+              {/* Real ESIGN Act / UETA consent requirement -- must be checked, not
+                  just displayed as text, before a signature can be applied. */}
+              <label className="flex items-start gap-2 bg-[#EAF5FF]/80 p-3 rounded-2xl border border-[#9EC8EF]/30 text-[9px] font-medium text-slate-700 leading-relaxed text-left cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={signerConsent}
+                  onChange={(e) => setSignerConsent(e.target.checked)}
+                  className="mt-0.5 rounded border-[#9EC8EF] text-[#315C9F] focus:ring-[#315C9F] shrink-0"
+                />
+                <span>
+                  I agree to sign this document electronically, and I understand that this e-signature holds the same legal
+                  standing as a handwritten signature under the ESIGN Act and applicable state UETA laws.
+                </span>
+              </label>
+
+              <ESignComplianceFooter onLearnMore={() => setShowESignLegalInfo(true)} />
             </div>
 
             {/* Action buttons */}
             <div className="flex gap-2.5 mt-5">
               <button
+                disabled={!signerConsent}
                 onClick={() => {
                   let finalVal = "";
                   if (signMethod === "draw") {
@@ -3359,7 +3381,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
                   } else if (signMethod === "import") {
                     finalVal = (window as any)._imported_sig || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='30'><text x='10' y='20' font-family='cursive' font-size='14' fill='%231F3557'>Imported</text></svg>";
                   }
-                  
+
                   if (!finalVal) {
                     alert("Please sign or enter text before applying!");
                     return;
@@ -3367,7 +3389,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
 
                   handleApplySignature(finalVal, activeSignObject.type === "initial");
                 }}
-                className="flex-1 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer animate-pulse-slow"
+                className="flex-1 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer animate-pulse-slow disabled:opacity-40 disabled:cursor-not-allowed disabled:animate-none"
               >
                 Apply Signature
               </button>
@@ -3380,6 +3402,10 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showESignLegalInfo && (
+        <ESignLegalInfoModal onClose={() => setShowESignLegalInfo(false)} />
       )}
     </div>
   );
