@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -43,6 +45,9 @@ import {
   ArrowRight,
   UserPlus
 } from "lucide-react";
+import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
+import { defaultGranularFromModuleList } from "../types/permissions";
+import type { SelectedRole } from "../App";
 
 // Types for SettingsPage
 export interface SettingsPageProps {
@@ -68,42 +73,47 @@ export interface SettingsPageProps {
   setGlobalAiSetting: (val: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO") => void;
   moduleAiSettings: Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">;
   setModuleAiSettings: React.Dispatch<React.SetStateAction<Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">>>;
-  selectedRoles: any[];
-  setSelectedRoles: React.Dispatch<React.SetStateAction<any[]>>;
+  selectedRoles: SelectedRole[];
+  setSelectedRoles: React.Dispatch<React.SetStateAction<SelectedRole[]>>;
 }
 
-// Initial defaults for fields not in parent state
+// Initial defaults for fields not in parent state. Generic system-behavior
+// defaults (frequencies, thresholds, toggles) are fine as sensible starting
+// points; anything that asserts a specific fact about *this* business
+// (an EIN, an insurance policy #, a supplier name, a real person's device)
+// must start blank/zero — a fabricated fact left untouched gets saved as
+// if it were real.
 const INITIAL_DEFAULTS = {
   company: {
-    dba: "LEADFORGELOCAL",
-    website: "www.leadforgelocal.com",
-    email: "waterdrops2001@gmail.com",
+    dba: "",
+    website: "",
+    email: "",
     businessHours: "08:00 AM - 05:00 PM",
     timeZone: "Pacific Standard Time (PST)",
     currency: "USD ($)",
-    taxId: "EIN-88-2910394",
-    licenseNumbers: "LIC-PLUMB-981",
-    insuranceInfo: "Allstate Liability Policy #AL-42442"
+    taxId: "",
+    licenseNumbers: "",
+    insuranceInfo: ""
   },
   payroll: {
     basis: "Hourly",
     overtimeThreshold: 40,
     overtimeMultiplier: 1.5,
     frequency: "Bi-Weekly",
-    nextPayday: "2026-07-10"
+    nextPayday: ""
   },
   taxes: {
-    stateTaxRate: 6.5,
-    countyTaxRate: 2.0,
+    stateTaxRate: 0,
+    countyTaxRate: 0,
     taxOnServices: true,
     taxOnMaterials: true,
     filingSchedule: "Quarterly"
   },
   inventory: {
     lowStockThreshold: 10,
-    defaultLocation: "Seattle Warehouse A",
+    defaultLocation: "",
     autoPoGeneration: true,
-    preferredSupplier: "Grainger"
+    preferredSupplier: ""
   },
   customer: {
     netTerms: "Net 30",
@@ -112,14 +122,14 @@ const INITIAL_DEFAULTS = {
     portalAccess: true
   },
   lead: {
-    source: "Google Local",
+    source: "",
     slaResponseTime: 15,
     autoRouting: "Round-Robin",
     followUpCadence: "3 touches"
   },
   estimate: {
     validityPeriod: 30,
-    footerDisclaimer: "Estimate valid for 30 days. 10% deposit required on approval.",
+    footerDisclaimer: "",
     depositPercentage: 10,
     digitalSignatureReq: true
   },
@@ -136,7 +146,7 @@ const INITIAL_DEFAULTS = {
     liveTrackingExpiry: 120
   },
   route: {
-    startDepot: "Seattle Headquarters",
+    startDepot: "",
     deviationThreshold: 15,
     trafficCompensation: true,
     avoidTolls: false
@@ -145,19 +155,19 @@ const INITIAL_DEFAULTS = {
     requirePhoto: true,
     requireSignature: true,
     requireSafetyCheck: true,
-    standardLaborRate: 95,
+    standardLaborRate: 0,
     defaultType: "Service",
     postCleanupDuration: 15
   },
   document: {
-    invoiceHeader: "Thank you for choosing LeadForge!",
+    invoiceHeader: "",
     maxSizeLimit: 10,
     pdfAutoGeneration: true,
     backupFolderFormat: "YYYY-MM-Customer"
   },
   message: {
-    smsSenderName: "LeadForge",
-    autoReplyText: "Thanks for contacting us! We've received your request.",
+    smsSenderName: "",
+    autoReplyText: "",
     quietHoursStart: "22:00",
     quietHoursEnd: "07:00",
     transcriptRetention: 180
@@ -179,15 +189,11 @@ const INITIAL_DEFAULTS = {
     twoFactorAuth: false,
     sessionTimeout: "1 hr",
     passwordRules: "Strong",
-    loginHistory: [
-      { date: "2026-07-06", time: "18:24", ip: "192.168.1.52", device: "Chrome / Windows 11", location: "Seattle, WA" },
-      { date: "2026-07-06", time: "09:12", ip: "172.56.21.99", device: "Safari / iPhone 15", location: "Seattle, WA" }
-    ],
-    trustedDevices: ["Sarah's iPad Pro", "Seattle Dispatch Terminal #1"],
-    apiTokens: [
-      { name: "QuickBooks Sync", token: "lf_tok_••••••••a3e9", created: "2026-04-12" },
-      { name: "Stripe Gateway", token: "lf_tok_••••••••00fc", created: "2026-05-18" }
-    ]
+    // No real audit-log pipeline exists yet to populate these — stay
+    // honestly empty rather than showing fabricated login/device history.
+    loginHistory: [] as Array<{ date: string; time: string; ip: string; device: string; location: string }>,
+    trustedDevices: [] as string[],
+    apiTokens: [] as Array<{ name: string; token: string; created: string }>
   },
   appearance: {
     theme: "Corporate Blue (Default)",
@@ -199,10 +205,9 @@ const INITIAL_DEFAULTS = {
   },
   backup: {
     autoBackupFrequency: "Daily",
-    backupHistory: [
-      { date: "2026-07-06", time: "03:00", status: "Successful", size: "142.5 MB", type: "Scheduled" },
-      { date: "2026-07-05", time: "03:00", status: "Successful", size: "141.2 MB", type: "Scheduled" }
-    ],
+    // No real backup system exists yet — stay honestly empty rather than
+    // showing fabricated "Successful" backup runs that never happened.
+    backupHistory: [] as Array<{ date: string; time: string; status: string; size: string; type: string }>,
     cloudStorage: "Google Drive"
   }
 };
@@ -233,7 +238,7 @@ export default function SettingsPage({
   selectedRoles,
   setSelectedRoles
 }: SettingsPageProps) {
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions } = useDomainData();
   const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
@@ -241,6 +246,37 @@ export default function SettingsPage({
   // Local settings state combining parent states and auxiliary defaults
   const [localConfig, setLocalConfig] = useState(INITIAL_DEFAULTS);
   const [savedConfig, setSavedConfig] = useState(INITIAL_DEFAULTS);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // Load this business's real saved settings from Firestore. Falls back to
+  // INITIAL_DEFAULTS (merged in per-category, so a category added after a
+  // business already saved once still gets a sane starting value) rather
+  // than leaving fields undefined.
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "business_profiles", businessId));
+        if (cancelled) return;
+        const stored = snap.exists() ? snap.data().companySettings : null;
+        if (stored) {
+          const merged = Object.fromEntries(
+            Object.entries(INITIAL_DEFAULTS).map(([category, defaults]) => [
+              category,
+              { ...defaults, ...(stored[category] || {}) }
+            ])
+          ) as typeof INITIAL_DEFAULTS;
+          setLocalConfig(merged);
+          setSavedConfig(merged);
+        }
+      } catch (err) {
+        console.error("Error loading company settings:", err);
+        triggerNotification("Couldn't load saved settings — check your connection.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [businessId]);
 
   // Search filter for settings
   const [searchQuery, setSearchQuery] = useState("");
@@ -254,6 +290,7 @@ export default function SettingsPage({
 
   // Custom role add state
   const [newRoleName, setNewRoleName] = useState("");
+  const [editingRole, setEditingRole] = useState<SelectedRole | null>(null);
 
   // Audit Logs state (starts with some historical entries, appends changes live)
   const [auditLogs, setAuditLogs] = useState<Array<{
@@ -363,7 +400,22 @@ export default function SettingsPage({
   };
 
   // Actions
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!businessId) {
+      triggerNotification("Missing business account — please sign in again.");
+      return;
+    }
+    setIsSavingSettings(true);
+    try {
+      await setDoc(doc(db, "business_profiles", businessId), { companySettings: localConfig }, { merge: true });
+    } catch (err) {
+      console.error("Error saving company settings:", err);
+      triggerNotification("Couldn't save settings — check your connection and try again.");
+      setIsSavingSettings(false);
+      return;
+    }
+    setIsSavingSettings(false);
+
     // Log the changes to Audit Logs
     const timestamp = new Date();
     const formattedDate = timestamp.toISOString().split("T")[0];
@@ -398,7 +450,7 @@ export default function SettingsPage({
 
     setSavedConfig(JSON.parse(JSON.stringify(localConfig)));
     setHasUnsavedChanges(false);
-    triggerNotification("⚙️ Settings saved successfully! Every connected module updated instantly.");
+    triggerNotification("⚙️ Settings saved to your business profile.");
   };
 
   const handleUndo = () => {
@@ -444,7 +496,7 @@ export default function SettingsPage({
     )}`;
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", jsonString);
-    downloadAnchor.setAttribute("download", `leadforge_local_os_settings.json`);
+    downloadAnchor.setAttribute("download", `ownerslocal_local_os_settings.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -643,13 +695,14 @@ export default function SettingsPage({
     const cleanRoleName = newRoleName.trim();
     const newId = cleanRoleName.toLowerCase().replace(/\s+/g, "_");
 
-    const customRoleObj = {
+    const customRoleObj: SelectedRole = {
       id: newId,
       name: cleanRoleName,
       count: 0,
       description: "Custom user-defined profile permissions",
+      isCustom: true,
       permissions: ["dashboard", "messages"],
-      capabilities: { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view")
     };
 
     setSelectedRoles(prev => [...prev, customRoleObj]);
@@ -670,25 +723,15 @@ export default function SettingsPage({
     }, ...prev]);
   };
 
-  // Update role capability matrix
-  const handleToggleCapability = (roleId: string, capKey: string) => {
-    setSelectedRoles(prev => prev.map(r => {
-      if (r.id === roleId) {
-        return {
-          ...r,
-          capabilities: {
-            ...r.capabilities,
-            [capKey]: !r.capabilities[capKey]
-          }
-        };
-      }
-      return r;
-    }));
-    triggerNotification(`🛡️ Updated capability "${capKey}" on role "${roleId}"`);
+  // Save edited per-module permissions for a role
+  const handleSaveRolePermissions = (updated: SelectedRole) => {
+    setSelectedRoles(prev => prev.map(r => r.id === updated.id ? updated : r));
+    setEditingRole(null);
+    triggerNotification(`🛡️ Updated permissions for role "${updated.name}"`);
   };
 
   return (
-    <div className="space-y-6 text-left animate-fade-in font-sans">
+    <div className="relative space-y-6 text-left animate-fade-in font-sans">
       
       {/* TOP HEADER CARD & CONTROL CENTER */}
       <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-4">
@@ -703,13 +746,14 @@ export default function SettingsPage({
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <button
               onClick={handleSave}
-              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer uppercase tracking-wider border ${
+              disabled={isSavingSettings}
+              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer uppercase tracking-wider border disabled:opacity-60 disabled:cursor-not-allowed ${
                 hasUnsavedChanges
                   ? "bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 animate-pulse"
                   : "bg-[#E3F3FF] text-[#315C9F] border-[#A9CDEE] hover:bg-white"
               }`}
             >
-              <Save className="w-3.5 h-3.5" /> Save
+              <Save className="w-3.5 h-3.5" /> {isSavingSettings ? "Saving..." : "Save"}
             </button>
             <button
               onClick={handleUndo}
@@ -1025,7 +1069,7 @@ export default function SettingsPage({
                         required
                         value={newUser.email}
                         onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
-                        placeholder="richard@leadforgelocal.com"
+                        placeholder="richard@ownerslocal.com"
                         className="w-full px-2.5 py-1.5 bg-white border border-[#A9CDEE] rounded-lg text-xs font-bold text-slate-800 focus:outline-none"
                       />
                     </div>
@@ -1055,23 +1099,27 @@ export default function SettingsPage({
                             <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-sans">{role.description}</p>
                           </div>
                           <div className="flex flex-wrap gap-1 pt-1.5 border-t border-[#A9CDEE]/30">
-                            {Object.keys(role.capabilities || {}).map((cap) => {
-                              const isEnabled = role.capabilities[cap];
-                              return (
-                                <button
-                                  key={cap}
-                                  onClick={() => handleToggleCapability(role.id, cap)}
-                                  className={`px-1.5 py-0.5 text-[8.5px] font-black rounded border cursor-pointer select-none transition-all uppercase ${
-                                    isEnabled
-                                      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                                      : "bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {cap}
-                                </button>
-                              );
-                            })}
+                            {role.permissions.slice(0, 4).map((moduleId) => (
+                              <span
+                                key={moduleId}
+                                className="px-1.5 py-0.5 text-[8.5px] font-black rounded border bg-slate-50 text-slate-400 border-slate-100 uppercase"
+                              >
+                                {moduleId}
+                              </span>
+                            ))}
+                            {role.permissions.length > 4 && (
+                              <span className="px-1.5 py-0.5 text-[8.5px] font-black rounded border bg-slate-50 text-slate-400 border-slate-100">
+                                +{role.permissions.length - 4}
+                              </span>
+                            )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingRole(role)}
+                            className="w-full py-1.5 text-[9.5px] font-bold bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] hover:bg-white rounded-lg cursor-pointer uppercase tracking-wider transition-all"
+                          >
+                            Edit Per-Module Permissions
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1810,7 +1858,7 @@ export default function SettingsPage({
               {/* AI SETTINGS SECTION */}
               {activeCategory === "ai_settings" && (
                 <div className="space-y-4">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">LeadForge Master AI Engine Configuration</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Master AI Engine Configuration</h3>
                   
                   <div className="space-y-2 bg-white p-4 rounded-xl border border-[#A9CDEE]">
                     <div className="flex items-center justify-between pb-2 border-b border-[#A9CDEE]/30">
@@ -2114,7 +2162,7 @@ export default function SettingsPage({
                     {/* OWNER CONSOLE SECURE LINK */}
                     <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE]/30">
                       <div>
-                        <p className="font-extrabold text-slate-800">LeadForge Owner Control Console</p>
+                        <p className="font-extrabold text-slate-800">Owner Control Console</p>
                         <p className="text-[10px] text-slate-400 font-sans mt-0.5">God-Mode Operating System administration deck.</p>
                       </div>
                       {activeRole === "Owner" ? (
@@ -2122,7 +2170,7 @@ export default function SettingsPage({
                           onClick={() => {
                             if (onNavigateToScreen) {
                               onNavigateToScreen("owner_console");
-                              triggerNotification("🔑 Entering LeadForge Owner Control Console. God Mode Active.");
+                              triggerNotification("🔑 Entering Owner Control Console. God Mode Active.");
                             }
                           }}
                           className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-lg transition-all cursor-pointer uppercase tracking-wider shadow-sm border border-amber-400 text-[10px]"
@@ -2236,7 +2284,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-3">
                 <Sparkles className="w-6 h-6 text-[#4A9BFF] animate-pulse" />
                 <div>
-                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">LeadForge Artificial Intelligence Audit</h3>
+                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Artificial Intelligence Audit</h3>
                   <p className="text-xs text-[#5E7393] font-sans font-semibold">Instant settings optimization diagnostics based on active business parameters</p>
                 </div>
               </div>
@@ -2318,6 +2366,14 @@ export default function SettingsPage({
 
           </div>
         </div>
+      )}
+
+      {editingRole && (
+        <RolePermissionEditorModal
+          role={editingRole}
+          onSave={handleSaveRolePermissions}
+          onClose={() => setEditingRole(null)}
+        />
       )}
 
     </div>

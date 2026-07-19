@@ -46,7 +46,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: "simulated_owner_uid", // App uses simplified email-based login, so we fill what is available
-      email: localStorage.getItem("leadforge_logged_in_user_email") || "unknown"
+      email: localStorage.getItem("ownerslocal_logged_in_user_email") || "unknown"
     },
     operationType,
     path

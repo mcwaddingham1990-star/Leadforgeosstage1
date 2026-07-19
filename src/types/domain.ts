@@ -116,6 +116,11 @@ export interface DocumentItem {
   vendor: string;
   job: string;
   type: string;
+  // Top-level cabinet folder this document lives in (Company, Customers,
+  // Leads, Jobs, Payroll, etc. -- see FOLDER_TAXONOMY in DocumentsPage).
+  // Optional because documents created before this taxonomy existed don't
+  // have one yet; DocumentsPage backfills a real inferred value for those.
+  folder?: string;
   uploadedBy: string;
   date: string;
   size: string;
@@ -130,6 +135,101 @@ export interface DocumentItem {
   lastModified: string;
   url?: string;
   metaObjects?: any[];
+  // Real per-signing-event log (timestamp, signer name/role, device, IP
+  // when available, SHA-256 hash) written by PDFEditor's eSign system —
+  // see ESignLegalInfoModal for what each field means and why.
+  auditTrail?: Array<{
+    id: string;
+    signerName: string;
+    role: string;
+    action: string;
+    timestamp: string;
+    ipAddress?: string;
+    device?: string;
+    documentVersion?: string;
+    hash?: string;
+  }>;
+  signingOptions?: {
+    signingOption?: "in_person" | "remote";
+    enforceSigningOrder?: boolean;
+    requireWitness?: boolean;
+  };
+}
+
+/**
+ * One real, timestamped revenue recognition — written by the Event
+ * Engine's job-completion cascade (useEventEngineSubscribers) when a job
+ * with a linked estimate is marked Completed. This is the only source of
+ * truth for both the running revenue total and the dashboard revenue
+ * graph — nothing here is ever synthesized or estimated.
+ */
+export interface RevenueEvent {
+  id: string;
+  date: string; // ISO timestamp, when the job was marked Completed
+  amount: number;
+  customer: string;
+  jobId: string;
+  estimateId: string;
+}
+
+/** A real employee record, written once at employee-onboarding completion (see handleCompleteEmployeeOnboarding in App.tsx). Doc id is the employee's email. */
+export interface EmployeeRecord {
+  id: string; // employee's email
+  email: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  phone: string;
+  photo: string;
+  goals: string;
+  hourlyRate: number;
+  role: string;
+  businessEmail: string;
+  createdAt: string;
+}
+
+/**
+ * One real clock in/out/break event, written the moment it actually
+ * happens — by the employee themselves (self clock-in/out) or by an
+ * authorized manager via manual time entry. This is the only source of
+ * truth for hours worked, overtime, and payroll on the Time Clock page;
+ * nothing there is ever a running counter kept separately from this log.
+ */
+export interface TimeClockLog {
+  id: string;
+  employeeEmail: string;
+  employeeName: string;
+  type: "Clock In" | "Clock Out" | "Break Start" | "Break End";
+  date: string; // YYYY-MM-DD, local to whoever logged it
+  time: string; // e.g. "08:00 AM"
+  timestamp: string; // ISO timestamp, real ordering/aggregation key
+  gps: string;
+  jobId?: string;
+  jobTitle?: string;
+  route?: string;
+  vehicle?: string;
+  approved?: boolean;
+  enteredManually?: boolean;
+}
+
+/**
+ * One real income or expense record. Entered either by typing it in
+ * directly or by scanning a photo (receipt/check) through real Gemini
+ * vision OCR (see handleScanFinancialDocument) — manual entry is always
+ * available and never blocked behind the scan path. Payroll runs also
+ * write real expense transactions here, computed from real time_clock_logs
+ * hours x real employee hourlyRate, never a fabricated number.
+ */
+export interface Transaction {
+  id: string;
+  type: "income" | "expense";
+  source: "manual" | "ai_scan" | "payroll";
+  amount: number;
+  description: string; // vendor/payer name, or a payroll period label
+  category?: string;
+  date: string; // YYYY-MM-DD
+  createdAt: string; // ISO timestamp
+  createdBy?: string; // real logged-in user's email
 }
 
 export interface SchedulingEvent {

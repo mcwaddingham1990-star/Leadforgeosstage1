@@ -113,12 +113,17 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     documents,
     setDocuments,
     completedJobsRevenue,
-    setCompletedJobsRevenue
+    employees,
+    timeClockLogs
   } = useDomainData();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
   const map = useMap();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
+  // Map IDs are tied to a specific Google Cloud project — falls back to the
+  // original demo project's Map ID only if a real business hasn't set
+  // their own yet (which won't work with their own API key/project).
+  const mapId = (process.env.GOOGLE_MAPS_MAP_ID || "").trim() || "61f65bb1969a473a";
 
   // Map Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -206,7 +211,13 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     { id: "veh_4", name: "HVAC Sprinter #412", driver: "Marcus Vance", fuel: 42, speed: 28, eta: 22, currentRoute: "Eastlake Ave Eastbound", assignedJobs: 1 }
   ]);
 
-  // Active Simulated Technicians
+  // Real technicians — one per real employee. Name and clocked-in/on-break/
+  // off-duty status come from the real employees + time_clock_logs
+  // collections; a real last-known GPS fix (captured at their last clock
+  // event) anchors their starting position when one exists. There is no
+  // real live GPS feed, so once placed they still animate via the jitter
+  // simulation below rather than actual tracked movement — that part
+  // remains a known limitation, not something faked as real.
   const [activeTechnicians, setActiveTechnicians] = useState<Array<{
     id: string;
     name: string;
@@ -217,12 +228,44 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     jobId?: string;
     routeProgress?: number; // 0 to 100
     routePath?: Array<{ lat: number; lng: number }>;
-  }>>([
-    { id: "tech_1", name: "John Doe", vehicle: "Rapid Response Van #102", status: "Traveling", lat: 47.6150, lng: -122.3400 },
-    { id: "tech_2", name: "David Vance", vehicle: "Heavy Duty Truck #205", status: "Available", lat: 47.5950, lng: -122.3150 },
-    { id: "tech_3", name: "Sarah Connor", vehicle: "Elite Service SUV #310", status: "Traveling", lat: 47.6520, lng: -122.3520 },
-    { id: "tech_4", name: "Marcus Vance", vehicle: "HVAC Sprinter #412", status: "Offline", lat: 47.5800, lng: -122.3380 }
-  ]);
+  }>>([]);
+
+  const parseGpsString = (gps: string): { lat: number; lng: number } | null => {
+    const match = gps.match(/(\d+(?:\.\d+)?)\s*°\s*([NS])\s*,\s*(\d+(?:\.\d+)?)\s*°\s*([EW])/);
+    if (!match) return null;
+    const [, latStr, latDir, lngStr, lngDir] = match;
+    return {
+      lat: parseFloat(latStr) * (latDir === "S" ? -1 : 1),
+      lng: parseFloat(lngStr) * (lngDir === "W" ? -1 : 1)
+    };
+  };
+
+  useEffect(() => {
+    setActiveTechnicians(prev => employees.map(er => {
+      const existing = prev.find(t => t.id === er.email);
+      const myLogs = timeClockLogs.filter(l => l.employeeEmail === er.email);
+      const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      const realStatus: "Available" | "Lunch" | "Offline" =
+        !lastLog || lastLog.type === "Clock Out" ? "Offline" :
+        lastLog.type === "Break Start" ? "Lunch" : "Available";
+      const lastRealFix = lastLog ? parseGpsString(lastLog.gps) : null;
+      const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Seattle, WA", er.email);
+      return {
+        id: er.email,
+        name: `${er.firstName} ${er.lastName}`.trim(),
+        vehicle: existing?.vehicle || "Unassigned",
+        // Preserve an in-progress local dispatch ("Traveling" to a job)
+        // rather than overwrite it with the plain clocked-in state.
+        status: existing?.jobId ? "Traveling" : realStatus,
+        lat: existing?.jobId ? existing.lat : (lastRealFix?.lat ?? existing?.lat ?? fallbackFix.lat),
+        lng: existing?.jobId ? existing.lng : (lastRealFix?.lng ?? existing?.lng ?? fallbackFix.lng),
+        jobId: existing?.jobId,
+        routeProgress: existing?.routeProgress,
+        routePath: existing?.routePath
+      };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees, timeClockLogs, businessAddresses]);
 
   // Editable Service Territories with Polygons
   const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([
@@ -741,6 +784,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 1. Update Estimate Status
     setEstimates(prev => prev.map(e => e.id === estId ? { ...e, status: "Accepted" } : e));
 
+    // Cross-reference the real customer record for real contact info --
+    // an estimate itself only stores a customer name/company, not phone/
+    // email. No real match means honestly blank fields, not fabricated
+    // placeholder contact details.
+    const matchedCustomer = customers.find(
+      c => c.contact === est.customerName || c.company === est.company
+    );
+
     // 2. Automatically dispatch schedule event
     const newJobId = `job_gen_${Date.now()}`;
     const newJob = {
@@ -750,12 +801,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       startTime: "10:30",
       endTime: "13:00",
       customer: est.customerName,
-      customerPhone: "(206) 555-8933",
-      customerEmail: "contact@seattleclient.net",
-      customerAddress: est.company || "Seattle, WA",
-      assignedEmployee: "John Doe",
-      assignedCrew: "Unit 1",
-      location: est.company || "Seattle, WA",
+      customerPhone: matchedCustomer?.phone || "",
+      customerEmail: matchedCustomer?.email || "",
+      customerAddress: matchedCustomer?.address || est.address || est.company || "",
+      // No real rule exists for which employee should get an
+      // auto-created job -- unassigned for a real dispatcher to pick is
+      // honest; a hardcoded name never matching a real employee is not.
+      assignedEmployee: "",
+      location: matchedCustomer?.address || est.address || est.company || "",
       priority: "Medium" as const,
       notes: `Generated automatically via approved estimate ${est.number}. Amount: $${est.amount}`,
       status: "Scheduled" as const
@@ -768,7 +821,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       id: newJobId,
       type: "Job",
       title: `Job: ${newJob.customer}`,
-      subtitle: `Assigned: John Doe | Priority: Medium | Status: Scheduled`,
+      subtitle: `Assigned: Unassigned | Priority: Medium | Status: Scheduled`,
       address: newJob.location,
       lat: geocodeAddress(newJob.location, newJobId).lat,
       lng: geocodeAddress(newJob.location, newJobId).lng,
@@ -898,20 +951,23 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       return evt;
     }));
 
-    const jobAmount = 1450; // standard job value to update financials
-    if (setCompletedJobsRevenue) {
-      setCompletedJobsRevenue(prev => prev + jobAmount);
-    }
+    // Real revenue recognition already happens via the Event Engine's
+    // job-completion cascade (useEventEngineSubscribers), triggered by the
+    // setSchedulingEvents status change above — it looks up the job's real
+    // linked estimate amount instead of guessing a flat number here.
+    const activeJob = schedulingEvents.find(e => e.id === jobId);
+    const linkedEstimate = activeJob?.sourceEstimateId
+      ? estimates.find(e => e.id === activeJob.sourceEstimateId)
+      : undefined;
 
     // Update matching customer's stats
-    const activeJob = schedulingEvents.find(e => e.id === jobId);
     if (activeJob) {
       setCustomers(prev => prev.map(c => {
         if (c.company === activeJob.customer || c.contact === activeJob.customer) {
           return {
             ...c,
             openJobs: Math.max(0, c.openJobs - 1),
-            lifetimeValue: c.lifetimeValue + jobAmount
+            lifetimeValue: c.lifetimeValue + (linkedEstimate?.amount || 0)
           };
         }
         return c;
@@ -932,7 +988,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     if (logOperationalEvent) {
       logOperationalEvent(
         "Job Completed",
-        `Job Completed successfully. $${jobAmount.toLocaleString()} generated as profit.`,
+        linkedEstimate
+          ? `Job completed successfully. $${linkedEstimate.amount.toLocaleString()} revenue recognized.`
+          : "Job completed successfully.",
         "✅"
       );
     }
@@ -1119,13 +1177,16 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const handleDispatchOptimizedRoute = () => {
     if (selectedBasketIds.length < 2) return;
 
-    // Dispatch all selected basket jobs to "John Doe"
+    // There's no real rule for which technician should get a batch of
+    // jobs from a one-click action -- mark them ready for dispatch
+    // (Scheduled, not the fake "Traveling") rather than fake-assigning
+    // them to a hardcoded name that isn't a real employee. A real
+    // dispatcher assigns each one via handleAssignTechnician.
     setSchedulingEvents(prev => prev.map(evt => {
       if (selectedBasketIds.includes(evt.id)) {
         return {
           ...evt,
-          assignedEmployee: "John Doe",
-          status: "Traveling"
+          status: "Scheduled"
         };
       }
       return evt;
@@ -1133,8 +1194,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
     if (logOperationalEvent) {
       logOperationalEvent(
-        "Route Dispatched",
-        `One-Click Route optimized. ${selectedBasketIds.length} stops dispatched to John Doe. ETA reduced by 24%!`,
+        "Route Grouped",
+        `${selectedBasketIds.length} stops grouped for dispatch — assign a technician to each to send them out.`,
         "⚡"
       );
     }
@@ -1254,7 +1315,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               id="gmp_mcp_codeassist_v1_aistudio"
               defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
               defaultZoom={11}
-              mapId="61f65bb1969a473a"
+              mapId={mapId}
               style={{ width: "100%", height: "100%", borderRadius: "24px" }}
             >
               {/* Google maps overlays */}
@@ -1353,6 +1414,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </p>
                   <p>
                     <strong className="text-white">3. Or Manually:</strong> Open <span className="text-white font-bold">Settings</span> (⚙️ gear icon, top-right corner) → <span className="text-white font-bold">Secrets</span> → Add secret name <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code> → paste key.
+                  </p>
+                  <p>
+                    <strong className="text-white">4. Map ID (required too):</strong> In the same Google Cloud project, go to <span className="text-white font-bold">Maps → Map Management</span>, create a Map ID, then add secret <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_MAP_ID</code> with that value. A Map ID from a different project than your key won't work.
                   </p>
                 </div>
               </div>
@@ -1855,7 +1919,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   id="gmp_mcp_codeassist_v1_aistudio"
                   defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
                   defaultZoom={11}
-                  mapId="61f65bb1969a473a"
+                  mapId={mapId}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
                   {/* Google maps overlays */}
@@ -1954,6 +2018,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       </p>
                       <p>
                         <strong className="text-white">3. Or Manually:</strong> Open <span className="text-white font-bold">Settings</span> (⚙️ gear icon, top-right corner) → <span className="text-white font-bold">Secrets</span> → Add secret name <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code> → paste key.
+                      </p>
+                      <p>
+                        <strong className="text-white">4. Map ID (required too):</strong> In the same Google Cloud project, go to <span className="text-white font-bold">Maps → Map Management</span>, create a Map ID, then add secret <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_MAP_ID</code> with that value. A Map ID from a different project than your key won't work.
                       </p>
                     </div>
                   </div>

@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, Plugin, Connect} from 'vite';
-import {handleAiAsk, handleScanReceipt} from './server/aiHandler';
+import {handleAiAsk, handleScanReceipt, handleScanFinancialDocument} from './server/aiHandler';
 import {getClientIp} from './server/clientInfo';
 import type {IncomingMessage, ServerResponse} from 'http';
 
@@ -38,6 +38,7 @@ function aiApiDevMiddleware(): Plugin {
     configureServer(server) {
       server.middlewares.use('/api/ai/ask', jsonRoute(handleAiAsk));
       server.middlewares.use('/api/ai/scan-receipt', jsonRoute(handleScanReceipt));
+      server.middlewares.use('/api/ai/scan-financial-document', jsonRoute(handleScanFinancialDocument));
       server.middlewares.use('/api/client-info', (req: IncomingMessage, res: ServerResponse) => {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ip: getClientIp(req) }));
@@ -50,7 +51,12 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aiApiDevMiddleware()],
     define: {
-      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || '')
+      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || ''),
+      // Map IDs are tied to a specific Google Cloud project — a Map ID from
+      // a different project than the one the API key belongs to will fail
+      // to render Advanced Markers. Configurable per-deployment instead of
+      // hardcoded so each real business's own key/Map ID pair actually match.
+      'process.env.GOOGLE_MAPS_MAP_ID': JSON.stringify(process.env.GOOGLE_MAPS_MAP_ID || '')
     },
     resolve: {
       alias: {

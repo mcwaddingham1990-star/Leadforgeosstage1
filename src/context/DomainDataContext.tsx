@@ -1,5 +1,6 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
-import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent } from "../types/domain";
+import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
 
 export interface RosterEntry {
   id?: string;
@@ -32,8 +33,36 @@ export interface DomainDataContextValue {
   setRecentAiActions: Dispatch<SetStateAction<any[]>>;
   snapshots: any[];
   setSnapshots: Dispatch<SetStateAction<any[]>>;
+  revenueEvents: RevenueEvent[];
+  setRevenueEvents: Dispatch<SetStateAction<RevenueEvent[]>>;
+  /** Derived sum of revenueEvents — provided so consumers don't each re-implement the reduce. */
   completedJobsRevenue: number;
-  setCompletedJobsRevenue: Dispatch<SetStateAction<number>>;
+  employees: EmployeeRecord[];
+  setEmployees: Dispatch<SetStateAction<EmployeeRecord[]>>;
+  timeClockLogs: TimeClockLog[];
+  setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
+  transactions: Transaction[];
+  setTransactions: Dispatch<SetStateAction<Transaction[]>>;
+  accounts: Account[];
+  setAccounts: Dispatch<SetStateAction<Account[]>>;
+  journalEntries: JournalEntry[];
+  setJournalEntries: Dispatch<SetStateAction<JournalEntry[]>>;
+  invoices: Invoice[];
+  setInvoices: Dispatch<SetStateAction<Invoice[]>>;
+  bills: Bill[];
+  setBills: Dispatch<SetStateAction<Bill[]>>;
+  vendors: Vendor[];
+  setVendors: Dispatch<SetStateAction<Vendor[]>>;
+  bankAccounts: BankAccount[];
+  setBankAccounts: Dispatch<SetStateAction<BankAccount[]>>;
+  recurringTransactions: RecurringTransaction[];
+  setRecurringTransactions: Dispatch<SetStateAction<RecurringTransaction[]>>;
+  mileageLogs: MileageLog[];
+  setMileageLogs: Dispatch<SetStateAction<MileageLog[]>>;
+  budgets: Budget[];
+  setBudgets: Dispatch<SetStateAction<Budget[]>>;
+  salesTaxRates: SalesTaxRate[];
+  setSalesTaxRates: Dispatch<SetStateAction<SalesTaxRate[]>>;
   preSelectedDate: string | undefined;
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
@@ -43,11 +72,11 @@ export interface DomainDataContextValue {
 export const DomainDataContext = createContext<DomainDataContextValue | undefined>(undefined);
 
 /**
- * The 11 Firestore-backed business collections (customers, leads, estimates,
+ * The 12 Firestore-backed business collections (customers, leads, estimates,
  * scheduling events, inventory, documents, roster, bulletins, notifications,
- * recent AI actions, snapshots) plus the handful of cross-page scalars that
- * travel with them. Page components should use this instead of taking each
- * collection as a pair of props.
+ * recent AI actions, snapshots, revenue events) plus the handful of
+ * cross-page scalars that travel with them. Page components should use this
+ * instead of taking each collection as a pair of props.
  */
 export function useDomainData(): DomainDataContextValue {
   const ctx = useContext(DomainDataContext);

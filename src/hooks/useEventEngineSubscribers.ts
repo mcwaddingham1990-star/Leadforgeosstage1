@@ -4,6 +4,10 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { SchedulingEvent, Estimate } from "../types/domain";
 
+function generateRevenueEventId(): string {
+  return `rev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /**
  * Registers the Event Engine's cascade rules. Every collection already
  * auto-emits create/update/delete via useFirestoreCollection, so adding a
@@ -11,7 +15,7 @@ import { SchedulingEvent, Estimate } from "../types/domain";
  * no other file needs to change.
  */
 export function useEventEngineSubscribers(): void {
-  const { estimates, setCompletedJobsRevenue } = useDomainData();
+  const { estimates, setRevenueEvents } = useDomainData();
   const { logOperationalEvent, triggerNotification } = useNavTelemetry();
 
   useEffect(() => {
@@ -24,7 +28,17 @@ export function useEventEngineSubscribers(): void {
       if (item.sourceEstimateId) {
         const estimate = estimates.find((e: Estimate) => e.id === item.sourceEstimateId);
         if (estimate) {
-          setCompletedJobsRevenue((prev) => prev + estimate.amount);
+          setRevenueEvents((prev) => [
+            ...prev,
+            {
+              id: generateRevenueEventId(),
+              date: new Date().toISOString(),
+              amount: estimate.amount,
+              customer: item.customer,
+              jobId: item.id,
+              estimateId: estimate.id
+            }
+          ]);
           logOperationalEvent("Job Completed", `${item.customer}'s job completed — $${estimate.amount.toLocaleString()} revenue recognized`, "💰");
           triggerNotification(`Job completed for ${item.customer}: $${estimate.amount.toLocaleString()} revenue recognized`);
           return;

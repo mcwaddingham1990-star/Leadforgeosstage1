@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { buildGranularFromCapabilities, fullAccessGranular, defaultGranularFromModuleList, GranularPermissions } from "./types/permissions";
+import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
+import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
+import { postTransactionEntry } from "./lib/accountingEngine";
+import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
+import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -97,6 +102,7 @@ import { TimeClockPage } from "./components/TimeClockPage";
 import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
+import { AccountingPage } from "./components/AccountingPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
 import { AIAssistantPage } from "./components/AIAssistantPage";
@@ -126,15 +132,10 @@ export interface SelectedRole {
   description: string;
   isCustom?: boolean;
   permissions: string[];
-  capabilities: {
-    view: boolean;
-    create: boolean;
-    edit: boolean;
-    delete: boolean;
-    approve: boolean;
-    export: boolean;
-    ai: boolean;
-  };
+  // Real per-module capabilities — e.g. this role can have Routes: Edit
+  // while another role has Routes: View only, instead of one flat
+  // view/create/edit/... set applied uniformly across every module.
+  modulePermissions: GranularPermissions;
 }
 
 export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: string; permissions: string[] }> = {
@@ -255,7 +256,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   }
 };
 
-// Asset URLs from LeadForgeOS GitHub
+// Asset URLs from Owner's Local OS GitHub
 const CARD_BG_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Login/lightmodecardbg.jpg";
 const SIGNIN_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Signinbuttom.png";
 const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Gobutton.png";
@@ -264,6 +265,7 @@ const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/L
 const OS_SCREENS = [
   { id: "dashboard", label: "Dashboard", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdashboard.jpg", icon: "📊", top: "12%", bottom: "17%" },
   { id: "revenue", label: "Revenue", url: "", icon: "📈", top: "12%", bottom: "17%" },
+  { id: "accounting", label: "Accounting", url: "", icon: "🧮", top: "12%", bottom: "17%" },
   { id: "customers", label: "Customers", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightcustomers.jpg", icon: "👥", top: "27%", bottom: "32%" },
   { id: "leads", label: "Leads", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightleads.jpg", icon: "🎯", top: "17%", bottom: "22%" },
   { id: "estimates", label: "Estimates & Bids", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightestimatesbids.jpg", icon: "📝", top: "57%", bottom: "62%" },
@@ -286,6 +288,165 @@ const OS_SCREENS = [
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
+/**
+ * Buckets the real revenueEvents log (written by the Event Engine's
+ * job-completion cascade) and real transactions log (manual/scanned/payroll
+ * entries — see LogTransactionModal + handleRunPayroll) into real calendar
+ * periods for the revenue chart, plus real prior-period/current-period
+ * totals for the comparison badge and summary cards. Accrued Taxes is
+ * deliberately not derived here — there's no real tax engine anywhere in
+ * the app to compute a real liability from.
+ */
+function getRevenueChartData(
+  filter: string,
+  revenueEvents: RevenueEvent[],
+  transactions: Transaction[] = []
+): {
+  series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>;
+  currentTotal: number;
+  priorTotal: number;
+  currentExpenseTotal: number;
+  currentPayrollTotal: number;
+} {
+  const now = new Date();
+  const expenseTx = transactions.filter((t) => t.type === "expense");
+  const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
+  // Real revenue = job-completion events (revenueEvents) + manually-logged
+  // or scanned income transactions (e.g. a photographed check) — both are
+  // real money in, and logging one should actually move these totals.
+  const incomeTx = transactions.filter((t) => t.type === "income");
+  const revenueSource: Array<{ amount: number; date: string }> = [...revenueEvents, ...incomeTx];
+
+  const sumInRange = (items: Array<{ amount: number; date: string }>, start: Date, end: Date) =>
+    items
+      .filter((e) => {
+        const d = new Date(e.date);
+        return d >= start && d < end;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+
+  const buildRow = (time: string, start: Date, end: Date) => {
+    const Revenue = sumInRange(revenueSource, start, end);
+    const Expenses = sumInRange(expenseTx, start, end);
+    return { time, Revenue, Expenses, Profit: Revenue - Expenses };
+  };
+
+  const buildDays = (count: number, labelFn: (d: Date) => string) => {
+    const days: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+      days.push(buildRow(labelFn(dayStart), dayStart, dayEnd));
+    }
+    return days;
+  };
+
+  const withTotals = (
+    series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>,
+    periodStart: Date,
+    periodEnd: Date,
+    priorTotal: number
+  ) => ({
+    series,
+    currentTotal: series.reduce((s, d) => s + d.Revenue, 0),
+    priorTotal,
+    currentExpenseTotal: series.reduce((s, d) => s + d.Expenses, 0),
+    currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd)
+  });
+
+  if (filter === "Week") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const series = buildDays(7, (d) => d.toLocaleDateString(undefined, { weekday: "short" }));
+    const priorTotal = sumInRange(
+      revenueSource,
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+    );
+    return withTotals(series, periodStart, periodEnd, priorTotal);
+  }
+
+  if (filter === "Quarter") {
+    const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    for (let i = 2; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      months.push(buildRow(monthStart.toLocaleDateString(undefined, { month: "short" }), monthStart, monthEnd));
+    }
+    const periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const priorTotal = sumInRange(
+      revenueSource,
+      new Date(now.getFullYear(), now.getMonth() - 5, 1),
+      new Date(now.getFullYear(), now.getMonth() - 2, 1)
+    );
+    return withTotals(months, periodStart, periodEnd, priorTotal);
+  }
+
+  if (filter === "Year") {
+    const quarters: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    let periodStart = now;
+    let periodEnd = now;
+    for (let i = 3; i >= 0; i--) {
+      const qIndex = currentQuarter - i;
+      const qYear = now.getFullYear() + Math.floor(qIndex / 4);
+      const qNum = ((qIndex % 4) + 4) % 4;
+      const qStart = new Date(qYear, qNum * 3, 1);
+      const qEnd = new Date(qYear, qNum * 3 + 3, 1);
+      if (i === 3) periodStart = qStart;
+      if (i === 0) periodEnd = qEnd;
+      quarters.push(buildRow(`Q${qNum + 1} ${qYear}`, qStart, qEnd));
+    }
+    const priorQIndex = currentQuarter - 4;
+    const priorYear = now.getFullYear() + Math.floor(priorQIndex / 4);
+    const priorQNum = ((priorQIndex % 4) + 4) % 4;
+    const priorTotal = sumInRange(
+      revenueSource,
+      new Date(priorYear, priorQNum * 3, 1),
+      new Date(priorYear, priorQNum * 3 + 3, 1)
+    );
+    return withTotals(quarters, periodStart, periodEnd, priorTotal);
+  }
+
+  // "Pay Period"/"Custom"/anything else: real trailing 30 days by day.
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+  const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
+  const priorTotal = sumInRange(
+    revenueSource,
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
+  );
+  return withTotals(series, periodStart, periodEnd, priorTotal);
+}
+
+/**
+ * Real hours worked in the trailing `sinceDaysAgo` days, computed by
+ * pairing Clock In/Break End with Clock Out/Break Start the same way
+ * TimeClockPage and handleRunPayroll do. Shared here so the Revenue page's
+ * Payroll Overview table shows the same real numbers Run Payroll acts on.
+ */
+function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number {
+  const since = new Date(Date.now() - sinceDaysAgo * 24 * 60 * 60 * 1000);
+  const sorted = [...logs]
+    .filter((l) => new Date(l.timestamp) >= since)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  let totalMs = 0;
+  let segmentStart: number | null = null;
+  for (const log of sorted) {
+    const ts = new Date(log.timestamp).getTime();
+    if (log.type === "Clock In" || log.type === "Break End") {
+      segmentStart = ts;
+    } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
+      totalMs += ts - segmentStart;
+      segmentStart = null;
+    }
+  }
+  if (segmentStart !== null) totalMs += Date.now() - segmentStart;
+  return totalMs / 3600000;
+}
+
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   switch (screenId) {
     case "owner_console":
@@ -294,6 +455,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <LayoutDashboard className={className} />;
     case "revenue":
       return <Activity className={className} />;
+    case "accounting":
+      return <Landmark className={className} />;
     case "customers":
       return <Users className={className} />;
     case "leads":
@@ -566,9 +729,12 @@ export default function App() {
     email: string;
     role: string;
     permissions: string[];
+    granularPermissions?: GranularPermissions;
     isEmployee?: boolean;
     name?: string;
     goals?: string;
+    /** The owner's business email — the real multi-tenant scoping key for employee sessions (an employee's own `email` is not it). */
+    businessEmail?: string;
   } | null>(null);
 
   // Authentication & Form States
@@ -671,7 +837,12 @@ export default function App() {
   // Each collection is backed by useFirestoreCollection, which centralizes the
   // sync-to-Firestore + realtime-subscribe + clear-on-logout behavior that used
   // to be hand-duplicated per collection (see src/hooks/useFirestoreCollection.ts).
-  const businessId = loggedInUser?.email;
+  // The real multi-tenant scoping key. For an owner this is their own
+  // email; for an employee it must be the owner's businessEmail — an
+  // employee's own email is a different tenant and would resolve every
+  // collection to empty. (TrainingPage.tsx already used this exact
+  // ternary, anticipating businessEmail would be populated here.)
+  const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
   const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId);
   const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
   const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
@@ -687,8 +858,40 @@ export default function App() {
   const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId);
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
+  const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
+  const [employees, setEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
+  const [timeClockLogs, setTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
+  const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
+  const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
+  const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
+  const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
+  const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
+  const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
+  const [bankAccounts, setBankAccounts] = useFirestoreCollection<BankAccount>("bank_accounts", businessId);
+  const [recurringTransactions, setRecurringTransactions] = useFirestoreCollection<RecurringTransaction>("recurring_transactions", businessId);
+  const [mileageLogs, setMileageLogs] = useFirestoreCollection<MileageLog>("mileage_logs", businessId);
+  const [budgets, setBudgets] = useFirestoreCollection<Budget>("budgets", businessId);
+  const [salesTaxRates, setSalesTaxRates] = useFirestoreCollection<SalesTaxRate>("sales_tax_rates", businessId);
 
-  const [completedJobsRevenue, setCompletedJobsRevenue] = useState<number>(0);
+  // Seed the standard Chart of Accounts once per business -- every account
+  // the app's own event-posting logic writes to must already exist so
+  // journal entries never get silently dropped for lacking a target
+  // account. Owners can still add unlimited custom accounts afterward.
+  useEffect(() => {
+    if (!businessId || accounts.length > 0) return;
+    const seeded: Account[] = DEFAULT_CHART_OF_ACCOUNTS.map(a => ({ ...a, createdAt: new Date().toISOString() }));
+    setAccounts(seeded);
+  }, [businessId, accounts.length, setAccounts]);
+
+  // Derived, never a separately-tracked number — a running total kept in
+  // its own useState would silently reset to 0 on every reload/re-login
+  // instead of reflecting what's actually been recognized. Includes both
+  // job-completion revenue (revenueEvents) and manually-logged/scanned
+  // income (transactions of type "income" — e.g. a photographed check) so
+  // logging income actually moves this number, not just an ignored ledger.
+  const completedJobsRevenue =
+    revenueEvents.reduce((sum, e) => sum + e.amount, 0) +
+    transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
 
@@ -700,9 +903,9 @@ export default function App() {
   // Track the logged-in-user email in localStorage across login/logout
   useEffect(() => {
     if (businessId) {
-      localStorage.setItem("leadforge_logged_in_user_email", businessId);
+      localStorage.setItem("ownerslocal_logged_in_user_email", businessId);
     } else {
-      localStorage.removeItem("leadforge_logged_in_user_email");
+      localStorage.removeItem("ownerslocal_logged_in_user_email");
     }
   }, [businessId]);
 
@@ -737,32 +940,56 @@ export default function App() {
 
   const getVisibleScreens = () => {
     if (!loggedInUser) return [];
-    
+
     // Determine which role we are currently viewing/simulating
     const activeRole = simulatedRole || loggedInUser.role;
-    
+
+    // The real owner account is never an employee record (only invited
+    // staff get isEmployee: true) -- that's the reliable signal for full
+    // access, not a role-string match. An older/inconsistent stored
+    // `role` value must never silently lock the actual owner out of
+    // screens. Workspace Simulator previews still go through the
+    // restricted logic below on purpose.
+    if (!simulatedRole && !loggedInUser.isEmployee) {
+      return OS_SCREENS;
+    }
+
     if (activeRole === "Owner") {
       return OS_SCREENS;
     }
-    
-    // Look up role in custom roles or default roles
-    const normalizedRoleKey = activeRole.toLowerCase().replace(/ /g, "_");
-    
+
     let perms: string[] = [];
-    
-    // Check if the role matches one of our SelectedRoles in team builder state
-    const customRoleMatch = selectedRoles.find(r => r.name === activeRole || r.id === normalizedRoleKey);
-    if (customRoleMatch) {
-      perms = [...customRoleMatch.permissions];
-    } else {
-      // Check in DEFAULT_ROLES_DATA
-      const defaultRoleMatch = DEFAULT_ROLES_DATA[normalizedRoleKey];
-      if (defaultRoleMatch) {
-        perms = [...defaultRoleMatch.permissions];
+
+    if (simulatedRole) {
+      // Owner is previewing a role template before any real employee is
+      // using it yet — there's no real employee profile to read, so fall
+      // back to the template's own module list.
+      const normalizedRoleKey = activeRole.toLowerCase().replace(/ /g, "_");
+      const customRoleMatch = selectedRoles.find(r => r.name === activeRole || r.id === normalizedRoleKey);
+      if (customRoleMatch) {
+        perms = [...customRoleMatch.permissions];
       } else {
-        // Fallback to user's direct permissions or default to dashboard
-        perms = [...(loggedInUser.permissions || ["dashboard"])];
+        const defaultRoleMatch = DEFAULT_ROLES_DATA[normalizedRoleKey];
+        perms = defaultRoleMatch ? [...defaultRoleMatch.permissions] : [...(loggedInUser.permissions || ["dashboard"])];
       }
+    } else if (loggedInUser.granularPermissions) {
+      // Real logged-in employee — their own stored per-module View
+      // permission is authoritative. This is what the owner actually
+      // configured for this person, not a role-name lookup against a
+      // generic template that may have since changed or never applied.
+      perms = OS_SCREENS
+        .map(s => s.id)
+        .filter(id => hasPermission(loggedInUser.granularPermissions, id, "view"));
+    } else {
+      // Legacy account from before granular permissions existed.
+      perms = [...(loggedInUser.permissions || ["dashboard"])];
+    }
+
+    // Always allow the Dashboard to be viewed by everyone -- it isn't part
+    // of the configurable module permission catalog (MODULE_CATALOG), same
+    // as bulletins/snapshots/notifications below.
+    if (!perms.includes("dashboard")) {
+      perms.push("dashboard");
     }
 
     // Always allow bulletins to be viewed by everyone
@@ -780,10 +1007,11 @@ export default function App() {
       perms.push("notifications");
     }
 
-    // Allow revenue for specific management/accounting roles
+    // Allow revenue & accounting for specific management/accounting roles
     const highPrivilegeRoles = ["Owner", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"];
-    if (highPrivilegeRoles.includes(activeRole) && !perms.includes("revenue")) {
-      perms.push("revenue");
+    if (highPrivilegeRoles.includes(activeRole)) {
+      if (!perms.includes("revenue")) perms.push("revenue");
+      if (!perms.includes("accounting")) perms.push("accounting");
     }
 
     return OS_SCREENS.filter(s => perms.includes(s.id));
@@ -858,6 +1086,8 @@ export default function App() {
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
   const [payrollSearch, setPayrollSearch] = useState("");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
+  const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(null);
+  const [isRunningPayroll, setIsRunningPayroll] = useState(false);
 
   // Global AI Widget States
   const [globalAiSetting, setGlobalAiSetting] = useState<"OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO">("ASSIST");
@@ -891,7 +1121,7 @@ export default function App() {
   const [floatingAiMessages, setFloatingAiMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([
     {
       sender: "ai",
-      text: "### 🤖 LeadForge AI Companion\n\nI am connected to your live Local OS viewport. Ask me anything, or run automated actions for this workspace module!\n\n*Try asking me to perform an action, or select one from the Page Actions tab.*"
+      text: "### 🤖 Owner's AI Companion\n\nI am connected to your live Local OS viewport. Ask me anything, or run automated actions for this workspace module!\n\n*Try asking me to perform an action, or select one from the Page Actions tab.*"
     }
   ]);
   const [floatingAiLoading, setFloatingAiLoading] = useState(false);
@@ -912,7 +1142,7 @@ export default function App() {
 
     const dateSlug = now.toISOString().slice(0, 10).replace(/-/g, '_');
     const timeSlug = now.toTimeString().slice(0, 5).replace(/:/g, '');
-    const filenameStr = `leadforge_snap_${pageId}_${dateSlug}_${timeSlug}.png`;
+    const filenameStr = `ownerslocal_snap_${pageId}_${dateSlug}_${timeSlug}.png`;
 
     const newSnapshot = {
       id: "snap_" + Math.random().toString(36).substring(2, 9),
@@ -950,10 +1180,11 @@ export default function App() {
                 email: user.email || "",
                 role: profileData.role || "Owner",
                 permissions: resolvedPermissions,
-                granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "standard") : fullAccessGranular(resolvedPermissions)),
+                granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "edit") : fullAccessGranular(resolvedPermissions)),
                 isEmployee: isEmployee,
                 name: profileData.name || user.displayName || "Owner",
-                goals: profileData.goals || ""
+                goals: profileData.goals || "",
+                businessEmail: isEmployee ? profileData.businessEmail : (user.email || "")
               });
               setIsLoggedIn(true);
               
@@ -1286,12 +1517,23 @@ export default function App() {
           if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
             blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
           } else {
+            const topCustomer = customers.length > 0 ? [...customers].sort((a, b) => b.lifetimeValue - a.lifetimeValue)[0] : null;
+            const topLead = leads.length > 0 ? [...leads].sort((a, b) => b.estimatedValue - a.estimatedValue)[0] : null;
             if (aiPageId === "customers") {
-              blockedText = "Your highest value client is **Marcus Vance** representing **Apex Plumb & Drain** with an elegant Lifetime Value of **[REDACTED - OWNER ONLY]**. They have 3 open jobs currently.";
+              blockedText = topCustomer
+                ? `Your highest value client is **${topCustomer.contact}** representing **${topCustomer.company}** with a Lifetime Value of **[REDACTED - OWNER ONLY]**. They have ${topCustomer.openJobs} open jobs currently.`
+                : "No customers on record yet.";
             } else if (aiPageId === "leads") {
-              blockedText = "The highest value lead is **Theresa W.** representing Facebook source with an estimated contract value of **[REDACTED - OWNER ONLY]** currently marked in 'New' status.";
+              blockedText = topLead
+                ? `The highest value lead is **${topLead.name}** representing **${topLead.source}** source with an estimated contract value of **[REDACTED - OWNER ONLY]**, currently marked in '${topLead.status}' status.`
+                : "No leads on record yet.";
+            } else if (topCustomer) {
+              const sourceCounts: Record<string, number> = {};
+              leads.forEach((l) => { sourceCounts[l.source] = (sourceCounts[l.source] || 0) + 1; });
+              const topSourceEntry = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+              blockedText = `Based on our operational ledger, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
             } else {
-              blockedText = "Based on our operational ledger, **Marcus Vance (Apex Plumb & Drain)** is the top customer (**[REDACTED - OWNER ONLY]** LTV), and your most consistent acquisition source is Website forms.";
+              blockedText = "No customer or lead data on record yet.";
             }
           }
           setAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
@@ -1361,7 +1603,7 @@ export default function App() {
           if (lowerText.includes("why did profit drop") || lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("invoice")) {
             blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
           } else {
-            blockedText = `### 🤖 LeadForge AI Solution
+            blockedText = `### 🤖 Owner's AI Solution
 Processed context query for **${activeScreen.label} Page**:
 - **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
 - **Lifetime Value**: **[REDACTED - OWNER ONLY]**
@@ -1398,47 +1640,90 @@ Access to full financial telemetry is restricted.`;
     executeConfirmedFloatingAiMessage(textToSend);
   };
 
-  // TEAM BUILDER STATE - INITIALIZED WITH SCREENSHOT VALUES
+  // TEAM BUILDER STATE - Owner always gets every module at full access;
+  // every other starter role gets an independent per-module level, not one
+  // tier applied blanket -- managers default to Create & Edit on their
+  // department's modules, base employees default to View except on the
+  // handful of modules their job actually requires editing.
   const [selectedRoles, setSelectedRoles] = useState<SelectedRole[]>([
     {
       id: "owner",
       name: "Owner",
       count: 1,
-      description: "Everything",
-      permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"],
-      capabilities: { view: true, create: true, edit: true, delete: true, approve: true, export: true, ai: true }
+      description: "Full access to every module",
+      permissions: MODULE_CATALOG.map(m => m.id),
+      modulePermissions: fullAccessGranular(MODULE_CATALOG.map(m => m.id))
     },
     {
       id: "office_manager",
       name: "Office Manager",
       count: 1,
-      description: "Dashboard, CRM, Sched, Msg, Docs, etc.",
-      permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: true, export: true, ai: false }
+      description: "Manager tier -- Create & Edit across office operations",
+      permissions: ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+      modulePermissions: defaultGranularFromModuleList(
+        ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+        "edit"
+      )
     },
     {
       id: "dispatcher",
       name: "Dispatcher",
       count: 1,
-      description: "Dispatch, Routes, Map, Jobs, Sched",
-      permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: false }
+      description: "Dispatch, Routes, Scheduling, Jobs",
+      permissions: ["dispatch", "routes", "scheduling", "jobs", "customers"],
+      modulePermissions: {
+        dispatch: "edit",
+        routes: "edit",
+        scheduling: "edit",
+        jobs: "edit",
+        customers: "view"
+      }
+    },
+    {
+      id: "field_technician",
+      name: "Field Technician",
+      count: 1,
+      description: "Jobs, Inventory, Documents, PDF Editor, eSign",
+      permissions: ["jobs", "customers", "inventory", "documents", "pdf_editor", "esign", "routes", "scheduling"],
+      modulePermissions: {
+        jobs: "edit",
+        customers: "view",
+        inventory: "edit",
+        documents: "edit",
+        pdf_editor: "edit",
+        esign: "edit",
+        routes: "view",
+        scheduling: "view"
+      }
     },
     {
       id: "sales_representative",
       name: "Sales Representative",
       count: 1,
-      description: "Leads, CRM, Estimates, Docs",
-      permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      description: "Leads, Customers, Estimates",
+      permissions: ["leads", "customers", "estimates", "messages", "ai_assistant"],
+      modulePermissions: {
+        leads: "edit",
+        customers: "view",
+        estimates: "edit",
+        messages: "view",
+        ai_assistant: "view"
+      }
     },
     {
       id: "estimator",
       name: "Estimator",
       count: 1,
-      description: "Estimates, Bids, Takeoffs, Reports",
-      permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      description: "Leads, Estimates, Documents, PDF Editor, eSign",
+      permissions: ["leads", "customers", "estimates", "documents", "pdf_editor", "esign"],
+      modulePermissions: {
+        leads: "edit",
+        customers: "view",
+        estimates: "edit",
+        documents: "edit",
+        pdf_editor: "edit",
+        esign: "edit"
+      }
     }
   ]);
   
@@ -1525,6 +1810,7 @@ Access to full financial telemetry is restricted.`;
   const [empPhone, setEmpPhone] = useState("");
   const [empPhoto, setEmpPhoto] = useState("");
   const [empGoals, setEmpGoals] = useState("");
+  const [empHourlyRate, setEmpHourlyRate] = useState("");
 
   // Trigger brief floating notifications
   const triggerNotification = (message: string) => {
@@ -1699,10 +1985,11 @@ Access to full financial telemetry is restricted.`;
           email: user.email || "",
           role: profileData.role || "Owner",
           permissions: resolvedPerms,
-          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "standard") : fullAccessGranular(resolvedPerms)),
+          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "edit") : fullAccessGranular(resolvedPerms)),
           isEmployee: isEmployeeAcct,
           name: profileData.name || user.displayName || "Owner",
-          goals: profileData.goals || ""
+          goals: profileData.goals || "",
+          businessEmail: isEmployeeAcct ? profileData.businessEmail : (user.email || "")
         });
         setIsLoggedIn(true);
 
@@ -1843,7 +2130,7 @@ Access to full financial telemetry is restricted.`;
       setCurrentView("login");
       setLoginMethod(null);
       setPassword("••••••••••••••••");
-      triggerNotification("Logged out of LeadForge.");
+      triggerNotification("Logged out of Owner's Local OS.");
     } catch (err) {
       console.error("Logout error:", err);
       // Fallback
@@ -1956,7 +2243,7 @@ Access to full financial telemetry is restricted.`;
       count: 1,
       description: defaultData.description,
       permissions: [...defaultData.permissions],
-      capabilities: { view: true, create: true, edit: true, delete: false, approve: false, export: false, ai: true }
+      modulePermissions: defaultGranularFromModuleList(defaultData.permissions, "edit")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     triggerNotification(`Added role: ${defaultData.name}`);
@@ -1970,7 +2257,8 @@ Access to full financial telemetry is restricted.`;
       id: randomId,
       name: `${role.name} Copy`,
       isCustom: true,
-      count: 1
+      count: 1,
+      modulePermissions: JSON.parse(JSON.stringify(role.modulePermissions))
     };
     setSelectedRoles(prev => [...prev, newRole]);
     triggerNotification(`Duplicated ${role.name}`);
@@ -1992,7 +2280,7 @@ Access to full financial telemetry is restricted.`;
       description: "Custom user defined role",
       isCustom: true,
       permissions: ["dashboard", "messages"],
-      capabilities: { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view")
     };
     setSelectedRoles(prev => [...prev, newRole]);
     setShowCustomRoleModal(false);
@@ -2006,6 +2294,73 @@ Access to full financial telemetry is restricted.`;
     setSelectedRoles(prev => prev.map(r => r.id === updated.id ? updated : r));
     setCustomizingRole(null);
     triggerNotification(`Updated permissions for ${updated.name}`);
+  };
+
+  // Save a real income/expense transaction -- typed manually or scanned via
+  // real Gemini vision, always confirmed/edited by the user before saving.
+  const handleSaveTransaction = async (t: Omit<Transaction, "id">) => {
+    try {
+      const newTxn: Transaction = { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+      setTransactions(prev => [...prev, newTxn]);
+      // Real double-entry posting -- every logged transaction moves the
+      // real ledger (Cash + Revenue or Cash + the matching expense
+      // account), not just a line in a list. See accountingEngine.ts.
+      setJournalEntries(prev => [...prev, postTransactionEntry(newTxn)]);
+      setLogTransactionType(null);
+      triggerNotification(`${t.type === "income" ? "Income" : "Expense"} logged: $${t.amount.toLocaleString()}`);
+    } catch (err) {
+      console.error("Error saving transaction:", err);
+      triggerNotification("Couldn't save that — check your connection and try again.");
+    }
+  };
+
+  // Runs payroll for the trailing 14-day pay period: real hours from
+  // time_clock_logs x each real employee's real hourlyRate. The
+  // calculation is fully automatic and real -- there's no real background
+  // cron infrastructure in a client-side app, so a manual click is what
+  // starts it, same as any payroll software's "Run Payroll" action.
+  const handleRunPayroll = async () => {
+    setIsRunningPayroll(true);
+    try {
+      const newPayrollTransactions: Array<Omit<Transaction, "id">> = [];
+      let totalPayroll = 0;
+      for (const emp of employees) {
+        const hours = computeRecentHours(timeClockLogs.filter(l => l.employeeEmail === emp.email), 14);
+        if (hours <= 0 || !emp.hourlyRate) continue;
+        const regHours = Math.min(hours, 80); // 40/wk x 2 weeks before OT
+        const otHours = Math.max(0, hours - 80);
+        const pay = regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5;
+        if (pay <= 0) continue;
+        totalPayroll += pay;
+        newPayrollTransactions.push({
+          type: "expense",
+          source: "payroll",
+          amount: Math.round(pay * 100) / 100,
+          description: `${emp.firstName} ${emp.lastName}`.trim(),
+          category: "Payroll",
+          date: new Date().toISOString().split("T")[0],
+          createdAt: new Date().toISOString(),
+          createdBy: loggedInUser?.email
+        });
+      }
+
+      if (newPayrollTransactions.length === 0) {
+        triggerNotification("No real hours logged in the last 14 days — nothing to run payroll on.");
+        return;
+      }
+
+      const finalizedPayrollTransactions: Transaction[] = newPayrollTransactions.map((t) => ({ ...t, id: `txn_payroll_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }));
+      setTransactions(prev => [...prev, ...finalizedPayrollTransactions]);
+      // Real double-entry posting for every payroll transaction -- Debit
+      // Payroll Expense, Credit Cash, same as any other logged expense.
+      setJournalEntries(prev => [...prev, ...finalizedPayrollTransactions.map(postTransactionEntry)]);
+      triggerNotification(`Payroll run: $${totalPayroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} across ${newPayrollTransactions.length} employee${newPayrollTransactions.length === 1 ? "" : "s"}, based on real logged hours.`);
+    } catch (err) {
+      console.error("Error running payroll:", err);
+      triggerNotification("Couldn't run payroll — check your connection and try again.");
+    } finally {
+      setIsRunningPayroll(false);
+    }
   };
 
   // Launch Local OS: generates invites, saves to db, triggers invites modal
@@ -2026,7 +2381,12 @@ Access to full financial telemetry is restricted.`;
         const startIndex = r.id === "owner" ? 1 : 0;
         const granularPermissions = r.id === "owner"
           ? fullAccessGranular(r.permissions)
-          : buildGranularFromCapabilities(r.permissions, r.capabilities);
+          // Only keep entries for currently-authorized modules — a module
+          // toggled off after being configured shouldn't leave a stale
+          // permission entry behind.
+          : Object.fromEntries(
+              Object.entries(r.modulePermissions).filter(([moduleId]) => r.permissions.includes(moduleId))
+            ) as GranularPermissions;
         for (let i = startIndex; i < r.count; i++) {
           const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
           const cleanRolePrefix = r.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8);
@@ -2081,7 +2441,7 @@ Access to full financial telemetry is restricted.`;
     // exist, or worse, to whichever fake default every failed lookup shares.
     let inviteRole = "Driver";
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
-    let inviteGranularPermissions: GranularPermissions = buildGranularFromCapabilities(invitePermissions, { view: true, create: false, edit: false, delete: false, approve: false, export: false });
+    let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view");
     let businessEmail: string | null = null;
 
     try {
@@ -2140,10 +2500,15 @@ Access to full financial telemetry is restricted.`;
         phone: empPhone,
         photo: empPhoto || "",
         goals: empGoals,
+        hourlyRate: parseFloat(empHourlyRate) || 0,
         role: inviteRole,
         permissions: invitePermissions,
         granularPermissions: inviteGranularPermissions,
         businessEmail,
+        // Also tagged as businessId (same value) so this collection is
+        // queryable through the same convention every other Firestore
+        // collection uses (see subscribeToCollection).
+        businessId: businessEmail,
         createdAt: new Date().toISOString()
       };
       await setDoc(doc(db, "employees", cleanEmail), newEmployee);
@@ -2161,7 +2526,8 @@ Access to full financial telemetry is restricted.`;
         granularPermissions: inviteGranularPermissions,
         isEmployee: true,
         name: `${empFirstName} ${empLastName}`,
-        goals: empGoals
+        goals: empGoals,
+        businessEmail
       });
       setIsLoggedIn(true);
       
@@ -2230,8 +2596,35 @@ Access to full financial telemetry is restricted.`;
     setRecentAiActions,
     snapshots,
     setSnapshots,
+    revenueEvents,
+    setRevenueEvents,
     completedJobsRevenue,
-    setCompletedJobsRevenue,
+    employees,
+    setEmployees,
+    timeClockLogs,
+    setTimeClockLogs,
+    transactions,
+    setTransactions,
+    accounts,
+    setAccounts,
+    journalEntries,
+    setJournalEntries,
+    invoices,
+    setInvoices,
+    bills,
+    setBills,
+    vendors,
+    setVendors,
+    bankAccounts,
+    setBankAccounts,
+    recurringTransactions,
+    setRecurringTransactions,
+    mileageLogs,
+    setMileageLogs,
+    budgets,
+    setBudgets,
+    salesTaxRates,
+    setSalesTaxRates,
     preSelectedDate,
     setPreSelectedDate,
     preSelectedCustomerId,
@@ -2276,7 +2669,7 @@ Access to full financial telemetry is restricted.`;
         <header className="hidden sm:flex w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex-col sm:flex-row items-center justify-between gap-3 border-b border-blue-200/50 bg-white/45 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">
             <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">LEADFORGE CLOUD GATEWAY v2.8.4</span>
+            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">OWNER'S LOCAL OS CLOUD GATEWAY v2.8.4</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-xs text-[#342D7E]/75 font-mono bg-blue-100/60 px-2 py-1 rounded">
@@ -2306,22 +2699,22 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO SECTION - Absolutely centered on top. Real transparent
-                      PNG asset (from the source repo, not a screenshot crop) at
-                      its real aspect ratio (1053x371) so nothing is stretched
-                      or squashed; top edge position is unchanged. */}
+                  {/* LOGO SECTION - Absolutely centered on top, same place/size
+                      as before. Real transparent PNG asset at its real aspect
+                      ratio (947x593) so nothing is stretched or squashed;
+                      only the file changed (owners-logo.png -> owners-logo1.png). */}
                   <div
                     style={{
                       top: `${99.895 * scale}px`,
                       left: "50%",
                       transform: "translateX(-50%)",
                       width: `${357.5 * scale}px`,
-                      height: `${357.5 * scale * (371 / 1053)}px`
+                      height: `${357.5 * scale * (593 / 947)}px`
                     }}
                     className="absolute flex justify-center pointer-events-none"
                   >
                     <img
-                      src="/branding/owners-logo.png"
+                      src="/branding/owners-logo1.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
                       className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
@@ -3375,6 +3768,22 @@ Access to full financial telemetry is restricted.`;
                             />
                           </div>
 
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Hourly Pay Rate (Optional)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={empHourlyRate}
+                              onChange={(e) => setEmpHourlyRate(e.target.value)}
+                              placeholder="e.g. 28.50"
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
                           {/* Avatar Selection (Optional Profile Photo) */}
                           <div className="space-y-2">
                             <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
@@ -3695,7 +4104,7 @@ Access to full financial telemetry is restricted.`;
                               <Info className="w-4 h-4 text-blue-600 animate-pulse" />
                             </div>
                             <h3 className="text-sm font-extrabold text-blue-950 uppercase tracking-tight font-sans">
-                              LeadForge Role Matrix
+                              Owner's Local OS Role Matrix
                             </h3>
                           </div>
                           <p style={getFontSize(11.5)} className="text-slate-600 leading-relaxed font-sans mb-3.5">
@@ -3784,160 +4193,12 @@ Access to full financial telemetry is restricted.`;
 
                   {/* STEP 2 MODAL 3: GRANULAR ROLE PERMISSION CUSTOMIZER MATRIX */}
                   {customizingRole && (
-                    <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-3 z-30 animate-fade-in">
-                      <div className="bg-white text-slate-800 rounded-3xl p-5 w-[95%] max-w-[420px] max-h-[92%] shadow-2xl border border-blue-100 flex flex-col justify-between overflow-hidden">
-                        
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
-                          <div>
-                            <h3 className="text-xs font-extrabold text-blue-950 uppercase tracking-tight flex items-center gap-1.5">
-                              <Settings className="w-4 h-4 text-blue-600 animate-spin-slow" />
-                              <span>Custom Permissions Template</span>
-                            </h3>
-                            <p style={getFontSize(9.5)} className="text-blue-600 font-sans font-bold block">
-                              Editing Profile: {customizingRole.name}
-                            </p>
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => setCustomizingRole(null)}
-                            className="text-slate-400 hover:text-slate-600 font-sans font-bold text-lg select-none cursor-pointer"
-                          >
-                            ×
-                          </button>
-                        </div>
-
-                        {/* MATRIX CHECKLIST SCROLL CONTAINER */}
-                        <div className="flex-1 overflow-y-auto my-3 pr-1 space-y-3.5 scrollbar-thin scrollbar-thumb-blue-100">
-                          
-                          {/* Navigation Screens Checkboxes */}
-                          <div className="space-y-1.5">
-                            <p style={getFontSize(10.5)} className="font-sans font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                              <CheckSquare className="w-3.5 h-3.5 text-blue-500" /> Authorized OS Screens
-                            </p>
-                            <p style={getFontSize(9)} className="text-slate-400 font-sans leading-normal">
-                              Toggle screens that are rendered in this employee's sidebar navigation menu.
-                            </p>
-                            <div className="grid grid-cols-2 gap-1.5 pt-1">
-                              {[
-                                { id: "dashboard", label: "Dashboard" },
-                                { id: "leads", label: "Leads / CRM" },
-                                { id: "jobs", label: "Jobs List" },
-                                { id: "customers", label: "Customers" },
-                                { id: "messages", label: "Messages" },
-                                { id: "scheduling", label: "Scheduling" },
-                                { id: "dispatch", label: "Dispatch Board" },
-                                { id: "timeclock", label: "Time Clock" },
-                                { id: "routes", label: "Routes & Stops" },
-                                { id: "estimates", label: "Estimates" },
-                                { id: "documents", label: "Documents" },
-                                { id: "ai_assistant", label: "AI Assistant" },
-                                { id: "inventory", label: "Inventory" },
-                                { id: "settings", label: "Settings" },
-                                { id: "training", label: "Employee Training" }
-                              ].map((screen) => {
-                                const isPermitted = customizingRole.permissions.includes(screen.id);
-                                return (
-                                  <label 
-                                    key={screen.id} 
-                                    className={`flex items-center gap-2 p-1.5 rounded-lg border text-[10.5px] cursor-pointer transition-all ${
-                                      isPermitted ? "bg-blue-50/50 border-blue-200 text-blue-900 font-bold" : "bg-slate-50/50 border-transparent text-slate-500 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isPermitted}
-                                      onChange={(e) => {
-                                        let updatedPerms = [...customizingRole.permissions];
-                                        if (e.target.checked) {
-                                          updatedPerms.push(screen.id);
-                                        } else {
-                                          updatedPerms = updatedPerms.filter(p => p !== screen.id);
-                                        }
-                                        setCustomizingRole({
-                                          ...customizingRole,
-                                          permissions: updatedPerms
-                                        });
-                                      }}
-                                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span className="truncate">{screen.label}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Action Level Capabilities */}
-                          <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                            <p style={getFontSize(10.5)} className="font-sans font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                              <Shield className="w-3.5 h-3.5 text-blue-500" /> Action-Level Capabilities
-                            </p>
-                            <p style={getFontSize(9)} className="text-slate-400 font-sans leading-normal">
-                              Define granular execution privileges allowed within accessible modules.
-                            </p>
-                            
-                            <div className="grid grid-cols-2 gap-1.5 pt-1">
-                              {[
-                                { key: "view", label: "Read-Only View Mode" },
-                                { key: "create", label: "Create Records" },
-                                { key: "edit", label: "Edit / Update" },
-                                { key: "delete", label: "Delete Records" },
-                                { key: "approve", label: "Approve Estimates" },
-                                { key: "export", label: "Export CSV / PDF" },
-                                { key: "ai", label: "Trigger Gemini AI" }
-                              ].map((cap) => {
-                                const hasCap = customizingRole.capabilities?.[cap.key as keyof SelectedRole["capabilities"]] ?? false;
-                                return (
-                                  <label 
-                                    key={cap.key}
-                                    className={`flex items-center gap-2 p-1.5 rounded-lg border text-[10.5px] cursor-pointer transition-all ${
-                                      hasCap ? "bg-indigo-50/50 border-indigo-200 text-indigo-900 font-bold" : "bg-slate-50/50 border-transparent text-slate-500 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={hasCap}
-                                      onChange={(e) => {
-                                        const updatedCapabilities = {
-                                          ...(customizingRole.capabilities || { view: true, create: false, edit: false, delete: false, approve: false, export: false, ai: false }),
-                                          [cap.key]: e.target.checked
-                                        };
-                                        setCustomizingRole({
-                                          ...customizingRole,
-                                          capabilities: updatedCapabilities
-                                        });
-                                      }}
-                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span>{cap.label}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                        </div>
-
-                        {/* FOOTER ACTIONS */}
-                        <div className="flex gap-2.5 pt-2 border-t border-slate-100 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setCustomizingRole(null)}
-                            className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveCustomPermissions(customizingRole)}
-                            className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md transition-all cursor-pointer font-sans"
-                          >
-                            Save Template
-                          </button>
-                        </div>
-
-                      </div>
-                    </div>
+                    <RolePermissionEditorModal
+                      role={customizingRole}
+                      onSave={handleSaveCustomPermissions}
+                      onClose={() => setCustomizingRole(null)}
+                      position="absolute"
+                    />
                   )}
 
                   {/* STEP 2 MODAL 4: SECURE GENERATED INVITE CODES PANEL */}
@@ -4125,7 +4386,7 @@ Access to full financial telemetry is restricted.`;
                 <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
                   <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
                     <h3 className="text-sm font-bold text-blue-950 tracking-tight flex items-center gap-1.5 mb-2">
-                      <HelpCircle className="w-4 h-4 text-blue-600" /> LeadForge Support Desk
+                      <HelpCircle className="w-4 h-4 text-blue-600" /> Owner's Local OS Support Desk
                     </h3>
                     <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
                       Need help accessing the Local OS platform? Here are your secure options:
@@ -4341,7 +4602,7 @@ Access to full financial telemetry is restricted.`;
                       <div className="w-8 h-8 rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md shrink-0">
                         <Activity className="w-5 h-5 stroke-[2.5]" />
                       </div>
-                      <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">LeadForge</span>
+                      <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">Owner's Local OS</span>
                       <span className="text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider select-none">Local OS</span>
                     </div>
                   ) : (
@@ -4368,7 +4629,7 @@ Access to full financial telemetry is restricted.`;
                 {!isSidebarCollapsed && (
                   <div className="mt-2.5 px-0.5 animate-fade-in text-left">
                     <p className="font-sans font-black text-xs text-[#1F3557] tracking-wider uppercase leading-normal">
-                      {businessNames?.[0] || "LEADFORGELOCAL"}
+                      {businessNames?.[0] || "Your Business"}
                     </p>
                   </div>
                 )}
@@ -4431,7 +4692,7 @@ Access to full financial telemetry is restricted.`;
                 })}
 
                 {/* Workspace Simulator Card - Styled with soft outline and NO solid white card */}
-                {!isSidebarCollapsed && loggedInUser?.role === "Owner" && (
+                {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
                   <div className="mx-1 my-3 p-4 bg-[#1F3557]/5 border border-[#1F3557]/10 rounded-2xl flex flex-col gap-1.5 text-left animate-fade-in">
                     <p className="text-[8.5px] font-black text-[#1F3557]/80 uppercase tracking-wider">WORKSPACE SIMULATOR</p>
                     <div className="flex items-center justify-between">
@@ -4540,7 +4801,7 @@ Access to full financial telemetry is restricted.`;
                               const scr = OS_SCREENS.find((s) => s.id === "owner_console");
                               if (scr) {
                                 setActiveScreen(scr);
-                                triggerNotification("🔑 Secure shortcut activated: Entering LeadForge Owner Control Console.");
+                                triggerNotification("🔑 Secure shortcut activated: Entering Owner Control Console.");
                               }
                             }
                           }}
@@ -4685,7 +4946,7 @@ Access to full financial telemetry is restricted.`;
                   <div className="relative w-full aspect-[16/10] bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-white/5 group">
                     <img
                       src={activeScreen.url}
-                      alt={`LeadForge OS ${activeScreen.label}`}
+                      alt={`Owner's Local OS ${activeScreen.label}`}
                       className="w-full h-full object-cover select-none"
                       referrerPolicy="no-referrer"
                     />
@@ -4726,7 +4987,7 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 text-[10.5px] text-slate-400 flex justify-between items-center">
-                    <span>Comparing layout with LeadForgeOS master screenshot asset.</span>
+                    <span>Comparing layout with Owner's Local OS master screenshot asset.</span>
                     <button
                       onClick={() => setCompareMockupMode(false)}
                       className="text-blue-400 hover:text-blue-300 font-bold"
@@ -4740,48 +5001,24 @@ Access to full financial telemetry is restricted.`;
 
                 /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
-                  
-                  {activeScreen.id === "dashboard" ? ( (() => {
-                    // Local helper for revenue data
-                    const getRevenueData = () => {
-                      switch (revenueResetInterval) {
-                        case "Monthly":
-                          return [
-                            { name: "Wk 1", income: 8400, expenses: 3100, taxes: 1200 },
-                            { name: "Wk 2", income: 10500, expenses: 3200, taxes: 1500 },
-                            { name: "Wk 3", income: 12400, expenses: 4000, taxes: 1800 },
-                            { name: "Wk 4", income: 15200, expenses: 4100, taxes: 2200 },
-                            { name: "Wk 5", income: 18900, expenses: 4500, taxes: 2700 }
-                          ];
-                        case "Quarterly":
-                          return [
-                            { name: "Mth 1", income: 35000, expenses: 14000, taxes: 5200 },
-                            { name: "Mth 2", income: 42000, expenses: 16200, taxes: 6300 },
-                            { name: "Mth 3", income: 48500, expenses: 18100, taxes: 7200 }
-                          ];
-                        case "Annually":
-                          return [
-                            { name: "Q1", income: 124000, expenses: 45000, taxes: 18000 },
-                            { name: "Q2", income: 148000, expenses: 48000, taxes: 22000 },
-                            { name: "Q3", income: 165000, expenses: 52000, taxes: 24000 },
-                            { name: "Q4", income: 198000, expenses: 58000, taxes: 29000 }
-                          ];
-                        case "Pay Period":
-                        default:
-                          return [
-                            { name: "Day 1", income: 1500, expenses: 450, taxes: 220 },
-                            { name: "Day 4", income: 3200, expenses: 800, taxes: 480 },
-                            { name: "Day 7", income: 4800, expenses: 1100, taxes: 720 },
-                            { name: "Day 10", income: 6900, expenses: 1600, taxes: 1030 },
-                            { name: "Day 14", income: 8550, expenses: 2100, taxes: 1280 }
-                          ];
-                      }
-                    };
 
-                    const revenueData = getRevenueData().map(item => ({
-                      ...item,
-                      net: item.income - item.expenses - item.taxes
-                    }));
+                  {simulatedRole && (
+                    <div className="sticky top-0 z-40 bg-amber-500 text-amber-950 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 font-bold text-xs">
+                      <span>⚠️ PREVIEWING AS "{simulatedRole}" — some tabs and data are hidden to match that role's real permissions. This is not your real Owner view.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSimulatedRole(null);
+                          triggerNotification("Exited simulation — back to your real Owner view.");
+                        }}
+                        className="shrink-0 px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-[10.5px] uppercase tracking-wide cursor-pointer hover:bg-amber-900"
+                      >
+                        Exit Simulation
+                      </button>
+                    </div>
+                  )}
+
+                  {activeScreen.id === "dashboard" ? ( (() => {
                     // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
                     // individual clock in/out events but nothing here aggregates them into a
                     // pay-period total) — this only reflects the current live clock-in session,
@@ -4789,38 +5026,10 @@ Access to full financial telemetry is restricted.`;
                     const totalHours = (clockInDuration / 3600).toFixed(1);
                     const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
 
-                    const getDashboardGraphData = () => {
-                      return revenuePageFilter === "Week" ? [
-                        { time: "Mon", Revenue: 1200, Profit: 450, Expenses: 750, Payroll: 400, Taxes: 120 },
-                        { time: "Tue", Revenue: 2400, Profit: 900, Expenses: 1500, Payroll: 800, Taxes: 240 },
-                        { time: "Wed", Revenue: 3800, Profit: 1400, Expenses: 2400, Payroll: 1200, Taxes: 380 },
-                        { time: "Thu", Revenue: 4900, Profit: 1850, Expenses: 3050, Payroll: 1600, Taxes: 490 },
-                        { time: "Fri", Revenue: 6200, Profit: 2300, Expenses: 3900, Payroll: 2000, Taxes: 620 },
-                        { time: "Sat", Revenue: 6800, Profit: 2550, Expenses: 4250, Payroll: 2200, Taxes: 680 },
-                        { time: "Sun", Revenue: 7420, Profit: 2920, Expenses: 4500, Payroll: 2400, Taxes: 740 }
-                      ] : revenuePageFilter === "Quarter" ? [
-                        { time: "Month 1", Revenue: 21000, Profit: 8200, Expenses: 12800, Payroll: 6000, Taxes: 1900 },
-                        { time: "Month 2", Revenue: 45000, Profit: 17500, Expenses: 27500, Payroll: 12000, Taxes: 4100 },
-                        { time: "Month 3", Revenue: 74550, Profit: 28860, Expenses: 45690, Payroll: 18690, Taxes: 6540 }
-                      ] : revenuePageFilter === "Year" ? [
-                        { time: "Q1", Revenue: 68000, Profit: 26000, Expenses: 42000, Payroll: 18000, Taxes: 6100 },
-                        { time: "Q2", Revenue: 142000, Profit: 55000, Expenses: 87000, Payroll: 36000, Taxes: 12800 },
-                        { time: "Q3", Revenue: 215000, Profit: 83000, Expenses: 132000, Payroll: 54000, Taxes: 19500 },
-                        { time: "Q4", Revenue: 298000, Profit: 115000, Expenses: 183000, Payroll: 72000, Taxes: 26800 }
-                      ] : revenuePageFilter === "Custom" ? [
-                        { time: "Period A", Revenue: 15000, Profit: 5800, Expenses: 9200, Payroll: 4500, Taxes: 1350 },
-                        { time: "Period B", Revenue: 32000, Profit: 12400, Expenses: 19600, Payroll: 9000, Taxes: 2880 },
-                        { time: "Period C", Revenue: 48500, Profit: 18700, Expenses: 29800, Payroll: 13500, Taxes: 4360 }
-                      ] : [
-                        { time: "May 1", Revenue: 3500, Profit: 1200, Expenses: 2300, Payroll: 1800, Taxes: 500 },
-                        { time: "May 6", Revenue: 5800, Profit: 2100, Expenses: 3700, Payroll: 2400, Taxes: 800 },
-                        { time: "May 11", Revenue: 7200, Profit: 2800, Expenses: 4400, Payroll: 2600, Taxes: 950 },
-                        { time: "May 16", Revenue: 9500, Profit: 3600, Expenses: 5900, Payroll: 3200, Taxes: 1100 },
-                        { time: "May 21", Revenue: 12400, Profit: 4800, Expenses: 7600, Payroll: 4500, Taxes: 1300 },
-                        { time: "May 26", Revenue: 16800, Profit: 6200, Expenses: 10600, Payroll: 5200, Taxes: 1700 },
-                        { time: "May 31", Revenue: 24850, Profit: 9620, Expenses: 12430, Payroll: 6230, Taxes: 2180 }
-                      ];
-                    };
+                    // Real Revenue only, bucketed by real completed-job data — see
+                    // getRevenueChartData for why Profit/Expenses/Payroll/Taxes
+                    // aren't part of this.
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents).series;
 
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
@@ -4898,42 +5107,6 @@ Access to full financial telemetry is restricted.`;
                                           activeDot={{ r: 3 }}
                                           name="Revenue"
                                         />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Profit"
-                                          stroke="#3B82F6"
-                                          strokeWidth={1.5}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Profit"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Expenses"
-                                          stroke="#EF4444"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Expenses"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Payroll"
-                                          stroke="#8B5CF6"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Payroll"
-                                        />
-                                        <Line
-                                          type="monotone"
-                                          dataKey="Taxes"
-                                          stroke="#F59E0B"
-                                          strokeWidth={1.2}
-                                          dot={{ r: 1 }}
-                                          activeDot={{ r: 3 }}
-                                          name="Taxes"
-                                        />
                                       </LineChart>
                                     </ResponsiveContainer>
                                   ) : (
@@ -4965,23 +5138,24 @@ Access to full financial telemetry is restricted.`;
                               
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
-                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{dashboardLeads.length} Leads</p>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{leads.length} Leads</p>
                                   <p className="text-[9px] text-[#5E7393] font-bold mt-1">Adjusted from connected sources</p>
                                 </div>
-                                
+
                                 <div className="space-y-1 my-3 text-[10px] text-[#1F3557]/85 font-semibold">
-                                  <div className="flex items-center justify-between border-b border-blue-200/40 pb-1">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Theresa W.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Facebook</span>
-                                  </div>
-                                  <div className="flex items-center justify-between border-b border-blue-200/40 pb-1">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Albert F.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Google (GBP)</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1 text-[#1F3557]/90">👤 Esther H.</span>
-                                    <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold">Website</span>
-                                  </div>
+                                  {leads.length === 0 ? (
+                                    <p className="text-[9px] text-[#5E7393]/70 italic">No active leads yet.</p>
+                                  ) : (
+                                    [...leads]
+                                      .sort((a, b) => (a.addedDaysAgo ?? 0) - (b.addedDaysAgo ?? 0))
+                                      .slice(0, 3)
+                                      .map((lead) => (
+                                        <div key={lead.id} className="flex items-center justify-between border-b border-blue-200/40 pb-1 last:border-b-0">
+                                          <span className="flex items-center gap-1 text-[#1F3557]/90 truncate">👤 {lead.name}</span>
+                                          <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold shrink-0">{lead.source}</span>
+                                        </div>
+                                      ))
+                                  )}
                                 </div>
 
                                 <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
@@ -5537,6 +5711,9 @@ Access to full financial telemetry is restricted.`;
                   ) : activeScreen.id === "documents" ? (
                     <DocumentsPage />
 
+                  ) : activeScreen.id === "accounting" ? (
+                    <AccountingPage />
+
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />
 
@@ -5684,12 +5861,13 @@ Access to full financial telemetry is restricted.`;
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
                             <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
                               Period: <strong className="text-[#315C9F]">
-                                {revenuePageFilter === "Pay Period" && "May 1 – May 31, 2025"}
-                                {revenuePageFilter === "Week" && "May 25 – May 31, 2025"}
-                                {revenuePageFilter === "Month" && "May 1 – May 31, 2025"}
-                                {revenuePageFilter === "Quarter" && "Q2 2025 (Apr 1 – Jun 30)"}
-                                {revenuePageFilter === "Year" && "FY 2025 (Jan 1 – Dec 31)"}
-                                {revenuePageFilter === "Custom" && "Custom Range (Last 45 Days)"}
+                                {(() => {
+                                  const now = new Date();
+                                  if (revenuePageFilter === "Week") return "Last 7 days";
+                                  if (revenuePageFilter === "Quarter") return "Last 3 months";
+                                  if (revenuePageFilter === "Year") return "Last 4 quarters";
+                                  return `Last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                })()}
                               </strong>
                             </p>
                           </div>
@@ -5723,49 +5901,61 @@ Access to full financial telemetry is restricted.`;
                           <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
                             {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </span>
-                          <span className="text-xs font-bold text-emerald-600 flex items-center bg-emerald-500/10 px-2.5 py-1 rounded-lg">
-                            <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" />
-                            {revenuePageFilter === "Week" ? "+4.5%" : revenuePageFilter === "Quarter" ? "+14.1%" : revenuePageFilter === "Year" ? "+12.8%" : revenuePageFilter === "Custom" ? "+8.7%" : "+18.2%"}
-                          </span>
+                          {(() => {
+                            const { currentTotal, priorTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                            const hasPrior = priorTotal > 0;
+                            const pct = hasPrior ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
+                            const isUp = pct === null ? currentTotal > 0 : pct >= 0;
+                            return (
+                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
+                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
+                                {pct === null ? (currentTotal > 0 ? "New" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                              </span>
+                            );
+                          })()}
                           <span className="text-xs text-[#5E7393] font-sans font-medium">vs prior period</span>
                         </div>
+
+                        {/* Log real income/expenses, run real payroll */}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setLogTransactionType("income")}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Income
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLogTransactionType("expense")}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Expense
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isRunningPayroll}
+                            onClick={handleRunPayroll}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isRunningPayroll ? "Running Payroll..." : "Run Payroll (last 14 days)"}
+                          </button>
+                        </div>
+
+                        {logTransactionType && (
+                          <LogTransactionModal
+                            type={logTransactionType}
+                            createdBy={loggedInUser?.email}
+                            onSave={handleSaveTransaction}
+                            onClose={() => setLogTransactionType(null)}
+                          />
+                        )}
 
                         {/* Recharts Live Multi-line Graph Container */}
                         <div className="h-[280px] w-full pt-2">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart
-                              data={
-                                revenuePageFilter === "Week" ? [
-                                  { time: "Mon", Revenue: 1200, Profit: 450, Expenses: 750, Payroll: 400, Taxes: 120 },
-                                  { time: "Tue", Revenue: 2400, Profit: 900, Expenses: 1500, Payroll: 800, Taxes: 240 },
-                                  { time: "Wed", Revenue: 3800, Profit: 1400, Expenses: 2400, Payroll: 1200, Taxes: 380 },
-                                  { time: "Thu", Revenue: 4900, Profit: 1850, Expenses: 3050, Payroll: 1600, Taxes: 490 },
-                                  { time: "Fri", Revenue: 6200, Profit: 2300, Expenses: 3900, Payroll: 2000, Taxes: 620 },
-                                  { time: "Sat", Revenue: 6800, Profit: 2550, Expenses: 4250, Payroll: 2200, Taxes: 680 },
-                                  { time: "Sun", Revenue: 7420, Profit: 2920, Expenses: 4500, Payroll: 2400, Taxes: 740 }
-                                ] : revenuePageFilter === "Quarter" ? [
-                                  { time: "Month 1", Revenue: 21000, Profit: 8200, Expenses: 12800, Payroll: 6000, Taxes: 1900 },
-                                  { time: "Month 2", Revenue: 45000, Profit: 17500, Expenses: 27500, Payroll: 12000, Taxes: 4100 },
-                                  { time: "Month 3", Revenue: 74550, Profit: 28860, Expenses: 45690, Payroll: 18690, Taxes: 6540 }
-                                ] : revenuePageFilter === "Year" ? [
-                                  { time: "Q1", Revenue: 68000, Profit: 26000, Expenses: 42000, Payroll: 18000, Taxes: 6100 },
-                                  { time: "Q2", Revenue: 142000, Profit: 55000, Expenses: 87000, Payroll: 36000, Taxes: 12800 },
-                                  { time: "Q3", Revenue: 215000, Profit: 83000, Expenses: 132000, Payroll: 54000, Taxes: 19500 },
-                                  { time: "Q4", Revenue: 298000, Profit: 115000, Expenses: 183000, Payroll: 72000, Taxes: 26800 }
-                                ] : revenuePageFilter === "Custom" ? [
-                                  { time: "Period A", Revenue: 15000, Profit: 5800, Expenses: 9200, Payroll: 4500, Taxes: 1350 },
-                                  { time: "Period B", Revenue: 32000, Profit: 12400, Expenses: 19600, Payroll: 9000, Taxes: 2880 },
-                                  { time: "Period C", Revenue: 48500, Profit: 18700, Expenses: 29800, Payroll: 13500, Taxes: 4360 }
-                                ] : [
-                                  { time: "May 1", Revenue: 3500, Profit: 1200, Expenses: 2300, Payroll: 1800, Taxes: 500 },
-                                  { time: "May 6", Revenue: 5800, Profit: 2100, Expenses: 3700, Payroll: 2400, Taxes: 800 },
-                                  { time: "May 11", Revenue: 7200, Profit: 2800, Expenses: 4400, Payroll: 2600, Taxes: 950 },
-                                  { time: "May 16", Revenue: 9500, Profit: 3600, Expenses: 5900, Payroll: 3200, Taxes: 1100 },
-                                  { time: "May 21", Revenue: 12400, Profit: 4800, Expenses: 7600, Payroll: 4500, Taxes: 1300 },
-                                  { time: "May 26", Revenue: 16800, Profit: 6200, Expenses: 10600, Payroll: 5200, Taxes: 1700 },
-                                  { time: "May 31", Revenue: 24850, Profit: 9620, Expenses: 12430, Payroll: 6230, Taxes: 2180 }
-                                ]
-                              }
+                              data={getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series}
                               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
@@ -5830,39 +6020,21 @@ Access to full financial telemetry is restricted.`;
                               />
                               <Line
                                 type="monotone"
-                                dataKey="Profit"
-                                stroke="#3B82F6"
-                                strokeWidth={3}
-                                dot={{ r: 4, strokeWidth: 1 }}
-                                activeDot={{ r: 6 }}
-                                name="Profit"
-                              />
-                              <Line
-                                type="monotone"
                                 dataKey="Expenses"
-                                stroke="#EF4444"
-                                strokeWidth={2.5}
+                                stroke="#F43F5E"
+                                strokeWidth={2}
                                 dot={{ r: 3, strokeWidth: 1 }}
                                 activeDot={{ r: 5 }}
                                 name="Expenses"
                               />
                               <Line
                                 type="monotone"
-                                dataKey="Payroll"
-                                stroke="#8B5CF6"
-                                strokeWidth={2.5}
+                                dataKey="Profit"
+                                stroke="#4A86F7"
+                                strokeWidth={2}
                                 dot={{ r: 3, strokeWidth: 1 }}
                                 activeDot={{ r: 5 }}
-                                name="Payroll"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Taxes"
-                                stroke="#F59E0B"
-                                strokeWidth={2.5}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Taxes"
+                                name="Profit"
                               />
                             </LineChart>
                           </ResponsiveContainer>
@@ -5871,7 +6043,11 @@ Access to full financial telemetry is restricted.`;
 
                       {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {[
+                        {(() => {
+                          const { currentExpenseTotal, currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                          const netProfit = completedJobsRevenue - currentExpenseTotal;
+                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                          return [
                           {
                             label: "Total Revenue",
                             key: "revenue",
@@ -5886,10 +6062,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Net Profit",
                             key: "profit",
-                            val: "$0.00",
+                            val: fmt(netProfit),
                             change: null,
-                            isUp: true,
-                            comp: "Expense tracking not built yet",
+                            isUp: netProfit >= 0,
+                            comp: "Revenue minus logged expenses",
                             icon: TrendingUp,
                             color: "text-blue-500",
                             bgColor: "bg-blue-500/10"
@@ -5897,10 +6073,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Total Expenses",
                             key: "expenses",
-                            val: "$0.00",
+                            val: fmt(currentExpenseTotal),
                             change: null,
                             isUp: true,
-                            comp: "Expense tracking not built yet",
+                            comp: "Real logged income/expense entries",
                             icon: TrendingDown,
                             color: "text-rose-500",
                             bgColor: "bg-rose-500/10"
@@ -5908,10 +6084,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Gross Payroll",
                             key: "payroll",
-                            val: "$0.00",
+                            val: fmt(currentPayrollTotal),
                             change: null,
                             isUp: true,
-                            comp: "Payroll tracking not built yet",
+                            comp: "Real payroll runs, this period",
                             icon: Users,
                             color: "text-purple-500",
                             bgColor: "bg-purple-500/10"
@@ -5927,7 +6103,8 @@ Access to full financial telemetry is restricted.`;
                             color: "text-amber-500",
                             bgColor: "bg-amber-500/10"
                           }
-                        ].map((card, idx) => (
+                          ];
+                        })().map((card, idx) => (
                           <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
                             <div className="flex justify-between items-start">
                               <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
@@ -5973,8 +6150,11 @@ Access to full financial telemetry is restricted.`;
                             { name: "Office Supplies", target: "inventory", label: "Inventory" },
                             { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
                           ].map((cat, idx) => {
-                            const currentAmt = "$0.00";
-                            
+                            const categoryTotal = transactions
+                              .filter((t) => t.type === "expense" && t.category === cat.name)
+                              .reduce((sum, t) => sum + t.amount, 0);
+                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
                             return (
                               <div
                                 key={idx}
@@ -6040,64 +6220,90 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
-                        {/* Search Result Statistics */}
-                        {payrollSearch && (
-                          <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
-                            Found {
-                              (recentRoster as { name: string; role: string }[])
-                                .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase())).length
-                            } employees matching "{payrollSearch}"
-                          </div>
-                        )}
+                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
+                            same trailing-14-day math as Run Payroll above. recentRoster is a separate
+                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
+                            to real hours — this table uses the real `employees` collection instead. */}
+                        {(() => {
+                          const rows = employees
+                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
+                            .map((emp) => {
+                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
+                              const hours = computeRecentHours(myLogs, 14);
+                              const regHours = Math.min(hours, 80);
+                              const otHours = Math.max(0, hours - 80);
+                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
+                              const lastPayroll = transactions
+                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
+                              return { emp, hours, otHours, pay, lastPayroll, status };
+                            });
+                          return (
+                            <>
+                              {payrollSearch && (
+                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
+                                  Found {rows.length} employees matching "{payrollSearch}"
+                                </div>
+                              )}
 
-                        {/* Searchable Responsive Table */}
-                        <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
-                                <th className="px-4 py-3">Employee</th>
-                                <th className="px-4 py-3 text-right">Current Hours</th>
-                                <th className="px-4 py-3 text-right">Overtime Hours</th>
-                                <th className="px-4 py-3 text-right">Current Pay</th>
-                                <th className="px-4 py-3 text-center">Last Payroll Date</th>
-                                <th className="px-4 py-3 text-center">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
-                              {recentRoster
-                                .filter(e => e.name.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
-                                .map((emp, idx) => {
-                                  const initials = emp.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
-                                  return (
-                                    <tr
-                                      key={emp.id || idx}
-                                      onClick={() => openPlaceholderPage(`Roster Profile: ${emp.name}`, "👤")}
-                                      className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
-                                    >
-                                      <td className="px-4 py-3 flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
-                                          {initials}
-                                        </div>
-                                        <div>
-                                          <p className="font-extrabold text-[#1F3557]">{emp.name}</p>
-                                          <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">0.00</td>
-                                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">$0.00</td>
-                                      <td className="px-4 py-3 text-center font-mono text-[#5E7393]">—</td>
-                                      <td className="px-4 py-3 text-center">
-                                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9.5px] font-bold rounded">
-                                          {emp.status}
-                                        </span>
-                                      </td>
+                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
+                                      <th className="px-4 py-3">Employee</th>
+                                      <th className="px-4 py-3 text-right">Current Hours</th>
+                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
+                                      <th className="px-4 py-3 text-right">Current Pay</th>
+                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
+                                      <th className="px-4 py-3 text-center">Status</th>
                                     </tr>
-                                  );
-                                })}
-                            </tbody>
-                          </table>
-                        </div>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
+                                    {rows.length === 0 && (
+                                      <tr>
+                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
+                                          No real employees onboarded yet.
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
+                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
+                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+                                      return (
+                                        <tr
+                                          key={emp.email}
+                                          onClick={() => openPlaceholderPage(`Roster Profile: ${emp.firstName} ${emp.lastName}`, "👤")}
+                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
+                                        >
+                                          <td className="px-4 py-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
+                                              {initials}
+                                            </div>
+                                            <div>
+                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
+                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
+                                          <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
+                                              {status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          );
+                        })()}
                         
                         <div className="text-center pt-2">
                           <button
@@ -6121,59 +6327,91 @@ Access to full financial telemetry is restricted.`;
                           </div>
                           
                           <div className="space-y-3">
-                            {[
-                              {
-                                text: "Payroll increased 8.9% compared to last pay period due to plumbing overtime demands.",
-                                link: "Review payroll details ➔",
-                                color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
-                                icon: Users,
-                                action: "Payroll Ledger Analysis"
-                              },
-                              {
-                                text: "Fuel expenses are 11.3% higher than last period. Route consolidation is recommended.",
-                                link: "Review fuel expenses ➔",
-                                color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
-                                icon: Landmark,
-                                action: "Fuel Receipts & Fleet Usage"
-                              },
-                              {
-                                text: "You have 3 overdue invoices totaling $4,250. Automated payment triggers scheduled.",
-                                link: "View overdue invoices ➔",
-                                color: "border-[#9EC8EF] bg-rose-500/5 text-rose-700",
-                                icon: DollarSign,
-                                action: "Overdue Invoices Ledger"
-                              },
-                              {
-                                text: "Estimated quarterly tax payment of $6,540.00 is due. Automated reserve generated.",
-                                link: "View tax summary ➔",
-                                color: "border-[#9EC8EF] bg-blue-500/5 text-blue-700",
-                                icon: Landmark,
-                                action: "Quarterly Tax Projections"
-                              },
-                              {
-                                text: "Profit margin this period is 38.7%, exceeding targeted baseline by 3.7%.",
-                                link: "View profit report ➔",
-                                color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
-                                icon: TrendingUp,
-                                action: "Net Profitability Margin Analyzer"
+                            {(() => {
+                              // Real insights only, each gated on having a real prior period to
+                              // compare against — no invoice or tax-liability system exists in the
+                              // app to back "overdue invoices" / "quarterly tax due" style claims,
+                              // so those insight types were removed rather than left fabricated.
+                              const now = new Date();
+                              const periodDays = 14;
+                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
+                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
+                              const priorEnd = curStart;
+                              const sumBetween = (category: string | null, start: Date, end: Date) =>
+                                transactions
+                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
+                                  .reduce((s, t) => s + t.amount, 0);
+                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
+
+                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
+
+                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
+                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
+                              if (curPayroll > 0 && priorPayroll > 0) {
+                                const pct = pctChange(curPayroll, priorPayroll);
+                                insights.push({
+                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review payroll details ➔",
+                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
+                                  icon: Users,
+                                  action: "Payroll Ledger Analysis"
+                                });
                               }
-                            ].map((insight, idx) => (
-                              <div
-                                key={idx}
-                                onClick={() => openPlaceholderPage(insight.action, "🔍")}
-                                className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
-                              >
-                                <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
-                                  <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
-                                </span>
-                                <div>
-                                  <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
-                                  <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
-                                    {insight.link}
-                                  </p>
+
+                              const curFuel = sumBetween("Fuel", curStart, curEnd);
+                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
+                              if (curFuel > 0 && priorFuel > 0) {
+                                const pct = pctChange(curFuel, priorFuel);
+                                insights.push({
+                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review fuel expenses ➔",
+                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
+                                  icon: Landmark,
+                                  action: "Fuel Receipts & Fleet Usage"
+                                });
+                              }
+
+                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
+                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
+                              const curExpenses = sumBetween(null, curStart, curEnd);
+                              if (curRevenue > 0) {
+                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
+                                insights.push({
+                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
+                                  link: "View profit report ➔",
+                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
+                                  icon: TrendingUp,
+                                  action: "Net Profitability Margin Analyzer"
+                                });
+                              }
+
+                              if (insights.length === 0) {
+                                return (
+                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
+                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
+                                  </div>
+                                );
+                              }
+
+                              return insights.map((insight, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
+                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
+                                >
+                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
+                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
+                                  </span>
+                                  <div>
+                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
+                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
+                                      {insight.link}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ));
+                            })()}
                           </div>
                         </div>
 
@@ -6543,7 +6781,7 @@ Access to full financial telemetry is restricted.`;
                 </div>
                 <div className="text-left">
                   <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-                    LeadForge AI Option
+                    Owner's AI Option
                   </h3>
                   <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
                     Workspace diagnostic assistant • {aiPageName}
@@ -6568,7 +6806,7 @@ Access to full financial telemetry is restricted.`;
                   }`}
                 >
                   <span className="text-[9px] uppercase tracking-wider font-bold text-[#5E7393] mb-1">
-                    {msg.sender === "user" ? "You" : "LeadForge AI"}
+                    {msg.sender === "user" ? "You" : "Owner's AI"}
                   </span>
                   <div
                     className={`p-3.5 rounded-2xl text-xs leading-relaxed border shadow-sm ${
@@ -6717,7 +6955,7 @@ Access to full financial telemetry is restricted.`;
                   🤖
                 </div>
                 <div className="text-left">
-                  <h3 className="text-xs font-black uppercase tracking-wider">LeadForge Local OS AI</h3>
+                  <h3 className="text-xs font-black uppercase tracking-wider">Owner's Local OS AI</h3>
                   <p className="text-[9.5px] text-slate-300 font-mono">Module: {activeScreen.label}</p>
                 </div>
               </div>
@@ -6771,7 +7009,7 @@ Access to full financial telemetry is restricted.`;
                     {floatingAiMessages.map((m, idx) => (
                       <div key={idx} className={`flex flex-col max-w-[85%] ${m.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}>
                         <span className="text-[8.5px] font-bold text-slate-400 uppercase mb-0.5 tracking-wider">
-                          {m.sender === "user" ? "You" : "LeadForge AI"}
+                          {m.sender === "user" ? "You" : "Owner's AI"}
                         </span>
                         <div className={`p-3 rounded-2xl text-[11px] leading-relaxed border shadow-xs ${
                           m.sender === "user"
@@ -6927,7 +7165,7 @@ Access to full financial telemetry is restricted.`;
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
                       }}
-                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask LeadForge AI about ${activeScreen.label}...`}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask Owner's AI about ${activeScreen.label}...`}
                       className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
                     <button

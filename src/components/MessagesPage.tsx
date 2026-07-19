@@ -489,7 +489,7 @@ export const MessagesPage: React.FC = () => {
 
   // AI Chat response simulator using advanced custom prompts
   const simulateAiResponse = (userPrompt: string) => {
-    triggerRealTimeNotification("LeadForge AI is analyzing your request...");
+    triggerRealTimeNotification("Owner's AI is analyzing your request...");
     
     setTimeout(() => {
       let aiContent = "I've analyzed the query. How else can I support your operations?";
@@ -507,7 +507,7 @@ export const MessagesPage: React.FC = () => {
 
       const aiMsg: Message = {
         id: "ai_" + Date.now(),
-        sender: "LeadForge AI",
+        sender: "Owner's AI",
         senderRole: "AI Assistant",
         content: aiContent,
         timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
@@ -518,7 +518,7 @@ export const MessagesPage: React.FC = () => {
           return {
             ...c,
             lastMessage: aiMsg.content,
-            lastMessageSender: "LeadForge AI",
+            lastMessageSender: "Owner's AI",
             lastMessageTime: aiMsg.timestamp,
             unreadCount: c.id === activeConv.id ? 0 : c.unreadCount + 1,
             isRead: c.id === activeConv.id,
@@ -528,7 +528,7 @@ export const MessagesPage: React.FC = () => {
         return c;
       }));
 
-      triggerRealTimeNotification("LeadForge AI completed response generation.");
+      triggerRealTimeNotification("Owner's AI completed response generation.");
     }, 2000);
   };
 
@@ -1792,7 +1792,7 @@ export const MessagesPage: React.FC = () => {
             {scanningStatus === "analyzing" && (
               <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
                 <div className="w-12 h-12 rounded-full border-4 border-[#315C9F] border-t-transparent animate-spin" />
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">LeadForge AI OCR Parsing...</h4>
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Owner's AI OCR Parsing...</h4>
                 <p className="text-[11px] text-slate-500 max-w-xs font-medium">Extracting metadata tables, dates, line-item totals, and client names.</p>
               </div>
             )}
@@ -1868,7 +1868,7 @@ export const MessagesPage: React.FC = () => {
           <div className="bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl p-6 w-full max-w-lg text-left space-y-4 animate-scale-up">
             <div className="flex items-center justify-between border-b pb-2">
               <h4 className="text-xs font-extrabold text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" /> LeadForge AI Writer
+                <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" /> Owner's AI Writer
               </h4>
               <button onClick={() => setIsAiComposeOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
             </div>
@@ -1918,7 +1918,7 @@ export const MessagesPage: React.FC = () => {
       <div className="p-4 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl space-y-3.5 text-left">
         <div>
           <h4 className="text-xs font-black uppercase text-[#342D7E] tracking-wider">
-            LeadForgeOS Intercom Framework Connections
+            Owner's Local OS Intercom Framework Connections
           </h4>
           <p className="text-[10.5px] text-slate-500 leading-normal font-medium mt-0.5">
             Real-time event sync nodes mapped across all corporate departments.

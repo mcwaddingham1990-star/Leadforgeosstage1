@@ -39,7 +39,7 @@ import {
 export type { Lead } from "../types/domain";
 import type { Lead } from "../types/domain";
 
-// 10 high-quality realistic LeadForge leads
+// 10 high-quality realistic Owner's Local OS leads
 export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC = () => {
@@ -252,15 +252,30 @@ export const LeadsPage: React.FC = () => {
     return stages;
   }, [leads]);
 
-  // Activity feed mock items
-  const activities = [
-    { id: "act_1", type: "Lead Created", desc: "New Lead 'John Connor' created via Website", time: "1 hour ago", icon: "✨" },
-    { id: "act_2", type: "Call Logged", desc: "Call logged with Bruce Wayne (Qualified) by Theresa W.", time: "3 hours ago", icon: "📞" },
-    { id: "act_3", type: "Estimate Sent", desc: "Estimate #E-2090 sent to Diana Prince ($8,900.00 value)", time: "Yesterday", icon: "📝" },
-    { id: "act_4", type: "Appointment Scheduled", desc: "On-site diagnostic scheduled for Clark Kent", time: "2 days ago", icon: "📅" },
-    { id: "act_5", type: "Lead Converted", desc: "Lead 'Tony Stark' converted to Won Account! ($50,000.00 value)", time: "3 days ago", icon: "🏆" },
-    { id: "act_6", type: "Lost Lead", desc: "Lead 'Arthur Curry' marked as Lost (Price objection)", time: "5 days ago", icon: "⚠️" }
-  ];
+  // Real recent leads instead of a fabricated activity feed -- there's no
+  // real per-lead change-history collection to derive individual "call
+  // logged"/"appointment scheduled" timestamped events from, so this
+  // shows real leads by their real current status instead.
+  const STATUS_ICON: Record<string, string> = {
+    New: "✨",
+    Contacted: "📞",
+    Qualified: "👍",
+    "Estimate Sent": "📝",
+    "Follow-Up Needed": "📅",
+    Won: "🏆",
+    Lost: "⚠️",
+    Archived: "🗄️"
+  };
+  const activities = [...leads]
+    .sort((a, b) => (a.addedDaysAgo ?? 0) - (b.addedDaysAgo ?? 0))
+    .slice(0, 6)
+    .map((lead) => ({
+      id: lead.id,
+      type: lead.status,
+      desc: `${lead.name} (${lead.company}) — ${lead.status}${lead.estimatedValue ? ` ($${lead.estimatedValue.toLocaleString()} value)` : ""}`,
+      time: lead.dateAdded,
+      icon: STATUS_ICON[lead.status] || "📌"
+    }));
 
   return (
     <div className="space-y-6 animate-fade-in text-left">

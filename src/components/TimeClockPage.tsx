@@ -35,6 +35,7 @@ import {
   X
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
+import { TimeClockLog } from "../types/domain";
 
 export interface TimeLog {
   id: string;
@@ -54,8 +55,10 @@ export interface EmployeeClockState {
   id: string;
   name: string;
   title: string;
-  department: "Field" | "Dispatch" | "Office" | "Management";
-  crew: "Crew Alpha" | "Crew Beta" | "Crew Gamma" | "Office Staff";
+  // Not a tracked real field yet (no crew/department assignment system
+  // exists) — left undefined rather than assigned a fabricated category.
+  department?: string;
+  crew?: string;
   hourlyRate: number;
   status: "Off Duty" | "Clocked In" | "On Break" | "Traveling" | "Working" | "Overtime" | "Clocked Out";
   currentJobId?: string;
@@ -79,113 +82,6 @@ export interface TimeClockPageProps {
   setClockInDuration: React.Dispatch<React.SetStateAction<number>>;
 }
 
-// Initial robust employee list
-const INITIAL_EMPLOYEES: EmployeeClockState[] = [
-  {
-    id: "emp_1",
-    name: "Theresa W.",
-    title: "Lead Plumber",
-    department: "Field",
-    crew: "Crew Alpha",
-    hourlyRate: 35,
-    status: "Working",
-    currentJobId: "evt_1",
-    currentJobTitle: "AC Leak Repair & Pipe Tuning",
-    currentCustomer: "Theresa Webb",
-    assignedVehicle: "Sprinter Van #14",
-    assignedRoute: "Route Alpha",
-    hoursToday: 6.5,
-    hoursThisPayPeriod: 48.5,
-    overtimeHours: 6.0,
-    approved: false,
-    history: [
-      { id: "log_1", employeeName: "Theresa W.", type: "Clock In", date: "2026-07-06", time: "08:00 AM", gps: "47.6062° N, 122.3321° W", jobId: "evt_1", jobTitle: "AC Leak Repair & Pipe Tuning", route: "Route Alpha", vehicle: "Sprinter Van #14" },
-      { id: "log_2", employeeName: "Theresa W.", type: "Break Start", date: "2026-07-06", time: "12:00 PM", gps: "47.6090° N, 122.3350° W" },
-      { id: "log_3", employeeName: "Theresa W.", type: "Break End", date: "2026-07-06", time: "12:30 PM", gps: "47.6090° N, 122.3350° W" }
-    ]
-  },
-  {
-    id: "emp_2",
-    name: "Albert F.",
-    title: "Senior HVAC Tech",
-    department: "Field",
-    crew: "Crew Beta",
-    hourlyRate: 32,
-    status: "Clocked In",
-    currentJobId: "evt_2",
-    currentJobTitle: "Full Heat Pump Install",
-    currentCustomer: "Albert Flores",
-    assignedVehicle: "Service Truck #03",
-    assignedRoute: "Route Beta",
-    hoursToday: 4.25,
-    hoursThisPayPeriod: 42.25,
-    overtimeHours: 2.5,
-    approved: false,
-    history: [
-      { id: "log_4", employeeName: "Albert F.", type: "Clock In", date: "2026-07-06", time: "08:30 AM", gps: "47.6101° N, 122.3421° W", jobId: "evt_2", jobTitle: "Full Heat Pump Install", route: "Route Beta", vehicle: "Service Truck #03" }
-    ]
-  },
-  {
-    id: "emp_3",
-    name: "Esther H.",
-    title: "Lead Dispatcher",
-    department: "Dispatch",
-    crew: "Office Staff",
-    hourlyRate: 24,
-    status: "On Break",
-    hoursToday: 4.0,
-    hoursThisPayPeriod: 40.0,
-    overtimeHours: 0.0,
-    approved: true,
-    history: [
-      { id: "log_5", employeeName: "Esther H.", type: "Clock In", date: "2026-07-06", time: "08:00 AM", gps: "47.6062° N, 122.3321° W" },
-      { id: "log_6", employeeName: "Esther H.", type: "Break Start", date: "2026-07-06", time: "11:45 AM", gps: "47.6062° N, 122.3321° W" }
-    ]
-  },
-  {
-    id: "emp_4",
-    name: "James W.",
-    title: "Apprentice Helper",
-    department: "Field",
-    crew: "Crew Alpha",
-    hourlyRate: 20,
-    status: "Traveling",
-    currentJobId: "evt_3",
-    currentJobTitle: "Emergency Pipe Burst Diagnosis",
-    currentCustomer: "Esther Howard",
-    assignedVehicle: "Sprinter Van #14",
-    assignedRoute: "Route Alpha",
-    hoursToday: 3.5,
-    hoursThisPayPeriod: 38.75,
-    overtimeHours: 0.0,
-    approved: false,
-    history: [
-      { id: "log_7", employeeName: "James W.", type: "Clock In", date: "2026-07-06", time: "09:00 AM", gps: "47.6062° N, 122.3321° W", jobId: "evt_3", jobTitle: "Emergency Pipe Burst Diagnosis", route: "Route Alpha", vehicle: "Sprinter Van #14" }
-    ]
-  },
-  {
-    id: "emp_5",
-    name: "Brandon M.",
-    title: "Commercial Plumber",
-    department: "Field",
-    crew: "Crew Gamma",
-    hourlyRate: 34,
-    status: "Overtime",
-    currentJobId: "evt_4",
-    currentJobTitle: "Sewer Line Hydrojetting",
-    currentCustomer: "Commercial Plaza",
-    assignedVehicle: "Flatbed Truck #07",
-    assignedRoute: "Route Gamma",
-    hoursToday: 8.0,
-    hoursThisPayPeriod: 44.0,
-    overtimeHours: 4.0,
-    approved: false,
-    history: [
-      { id: "log_8", employeeName: "Brandon M.", type: "Clock In", date: "2026-07-06", time: "07:30 AM", gps: "47.5980° N, 122.3290° W", jobId: "evt_4", jobTitle: "Sewer Line Hydrojetting", route: "Route Gamma", vehicle: "Flatbed Truck #07" }
-    ]
-  }
-];
-
 export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   isClockedIn,
   setIsClockedIn,
@@ -196,7 +92,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { schedulingEvents: events, setSchedulingEvents: setEvents } = useDomainData();
+  const {
+    schedulingEvents: events,
+    employees: employeeRecords,
+    timeClockLogs,
+    setTimeClockLogs
+  } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -204,10 +105,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     navigateToScreen: onNavigateToScreen,
     logOperationalEvent
   } = useNavTelemetry();
-  const [employees, setEmployees] = useState<EmployeeClockState[]>(INITIAL_EMPLOYEES);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSummaryFilter, setActiveSummaryFilter] = useState<string>("All");
-  
+
   // Advanced filters state
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [filterCrew, setFilterCrew] = useState("All");
@@ -215,23 +115,26 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterJob, setFilterJob] = useState("All");
   const [filterPayPeriod, setFilterPayPeriod] = useState("Current");
-  
+
   // Selected Employee for Details Panel
-  const [selectedEmpId, setSelectedEmpId] = useState<string | null>("emp_1");
-  
+  const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
+
   // Modal states
   const [showClockInModal, setShowClockInModal] = useState(false);
   const [showManualTimeModal, setShowManualTimeModal] = useState(false);
   const [showEditTimeModal, setShowEditTimeModal] = useState(false);
-  
+
   // Clock In fields
   const [clockInJobId, setClockInJobId] = useState("");
   const [clockInRoute, setClockInRoute] = useState("Route Alpha");
   const [clockInVehicle, setClockInVehicle] = useState("Sprinter Van #14");
-  
+
   // Manual Time fields
-  const [manualEmpId, setManualEmpId] = useState("emp_1");
-  const [manualDate, setManualDate] = useState("2026-07-06");
+  const [manualEmpId, setManualEmpId] = useState("");
+  const [manualDate, setManualDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [manualType, setManualType] = useState<"Clock In" | "Clock Out" | "Break Start" | "Break End">("Clock In");
   const [manualHours, setManualHours] = useState("8.0");
   const [manualTimeStr, setManualTimeStr] = useState("08:00 AM");
@@ -276,55 +179,108 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     return rolesWithPermission.includes(activeRole);
   }, [activeRole]);
 
-  // We'll create or update the logged-in user in our employees array dynamically if clocked in
-  useEffect(() => {
-    const userName = loggedInUser?.name || "Unknown User";
-    const userRole = activeRole || "Owner";
-    
-    setEmployees(prev => {
-      // Find or create Sarah's record
-      const exists = prev.find(e => e.name === userName);
-      
-      const newStatus = isClockedIn 
-        ? (prev.find(e => e.name === userName)?.status === "On Break" ? "On Break" : "Clocked In")
-        : "Off Duty";
+  // List of active jobs for dropdowns
+  const activeJobs = useMemo(() => {
+    return events.filter(e => e.eventType === "Job" || e.eventType === "Estimate");
+  }, [events]);
 
-      if (exists) {
-        return prev.map(e => {
-          if (e.name === userName) {
-            // Update live state
-            const todayHrs = isClockedIn ? parseFloat((clockInDuration / 3600).toFixed(2)) : e.hoursToday;
-            return {
-              ...e,
-              status: newStatus as any,
-              hoursToday: todayHrs,
-              clockInTime: clockInTime || undefined,
-            };
-          }
-          return e;
-        });
-      } else {
-        // Create new
-        const newRecord: EmployeeClockState = {
-          id: `emp_logged_in`,
-          name: userName,
-          title: userRole,
-          department: "Management",
-          crew: "Office Staff",
-          hourlyRate: 45,
-          status: newStatus as any,
-          hoursToday: isClockedIn ? parseFloat((clockInDuration / 3600).toFixed(2)) : 0,
-          hoursThisPayPeriod: 0.0,
-          overtimeHours: 0.0,
-          approved: false,
-          // No fabricated history entry: we don't actually know when/where a session that
-          // predates this effect running started, so an honest empty history beats a guess.
-          history: []
-        };
-        return [...prev, newRecord];
+  // Sums real Clock In/Break End -> Clock Out/Break Start segments since a
+  // given point in time. An open (not yet closed) segment counts its
+  // elapsed time up to "now" — this is what makes a currently-clocked-in
+  // employee's hours keep ticking up without a separately fabricated
+  // running counter that could drift from what actually happened.
+  const computeHoursFromLogs = (logs: TimeClockLog[], since: Date): number => {
+    const sorted = [...logs]
+      .filter(l => new Date(l.timestamp) >= since)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    let totalMs = 0;
+    let segmentStart: number | null = null;
+    for (const log of sorted) {
+      const ts = new Date(log.timestamp).getTime();
+      if (log.type === "Clock In" || log.type === "Break End") {
+        segmentStart = ts;
+      } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
+        totalMs += ts - segmentStart;
+        segmentStart = null;
       }
-    });
-  }, [isClockedIn, clockInTime, clockInDuration, loggedInUser, activeRole]);
+    }
+    if (segmentStart !== null) {
+      totalMs += Date.now() - segmentStart;
+    }
+    return totalMs / 3600000;
+  };
+
+  const deriveStatus = (logs: TimeClockLog[]): EmployeeClockState["status"] => {
+    if (logs.length === 0) return "Off Duty";
+    const last = [...logs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    if (last.type === "Break Start") return "On Break";
+    if (last.type === "Clock Out") return "Off Duty";
+    return "Clocked In"; // Clock In or Break End
+  };
+
+  // The real, live team roster — every invited employee who's completed
+  // onboarding, plus the current user if they aren't in that list yet (the
+  // owner never gets an `employees` doc). Status/hours/overtime are all
+  // derived from the real time_clock_logs collection, never tracked as a
+  // separate counter that could drift from what actually happened.
+  const employees: EmployeeClockState[] = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const payPeriodStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
+    const buildFromLogs = (email: string, name: string, title: string, hourlyRate: number): EmployeeClockState => {
+      const myLogs = timeClockLogs.filter(l => l.employeeEmail === email);
+      const hoursToday = computeHoursFromLogs(myLogs, todayStart);
+      const hoursThisPayPeriod = computeHoursFromLogs(myLogs, payPeriodStart);
+      const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      return {
+        id: email,
+        name,
+        title,
+        hourlyRate,
+        status: deriveStatus(myLogs),
+        currentJobId: lastLog?.jobId,
+        currentJobTitle: lastLog?.jobTitle,
+        assignedVehicle: lastLog?.vehicle,
+        assignedRoute: lastLog?.route,
+        hoursToday: parseFloat(hoursToday.toFixed(2)),
+        hoursThisPayPeriod: parseFloat(hoursThisPayPeriod.toFixed(2)),
+        // Real, disclosed methodology: hours beyond 40 in the trailing
+        // 14-day window count as overtime. No configured pay-period
+        // boundary exists yet to derive this from more precisely.
+        overtimeHours: parseFloat(Math.max(0, hoursThisPayPeriod - 40).toFixed(2)),
+        approved: myLogs.length > 0 && myLogs.every(l => l.approved),
+        history: [...myLogs]
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .map((l): TimeLog => ({
+            id: l.id,
+            employeeName: l.employeeName,
+            type: l.type,
+            date: l.date,
+            time: l.time,
+            gps: l.gps,
+            jobId: l.jobId,
+            jobTitle: l.jobTitle,
+            route: l.route,
+            vehicle: l.vehicle,
+            approved: l.approved
+          }))
+      };
+    };
+
+    const roster = employeeRecords.map(er =>
+      buildFromLogs(er.email, `${er.firstName} ${er.lastName}`.trim(), er.role, er.hourlyRate || 0)
+    );
+
+    // Ensure the current user always has an entry, even before they're a
+    // real `employees` doc (owners never get one) or before their first
+    // real clock event exists.
+    if (loggedInUser?.email && !roster.some(e => e.id === loggedInUser.email)) {
+      roster.push(buildFromLogs(loggedInUser.email, loggedInUser.name || loggedInUser.email, activeRole, 0));
+    }
+
+    return roster;
+  }, [employeeRecords, timeClockLogs, loggedInUser, activeRole]);
 
   // Reset Filters helper
   const handleResetFilters = () => {
@@ -340,23 +296,18 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     }
   };
 
-  // List of active jobs for dropdowns
-  const activeJobs = useMemo(() => {
-    return events.filter(e => e.eventType === "Job" || e.eventType === "Estimate");
-  }, [events]);
-
   // Core filter logic
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
       // Search Box matches name or title
-      const matchesSearch = searchQuery === "" || 
+      const matchesSearch = searchQuery === "" ||
         emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.title.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
       // Summary Card selection filters
       if (activeSummaryFilter === "ClockedIn" && emp.status === "Off Duty") return false;
-      if (activeSummaryFilter === "Working" && !["Working", "Traveling", "Clocked In", "Overtime"].includes(emp.status)) return false;
+      if (activeSummaryFilter === "Working" && emp.status !== "Clocked In") return false;
       if (activeSummaryFilter === "OnBreak" && emp.status !== "On Break") return false;
       if (activeSummaryFilter === "Overtime" && emp.overtimeHours === 0) return false;
 
@@ -375,18 +326,19 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Selected Employee object
   const selectedEmployee = useMemo(() => {
-    return employees.find(e => e.id === selectedEmpId) || employees[0];
-  }, [employees, selectedEmpId]);
+    return employees.find(e => e.id === selectedEmpId) || employees.find(e => e.id === loggedInUser?.email) || employees[0];
+  }, [employees, selectedEmpId, loggedInUser]);
 
   // Top Summary Metric Cards calculations
   const summaryMetrics = useMemo(() => {
     const clockedIn = employees.filter(e => e.status !== "Off Duty").length;
-    const working = employees.filter(e => ["Working", "Traveling", "Clocked In", "Overtime"].includes(e.status)).length;
+    const working = employees.filter(e => e.status === "Clocked In").length;
     const onBreak = employees.filter(e => e.status === "On Break").length;
     const totalHoursToday = employees.reduce((sum, e) => sum + e.hoursToday, 0);
     const overtimeHours = employees.reduce((sum, e) => sum + e.overtimeHours, 0);
-    
-    // Estimate payroll
+
+    // Real payroll from real hours x real hourly rates (0 for anyone
+    // without a rate on file yet — never a fabricated number).
     const totalPayroll = employees.reduce((sum, e) => {
       const regHrs = Math.max(0, e.hoursThisPayPeriod - e.overtimeHours);
       const regPay = regHrs * e.hourlyRate;
@@ -404,11 +356,19 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     };
   }, [employees]);
 
+  const nowStamp = () => {
+    const now = new Date();
+    return {
+      timeStr: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      dateStr: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      iso: now.toISOString()
+    };
+  };
+
   // Action: Clock In
   const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toISOString().split('T')[0];
+    if (!loggedInUser?.email) return;
+    const { timeStr, dateStr, iso } = nowStamp();
     const gps = await getCurrentGPSString();
 
     setIsClockedIn(true);
@@ -418,40 +378,26 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const userName = loggedInUser?.name || "Unknown User";
     const selectedJob = activeJobs.find(j => j.id === jobId);
 
-    // Add entry to state
-    setEmployees(prev => prev.map(e => {
-      if (e.name === userName) {
-        const newLog: TimeLog = {
-          id: `log_self_${Date.now()}`,
-          employeeName: userName,
-          type: "Clock In",
-          date: dateStr,
-          time: timeStr,
-          gps,
-          jobId: jobId || undefined,
-          jobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
-          route: route || undefined,
-          vehicle: vehicle || undefined
-        };
-        return {
-          ...e,
-          status: "Clocked In",
-          currentJobId: jobId || undefined,
-          currentJobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
-          currentCustomer: selectedJob?.customer || undefined,
-          assignedVehicle: vehicle || undefined,
-          assignedRoute: route || undefined,
-          history: [newLog, ...e.history]
-        };
-      }
-      return e;
-    }));
+    setTimeClockLogs(prev => [...prev, {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: loggedInUser.email,
+      employeeName: userName,
+      type: "Clock In",
+      date: dateStr,
+      time: timeStr,
+      timestamp: iso,
+      gps,
+      jobId: jobId || undefined,
+      jobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
+      route: route || undefined,
+      vehicle: vehicle || undefined
+    }]);
 
     // Update shared Event Engine (create framework action / log event)
     if (logOperationalEvent) {
       logOperationalEvent("Clocked In", `${userName} punched in to shift. Assigned: ${route}, vehicle ${vehicle}.`, "⏱️");
     }
-    
+
     // Trigger notification
     triggerLocalNotification(`Punched in successfully at ${timeStr}`);
     setShowClockInModal(false);
@@ -459,40 +405,21 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Action: Clock Out
   const handleClockOut = async () => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toISOString().split('T')[0];
+    if (!loggedInUser?.email) return;
+    const { timeStr, dateStr, iso } = nowStamp();
     const gps = await getCurrentGPSString();
-
     const userName = loggedInUser?.name || "Unknown User";
 
-    setEmployees(prev => prev.map(e => {
-      if (e.name === userName) {
-        const newLog: TimeLog = {
-          id: `log_self_${Date.now()}`,
-          employeeName: userName,
-          type: "Clock Out",
-          date: dateStr,
-          time: timeStr,
-          gps
-        };
-        // Calculate accrued hours
-        const sessionHours = parseFloat((clockInDuration / 3600).toFixed(2));
-        return {
-          ...e,
-          status: "Off Duty",
-          currentJobId: undefined,
-          currentJobTitle: undefined,
-          currentCustomer: undefined,
-          assignedVehicle: undefined,
-          assignedRoute: undefined,
-          hoursToday: parseFloat((e.hoursToday + sessionHours).toFixed(2)),
-          hoursThisPayPeriod: parseFloat((e.hoursThisPayPeriod + sessionHours).toFixed(2)),
-          history: [newLog, ...e.history]
-        };
-      }
-      return e;
-    }));
+    setTimeClockLogs(prev => [...prev, {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: loggedInUser.email,
+      employeeName: userName,
+      type: "Clock Out",
+      date: dateStr,
+      time: timeStr,
+      timestamp: iso,
+      gps
+    }]);
 
     setIsClockedIn(false);
     setClockInTime(null);
@@ -506,30 +433,21 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Action: Start Break
   const handleStartBreak = async () => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toISOString().split('T')[0];
+    if (!loggedInUser?.email) return;
+    const { timeStr, dateStr, iso } = nowStamp();
     const userName = loggedInUser?.name || "Unknown User";
     const gps = await getCurrentGPSString();
 
-    setEmployees(prev => prev.map(e => {
-      if (e.name === userName) {
-        const newLog: TimeLog = {
-          id: `log_self_${Date.now()}`,
-          employeeName: userName,
-          type: "Break Start",
-          date: dateStr,
-          time: timeStr,
-          gps
-        };
-        return {
-          ...e,
-          status: "On Break",
-          history: [newLog, ...e.history]
-        };
-      }
-      return e;
-    }));
+    setTimeClockLogs(prev => [...prev, {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: loggedInUser.email,
+      employeeName: userName,
+      type: "Break Start",
+      date: dateStr,
+      time: timeStr,
+      timestamp: iso,
+      gps
+    }]);
 
     if (logOperationalEvent) {
       logOperationalEvent("Break Started", `${userName} started an administrative break.`, "☕");
@@ -539,30 +457,21 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Action: End Break
   const handleEndBreak = async () => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toISOString().split('T')[0];
+    if (!loggedInUser?.email) return;
+    const { timeStr, dateStr, iso } = nowStamp();
     const userName = loggedInUser?.name || "Unknown User";
     const gps = await getCurrentGPSString();
 
-    setEmployees(prev => prev.map(e => {
-      if (e.name === userName) {
-        const newLog: TimeLog = {
-          id: `log_self_${Date.now()}`,
-          employeeName: userName,
-          type: "Break End",
-          date: dateStr,
-          time: timeStr,
-          gps
-        };
-        return {
-          ...e,
-          status: "Clocked In",
-          history: [newLog, ...e.history]
-        };
-      }
-      return e;
-    }));
+    setTimeClockLogs(prev => [...prev, {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: loggedInUser.email,
+      employeeName: userName,
+      type: "Break End",
+      date: dateStr,
+      time: timeStr,
+      timestamp: iso,
+      gps
+    }]);
 
     if (logOperationalEvent) {
       logOperationalEvent("Break Ended", `${userName} resumed active shift duty.`, "🛠️");
@@ -575,52 +484,35 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const selectedEmp = employees.find(e => e.id === manualEmpId);
     if (!selectedEmp) return;
 
-    const newLog: TimeLog = {
-      id: `log_manual_${Date.now()}`,
+    const parsedManualTimestamp = new Date(`${manualDate} ${manualTimeStr}`);
+    const timestamp = isNaN(parsedManualTimestamp.getTime()) ? new Date().toISOString() : parsedManualTimestamp.toISOString();
+
+    setTimeClockLogs(prev => [...prev, {
+      id: `log_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: selectedEmp.id,
       employeeName: selectedEmp.name,
       type: manualType,
       date: manualDate,
       time: manualTimeStr,
+      timestamp,
       gps: "Manual Entry (Overridden by Admin)",
       jobId: manualJobId || undefined,
       route: manualRoute || undefined,
       vehicle: manualVehicle || undefined,
-      approved: true
-    };
-
-    const addedHrs = parseFloat(manualHours) || 0;
-
-    setEmployees(prev => prev.map(e => {
-      if (e.id === manualEmpId) {
-        return {
-          ...e,
-          hoursThisPayPeriod: parseFloat((e.hoursThisPayPeriod + addedHrs).toFixed(2)),
-          overtimeHours: addedHrs > 8 ? parseFloat((e.overtimeHours + (addedHrs - 8)).toFixed(2)) : e.overtimeHours,
-          history: [newLog, ...e.history]
-        };
-      }
-      return e;
-    }));
+      approved: true,
+      enteredManually: true
+    }]);
 
     if (logOperationalEvent) {
-      logOperationalEvent("Manual Time Inserted", `Admin manually posted ${addedHrs} hours to ${selectedEmp.name}'s time ledger.`, "📝");
+      logOperationalEvent("Manual Time Inserted", `Admin manually posted a ${manualType} entry for ${selectedEmp.name}.`, "📝");
     }
-    triggerLocalNotification(`Manually added ${addedHrs} hours to ${selectedEmp.name}`);
+    triggerLocalNotification(`Manual ${manualType} entry added for ${selectedEmp.name}`);
     setShowManualTimeModal(false);
   };
 
   // Action: Approve Employee Time
   const handleApproveEmployeeTime = (empId: string) => {
-    setEmployees(prev => prev.map(e => {
-      if (e.id === empId) {
-        return {
-          ...e,
-          approved: true,
-          history: e.history.map(h => ({ ...h, approved: true }))
-        };
-      }
-      return e;
-    }));
+    setTimeClockLogs(prev => prev.map(l => l.employeeEmail === empId ? { ...l, approved: true } : l));
 
     const targetEmp = employees.find(e => e.id === empId);
     if (logOperationalEvent && targetEmp) {
@@ -633,26 +525,15 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const handleEditTimeEntry = () => {
     if (!editingLogId) return;
 
-    setEmployees(prev => prev.map(e => {
-      const logExists = e.history.find(h => h.id === editingLogId);
-      if (logExists) {
-        return {
-          ...e,
-          history: e.history.map(h => {
-            if (h.id === editingLogId) {
-              return {
-                ...h,
-                type: editType,
-                time: editTimeStr,
-                date: editDateStr,
-                gps: editGpsStr
-              };
-            }
-            return h;
-          })
-        };
-      }
-      return e;
+    setTimeClockLogs(prev => prev.map(l => {
+      if (l.id !== editingLogId) return l;
+      return {
+        ...l,
+        type: editType,
+        time: editTimeStr,
+        date: editDateStr,
+        gps: editGpsStr
+      };
     }));
 
     if (logOperationalEvent) {
@@ -1052,15 +933,15 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                   {selectedEmployee.name}
                 </h4>
                 <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  {selectedEmployee.title} • {selectedEmployee.crew}
+                  {selectedEmployee.title}{selectedEmployee.crew ? ` • ${selectedEmployee.crew}` : ""}
                 </p>
                 <p className="text-[10px] text-slate-400 font-mono mt-1">
                   Rate: ${selectedEmployee.hourlyRate}/hr regular • ${selectedEmployee.hourlyRate * 1.5}/hr Overtime
                 </p>
               </div>
-              
+
               <span className="px-3 py-1 bg-[#F3F4F6] text-slate-700 text-xs font-bold rounded-lg border border-slate-200 uppercase tracking-wider">
-                {selectedEmployee.department}
+                {selectedEmployee.department || "Unassigned"}
               </span>
             </div>
 
@@ -1601,7 +1482,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       {/* FRAMEWORK CONNECTIONS (As required by the guideline exactly) */}
       <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 text-left">
         <h4 className="text-[10px] font-black uppercase tracking-wider text-[#342D7E] mb-2">
-          LeadForgeOS Framework Connections
+          Owner's Local OS Framework Connections
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-sans">
           <div>

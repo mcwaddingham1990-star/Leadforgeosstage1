@@ -11,7 +11,7 @@ import { Customer, Estimate, SchedulingEvent } from "../types/domain";
  * point.
  */
 export function useDomainActions() {
-  const { leads, setLeads, setCustomers, estimates, setEstimates, setSchedulingEvents } = useDomainData();
+  const { leads, setLeads, customers, setCustomers, estimates, setEstimates, setSchedulingEvents } = useDomainData();
   const { logOperationalEvent } = useNavTelemetry();
 
   const convertLeadToCustomer = (leadId: string) => {
@@ -24,7 +24,7 @@ export function useDomainActions() {
       contact: lead.name,
       phone: lead.phone,
       email: lead.email,
-      address: lead.address || "100 Operational Way",
+      address: lead.address || "",
       openJobs: 0,
       outstandingBalance: 0,
       lifetimeValue: lead.estimatedValue || 0,
@@ -49,7 +49,7 @@ export function useDomainActions() {
       company: lead.company || lead.name + " Inc",
       customerName: lead.name,
       salesRep: lead.salesRep || "Unassigned",
-      amount: lead.estimatedValue || 1500,
+      amount: lead.estimatedValue || 0,
       status: "Draft",
       createdDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
@@ -64,6 +64,14 @@ export function useDomainActions() {
     const estimate = estimates.find(e => e.id === estimateId);
     if (!estimate) return;
 
+    // Cross-reference the real customer record for real contact info —
+    // an estimate itself only stores a customer name/company, not
+    // phone/email. No real match means honestly blank fields, not
+    // fabricated placeholder contact details.
+    const matchedCustomer = customers.find(
+      c => c.contact === estimate.customerName || c.company === estimate.company
+    );
+
     const newJob: SchedulingEvent = {
       id: "job_" + Math.random().toString(36).substring(2, 9),
       eventType: "Job",
@@ -71,12 +79,15 @@ export function useDomainActions() {
       startTime: "09:00 AM",
       endTime: "12:00 PM",
       customer: estimate.customerName,
-      customerPhone: "(555) 123-4567",
-      customerEmail: "client@example.com",
-      customerAddress: "1024 Industrial Pkwy, Seattle WA",
-      assignedEmployee: "Theresa W.",
-      assignedCrew: "Crew Alpha",
-      location: "Seattle Area",
+      customerPhone: matchedCustomer?.phone || "",
+      customerEmail: matchedCustomer?.email || "",
+      customerAddress: matchedCustomer?.address || estimate.address || "",
+      // No real rule exists yet for which employee should get an
+      // auto-created job — leaving it unassigned for a real dispatcher
+      // to pick is honest; a hardcoded name never matching a real
+      // employee is not.
+      assignedEmployee: "",
+      location: matchedCustomer?.address || estimate.address || "",
       priority: "Medium",
       notes: "Auto-generated from Approved Estimate " + estimate.number,
       status: "Scheduled",
@@ -85,7 +96,7 @@ export function useDomainActions() {
 
     setSchedulingEvents(prev => [newJob, ...prev]);
     setEstimates(prev => prev.map(e => (e.id === estimateId ? { ...e, status: "Accepted" } : e)));
-    logOperationalEvent("Estimate Approved", `${estimate.number} converted to Scheduled Job`, "✅");
+    logOperationalEvent("Estimate Approved", `${estimate.number} converted to Scheduled Job — needs employee assignment`, "✅");
   };
 
   return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob };

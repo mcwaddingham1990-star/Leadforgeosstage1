@@ -106,7 +106,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions } = useDomainData();
+  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents } = useDomainData();
   const { triggerNotification } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
@@ -160,7 +160,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   // --- Event Node definition & placement for SVG flow diagram ---
   const EVENT_NODES: EventEngineNode[] = [
-    { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "LeadForge Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
+    { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "Owner's Local OS Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
     { id: "lead_created", label: "Lead Created", category: "leads", description: "Sales funnel registers a new pipeline prospect.", origin: "Customers Intake Engine", destination: "Estimates Compiler", changesMade: "Initialized closing probability vector & conversion trackers.", triggeredModules: ["Leads", "AI Optimizer"], x: 260, y: 50 },
     { id: "est_created", label: "Estimate Created", category: "estimates", description: "Quote or service bid generated.", origin: "Leads AI Analyzer", destination: "Scheduling Dispatcher", changesMade: "Saved price quotes, materials array, and signature hooks.", triggeredModules: ["Estimates", "Revenue Matrix"], x: 460, y: 50 },
     { id: "sched_updated", label: "Schedule Updated", category: "scheduling", description: "Appointment allocated on central scheduling board.", origin: "Estimates Approval Pipeline", destination: "Dispatch Controller", changesMade: "Pinned block on Gantt dispatch layout, reserved Crew Alpha.", triggeredModules: ["Scheduling", "Notifications Center"], x: 60, y: 180 },
@@ -197,15 +197,46 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   ]);
 
   // --- 4. DATABASE CENTER RECORDS & CHECKS ---
-  const [dbCollections, setDbCollections] = useState<Array<{ name: string; docCount: number; indexStatus: "Indexed" | "Stale"; sizeKb: number }>>([
-    { name: "Customers", docCount: 42, indexStatus: "Indexed", sizeKb: 254 },
-    { name: "Leads", docCount: 18, indexStatus: "Indexed", sizeKb: 110 },
-    { name: "Estimates", docCount: 29, indexStatus: "Indexed", sizeKb: 180 },
-    { name: "Scheduling", docCount: 12, indexStatus: "Indexed", sizeKb: 95 },
-    { name: "Messages", docCount: 114, indexStatus: "Indexed", sizeKb: 512 },
-    { name: "Inventory", docCount: 65, indexStatus: "Indexed", sizeKb: 140 },
-    { name: "Documents", docCount: 21, indexStatus: "Indexed", sizeKb: 2048 }
+  // Index status and storage footprint have no real client-accessible
+  // source (that needs the Firebase Admin SDK, not available here), so
+  // those stay illustrative -- but doc counts are the one number an owner
+  // would actually notice is wrong, so those are real, live counts from
+  // the same Firestore-backed collections the rest of the app uses.
+  const [dbCollectionMeta] = useState<Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>>([
+    { name: "Customers", indexStatus: "Indexed", sizeKb: 254 },
+    { name: "Leads", indexStatus: "Indexed", sizeKb: 110 },
+    { name: "Estimates", indexStatus: "Indexed", sizeKb: 180 },
+    { name: "Scheduling", indexStatus: "Indexed", sizeKb: 95 },
+    { name: "Messages", indexStatus: "Indexed", sizeKb: 512 },
+    { name: "Inventory", indexStatus: "Indexed", sizeKb: 140 },
+    { name: "Documents", indexStatus: "Indexed", sizeKb: 2048 }
   ]);
+  const [dbCollectionSizes, setDbCollectionSizes] = useState<Record<string, number>>(
+    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.sizeKb]))
+  );
+  const [dbCollectionIndexStatus, setDbCollectionIndexStatus] = useState<Record<string, "Indexed" | "Stale">>(
+    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.indexStatus]))
+  );
+  const realDocCounts: Record<string, number | null> = useMemo(() => ({
+    Customers: customers.length,
+    Leads: leads.length,
+    Estimates: estimates.length,
+    Scheduling: schedulingEvents.length,
+    Messages: null, // not exposed through the shared domain context yet
+    Inventory: inventoryList.length,
+    Documents: documents.length
+  }), [customers, leads, estimates, schedulingEvents, inventoryList, documents]);
+  const dbCollections = dbCollectionMeta.map(c => ({
+    name: c.name,
+    docCount: realDocCounts[c.name],
+    indexStatus: dbCollectionIndexStatus[c.name],
+    sizeKb: dbCollectionSizes[c.name]
+  }));
+  const setDbCollections = (updater: (prev: typeof dbCollectionMeta) => Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>) => {
+    const updated = updater(dbCollectionMeta);
+    setDbCollectionSizes(Object.fromEntries(updated.map(c => [c.name, c.sizeKb])));
+    setDbCollectionIndexStatus(Object.fromEntries(updated.map(c => [c.name, c.indexStatus])));
+  };
 
   const [dbDiagnosticResult, setDbDiagnosticResult] = useState<{
     brokenReferences: number;
@@ -269,9 +300,9 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   // --- 9. BACKUP MATRIX ---
   const [backupHistory, setBackupHistory] = useState<Array<{ id: string; name: string; date: string; sizeMb: number; verified: boolean; type: "Manual" | "Automatic" }>>([
-    { id: "bk_1", name: "LeadForge_Backup_Production_20260706_040000.tar.gz", date: "2026-07-06 04:00", sizeMb: 14.8, verified: true, type: "Automatic" },
-    { id: "bk_2", name: "LeadForge_Backup_Production_20260705_040000.tar.gz", date: "2026-07-05 04:00", sizeMb: 14.5, verified: true, type: "Automatic" },
-    { id: "bk_3", name: "LeadForge_Backup_Manual_20260706_150022.tar.gz", date: "2026-07-06 15:00", sizeMb: 15.1, verified: true, type: "Manual" }
+    { id: "bk_1", name: "OwnersLocal_Backup_Production_20260706_040000.tar.gz", date: "2026-07-06 04:00", sizeMb: 14.8, verified: true, type: "Automatic" },
+    { id: "bk_2", name: "OwnersLocal_Backup_Production_20260705_040000.tar.gz", date: "2026-07-05 04:00", sizeMb: 14.5, verified: true, type: "Automatic" },
+    { id: "bk_3", name: "OwnersLocal_Backup_Manual_20260706_150022.tar.gz", date: "2026-07-06 15:00", sizeMb: 15.1, verified: true, type: "Manual" }
   ]);
 
   // --- 10. AI BUSINESS INSIGHT DIAGNOSTICS & SCORE COPIES ---
@@ -360,7 +391,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(telemetryBundle, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `LeadForge_OS_Telemetry_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `OwnersLocal_OS_Telemetry_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -374,7 +405,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     setTimeout(() => {
       const newBackup = {
         id: `bk_${Date.now()}`,
-        name: `LeadForge_Backup_Manual_${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}.tar.gz`,
+        name: `OwnersLocal_Backup_Manual_${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}.tar.gz`,
         date: new Date().toISOString().replace("T", " ").slice(0, 16),
         sizeMb: Number((14.5 + Math.random()).toFixed(1)),
         verified: true,
@@ -1107,7 +1138,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                     {dbCollections.map((col, i) => (
                       <tr key={i} className="hover:bg-slate-50/50">
                         <td className="p-3 font-bold text-slate-800">📂 {col.name}</td>
-                        <td className="p-3 text-center font-mono font-bold">{col.docCount} records</td>
+                        <td className="p-3 text-center font-mono font-bold">{col.docCount === null ? "—" : `${col.docCount} records`}</td>
                         <td className="p-3 text-center font-sans font-medium text-slate-500">Many-to-Many</td>
                         <td className="p-3 text-center">
                           <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-widest">

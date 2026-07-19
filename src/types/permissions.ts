@@ -1,116 +1,65 @@
-// Granular per-module permissions. Replaces the old model where a role's
-// `permissions: string[]` only gated whether a module was visible at all
-// (view or nothing) with real per-action control.
+// Per-module permissions. Every module gets exactly one setting, chosen
+// from four levels -- no separate per-action toggles, no global switch
+// that applies across modules. Each module is fully independent.
 
-export type PermissionAction =
-  | "view"
-  | "create"
-  | "edit"
-  | "delete"
-  | "approve"
-  | "export"
-  | "manage";
+export type PermissionLevel = "none" | "view" | "edit" | "delete";
 
-export const PERMISSION_ACTIONS: PermissionAction[] = [
-  "view",
-  "create",
-  "edit",
-  "delete",
-  "approve",
-  "export",
-  "manage"
-];
+export const PERMISSION_LEVELS: PermissionLevel[] = ["none", "view", "edit", "delete"];
 
-export type ModulePermissions = Record<PermissionAction, boolean>;
-
-export type GranularPermissions = Record<string, ModulePermissions>;
-
-const NO_ACCESS: ModulePermissions = {
-  view: false,
-  create: false,
-  edit: false,
-  delete: false,
-  approve: false,
-  export: false,
-  manage: false
+export const PERMISSION_LEVEL_LABELS: Record<PermissionLevel, string> = {
+  none: "No Access",
+  view: "View",
+  edit: "Create & Edit",
+  delete: "Delete"
 };
 
+// Levels are ordered/hierarchical: Delete implies Create & Edit implies View.
+const LEVEL_RANK: Record<PermissionLevel, number> = { none: 0, view: 1, edit: 2, delete: 3 };
+
+export type GranularPermissions = Record<string, PermissionLevel>;
+
+/**
+ * `action` is checked against the module's single level using the same
+ * hierarchy the levels are ordered in -- e.g. hasPermission(perms, "jobs",
+ * "view") is true for a module set to "edit" or "delete" too, since those
+ * levels include viewing.
+ */
 export function hasPermission(
   granular: GranularPermissions | undefined,
   moduleId: string,
-  action: PermissionAction
+  action: "view" | "edit" | "delete"
 ): boolean {
   if (!granular) return false;
-  const mod = granular[moduleId];
-  if (!mod) return false;
-  // "manage" implies every other action within that module.
-  if (mod.manage) return true;
-  return !!mod[action];
+  const level = granular[moduleId] || "none";
+  return LEVEL_RANK[level] >= LEVEL_RANK[action];
+}
+
+export function getPermissionLevel(granular: GranularPermissions | undefined, moduleId: string): PermissionLevel {
+  if (!granular) return "none";
+  return granular[moduleId] || "none";
 }
 
 /**
- * Builds a granular permission set from the legacy module-access list
- * (`permissions: string[]`), so existing roles/employees keep working
- * without needing to be manually reconfigured. Tier controls how much
- * beyond "view" a module gets by default.
- *
- * - "full": view/create/edit/export granted, delete/approve/manage withheld
- *   (owners and managers still need to explicitly grant delete/approve).
- * - "standard": view/create/edit granted, nothing destructive or admin.
- * - "view-only": view only — for reporting/reference-only roles.
+ * Builds a granular permission set with every listed module set to the
+ * same level -- used for role-template defaults, e.g. a fresh custom
+ * role starting at "view" until the owner customizes it further.
  */
 export function defaultGranularFromModuleList(
   modules: string[],
-  tier: "full" | "standard" | "view-only" = "standard"
+  level: PermissionLevel = "view"
 ): GranularPermissions {
   const result: GranularPermissions = {};
   for (const moduleId of modules) {
-    if (tier === "view-only") {
-      result[moduleId] = { ...NO_ACCESS, view: true };
-    } else if (tier === "full") {
-      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true, export: true };
-    } else {
-      result[moduleId] = { ...NO_ACCESS, view: true, create: true, edit: true };
-    }
+    result[moduleId] = level;
   }
   return result;
 }
 
-export function emptyModulePermissions(): ModulePermissions {
-  return { ...NO_ACCESS };
-}
-
-/**
- * Builds a real per-module GranularPermissions object by applying one flat
- * set of action toggles (the existing role-editor checkboxes: view/create/
- * edit/delete/approve/export) uniformly across every module the role can
- * see. Not yet independently configurable per module — that's the next
- * step — but this makes the existing checkboxes real (they previously set
- * state that was never saved or enforced) instead of decorative.
- */
-export function buildGranularFromCapabilities(
-  modules: string[],
-  capabilities: { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean; export: boolean }
-): GranularPermissions {
-  const result: GranularPermissions = {};
-  for (const moduleId of modules) {
-    result[moduleId] = {
-      view: !!capabilities.view,
-      create: !!capabilities.create,
-      edit: !!capabilities.edit,
-      delete: !!capabilities.delete,
-      approve: !!capabilities.approve,
-      export: !!capabilities.export,
-      manage: false
-    };
-  }
-  return result;
-}
-
+/** Owners always have full (Delete-tier, i.e. everything) access to every module. */
 export function fullAccessGranular(modules: string[]): GranularPermissions {
   const result: GranularPermissions = {};
   for (const moduleId of modules) {
-    result[moduleId] = { view: true, create: true, edit: true, delete: true, approve: true, export: true, manage: true };
+    result[moduleId] = "delete";
   }
   return result;
 }

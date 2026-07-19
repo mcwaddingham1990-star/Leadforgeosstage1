@@ -102,6 +102,21 @@ const MOCK_MAP_GRID = {
   "Van 3 (Mercedes Sprinter)": { x: 50, y: 70, type: "vehicle" }
 };
 
+// Deterministic fallback grid position for a real name that isn't in the
+// small illustrative MOCK_MAP_GRID lookup above (i.e. almost always, for a
+// real customer/employee/vehicle) -- stable across re-renders instead of
+// jumping to a new random spot every time, while still not claiming to be
+// a real GPS location (that's what the actual Google Map page is for).
+function deterministicGridPosition(key: string, minX: number, spreadX: number, minY: number, spreadY: number): { x: number; y: number } {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = key.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const xFrac = (Math.abs(hash) % 1000) / 1000;
+  const yFrac = (Math.abs(hash >> 3) % 1000) / 1000;
+  return { x: minX + xFrac * spreadX, y: minY + yFrac * spreadY };
+}
+
 export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -115,7 +130,10 @@ export const DispatchPage: React.FC = () => {
     logOperationalEvent
   } = useNavTelemetry();
   // Current Selected Date in Dispatch view - Defaults to "2026-07-05" (Today in system context)
-  const [selectedDate, setSelectedDate] = useState("2026-07-05");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   
   // Search query
   const [searchQuery, setSearchQuery] = useState("");
@@ -269,13 +287,17 @@ export const DispatchPage: React.FC = () => {
   const filteredEvents = useMemo(() => {
     let result = [...normalizedEvents];
 
-    // 1. Role Restrictions
+    // 1. Role Restrictions -- compare against the real logged-in user's
+    // real name, not a hardcoded fake name or their role title (a job
+    // title like "technician" isn't a person's name, so that comparison
+    // never matched either — restricted roles would have seen almost
+    // nothing, not even their own real assigned jobs).
     const roleLower = activeRole.toLowerCase();
     const isRestrictedRole = roleLower.includes("technician") || roleLower.includes("driver") || roleLower.includes("installer");
     if (isRestrictedRole) {
-      // Find events assigned to John Doe (since the default active driver is John Doe)
+      const myName = (loggedInUser?.name || "").trim().toLowerCase();
       result = result.filter(
-        (e) => e.assignedEmployee === "John Doe" || e.assignedEmployee?.toLowerCase() === activeRole.toLowerCase()
+        (e) => !!myName && e.assignedEmployee.trim().toLowerCase() === myName
       );
     }
 
@@ -342,7 +364,8 @@ export const DispatchPage: React.FC = () => {
     filterPriority,
     filterDepartment,
     filterEventType,
-    activeSummaryFilter
+    activeSummaryFilter,
+    loggedInUser
   ]);
 
   // Open Assign Modal with preloaded details
@@ -373,7 +396,7 @@ export const DispatchPage: React.FC = () => {
 
     // 1. Add Jobs for current date
     filteredEvents.forEach((evt) => {
-      const coord = MOCK_MAP_GRID[evt.customer as keyof typeof MOCK_MAP_GRID] || { x: 30 + Math.random() * 40, y: 20 + Math.random() * 50 };
+      const coord = MOCK_MAP_GRID[evt.customer as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(evt.customer, 30, 40, 20, 50);
       pins.push({
         id: evt.id,
         label: evt.customer,
@@ -398,7 +421,7 @@ export const DispatchPage: React.FC = () => {
       // Find if assigned today
       const isAssigned = filteredEvents.some(e => e.assignedEmployee === tech);
       if (isAssigned) {
-        const coord = MOCK_MAP_GRID[tech as keyof typeof MOCK_MAP_GRID] || { x: 15 + Math.random() * 70, y: 15 + Math.random() * 70 };
+        const coord = MOCK_MAP_GRID[tech as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(tech, 15, 70, 15, 70);
         pins.push({
           id: `tech_${tech.replace(/\s+/g, "_")}`,
           label: tech,
@@ -416,7 +439,7 @@ export const DispatchPage: React.FC = () => {
       if (vehicle !== "None") {
         const isUsed = filteredEvents.some(e => e.assignedVehicle === vehicle);
         if (isUsed) {
-          const coord = MOCK_MAP_GRID[vehicle as keyof typeof MOCK_MAP_GRID] || { x: 20 + Math.random() * 60, y: 20 + Math.random() * 60 };
+          const coord = MOCK_MAP_GRID[vehicle as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(vehicle, 20, 60, 20, 60);
           pins.push({
             id: `veh_${vehicle.replace(/\s+/g, "_")}`,
             label: vehicle,

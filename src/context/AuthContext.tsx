@@ -11,13 +11,7 @@ export interface LoggedInUser {
   isEmployee?: boolean;
   name?: string;
   goals?: string;
-  /**
-   * NOTE: this is never actually populated wherever loggedInUser gets
-   * constructed (sign-in/sign-up/onboarding) — declared here only so
-   * existing reads of it (e.g. TrainingPage's employee businessId
-   * derivation) keep their current, already-broken-for-employees runtime
-   * behavior instead of picking up a new type error. See TrainingPage.tsx.
-   */
+  /** The owner's business email — the real multi-tenant scoping key for an employee session (an employee's own `email` is a different tenant). Populated on every real sign-in/onboarding path in App.tsx. */
   businessEmail?: string;
 }
 

@@ -157,3 +157,84 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
     unreadable: parsed.unreadable ?? false
   };
 }
+
+export interface ScanFinancialDocumentRequest {
+  /** Base64-encoded image data, no data: URI prefix. */
+  imageBase64: string;
+  mimeType: string;
+}
+
+export interface ScanFinancialDocumentResponse {
+  documentType: "receipt" | "check" | "invoice" | "unknown";
+  /** The vendor being paid (receipt/invoice) or the payer/payee named on a check. */
+  counterpartyName: string | null;
+  amount: number | null;
+  date: string | null;
+  /** True if the model could not confidently read a real financial document from the image. */
+  unreadable: boolean;
+}
+
+const FINANCIAL_DOCUMENT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    documentType: { type: Type.STRING, enum: ["receipt", "check", "invoice", "unknown"] },
+    counterpartyName: { type: Type.STRING, nullable: true },
+    amount: { type: Type.NUMBER, nullable: true },
+    date: { type: Type.STRING, nullable: true },
+    unreadable: { type: Type.BOOLEAN }
+  },
+  required: ["documentType", "unreadable"]
+};
+
+/**
+ * Real OCR via Gemini's multimodal vision for expense receipts and checks
+ * (income). Shares the same "never fabricate, leave null instead" contract
+ * as handleScanReceipt — this is a manual-entry ALTERNATIVE, not a
+ * replacement: every field it returns is meant to prefill an editable form
+ * the user confirms before anything is saved, and typing the same form in
+ * by hand with no photo at all is an equally first-class path.
+ */
+export async function handleScanFinancialDocument(req: ScanFinancialDocumentRequest): Promise<ScanFinancialDocumentResponse> {
+  const ai = getClient();
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
+          {
+            text: [
+              "This image is a photo of a business financial document for a local service business: either an expense receipt/invoice (money paid out to a vendor) or a check (money received/income).",
+              "Identify which it is, then extract only what you can actually read in the image. Do not guess or fabricate values.",
+              "For a receipt/invoice: counterpartyName is the vendor/business being paid, amount is the total.",
+              "For a check: counterpartyName is the payer (whoever wrote/signed the check, or the account holder name printed on it), amount is the dollar amount.",
+              "If a field isn't visible or legible, set it to null. Set unreadable=true only if the image doesn't contain a legible financial document at all."
+            ].join(" ")
+          }
+        ]
+      }
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: FINANCIAL_DOCUMENT_SCHEMA
+    }
+  });
+
+  const raw = response.text ?? "{}";
+  let parsed: Partial<ScanFinancialDocumentResponse>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { documentType: "unknown", counterpartyName: null, amount: null, date: null, unreadable: true };
+  }
+
+  return {
+    documentType: parsed.documentType ?? "unknown",
+    counterpartyName: parsed.counterpartyName ?? null,
+    amount: parsed.amount ?? null,
+    date: parsed.date ?? null,
+    unreadable: parsed.unreadable ?? false
+  };
+}

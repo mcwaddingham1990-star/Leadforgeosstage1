@@ -118,7 +118,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
   const handleSaveConfig = () => {
     setShowSaveToast(true);
-    logOperationalEvent("AI Config", "LeadForge Global AI Knowledge database and tone configs saved.", "⚙️");
+    logOperationalEvent("AI Config", "Owner's Local OS Global AI Knowledge database and tone configs saved.", "⚙️");
     setTimeout(() => setShowSaveToast(false), 3000);
   };
 
@@ -146,10 +146,10 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-              LeadForge AI Command Center
+              Owner's AI Command Center
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold">
-              The neural core of LeadForge Local OS • Intelligent routing, automations & business diagnostics
+              The neural core of Owner's Local OS • Intelligent routing, automations & business diagnostics
             </p>
           </div>
         </div>
@@ -604,7 +604,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
               </span>
               <h3 className="text-base font-extrabold uppercase mt-1.5 tracking-wider">Active Workspace AI</h3>
               <p className="text-[10.5px] text-slate-300 leading-normal font-sans font-medium">
-                LeadForge AI watches active module screens, syncing real-time inputs to optimize task proposal flows.
+                Owner's AI watches active module screens, syncing real-time inputs to optimize task proposal flows.
               </p>
             </div>
             
@@ -691,7 +691,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
           <div>
             <p className="font-bold text-white mb-0.5">Configuration Saved</p>
-            <p className="text-slate-400 font-medium text-xs leading-tight">Neural parameters applied successfully to LeadForge Core.</p>
+            <p className="text-slate-400 font-medium text-xs leading-tight">Neural parameters applied successfully to Owner's Local OS Core.</p>
           </div>
         </div>
       )}
