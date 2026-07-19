@@ -307,6 +307,11 @@ function getRevenueChartData(
   const now = new Date();
   const expenseTx = transactions.filter((t) => t.type === "expense");
   const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
+  // Real revenue = job-completion events (revenueEvents) + manually-logged
+  // or scanned income transactions (e.g. a photographed check) — both are
+  // real money in, and logging one should actually move these totals.
+  const incomeTx = transactions.filter((t) => t.type === "income");
+  const revenueSource: Array<{ amount: number; date: string }> = [...revenueEvents, ...incomeTx];
 
   const sumInRange = (items: Array<{ amount: number; date: string }>, start: Date, end: Date) =>
     items
@@ -317,7 +322,7 @@ function getRevenueChartData(
       .reduce((sum, e) => sum + e.amount, 0);
 
   const buildRow = (time: string, start: Date, end: Date) => {
-    const Revenue = sumInRange(revenueEvents, start, end);
+    const Revenue = sumInRange(revenueSource, start, end);
     const Expenses = sumInRange(expenseTx, start, end);
     return { time, Revenue, Expenses, Profit: Revenue - Expenses };
   };
@@ -350,7 +355,7 @@ function getRevenueChartData(
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const series = buildDays(7, (d) => d.toLocaleDateString(undefined, { weekday: "short" }));
     const priorTotal = sumInRange(
-      revenueEvents,
+      revenueSource,
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
     );
@@ -367,7 +372,7 @@ function getRevenueChartData(
     const periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const priorTotal = sumInRange(
-      revenueEvents,
+      revenueSource,
       new Date(now.getFullYear(), now.getMonth() - 5, 1),
       new Date(now.getFullYear(), now.getMonth() - 2, 1)
     );
@@ -393,7 +398,7 @@ function getRevenueChartData(
     const priorYear = now.getFullYear() + Math.floor(priorQIndex / 4);
     const priorQNum = ((priorQIndex % 4) + 4) % 4;
     const priorTotal = sumInRange(
-      revenueEvents,
+      revenueSource,
       new Date(priorYear, priorQNum * 3, 1),
       new Date(priorYear, priorQNum * 3 + 3, 1)
     );
@@ -405,7 +410,7 @@ function getRevenueChartData(
   const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
   const priorTotal = sumInRange(
-    revenueEvents,
+    revenueSource,
     new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
     new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
   );
@@ -854,8 +859,13 @@ export default function App() {
 
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
-  // instead of reflecting what's actually been recognized.
-  const completedJobsRevenue = revenueEvents.reduce((sum, e) => sum + e.amount, 0);
+  // instead of reflecting what's actually been recognized. Includes both
+  // job-completion revenue (revenueEvents) and manually-logged/scanned
+  // income (transactions of type "income" — e.g. a photographed check) so
+  // logging income actually moves this number, not just an ignored ledger.
+  const completedJobsRevenue =
+    revenueEvents.reduce((sum, e) => sum + e.amount, 0) +
+    transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
 
@@ -6230,7 +6240,8 @@ Access to full financial telemetry is restricted.`;
                                 });
                               }
 
-                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0);
+                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
+                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
                               const curExpenses = sumBetween(null, curStart, curEnd);
                               if (curRevenue > 0) {
                                 const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
