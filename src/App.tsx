@@ -2770,25 +2770,24 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO SECTION - Absolutely centered on top, same place/size
-                      as before. Real transparent PNG asset at its real aspect
-                      ratio (947x593) so nothing is stretched or squashed;
-                      only the file changed (owners-logo.png -> owners-logo1.png). */}
+                  {/* LOGO BANNER - Full-bleed image that IS the card's top edge
+                      (baked-in rounded corners + gradient background), so it's
+                      laid flush edge-to-edge against the card container with no
+                      visible seam. Real aspect ratio (913x373) preserved. */}
                   <div
                     style={{
-                      top: `${99.895 * scale}px`,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: `${357.5 * scale}px`,
-                      height: `${357.5 * scale * (593 / 947)}px`
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${cardWidth * (373 / 913)}px`
                     }}
-                    className="absolute flex justify-center pointer-events-none"
+                    className="absolute pointer-events-none"
                   >
                     <img
-                      src="/branding/owners-logo1.png"
+                      src="/branding/CutPaste_2026-07-20_17-51-10-433.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-contain drop-shadow-[0_0_18px_rgba(30,144,255,0.55)]"
+                      className="object-cover"
                       referrerPolicy="no-referrer"
                     />
                   </div>
