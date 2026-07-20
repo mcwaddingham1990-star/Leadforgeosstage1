@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { onCollectionEvent, CollectionEvent } from "../lib/eventBus";
 import {
   Activity,
   AlertCircle,
@@ -68,16 +69,18 @@ export interface EventEngineNode {
   y: number;
 }
 
-export interface SimulatedEvent {
+/**
+ * One real create/update/delete event observed on the shared Event Bus
+ * (see src/lib/eventBus.ts). Every Firestore-backed collection auto-emits
+ * through that bus via useFirestoreCollection, so this is a genuine rolling
+ * log of what actually happened in this account's data -- never simulated.
+ */
+export interface RealActivityEvent {
   id: string;
-  timestamp: string;
-  origin: string;
-  destination: string[];
-  processingTime: number; // ms
-  status: "Pending" | "Running" | "Completed" | "Failed";
-  changesMade: string;
-  payload: Record<string, any>;
-  retryCount: number;
+  timestamp: string; // real wall-clock time the event was observed, via new Date()
+  collection: string;
+  type: "created" | "updated" | "deleted";
+  description: string;
 }
 
 export interface DecisionLogEntry {
@@ -89,6 +92,80 @@ export interface DecisionLogEntry {
   approvedBy: string;
   executed: boolean;
   undoAvailable: boolean;
+}
+
+// Every Firestore-backed collection in this app, plus a human-friendly label
+// for the ones the Live Event Queue subscribes to below (item 3 of the
+// no-fake-data pass). Matches the collection names used in App.tsx's
+// useFirestoreCollection(...) calls and the "roster" collection powering
+// recentRoster.
+const REAL_COLLECTION_LABELS: Record<string, string> = {
+  customers: "Customers",
+  leads: "Leads",
+  estimates: "Estimates",
+  scheduling_events: "Scheduling",
+  inventory: "Inventory",
+  documents: "Documents",
+  bulletins: "Bulletins",
+  notifications: "Notifications",
+  recent_ai_actions: "AI Actions",
+  snapshots: "Snapshots",
+  revenue_events: "Revenue",
+  employees: "Employees",
+  time_clock_logs: "Time Clock",
+  transactions: "Transactions",
+  chart_of_accounts: "Chart of Accounts",
+  journal_entries: "Journal Entries",
+  invoices: "Invoices",
+  bills: "Bills",
+  vendors: "Vendors",
+  conversations: "Messages",
+  bank_accounts: "Bank Accounts",
+  recurring_transactions: "Recurring Transactions",
+  mileage_logs: "Mileage Logs",
+  budgets: "Budgets",
+  sales_tax_rates: "Sales Tax Rates",
+  roster: "Roster"
+};
+
+/**
+ * Short, honest description of a real CollectionEvent for the activity log.
+ * Only uses field names verified against src/types/domain.ts and
+ * src/types/accounting.ts; anything not verified falls back to a generic
+ * description rather than guessing a field that might not exist.
+ */
+function describeRealCollectionEvent(collection: string, evt: CollectionEvent): string {
+  const item: any = evt.item || {};
+  switch (collection) {
+    case "customers":
+      return item.company ? `Customer "${item.company}"` : "A customer record";
+    case "leads":
+      return item.company || item.name ? `Lead "${item.company || item.name}"` : "A lead record";
+    case "estimates":
+      return item.number ? `Estimate ${item.number}` : "An estimate record";
+    case "scheduling_events":
+      return item.customer ? `Scheduling event for "${item.customer}"` : "A scheduling event";
+    case "inventory":
+      return item.name ? `Inventory item "${item.name}"` : "An inventory record";
+    case "documents":
+      return item.name ? `Document "${item.name}"` : "A document record";
+    case "invoices":
+      return item.invoiceNumber ? `Invoice ${item.invoiceNumber}` : "An invoice record";
+    case "bills":
+      return item.billNumber ? `Bill ${item.billNumber}` : "A bill record";
+    case "vendors":
+      return item.name ? `Vendor "${item.name}"` : "A vendor record";
+    case "bank_accounts":
+      return item.name ? `Bank account "${item.name}"` : "A bank account record";
+    case "employees": {
+      const fullName = [item.firstName, item.lastName].filter(Boolean).join(" ");
+      return fullName ? `Employee ${fullName}` : "An employee record";
+    }
+    case "transactions":
+      return item.description ? `Transaction "${item.description}"` : "A transaction record";
+    default:
+      return `A record in ${REAL_COLLECTION_LABELS[collection] || collection}`;
+  }
 }
 
 interface OwnerConsolePageProps {
@@ -106,7 +183,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents } = useDomainData();
+  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents, employees, invoices, transactions } = useDomainData();
   const { triggerNotification } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
@@ -128,20 +205,16 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   const [activeTab, setActiveTab] = useState<"engine" | "database" | "ai" | "security" | "backups" | "system">("engine");
   const [isConfirmReportModalOpen, setIsConfirmReportModalOpen] = useState<boolean>(false);
   const [devModeActive, setDevModeActive] = useState<boolean>(true);
-  const [isSystemOnline, setIsSystemOnline] = useState<boolean>(true);
-  const [overallHealthStatus, setOverallHealthStatus] = useState<"Healthy" | "Warning" | "Critical" | "Offline">("Healthy");
-  
-  // Real-time changing CPU, Memory, Request statistics
-  const [cpuUsage, setCpuUsage] = useState<number>(14.8);
-  const [memoryUsage, setMemoryUsage] = useState<number>(542);
-  const [storageUsage, setStorageUsage] = useState<number>(4.28);
-  const [networkUsage, setNetworkUsage] = useState<number>(6.4);
-  const [activeUsersCount, setActiveUsersCount] = useState<number>(8);
-  const [todayRequests, setTodayRequests] = useState<number>(412);
-  const [todayAiRequests, setTodayAiRequests] = useState<number>(104);
-  const [monthlyAiCost, setMonthlyAiCost] = useState<number>(15.42);
-  const [monthlyApiCost, setMonthlyApiCost] = useState<number>(8.90);
-  
+
+  // NOTE: This console previously showed simulated CPU/memory/network/
+  // active-user/AI-and-API-cost telemetry (cpuUsage, memoryUsage,
+  // storageUsage, networkUsage, activeUsersCount, todayRequests,
+  // todayAiRequests, monthlyAiCost, monthlyApiCost, overallHealthStatus).
+  // This is a client-side React/Firebase app with no server process to
+  // sample and no metrics/health endpoint, so none of that could ever be
+  // real -- it has been removed rather than faked. See the honest note in
+  // the "Infrastructure Diagnostics" card below.
+
   // Dynamic signal flow index
   const [selectedEventNode, setSelectedEventNode] = useState<string | null>("cust_created");
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
@@ -154,16 +227,17 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   const [logsFilterLevel, setLogsFilterLevel] = useState<string>("all");
   const [logsSearch, setLogsSearch] = useState<string>("");
 
-  // AI Active state
+  // AI Active state (local UI toggle only -- not wired to a real backend
+  // AI on/off switch; see feature flags note further down for the same
+  // caveat applied to the other decorative toggles in this file).
   const [aiEngineRunning, setAiEngineRunning] = useState<boolean>(true);
-  const [aiCacheCount, setAiCacheCount] = useState<number>(318);
 
   // --- Event Node definition & placement for SVG flow diagram ---
   const EVENT_NODES: EventEngineNode[] = [
     { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "Owner's Local OS Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
     { id: "lead_created", label: "Lead Created", category: "leads", description: "Sales funnel registers a new pipeline prospect.", origin: "Customers Intake Engine", destination: "Estimates Compiler", changesMade: "Initialized closing probability vector & conversion trackers.", triggeredModules: ["Leads", "AI Optimizer"], x: 260, y: 50 },
     { id: "est_created", label: "Estimate Created", category: "estimates", description: "Quote or service bid generated.", origin: "Leads AI Analyzer", destination: "Scheduling Dispatcher", changesMade: "Saved price quotes, materials array, and signature hooks.", triggeredModules: ["Estimates", "Revenue Matrix"], x: 460, y: 50 },
-    { id: "sched_updated", label: "Schedule Updated", category: "scheduling", description: "Appointment allocated on central scheduling board.", origin: "Estimates Approval Pipeline", destination: "Dispatch Controller", changesMade: "Pinned block on Gantt dispatch layout, reserved Crew Alpha.", triggeredModules: ["Scheduling", "Notifications Center"], x: 60, y: 180 },
+    { id: "sched_updated", label: "Schedule Updated", category: "scheduling", description: "Appointment allocated on central scheduling board.", origin: "Estimates Approval Pipeline", destination: "Dispatch Controller", changesMade: "Pinned block on Gantt dispatch layout, reserved the assigned crew.", triggeredModules: ["Scheduling", "Notifications Center"], x: 60, y: 180 },
     { id: "disp_updated", label: "Dispatch Updated", category: "dispatch", description: "Crew allocation instructions pushed to field technician dashboard.", origin: "Scheduling Event Trigger", destination: "Routes Optimizer", changesMade: "Sent dispatch ticket, mobile app coordinates activated.", triggeredModules: ["Dispatch", "Time Clock"], x: 260, y: 180 },
     { id: "job_updated", label: "Job Updated", category: "jobs", description: "Work ticket moves from pending to in-progress.", origin: "Dispatch Mobile Sync", destination: "Inventory Allocator", changesMade: "Logged start stamp, activated site-safety hazard checklist.", triggeredModules: ["Jobs", "Roster Control"], x: 460, y: 180 },
     { id: "inv_updated", label: "Inventory Updated", category: "inventory", description: "Stock levels subtracted for job parts consumption.", origin: "Jobs Parts Checklist", destination: "Revenue Calculator", changesMade: "Subtracted PVC pipe bundles & brass fittings.", triggeredModules: ["Inventory", "Documents Drawer"], x: 60, y: 310 },
@@ -174,121 +248,76 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   ];
 
   // --- 2. LIVE EVENT QUEUE DATA STATE ---
-  const [eventsQueue, setEventsQueue] = useState<SimulatedEvent[]>([
-    { id: "ev_101", timestamp: "2026-07-07 10:02:44", origin: "Estimates Approver", destination: ["Revenue Engine", "Scheduling Module"], processingTime: 44, status: "Completed", changesMade: "Estimate #EST-1092 set to APPROVED. Gross margins calculated.", payload: { id: 1092, value: 6200 }, retryCount: 0 },
-    { id: "ev_102", timestamp: "2026-07-07 10:02:45", origin: "Scheduling Router", destination: ["Dispatch Board"], processingTime: 120, status: "Completed", changesMade: "Auto-allocated Crew Alpha for Thursday 11:30 excavation.", payload: { crew: "Alpha", time: "11:30" }, retryCount: 0 },
-    { id: "ev_103", timestamp: "2026-07-07 10:05:12", origin: "Inventory Auditor", destination: ["Procurement Engine"], processingTime: 85, status: "Completed", changesMade: "Low Stock Alert: PVC pipes threshold tripped (8 left).", payload: { itemId: "pvc_3in", count: 8 }, retryCount: 0 },
-    { id: "ev_104", timestamp: "2026-07-07 10:06:01", origin: "AI Priorities Sweep", destination: ["Dashboard Widget", "Notifications Center"], processingTime: 310, status: "Completed", changesMade: "AI recommendation spawned for lead David Miller.", payload: { leadId: "l_81", urgency: "Normal" }, retryCount: 0 },
-    { id: "ev_105", timestamp: "2026-07-07 10:07:30", origin: "QuickBooks Webhook", destination: ["Revenue Database", "Integrations Tracker"], processingTime: 412, status: "Completed", changesMade: "Synchronized invoice #INV-2026-881 as PAID.", payload: { invoice: "INV-2026-881", amount: 4850 }, retryCount: 0 },
-    { id: "ev_106", timestamp: "2026-07-07 10:08:45", origin: "Telematics Dispatch", destination: ["Routes Panel"], processingTime: 212, status: "Failed", changesMade: "Google Maps routing API key limit exceeded. Over-quota status 403.", payload: { request: "Route Calc Crew Beta" }, retryCount: 2 },
-    { id: "ev_107", timestamp: "2026-07-07 10:09:12", origin: "Geofence Trigger", destination: ["Notification Matrix"], processingTime: 18, status: "Pending", changesMade: "Technician checked into Site A Pine St.", payload: { techId: "t_4", site: "Pine St" }, retryCount: 0 }
-  ]);
+  // Real rolling activity log fed by the shared Event Bus (see the
+  // useEffect below that subscribes to onCollectionEvent for every real
+  // Firestore-backed collection). Starts empty -- a brand-new account has
+  // no history, so it should show none rather than pre-seeded fake activity.
+  const [eventsQueue, setEventsQueue] = useState<RealActivityEvent[]>([]);
+  const MAX_EVENT_QUEUE_LENGTH = 50;
 
   // --- 3. SYSTEM LOG RECORDS ---
-  const [systemLogs, setSystemLogs] = useState<Array<{ id: string; time: string; level: "Error" | "Warning" | "Info" | "Debug"; source: string; message: string }>>([
-    { id: "log_1", time: "10:02:44", level: "Info", source: "Event Engine", message: "Initial handshaking on channel PORT_3000 established." },
-    { id: "log_2", time: "10:02:45", level: "Info", source: "Database", message: "Indexed 42 customers and 18 pending estimates in memory table." },
-    { id: "log_3", time: "10:03:10", level: "Info", source: "AI Assistant", message: "Gemini Model context window cleared. 14,810 active tokens embedded." },
-    { id: "log_4", time: "10:05:12", level: "Warning", source: "Inventory", message: "PVC 3-inch pressure pipe stock level (8) is below safety trigger (15)." },
-    { id: "log_5", time: "10:05:40", level: "Info", source: "Integrations", message: "Webhook successfully registered with stripe merchant portal." },
-    { id: "log_6", time: "10:06:01", level: "Debug", source: "AI Assistant", message: "Running priority lead-engagement vector evaluation." },
-    { id: "log_7", time: "10:08:45", level: "Error", source: "Integrations", message: "Google Maps Routing API error: 403 Quota Exceeded." },
-    { id: "log_8", time: "10:09:12", level: "Info", source: "Security", message: "User 'Owner' requested administrative access to System Diagnostics." }
-  ]);
+  // There is no real application logging backend in this app (no server
+  // process emitting structured logs), so this starts empty and the UI
+  // shows an honest "no logs recorded" state rather than fabricated lines.
+  // handleRefreshSystem below appends a genuine entry when the owner
+  // actually clicks that button -- that's real (an event that really
+  // happened, with a real timestamp), not simulated infrastructure output.
+  const [systemLogs, setSystemLogs] = useState<Array<{ id: string; time: string; level: "Error" | "Warning" | "Info" | "Debug"; source: string; message: string }>>([]);
 
   // --- 4. DATABASE CENTER RECORDS & CHECKS ---
-  // Index status and storage footprint have no real client-accessible
-  // source (that needs the Firebase Admin SDK, not available here), so
-  // those stay illustrative -- but doc counts are the one number an owner
-  // would actually notice is wrong, so those are real, live counts from
-  // the same Firestore-backed collections the rest of the app uses.
-  const [dbCollectionMeta] = useState<Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>>([
-    { name: "Customers", indexStatus: "Indexed", sizeKb: 254 },
-    { name: "Leads", indexStatus: "Indexed", sizeKb: 110 },
-    { name: "Estimates", indexStatus: "Indexed", sizeKb: 180 },
-    { name: "Scheduling", indexStatus: "Indexed", sizeKb: 95 },
-    { name: "Messages", indexStatus: "Indexed", sizeKb: 512 },
-    { name: "Inventory", indexStatus: "Indexed", sizeKb: 140 },
-    { name: "Documents", indexStatus: "Indexed", sizeKb: 2048 }
-  ]);
-  const [dbCollectionSizes, setDbCollectionSizes] = useState<Record<string, number>>(
-    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.sizeKb]))
-  );
-  const [dbCollectionIndexStatus, setDbCollectionIndexStatus] = useState<Record<string, "Indexed" | "Stale">>(
-    Object.fromEntries(dbCollectionMeta.map(c => [c.name, c.indexStatus]))
-  );
-  const realDocCounts: Record<string, number | null> = useMemo(() => ({
-    Customers: customers.length,
-    Leads: leads.length,
-    Estimates: estimates.length,
-    Scheduling: schedulingEvents.length,
-    Messages: null, // not exposed through the shared domain context yet
-    Inventory: inventoryList.length,
-    Documents: documents.length
-  }), [customers, leads, estimates, schedulingEvents, inventoryList, documents]);
-  const dbCollections = dbCollectionMeta.map(c => ({
-    name: c.name,
-    docCount: realDocCounts[c.name],
-    indexStatus: dbCollectionIndexStatus[c.name],
-    sizeKb: dbCollectionSizes[c.name]
-  }));
-  const setDbCollections = (updater: (prev: typeof dbCollectionMeta) => Array<{ name: string; indexStatus: "Indexed" | "Stale"; sizeKb: number }>) => {
-    const updated = updater(dbCollectionMeta);
-    setDbCollectionSizes(Object.fromEntries(updated.map(c => [c.name, c.sizeKb])));
-    setDbCollectionIndexStatus(Object.fromEntries(updated.map(c => [c.name, c.indexStatus])));
-  };
-
-  const [dbDiagnosticResult, setDbDiagnosticResult] = useState<{
-    brokenReferences: number;
-    duplicateDocuments: number;
-    missingIndices: number;
-    unusedSpaceKb: number;
-    suggestions: string[];
-  } | null>(null);
-  
-  const [dbRunningTask, setDbRunningTask] = useState<string | null>(null);
+  // Real, live document counts pulled straight from the same
+  // Firestore-backed collections every other screen in the app reads via
+  // useDomainData(). There is no Firebase Admin SDK available client-side,
+  // so per-collection storage footprint and index status can never be real
+  // here -- both have been removed rather than faked (see the "not
+  // available" note next to the collections table below).
+  const dbCollections = useMemo(() => ([
+    { name: "Customers", docCount: customers.length },
+    { name: "Leads", docCount: leads.length },
+    { name: "Estimates", docCount: estimates.length },
+    { name: "Scheduling", docCount: schedulingEvents.length },
+    { name: "Inventory", docCount: inventoryList.length },
+    { name: "Documents", docCount: documents.length },
+    { name: "Employees", docCount: employees.length },
+    { name: "Invoices", docCount: invoices.length },
+    { name: "Transactions", docCount: transactions.length }
+  ]), [customers, leads, estimates, schedulingEvents, inventoryList, documents, employees, invoices, transactions]);
 
   // --- 5. AI DECISION LOG TABLE ---
-  const [aiDecisionLogs, setAiDecisionLogs] = useState<DecisionLogEntry[]>([
-    { id: "ai_dec_1", time: "10:02:44", module: "Leads Advisor", reason: "Lead David Miller inactive for 72 hours", decision: "Generated promotional follow-up letter Draft B", approvedBy: "Owner", executed: true, undoAvailable: true },
-    { id: "ai_dec_2", time: "10:03:12", module: "Dispatch Router", reason: "Crew Beta late by 25 mins due to I-5 traffic delay", decision: "Drafted Missed Call Text Back message, scheduled SMS", approvedBy: "Pete (Dispatch)", executed: true, undoAvailable: true },
-    { id: "ai_dec_3", time: "10:05:00", module: "Pricing Analyst", reason: "Estimate draft #EST-1093 margin below 45%", decision: "Flagged low estimate warning and suggested material markup shift of +8%", approvedBy: "Auto-Rule Engine", executed: true, undoAvailable: false },
-    { id: "ai_dec_4", time: "10:07:44", module: "Schedule Optimizer", reason: "Crew Alpha double booking overlap warning", decision: "Suggested shifting Site Survey to 14:00 PM", approvedBy: "Owner", executed: true, undoAvailable: true }
-  ]);
+  // Driven entirely from recentAiActions (real, Firestore-backed -- the
+  // same log AIAssistantPage.tsx reads/writes for every real AI-driven
+  // action taken across the app). No local fake decision entries.
+  const aiDecisionLogs: DecisionLogEntry[] = useMemo(() => (
+    recentAiActions.map((a: any) => ({
+      id: a.id,
+      time: `${a.date || ""} ${a.time || ""}`.trim(),
+      module: a.module || "—",
+      reason: a.reason || "—",
+      decision: a.action || "—",
+      approvedBy: a.approvedBy || "—",
+      executed: a.status !== "Undone",
+      undoAvailable: a.status !== "Undone"
+    }))
+  ), [recentAiActions]);
 
   // --- 6. MODULE HEALTH REGISTRY ---
-  const [moduleHealthRegistry, setModuleHealthRegistry] = useState<Array<{ name: string; status: "Healthy" | "Performance Warning" | "Error" | "Offline"; pendingEvents: number; avgTimeMs: number }>>([
-    { name: "Dashboard", status: "Healthy", pendingEvents: 0, avgTimeMs: 14 },
-    { name: "Revenue", status: "Healthy", pendingEvents: 0, avgTimeMs: 25 },
-    { name: "Customers", status: "Healthy", pendingEvents: 0, avgTimeMs: 18 },
-    { name: "Leads", status: "Healthy", pendingEvents: 0, avgTimeMs: 40 },
-    { name: "Estimates", status: "Healthy", pendingEvents: 0, avgTimeMs: 35 },
-    { name: "Scheduling", status: "Healthy", pendingEvents: 1, avgTimeMs: 48 },
-    { name: "Dispatch", status: "Healthy", pendingEvents: 0, avgTimeMs: 50 },
-    { name: "Routes", status: "Performance Warning", pendingEvents: 0, avgTimeMs: 180 },
-    { name: "Jobs", status: "Healthy", pendingEvents: 0, avgTimeMs: 20 },
-    { name: "Time Clock", status: "Healthy", pendingEvents: 0, avgTimeMs: 12 },
-    { name: "Inventory", status: "Healthy", pendingEvents: 0, avgTimeMs: 15 },
-    { name: "Documents", status: "Healthy", pendingEvents: 0, avgTimeMs: 95 },
-    { name: "Messages", status: "Healthy", pendingEvents: 0, avgTimeMs: 22 },
-    { name: "Roster", status: "Healthy", pendingEvents: 0, avgTimeMs: 16 },
-    { name: "Training", status: "Healthy", pendingEvents: 0, avgTimeMs: 28 },
-    { name: "AI Assistant", status: "Healthy", pendingEvents: 0, avgTimeMs: 310 },
-    { name: "Settings", status: "Healthy", pendingEvents: 0, avgTimeMs: 8 },
-    { name: "Integrations", status: "Error", pendingEvents: 1, avgTimeMs: 412 },
-    { name: "Notifications", status: "Healthy", pendingEvents: 0, avgTimeMs: 12 }
-  ]);
+  // Removed. There is no real per-module timing/health telemetry anywhere
+  // in this app (no server process, no APM), so a "module health" table
+  // could only ever be fabricated numbers. See the honest note in the
+  // System tab where this table used to render.
 
   // --- 7. SECURITY INCIDENTS & ACTIVITY LEDGER ---
-  const [securityLogs, setSecurityLogs] = useState<Array<{ id: string; time: string; type: string; user: string; severity: "Low" | "Medium" | "High"; status: string }>>([
-    { id: "sec_1", time: "2026-07-07 09:12:10", type: "Successful Login", user: "Owner (Sarah J.)", severity: "Low", status: "Authorized" },
-    { id: "sec_2", time: "2026-07-07 09:14:44", type: "API Key Rotation Request", user: "Owner (Sarah J.)", severity: "Medium", status: "Approved" },
-    { id: "sec_3", time: "2026-07-07 09:22:15", type: "Failed Password Verification", user: "Manager (Pete K.)", severity: "Low", status: "Blocked" },
-    { id: "sec_4", time: "2026-07-07 09:45:00", type: "Permission Override Authorization", user: "Manager (Marcus V.)", severity: "Medium", status: "Logged" },
-    { id: "sec_5", time: "2026-07-07 10:08:45", type: "API Over-Quota Lockout", user: "Google System", severity: "High", status: "Mitigated" }
-  ]);
+  // No real security-scanning backend exists in this app, so this starts
+  // empty with an honest empty state instead of fabricated incident rows.
+  const [securityLogs, setSecurityLogs] = useState<Array<{ id: string; time: string; type: string; user: string; severity: "Low" | "Medium" | "High"; status: string }>>([]);
 
   // --- 8. FEATURE FLAGS STATE ---
+  // Real local settings state -- these toggles genuinely flip when clicked
+  // and their value is genuinely reflected in the UI below. None of them
+  // currently gate any other real feature elsewhere in the codebase (grepped
+  // each flag id app-wide); they're decorative previews of planned work
+  // rather than fabricated data, so they're left in place per the audit's
+  // lower-priority guidance for this category.
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({
     voice_assistant: false,
     predictive_scheduling: true,
@@ -299,76 +328,63 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   });
 
   // --- 9. BACKUP MATRIX ---
-  const [backupHistory, setBackupHistory] = useState<Array<{ id: string; name: string; date: string; sizeMb: number; verified: boolean; type: "Manual" | "Automatic" }>>([
-    { id: "bk_1", name: "OwnersLocal_Backup_Production_20260706_040000.tar.gz", date: "2026-07-06 04:00", sizeMb: 14.8, verified: true, type: "Automatic" },
-    { id: "bk_2", name: "OwnersLocal_Backup_Production_20260705_040000.tar.gz", date: "2026-07-05 04:00", sizeMb: 14.5, verified: true, type: "Automatic" },
-    { id: "bk_3", name: "OwnersLocal_Backup_Manual_20260706_150022.tar.gz", date: "2026-07-06 15:00", sizeMb: 15.1, verified: true, type: "Manual" }
-  ]);
+  // There is no real backup system in this app. Starts empty; nothing
+  // pushes fabricated entries into it (see handleBackupNow below, which now
+  // shows an honest "not available" message instead of faking a record).
+  const [backupHistory] = useState<Array<{ id: string; name: string; date: string; sizeMb: number; verified: boolean; type: "Manual" | "Automatic" }>>([]);
 
-  // --- 10. AI BUSINESS INSIGHT DIAGNOSTICS & SCORE COPIES ---
-  const [businessInsights, setBusinessInsights] = useState<Array<{
-    metric: string;
-    score: number;
-    trend: "up" | "down" | "flat";
-    explanation: string;
-    recs: string;
-  }>>([
-    { metric: "Business Health Score", score: 94, trend: "up", explanation: "Calculated based on positive gross operating revenue flow and minimal active employee schedule conflicts.", recs: "Authorize additional purchase order bundles to restock pipeline inventory before end-of-week." },
-    { metric: "Customer Satisfaction", score: 98, trend: "up", explanation: "High rating average due to quick SMS notifications of schedule alignments and real-time site survey checklists.", recs: "Review Marcus Webb's custom feedback for continuous optimization on residential setups." },
-    { metric: "Lead Conversion Efficiency", score: 82, trend: "flat", explanation: "Slight bottleneck detected during the estimate-acceptance handoff, leaving leads idle on secondary phases.", recs: "Enable the Gemini 'Suggested Follow-up' automated text prompt engine to engage stale leads." },
-    { metric: "Estimate Win Rate", score: 78, trend: "up", explanation: "Boosted by interactive and highly comprehensive estimates detailing scope of work visually.", recs: "Apply standard markup metrics from previous successful Drainage Projects." },
-    { metric: "Scheduling Efficiency", score: 86, trend: "down", explanation: "Double bookings and manual shifts indicate dispatcher fatigue on highly active scheduling blocks.", recs: "Deploy Predictive Scheduling models to auto-resolve physical coordinate conflicts." },
-    { metric: "Inventory Turn Rate", score: 91, trend: "up", explanation: "High volume usage of primary PVC pipes tracks cleanly to massive drainage installations.", recs: "Set up automated inventory triggers in settings to dispatch vendor POs when parts drop past 15 units." },
-    { metric: "Employee Productivity", score: 89, trend: "up", explanation: "Time clock check-ins are clean, with crew travel routes optimizing drive times.", recs: "Increase course assignments in training modules to preserve OSHA HazMat certification logs." },
-    { metric: "Revenue Profit Margin Trend", score: 94, trend: "up", explanation: "Invoices average high gross profit margins thanks to granular pricing recommendations.", recs: "Synchronize local QuickBooks ledgers to reconcile incoming cash flows perfectly." }
-  ]);
+  // --- 10. AI BUSINESS INSIGHT DIAGNOSTICS ---
+  // Removed. These were hardcoded fake scores ("Business Health Score: 94%",
+  // etc.) with explanations referencing a fabricated customer name. There is
+  // no real scoring model behind this in the app, so it's been replaced
+  // with an honest "not available" note where it used to render (AI tab).
 
-  // Periodic random stat fluctuations to simulate real-time operations
+  // Subscribe the Live Event Queue to every real Firestore-backed collection
+  // via the shared Event Bus. Every create/update/delete that actually
+  // happens anywhere in the app already emits through this bus (see
+  // useFirestoreCollection), so this is a genuine rolling activity log --
+  // never simulated. Capped to the most recent MAX_EVENT_QUEUE_LENGTH
+  // entries, newest first.
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuUsage(prev => {
-        const delta = (Math.random() - 0.5) * 2;
-        return Math.max(8.0, Math.min(35.0, Number((prev + delta).toFixed(1))));
-      });
-      setMemoryUsage(prev => {
-        const delta = Math.floor((Math.random() - 0.5) * 6);
-        return Math.max(512, Math.min(580, prev + delta));
-      });
-      setNetworkUsage(prev => {
-        const delta = (Math.random() - 0.5) * 1.5;
-        return Math.max(3.0, Math.min(15.0, Number((prev + delta).toFixed(1))));
-      });
-    }, 4000);
+    const collectionNames = Object.keys(REAL_COLLECTION_LABELS);
 
-    return () => clearInterval(interval);
+    const unsubscribers = collectionNames.map((name) =>
+      onCollectionEvent(name, (evt: CollectionEvent) => {
+        const entry: RealActivityEvent = {
+          id: `evq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: new Date().toLocaleString(),
+          collection: REAL_COLLECTION_LABELS[name] || name,
+          type: evt.type,
+          description: describeRealCollectionEvent(name, evt)
+        };
+        setEventsQueue(prev => [entry, ...prev].slice(0, MAX_EVENT_QUEUE_LENGTH));
+      })
+    );
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
   }, []);
 
   // --- ACTIONS HANDLERS ---
   const handleRefreshSystem = () => {
-    triggerNotification("🔄 Owner Command: System diagnostics fully refreshed. 0 duplicates found.");
-    setCpuUsage(12.4);
-    setNetworkUsage(5.1);
-    
-    // Append a log entry
+    triggerNotification("🔄 Owner Command: Refresh acknowledged.");
+
+    // Append a real log entry -- this genuinely happened (the owner just
+    // clicked this button, right now), unlike the old fabricated
+    // infrastructure-refresh claims.
     const timestampStr = new Date().toLocaleTimeString();
     setSystemLogs(prev => [
-      { id: `log_${Date.now()}`, time: timestampStr, level: "Info", source: "Security", message: "Administrative system refresh command dispatched by Owner console." },
+      { id: `log_${Date.now()}`, time: timestampStr, level: "Info", source: "Owner Console", message: "Owner manually requested a system refresh from the Owner Console." },
       ...prev
     ]);
   };
 
   const handleAISystemAudit = () => {
-    triggerNotification("🤖 Owner Command: Running central AI Prompt and Token Audit...");
-    
-    // Add decision log entry simulating audit analysis
-    setTimeout(() => {
-      const timestampStr = new Date().toLocaleTimeString();
-      setAiDecisionLogs(prev => [
-        { id: `ai_dec_${Date.now()}`, time: timestampStr.substring(0, 8), module: "Administrative Audit", reason: "Manual system trigger audit requested", decision: "Analyzed 104 today's prompts. 0 prompt-injection triggers found. Vector databases synchronized.", approvedBy: "Owner", executed: true, undoAvailable: false },
-        ...prev
-      ]);
-      triggerNotification("✅ AI Audit Complete: Security check passed. Model parameters optimal.");
-    }, 1200);
+    // There is no real automated AI audit/security-scan pipeline in this
+    // deployment -- be honest about that instead of fabricating a "104
+    // prompts analyzed, 0 threats found" result.
+    triggerNotification("ℹ️ There's no automated AI audit pipeline available in this deployment yet.");
   };
 
   const handleExportSystemReport = () => {
@@ -377,52 +393,44 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
   const executeExportSystemReport = () => {
     setIsConfirmReportModalOpen(false);
-    triggerNotification("📥 Owner Command: Preparing system JSON telemetry bundle...");
-    
+    triggerNotification("📥 Owner Command: Preparing report from real account data...");
+
+    // Only real, live data -- no simulated CPU/memory/cost telemetry.
     const telemetryBundle = {
-      systemHealth: { cpuUsage, memoryUsage, storageUsage, todayRequests, todayAiRequests, overallHealthStatus },
-      backupCount: backupHistory.length,
       collections: dbCollections,
       aiEngineRunning,
+      aiActionsLogged: recentAiActions.length,
       featureFlags,
+      backupCount: backupHistory.length,
       timestamp: new Date().toISOString()
     };
 
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(telemetryBundle, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `OwnersLocal_OS_Telemetry_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `OwnersLocal_OS_Report_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    
-    triggerNotification("📥 System telemetry exported successfully!");
+
+    triggerNotification("📥 Report exported successfully!");
   };
 
   const handleBackupNow = () => {
-    triggerNotification("💾 Backup initiated. Compressing tables & static files...");
-    
-    setTimeout(() => {
-      const newBackup = {
-        id: `bk_${Date.now()}`,
-        name: `OwnersLocal_Backup_Manual_${new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)}.tar.gz`,
-        date: new Date().toISOString().replace("T", " ").slice(0, 16),
-        sizeMb: Number((14.5 + Math.random()).toFixed(1)),
-        verified: true,
-        type: "Manual" as const
-      };
-      
-      setBackupHistory(prev => [newBackup, ...prev]);
-      triggerNotification("💾 Backup completed. Manifest files pushed to secure cloud storage.");
-    }, 1500);
+    // There is no real backup system wired up in this app -- be honest
+    // instead of fabricating a "backup completed" record.
+    triggerNotification("💾 Backups aren't available in this deployment yet.");
   };
 
-  // Run SVG Signal packet flow animation
+  // Run SVG Signal packet flow animation. This is a static diagram of how
+  // the Event Engine cascades between modules (see item 2 of the no-fake-
+  // data pass) -- it no longer writes anything into the Live Event Queue,
+  // which is reserved for real events observed on the Event Bus.
   const triggerSignalPacketFlow = () => {
     if (signalAnimationActive) return;
     setSignalAnimationActive(true);
     setAnimatedPacketIndex(0);
-    triggerNotification("⚡ Initializing Event Engine Signal Packet Flow simulation...");
+    triggerNotification("⚡ Playing Event Engine architecture animation...");
 
     const intervals = [800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800];
     let currentIndex = 0;
@@ -431,87 +439,15 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
       if (currentIndex < EVENT_NODES.length) {
         setAnimatedPacketIndex(currentIndex);
         setSelectedEventNode(EVENT_NODES[currentIndex].id);
-        
-        // Push a simulated queue entry for some nodes
-        if (currentIndex === 0 || currentIndex === 3 || currentIndex === 7 || currentIndex === 10) {
-          const timestampStr = new Date().toLocaleTimeString();
-          const targetNode = EVENT_NODES[currentIndex];
-          setEventsQueue(prev => [
-            {
-              id: `ev_gen_${Date.now()}`,
-              timestamp: `2026-07-07 ${timestampStr}`,
-              origin: targetNode.origin,
-              destination: [targetNode.destination],
-              processingTime: Math.floor(Math.random() * 150 + 20),
-              status: "Completed",
-              changesMade: `Flow Simulation: ${targetNode.label} updated.`,
-              payload: { triggered: true },
-              retryCount: 0
-            },
-            ...prev
-          ]);
-        }
-
         currentIndex++;
         setTimeout(walkNextNode, intervals[currentIndex - 1] || 800);
       } else {
         setSignalAnimationActive(false);
         setAnimatedPacketIndex(-1);
-        triggerNotification("🔄 Signal Packet fully propagated through shared system pipeline.");
       }
     };
 
     walkNextNode();
-  };
-
-  // DATABASE CENTER TRIGGERS
-  const handleAnalyzeDb = () => {
-    setDbRunningTask("Analyzing");
-    triggerNotification("🔍 Scanning Firestore databases & checking relational indices...");
-    
-    setTimeout(() => {
-      setDbDiagnosticResult({
-        brokenReferences: 0,
-        duplicateDocuments: 0,
-        missingIndices: 1,
-        unusedSpaceKb: 154,
-        suggestions: [
-          "Optimized: Detected 1 minor unindexed query sequence inside 'Messages' history lookup.",
-          "Suggestion: Rebuild sub-indices for Leads closing probability to compress storage by 154Kb."
-        ]
-      });
-      setDbRunningTask(null);
-      triggerNotification("🔍 Database integrity analysis finished. No critical errors detected.");
-    }, 1500);
-  };
-
-  const handleRepairDb = () => {
-    setDbRunningTask("Repairing");
-    triggerNotification("🛠️ Running system database repairs and compression checks...");
-    
-    setTimeout(() => {
-      setDbDiagnosticResult(prev => prev ? {
-        ...prev,
-        brokenReferences: 0,
-        unusedSpaceKb: 0,
-        suggestions: ["All indices optimized. Relational reference structures fully healthy."]
-      } : null);
-      
-      setDbCollections(prev => prev.map(c => ({ ...c, sizeKb: Math.max(c.sizeKb - 12, 10), indexStatus: "Indexed" })));
-      setDbRunningTask(null);
-      triggerNotification("🛠️ System database references repaired and optimized successfully!");
-    }, 1500);
-  };
-
-  const handleRebuildIndexes = () => {
-    setDbRunningTask("Rebuilding Indexes");
-    triggerNotification("🔄 Reindexing all Firestore document matrices in shared database...");
-    
-    setTimeout(() => {
-      setDbCollections(prev => prev.map(c => ({ ...c, indexStatus: "Indexed" })));
-      setDbRunningTask(null);
-      triggerNotification("🔄 7 Firestore collections fully reindexed and active.");
-    }, 1200);
   };
 
   // AI CONTROL TRIGGERS
@@ -520,15 +456,14 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     triggerNotification(`🤖 Gemini AI Engine set to ${!aiEngineRunning ? "ENABLED" : "PAUSED"}`);
   };
 
-  const handleResetAiCache = () => {
-    setAiCacheCount(0);
-    triggerNotification("🤖 Gemini local context cache cleared.");
-  };
-
-  // UNDO AI DECISION
+  // UNDO AI DECISION -- marks the underlying real recentAiActions entry as
+  // undone (same audit-annotation pattern as App.tsx / AIAssistantPage.tsx).
+  // This does not attempt to reverse the original change automatically:
+  // recentAiActions entries don't carry structured revert data, so doing
+  // that with guessed values would risk silently corrupting real data.
   const handleUndoDecision = (id: string) => {
-    setAiDecisionLogs(prev => prev.map(d => d.id === id ? { ...d, executed: false } : d));
-    triggerNotification(`🔄 AI Decision ${id} successfully rolled back.`);
+    setRecentAiActions(prev => prev.map((a: any) => a.id === id ? { ...a, status: "Undone" } : a));
+    triggerNotification("🔄 Marked as undone. Reverse the change manually on the relevant page if needed.");
   };
 
   // FILTERED EVENT LISTS
@@ -537,13 +472,12 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
       if (searchQuery.trim() !== "") {
         const q = searchQuery.toLowerCase();
         return (
-          ev.id.toLowerCase().includes(q) ||
-          ev.origin.toLowerCase().includes(q) ||
-          ev.changesMade.toLowerCase().includes(q) ||
-          ev.status.toLowerCase().includes(q)
+          ev.collection.toLowerCase().includes(q) ||
+          ev.description.toLowerCase().includes(q) ||
+          ev.type.toLowerCase().includes(q)
         );
       }
-      if (eventHistoryFilter !== "all" && ev.status.toLowerCase() !== eventHistoryFilter.toLowerCase()) {
+      if (eventHistoryFilter !== "all" && ev.type.toLowerCase() !== eventHistoryFilter.toLowerCase()) {
         return false;
       }
       return true;
@@ -662,39 +596,30 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
         </div>
       </div>
 
-      {/* SYSTEM DIAGNOSTICS & HARDWARE TELEMETRY GRID */}
+      {/* REAL RECORD COUNTS -- replaces the old fabricated CPU/memory/network/
+          active-user/AI-cost telemetry grid. This is a client-side
+          React/Firebase app with no server process and no metrics/health
+          endpoint, so infrastructure telemetry can never be real here; it
+          has been removed rather than faked. What follows instead are real,
+          live counts from this account's own Firestore-backed data. */}
       <div className="bg-[#EAF5FF] rounded-3xl p-6 border border-[#BDDDF8] shadow-sm space-y-4">
         <h3 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider flex items-center gap-1.5">
-          <span>📊</span> Real-Time Infrastructure Diagnostics Matrix
+          <span>📊</span> Account Data Snapshot
         </h3>
-        
+        <p className="text-[10.5px] text-[#5E7393] font-sans font-medium -mt-2">
+          Infrastructure metrics (CPU, memory, network, server cost) aren't available in this deployment — this app has no server process to sample. The counts below are real, live totals from your account's own data.
+        </p>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-          {[
-            { label: "OS Status", val: isSystemOnline ? "ONLINE" : "OFFLINE", indicator: isSystemOnline ? "bg-emerald-500" : "bg-red-500", desc: "System online" },
-            { label: "CPU Usage", val: `${cpuUsage}%`, indicator: cpuUsage > 25 ? "bg-amber-500" : "bg-emerald-500", desc: "Dynamic processing" },
-            { label: "Memory Usage", val: `${memoryUsage} MB`, indicator: "bg-emerald-500", desc: "Slab heap reservation" },
-            { label: "DB Health", val: "HEALTHY", indicator: "bg-emerald-500", desc: "0 duplicate tables" },
-            { label: "Firebase Status", val: "CONNECTED", indicator: "bg-emerald-500", desc: "Real-time sync on" },
-            { label: "API Handshakes", val: "HEALTHY", indicator: "bg-emerald-500", desc: "Stripe & QB live" },
-            { label: "Storage Limit", val: `${storageUsage} GB`, indicator: "bg-emerald-500", desc: "42.8% capacity used" },
-            { label: "Network IO", val: `${networkUsage} Mbps`, indicator: "bg-emerald-500", desc: "WebSocket pipe" },
-            { label: "Active Users", val: activeUsersCount, indicator: "bg-emerald-500", desc: "Connected clients" },
-            { label: "Today's IO", val: todayRequests, indicator: "bg-emerald-500", desc: "Requests logged" },
-            { label: "AI Prompts", val: todayAiRequests, indicator: "bg-emerald-500", desc: "Today's AI calls" },
-            { label: "Monthly AI Cost", val: `$${monthlyAiCost.toFixed(2)}`, indicator: "bg-emerald-500", desc: "Gemini token ledger" },
-            { label: "API Expenses", val: `$${monthlyApiCost.toFixed(2)}`, indicator: "bg-emerald-500", desc: "Google & Twilio bill" },
-            { label: "Google APIs", val: "ACTIVE", indicator: "bg-emerald-500", desc: "Calendar sync active" },
-            { label: "Stripe Ledger", val: "OK", indicator: "bg-emerald-500", desc: "Gateway fully loaded" },
-            { label: "Maps Integration", val: "OVER QUOTA", indicator: "bg-red-500 animate-pulse", desc: "403 Billing limit warning" }
-          ].map((metric, i) => (
-            <div key={i} className="bg-white border border-[#BDDDF8] p-3 rounded-2xl flex flex-col justify-between hover:scale-[1.01] transition-all">
+          {dbCollections.map((col) => (
+            <div key={col.name} className="bg-white border border-[#BDDDF8] p-3 rounded-2xl flex flex-col justify-between hover:scale-[1.01] transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">{metric.label}</span>
-                <span className={`w-2 h-2 rounded-full ${metric.indicator}`} />
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">{col.name}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
               </div>
               <div className="mt-2 text-left">
-                <p className="text-sm font-sans font-black text-[#1F3557]">{metric.val}</p>
-                <p className="text-[9px] text-[#5E7393] font-medium leading-none mt-0.5 font-sans truncate">{metric.desc}</p>
+                <p className="text-sm font-sans font-black text-[#1F3557]">{col.docCount}</p>
+                <p className="text-[9px] text-[#5E7393] font-medium leading-none mt-0.5 font-sans truncate">records</p>
               </div>
             </div>
           ))}
@@ -955,13 +880,13 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-[#BDDDF8] shadow-sm xl:col-span-12 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#BDDDF8]/40 pb-3">
               <div>
-                <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Active Event Queue Monitor</h4>
-                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Real-time scheduling stack. Track execution latencies and transactional safety states.</p>
+                <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Live Activity Log</h4>
+                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Real create/update/delete events observed on the shared Event Bus as they happen this session. Nothing here is simulated.</p>
               </div>
 
-              {/* Status Tabs */}
+              {/* Type Tabs */}
               <div className="flex gap-1 bg-slate-50 p-1 border border-slate-200 rounded-xl text-[10px] font-black">
-                {["all", "Pending", "Running", "Completed", "Failed"].map((state) => {
+                {["all", "created", "updated", "deleted"].map((state) => {
                   const isS = eventHistoryFilter === state.toLowerCase();
                   return (
                     <button
@@ -982,86 +907,36 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
               <table className="w-full text-xs text-left border-collapse font-sans font-medium">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    <th className="p-3">Event ID</th>
                     <th className="p-3">Timestamp</th>
-                    <th className="p-3">Origin Module</th>
-                    <th className="p-3">Destination Modules</th>
-                    <th className="p-3">Changes Made / Action Detail</th>
-                    <th className="p-3">Latency</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-right">Controls</th>
+                    <th className="p-3">Collection</th>
+                    <th className="p-3 text-center">Event Type</th>
+                    <th className="p-3">Description</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                   {filteredEventsHistory.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400">
-                        No transactions registered inside this query state.
+                      <td colSpan={4} className="p-8 text-center text-slate-400">
+                        No activity recorded yet this session. Real create/update/delete events across the app will appear here as they happen.
                       </td>
                     </tr>
                   ) : (
                     filteredEventsHistory.map((ev) => (
                       <tr key={ev.id} className="hover:bg-slate-50/50">
-                        <td className="p-3 font-mono font-black text-[#315C9F]">{ev.id}</td>
                         <td className="p-3 font-mono text-[10.5px] text-slate-500">{ev.timestamp}</td>
-                        <td className="p-3"><span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold">{ev.origin}</span></td>
-                        <td className="p-3">
-                          <div className="flex flex-wrap gap-1">
-                            {ev.destination.map((d, i) => (
-                              <span key={i} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[9px] font-bold font-mono">
-                                {d}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3 max-w-xs truncate" title={ev.changesMade}>{ev.changesMade}</td>
-                        <td className="p-3 font-mono font-bold text-slate-500">{ev.processingTime}ms</td>
+                        <td className="p-3"><span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold">{ev.collection}</span></td>
                         <td className="p-3 text-center">
                           <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
-                            ev.status === "Completed"
+                            ev.type === "created"
                               ? "bg-emerald-50 text-emerald-700"
-                              : ev.status === "Failed"
+                              : ev.type === "deleted"
                               ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700 animate-pulse"
+                              : "bg-blue-50 text-blue-700"
                           }`}>
-                            {ev.status}
+                            {ev.type}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
-                          <div className="flex justify-end gap-1.5 text-[9.5px] font-black uppercase tracking-wider">
-                            <button
-                              onClick={() => {
-                                setEventsQueue(prev => prev.map(x => x.id === ev.id ? { ...x, status: "Completed", processingTime: Math.floor(Math.random() * 100 + 10) } : x));
-                                triggerNotification(`🔄 Event ${ev.id} successfully executed.`);
-                              }}
-                              className="px-2 py-1 bg-slate-100 hover:bg-[#BDDDF8] text-[#1F3557] rounded cursor-pointer border border-slate-200"
-                            >
-                              Replay
-                            </button>
-
-                            {ev.status === "Failed" && (
-                              <button
-                                onClick={() => {
-                                  setEventsQueue(prev => prev.map(x => x.id === ev.id ? { ...x, status: "Completed", retryCount: x.retryCount + 1 } : x));
-                                  triggerNotification(`🔄 Retry instruction dispatched for ${ev.id}.`);
-                                }}
-                                className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded cursor-pointer"
-                              >
-                                Retry
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => {
-                                setEventsQueue(prev => prev.map(x => x.id === ev.id ? { ...x, status: "Failed" } : x));
-                                triggerNotification(`✕ Transaction ${ev.id} cancelled manually.`);
-                              }}
-                              className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-100 rounded cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </td>
+                        <td className="p-3 max-w-md truncate" title={ev.description}>{ev.description}</td>
                       </tr>
                     ))
                   )}
@@ -1081,120 +956,41 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#BDDDF8]/40 pb-3">
               <div>
                 <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Firestore Document Explorer Registry</h4>
-                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Live index size ledger. No duplicate records, 0 data-corruption warnings.</p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={handleAnalyzeDb}
-                  disabled={!!dbRunningTask}
-                  className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer transition-all"
-                >
-                  {dbRunningTask === "Analyzing" ? "Analyzing..." : "Analyze DB"}
-                </button>
-
-                <button
-                  onClick={handleRepairDb}
-                  disabled={!!dbRunningTask}
-                  className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer transition-all"
-                >
-                  {dbRunningTask === "Repairing" ? "Repairing..." : "Repair References"}
-                </button>
-
-                <button
-                  onClick={handleRebuildIndexes}
-                  disabled={!!dbRunningTask}
-                  className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer transition-all"
-                >
-                  {dbRunningTask === "Rebuilding Indexes" ? "Rebuilding..." : "Rebuild Indexes"}
-                </button>
-
-                <button
-                  onClick={() => {
-                    triggerNotification("🧹 Duplicate detection completed: 0 duplicate records identified.");
-                  }}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer transition-all"
-                >
-                  Duplicate Cleanup
-                </button>
+                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Real, live document counts pulled from this account's own collections.</p>
               </div>
             </div>
 
             {/* Collections list table */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-              
+
               <div className="md:col-span-7 overflow-x-auto border border-slate-200 rounded-xl">
                 <table className="w-full text-xs text-left border-collapse font-sans font-medium">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
                       <th className="p-3">Collection Name</th>
-                      <th className="p-3 text-center">Active Docs</th>
-                      <th className="p-3 text-center">Relationships</th>
-                      <th className="p-3 text-center">Index Status</th>
-                      <th className="p-3 text-right">Data Footprint</th>
+                      <th className="p-3 text-right">Active Docs</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {dbCollections.map((col, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50">
+                    {dbCollections.map((col) => (
+                      <tr key={col.name} className="hover:bg-slate-50/50">
                         <td className="p-3 font-bold text-slate-800">📂 {col.name}</td>
-                        <td className="p-3 text-center font-mono font-bold">{col.docCount === null ? "—" : `${col.docCount} records`}</td>
-                        <td className="p-3 text-center font-sans font-medium text-slate-500">Many-to-Many</td>
-                        <td className="p-3 text-center">
-                          <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-widest">
-                            {col.indexStatus}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-slate-500">{col.sizeKb} Kb</td>
+                        <td className="p-3 text-right font-mono font-bold">{col.docCount} records</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
-              {/* Integrity status sidebar */}
-              <div className="md:col-span-5 bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-4">
-                <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-500">Database Integrity Report</h5>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-slate-100">
-                    <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Duplicate Documents</span>
-                    <span className="text-sm font-black text-slate-800">0 records</span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-100">
-                    <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Broken References</span>
-                    <span className="text-sm font-black text-slate-800">0 references</span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-100">
-                    <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Missing Records</span>
-                    <span className="text-sm font-black text-slate-800">0 missing</span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-100">
-                    <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">Unused Records</span>
-                    <span className="text-sm font-black text-slate-800">0 items</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2 border-t border-slate-200 pt-3">
-                  <span className="text-[9px] font-black uppercase text-[#315C9F] tracking-widest block">Repair Recommendations</span>
-                  
-                  {dbDiagnosticResult ? (
-                    <div className="space-y-2 animate-fade-in text-xs font-semibold">
-                      {dbDiagnosticResult.suggestions.map((s, idx) => (
-                        <p key={idx} className="p-2.5 bg-white border border-slate-200 rounded-lg text-slate-600 leading-relaxed">
-                          💡 {s}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-slate-400 text-xs">
-                      <p>Run administrative <strong>Analyze DB</strong> sweep to search for data anomalies.</p>
-                    </div>
-                  )}
-                </div>
+              {/* Honest note sidebar -- replaces the old fabricated "0
+                  duplicates / 0 broken references / Analyze / Repair /
+                  Rebuild Indexes" diagnostics, none of which could ever be
+                  real from a client-side app without the Firebase Admin SDK. */}
+              <div className="md:col-span-5 bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-3">
+                <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-500">Database Integrity Diagnostics</h5>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Index status, storage footprint, and integrity checks (duplicate documents, broken references, unused space) aren't available client-side in this deployment — they require the Firebase Admin SDK, which this app doesn't run. Nothing is fabricated here in its place.
+                </p>
               </div>
 
             </div>
@@ -1227,15 +1023,23 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                 </button>
 
                 <button
-                  onClick={handleResetAiCache}
-                  className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer"
-                >
-                  Reset AI Cache ({aiCacheCount} keys)
-                </button>
-
-                <button
                   onClick={() => {
-                    triggerNotification("📥 AI Context Logs compiled. Initiating CSV ledger download...");
+                    if (recentAiActions.length === 0) {
+                      triggerNotification("There are no AI actions logged yet to export.");
+                      return;
+                    }
+                    const header = "id,date,time,module,action,reason,status,approvedBy\n";
+                    const rows = recentAiActions.map((a: any) => [a.id, a.date, a.time, a.module, a.action, a.reason, a.status, a.approvedBy]
+                      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","));
+                    const csv = header + rows.join("\n");
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `ai_action_log_${Date.now()}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    triggerNotification(`📥 Exported ${recentAiActions.length} real AI action log entries.`);
                   }}
                   className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer"
                 >
@@ -1244,65 +1048,48 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
               </div>
             </div>
 
-            {/* AI Health Matrix */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-medium font-sans">
-              
+            {/* AI activity summary -- real counts derived from recentAiActions,
+                replacing the old hardcoded "310ms latency / $0.15 cost /
+                100% success / 3,410 tokens" fake metrics, none of which had
+                any real source. */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-medium font-sans">
+
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
-                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Average Latency</span>
-                <p className="text-lg font-black text-slate-800 font-mono mt-1">310ms</p>
-                <p className="text-[10px] text-slate-500 leading-none mt-1">Gemini-3.5-flash fast pipeline</p>
+                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">AI Actions Logged</span>
+                <p className="text-lg font-black text-slate-800 font-mono mt-1">{recentAiActions.length}</p>
+                <p className="text-[10px] text-slate-500 leading-none mt-1">All-time, this account</p>
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
-                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Today's Model Cost</span>
-                <p className="text-lg font-black text-slate-800 font-mono mt-1">$0.15</p>
-                <p className="text-[10px] text-slate-500 leading-none mt-1">104 cached completions</p>
+                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Executed</span>
+                <p className="text-lg font-black text-slate-800 font-mono mt-1">{recentAiActions.filter((a: any) => a.status !== "Undone").length}</p>
+                <p className="text-[10px] text-slate-500 leading-none mt-1">Currently standing actions</p>
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
-                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Workflow Approvals</span>
-                <p className="text-lg font-black text-slate-800 font-mono mt-1">100% success</p>
-                <p className="text-[10px] text-slate-500 leading-none mt-1">No execution timeouts detected</p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
-                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Memory Saved Keys</span>
-                <p className="text-lg font-black text-slate-800 font-mono mt-1">3,410 tokens</p>
-                <p className="text-[10px] text-slate-500 leading-none mt-1">Lead engagement vector maps</p>
+                <span className="text-[9.5px] uppercase font-black text-slate-400 block tracking-wider">Reverted</span>
+                <p className="text-lg font-black text-slate-800 font-mono mt-1">{recentAiActions.filter((a: any) => a.status === "Undone").length}</p>
+                <p className="text-[10px] text-slate-500 leading-none mt-1">Marked undone by the owner</p>
               </div>
 
             </div>
 
-            {/* AI Business Insights Explanations section */}
-            <div className="bg-[#F5FAFF] p-5 rounded-2xl border border-[#BDDDF8] space-y-4 font-sans text-xs">
-              <h5 className="text-[10px] font-black uppercase text-[#315C9F] tracking-widest flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse text-indigo-600" /> AI Explanatory Business Diagnostics & Actions
+            {/* AI Business Insight Diagnostics -- removed. This used to be
+                hardcoded fake scores ("Business Health Score: 94%", etc.)
+                with explanations referencing a fabricated customer name.
+                There's no real scoring model behind this in the app. */}
+            <div className="bg-[#F5FAFF] p-5 rounded-2xl border border-[#BDDDF8] text-xs font-sans text-slate-500 leading-relaxed">
+              <h5 className="text-[10px] font-black uppercase text-[#315C9F] tracking-widest flex items-center gap-1 mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> AI Business Insight Diagnostics
               </h5>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {businessInsights.map((ins, i) => (
-                  <div key={i} className="bg-white border border-slate-100 p-4 rounded-xl space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-extrabold text-[#1F3557]">{ins.metric}</span>
-                      <span className={`text-[10.5px] font-mono px-2 py-0.5 rounded-full font-black ${
-                        ins.score >= 90 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-                      }`}>
-                        Score: {ins.score}% {ins.trend === "up" ? "▲" : ins.trend === "down" ? "▼" : "■"}
-                      </span>
-                    </div>
-                    <p className="text-slate-500 font-sans font-medium leading-relaxed">{ins.explanation}</p>
-                    <div className="p-2.5 bg-indigo-50 border border-indigo-100/50 rounded-lg text-indigo-900 leading-relaxed text-[11px] font-semibold">
-                      💡 <strong>Rec</strong>: {ins.recs}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              AI-generated business health scoring isn't available in this deployment yet — there's no real model computing it, so nothing is shown here rather than a fabricated score.
             </div>
 
-            {/* AI Decision log table */}
+            {/* AI Decision log table -- driven entirely by recentAiActions
+                (real, Firestore-backed). No local fake decision entries. */}
             <div className="space-y-3">
               <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-500">Historical AI Decision Log Ledger</h5>
-              
+
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-xs text-left border-collapse font-sans font-medium">
                   <thead>
@@ -1317,32 +1104,40 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                    {aiDecisionLogs.map((dec) => (
-                      <tr key={dec.id} className="hover:bg-slate-50/50">
-                        <td className="p-3 font-mono text-slate-500">{dec.time}</td>
-                        <td className="p-3"><span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold">{dec.module}</span></td>
-                        <td className="p-3 max-w-xs truncate" title={dec.reason}>{dec.reason}</td>
-                        <td className="p-3 font-mono text-[11px] text-[#315C9F]">{dec.decision}</td>
-                        <td className="p-3 text-slate-500">{dec.approvedBy}</td>
-                        <td className="p-3 text-center">
-                          <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
-                            dec.executed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"
-                          }`}>
-                            {dec.executed ? "Executed" : "Reverted"}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          {dec.undoAvailable && dec.executed && (
-                            <button
-                              onClick={() => handleUndoDecision(dec.id)}
-                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[9.5px] font-black uppercase tracking-wider rounded cursor-pointer"
-                            >
-                              Undo Action
-                            </button>
-                          )}
+                    {aiDecisionLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          No AI-driven actions logged yet. Real actions the AI takes across the app will show up here.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      aiDecisionLogs.map((dec) => (
+                        <tr key={dec.id} className="hover:bg-slate-50/50">
+                          <td className="p-3 font-mono text-slate-500">{dec.time}</td>
+                          <td className="p-3"><span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold">{dec.module}</span></td>
+                          <td className="p-3 max-w-xs truncate" title={dec.reason}>{dec.reason}</td>
+                          <td className="p-3 font-mono text-[11px] text-[#315C9F]">{dec.decision}</td>
+                          <td className="p-3 text-slate-500">{dec.approvedBy}</td>
+                          <td className="p-3 text-center">
+                            <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
+                              dec.executed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"
+                            }`}>
+                              {dec.executed ? "Executed" : "Reverted"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            {dec.undoAvailable && dec.executed && (
+                              <button
+                                onClick={() => handleUndoDecision(dec.id)}
+                                className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[9.5px] font-black uppercase tracking-wider rounded cursor-pointer"
+                              >
+                                Undo Action
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1366,7 +1161,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => triggerNotification("🛡️ Owner Command: 4 active user sessions reviewed. All secure.")}
+                  onClick={() => triggerNotification("Access-log review isn't available in this deployment yet — there's no real session-tracking backend to check.")}
                   className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer"
                 >
                   Review Access Logs
@@ -1374,7 +1169,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
                 <button
                   onClick={() => {
-                    triggerNotification("🔒 Lockout warning: All non-Owner accounts scheduled for verification logout.");
+                    triggerNotification("Forced logouts aren't available in this deployment yet — there's no real session-management backend wired up.");
                   }}
                   className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer shadow-sm border border-amber-500"
                 >
@@ -1383,7 +1178,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
                 <button
                   onClick={() => {
-                    triggerNotification("🛡️ API Keys Rotated: Google Cloud, Stripe, and Twilio secrets securely re-indexed.");
+                    triggerNotification("API key rotation isn't available from this console yet — it isn't wired up to any real secrets backend.");
                   }}
                   className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer shadow-sm"
                 >
@@ -1392,7 +1187,9 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
               </div>
             </div>
 
-            {/* Security Logs list */}
+            {/* Security Logs list -- no real security-scanning backend
+                exists in this app, so this starts empty with an honest
+                empty state instead of fabricated incident rows. */}
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-xs text-left border-collapse font-sans font-medium">
                 <thead>
@@ -1405,25 +1202,33 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {securityLogs.map((sec, i) => (
-                    <tr key={i} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-mono text-slate-500">{sec.time}</td>
-                      <td className="p-3 font-bold text-slate-800">🛡️ {sec.type}</td>
-                      <td className="p-3 text-slate-600 font-mono">{sec.user}</td>
-                      <td className="p-3 text-center">
-                        <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
-                          sec.severity === "Low"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : sec.severity === "Medium"
-                            ? "bg-amber-50 text-amber-700 border border-amber-100"
-                            : "bg-red-50 text-red-700 border border-red-100 animate-pulse"
-                        }`}>
-                          {sec.severity}
-                        </span>
+                  {securityLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                        No security incidents recorded. This app doesn't run real security scanning yet, so this ledger stays honestly empty rather than showing fabricated incidents.
                       </td>
-                      <td className="p-3 text-right text-slate-500 font-mono">{sec.status}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    securityLogs.map((sec, i) => (
+                      <tr key={i} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-mono text-slate-500">{sec.time}</td>
+                        <td className="p-3 font-bold text-slate-800">🛡️ {sec.type}</td>
+                        <td className="p-3 text-slate-600 font-mono">{sec.user}</td>
+                        <td className="p-3 text-center">
+                          <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
+                            sec.severity === "Low"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                              : sec.severity === "Medium"
+                              ? "bg-amber-50 text-amber-700 border border-amber-100"
+                              : "bg-red-50 text-red-700 border border-red-100 animate-pulse"
+                          }`}>
+                            {sec.severity}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-slate-500 font-mono">{sec.status}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1440,20 +1245,20 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#BDDDF8]/40 pb-3">
               <div>
                 <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Central Backup Registry Ledger</h4>
-                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Automated cron loops trigger backup sequences every 24 hours.</p>
+                <p className="text-[10px] text-slate-400 font-sans mt-0.5">There is no real backup system in this app yet.</p>
               </div>
 
               <div className="flex gap-2">
                 <button
                   onClick={handleBackupNow}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase rounded-xl cursor-pointer shadow-sm transition-all"
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-black uppercase rounded-xl cursor-pointer shadow-sm transition-all"
                 >
                   Create Backup Now
                 </button>
 
                 <button
                   onClick={() => {
-                    triggerNotification("☁️ Cloud database sync validated: Backup archives successfully mapped.");
+                    triggerNotification("Cloud backup storage isn't available in this deployment yet.");
                   }}
                   className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-black uppercase rounded-xl cursor-pointer"
                 >
@@ -1462,7 +1267,9 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
               </div>
             </div>
 
-            {/* List */}
+            {/* List -- there is no real backup system in this app, so this
+                starts (and stays) empty with an honest message rather than
+                fabricated backup records. */}
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-xs text-left border-collapse font-sans font-medium">
                 <thead>
@@ -1476,32 +1283,34 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {backupHistory.map((bk) => (
-                    <tr key={bk.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-mono font-bold text-slate-800">📦 {bk.name}</td>
-                      <td className="p-3 text-center text-slate-500 font-mono">{bk.date}</td>
-                      <td className="p-3 text-center font-mono text-slate-500">{bk.sizeMb} MB</td>
-                      <td className="p-3 text-center">
-                        <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-widest">
-                          {bk.verified ? "Verified ✅" : "Unverified"}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center text-slate-600 font-bold">{bk.type}</td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={() => {
-                            triggerNotification(`🔄 Restoring dataset from file ${bk.name}...`);
-                            setTimeout(() => {
-                              triggerNotification("🔄 Restore process completed successfully. Central system databases active.");
-                            }, 1200);
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-[#BDDDF8] text-[#1F3557] text-[10px] font-black uppercase tracking-wider border border-slate-200 rounded cursor-pointer"
-                        >
-                          Restore
-                        </button>
+                  {backupHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-400">
+                        No backups on file. Backups aren't available in this deployment yet.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    backupHistory.map((bk) => (
+                      <tr key={bk.id} className="hover:bg-slate-50/50">
+                        <td className="p-3 font-mono font-bold text-slate-800">📦 {bk.name}</td>
+                        <td className="p-3 text-center text-slate-500 font-mono">{bk.date}</td>
+                        <td className="p-3 text-center font-mono text-slate-500">{bk.sizeMb} MB</td>
+                        <td className="p-3 text-center">
+                          <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-widest">
+                            {bk.verified ? "Verified ✅" : "Unverified"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center text-slate-600 font-bold">{bk.type}</td>
+                        <td className="p-3 text-right">
+                          <button
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-[#BDDDF8] text-[#1F3557] text-[10px] font-black uppercase tracking-wider border border-slate-200 rounded cursor-pointer"
+                          >
+                            Restore
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1589,38 +1398,36 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
               </div>
             </div>
 
-            {/* Simulated Debug Log view */}
+            {/* Debug Log view -- there is no real application logging
+                backend in this app, so this starts (and stays) empty
+                except for genuine entries the owner's own actions append
+                (see handleRefreshSystem). No fabricated log lines. */}
             <div className="bg-slate-900 rounded-2xl p-4 font-mono text-[10.5px] text-amber-100 space-y-2 h-[340px] overflow-y-auto shadow-inner border border-slate-950">
-              <p className="text-emerald-400 select-none">{"[System Dev Console] Initializing handshake matrices..."}</p>
-              <p className="text-emerald-400 select-none">{"[WebSocket] Connection on port 3000 online. HMR disabled by control plane."}</p>
-              <p className="text-slate-400 select-none">{"------------------------------------------------------------"}</p>
-              
-              {filteredLogsList.map((log) => (
-                <div key={log.id} className="leading-relaxed">
-                  <span className="text-slate-400 mr-1 select-none">[{log.time}]</span>
-                  <span className={`font-black uppercase mr-1.5 ${
-                    log.level === "Error"
-                      ? "text-red-400"
-                      : log.level === "Warning"
-                      ? "text-orange-400"
-                      : log.level === "Debug"
-                      ? "text-indigo-400"
-                      : "text-blue-400"
-                  }`}>
-                    [{log.level}]
-                  </span>
-                  <span className="text-slate-400 font-bold mr-1 select-none">[{log.source}]:</span>
-                  <span className="text-slate-100">{log.message}</span>
-                </div>
-              ))}
+              {filteredLogsList.length === 0 ? (
+                <p className="text-slate-500 select-none">No system logs recorded this session.</p>
+              ) : (
+                filteredLogsList.map((log) => (
+                  <div key={log.id} className="leading-relaxed">
+                    <span className="text-slate-400 mr-1 select-none">[{log.time}]</span>
+                    <span className={`font-black uppercase mr-1.5 ${
+                      log.level === "Error"
+                        ? "text-red-400"
+                        : log.level === "Warning"
+                        ? "text-orange-400"
+                        : log.level === "Debug"
+                        ? "text-indigo-400"
+                        : "text-blue-400"
+                    }`}>
+                      [{log.level}]
+                    </span>
+                    <span className="text-slate-400 font-bold mr-1 select-none">[{log.source}]:</span>
+                    <span className="text-slate-100">{log.message}</span>
+                  </div>
+                ))
+              )}
             </div>
 
-            <div className="flex justify-between items-center text-[10.5px] font-semibold text-slate-500">
-              <div className="flex gap-4">
-                <span>Version: <strong className="text-slate-700">v4.8.2</strong></span>
-                <span>Build: <strong className="text-slate-700">#40291</strong></span>
-                <span>Commit: <strong className="text-slate-700">7a2f1c8e</strong></span>
-              </div>
+            <div className="flex justify-end items-center text-[10.5px] font-semibold text-slate-500">
               <button
                 onClick={() => {
                   setSystemLogs([]);
@@ -1634,42 +1441,11 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 
           </div>
 
-          {/* MODULE INTEGRITY MATRIX GRAPH */}
-          <div className="bg-white rounded-3xl p-6 border border-[#BDDDF8] shadow-sm xl:col-span-12 space-y-4">
-            <div>
-              <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">System Modules Health Check Registry</h4>
-              <p className="text-[10px] text-slate-400 font-sans mt-0.5">Continuous automated operational auditing loops across all 19 screens.</p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-6 gap-3 text-xs font-sans font-medium">
-              {moduleHealthRegistry.map((mod, i) => {
-                let colorClass = "bg-emerald-50 border-emerald-200 text-emerald-800";
-                if (mod.status === "Performance Warning") colorClass = "bg-amber-50 border-amber-200 text-amber-800";
-                if (mod.status === "Error") colorClass = "bg-red-50 border-red-200 text-red-800 animate-pulse";
-                if (mod.status === "Offline") colorClass = "bg-slate-50 border-slate-200 text-slate-500";
-
-                return (
-                  <div key={i} className={`p-3.5 rounded-2xl border ${colorClass} hover:scale-[1.01] transition-all`}>
-                    <div className="flex justify-between items-start">
-                      <span className="font-extrabold text-[#1F3557] uppercase tracking-wider text-[10px] block truncate">{mod.name}</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    </div>
-                    <div className="mt-2 text-left space-y-1 font-semibold">
-                      <p className="text-[9.5px] font-bold opacity-80 uppercase font-mono">{mod.status}</p>
-                      <div className="flex justify-between text-[9px] opacity-60 pt-1 border-t border-black/5 font-mono">
-                        <span>Latency:</span>
-                        <span>{mod.avgTimeMs}ms</span>
-                      </div>
-                      <div className="flex justify-between text-[9px] opacity-60 font-mono">
-                        <span>Queue:</span>
-                        <span>{mod.pendingEvents} pending</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Module Health Registry removed -- there is no real per-module
+              timing/health telemetry anywhere in this app (no server
+              process, no APM), so the old table ("Dashboard: Healthy, 14ms",
+              etc.) was entirely fabricated. Not replaced with a stand-in;
+              simply not shown rather than faked. */}
 
         </div>
       )}
@@ -1683,25 +1459,14 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
           {[
             { label: "Create Backup", action: handleBackupNow, icon: "💾", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
-            { label: "Restart Services", action: () => {
-              triggerNotification("🔄 Owner Command: Gracefully reloading central server processes... Online!");
-            }, icon: "🔄", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
-            { label: "Rebuild Event Queue", action: () => {
-              setEventsQueue(prev => prev.filter(e => e.status !== "Completed"));
-              triggerNotification("🔄 Rebuilt Event queue matrices. Discarded completed records.");
+            { label: "Clear Activity Log", action: () => {
+              setEventsQueue([]);
+              triggerNotification("Cleared the live activity log for this session.");
             }, icon: "⚙️", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
-            { label: "Verify Database", action: handleAnalyzeDb, icon: "🔍", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
             { label: "Run System Audit", action: handleAISystemAudit, icon: "🛡️", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
-            { label: "Optimize Performance", action: () => {
-              setCpuUsage(9.2);
-              triggerNotification("⚡ Performance optimized. Cleared slab caches.");
-            }, icon: "⚡", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
             { label: "Verify Permissions", action: () => {
-              triggerNotification("🛡️ Checked Owner-only access tokens. Permissions secure.");
-            }, icon: "🔑", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" },
-            { label: "Verify Integrations", action: () => {
-              triggerNotification("🔗 Integrations: Stripe & QuickBooks online. Maps billing warning active.");
-            }, icon: "🔗", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" }
+              triggerNotification(`🛡️ Owner-only access confirmed for this console (role: ${activeRole}).`);
+            }, icon: "🔑", color: "bg-white hover:bg-[#BDDDF8] border-[#9EC8EF]" }
           ].map((act, i) => (
             <button
               key={i}
@@ -1724,8 +1489,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
             </div>
             <h3 className="text-base font-extrabold text-[#1F3557] uppercase tracking-wider">Confirm Report Generation</h3>
             <p className="text-xs text-[#5E7393] leading-relaxed font-sans font-medium">
-              This action compiles and packages real-time operational and system telemetry indices. 
-              Please confirm your administrative authorization override.
+              This action compiles and downloads a JSON report from your account's real data (collection counts, AI action log size, feature flag state).
             </p>
             <div className="flex gap-3 justify-center pt-2">
               <button
