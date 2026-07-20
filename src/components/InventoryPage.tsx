@@ -1617,7 +1617,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     </div>
                     <div>
                       <span className="text-[9px] text-slate-400 block uppercase font-bold">Custodian Employee</span>
-                      <span className="text-slate-700 font-black">{selectedItem.assignedEmployee || "Pete Rogers (Warehouse)"}</span>
+                      <span className="text-slate-700 font-black">{selectedItem.assignedEmployee || "Unassigned"}</span>
                     </div>
                     <div>
                       <span className="text-[9px] text-slate-400 block uppercase font-bold">Primary Supplier</span>
@@ -1697,7 +1697,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <div className="space-y-1">
                     <span className="text-[9px] text-slate-400 block uppercase font-bold">Material Custodian</span>
                     <span className="text-slate-700 font-bold block bg-white p-2 border border-[#A9CDEE]/30 rounded-lg">
-                      {selectedItem.assignedEmployee || "Pete Rogers"}
+                      {selectedItem.assignedEmployee || "Unassigned"}
                     </span>
                   </div>
                 </div>
@@ -2201,7 +2201,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   onClick={handleScannerSubmit}
                   className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-lg"
                 >
-                  Simulate Scan Gun
+                  Submit Code
                 </button>
               </div>
 

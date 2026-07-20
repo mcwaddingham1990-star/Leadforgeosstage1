@@ -867,6 +867,9 @@ export default function App() {
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
+  // Read-only mirror for the Dashboard's Messages summary card -- MessagesPage
+  // owns the real read/write subscription for the actual Messages screen.
+  const [dashboardConversations] = useFirestoreCollection<any>("conversations", businessId);
   const [bankAccounts, setBankAccounts] = useFirestoreCollection<BankAccount>("bank_accounts", businessId);
   const [recurringTransactions, setRecurringTransactions] = useFirestoreCollection<RecurringTransaction>("recurring_transactions", businessId);
   const [mileageLogs, setMileageLogs] = useFirestoreCollection<MileageLog>("mileage_logs", businessId);
@@ -5172,23 +5175,31 @@ Access to full financial telemetry is restricted.`;
                               
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
-                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">2 Unread Chats</p>
-                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Corporate intercom online</p>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{dashboardConversations.reduce((s: number, c: any) => s + (c.unreadCount || 0), 0)} Unread Chats</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">{dashboardConversations.length} conversation{dashboardConversations.length === 1 ? "" : "s"} total</p>
                                 </div>
 
-                                <div className="space-y-1.5 my-2 text-[9px] text-[#1F3557]/85 leading-normal">
-                                  <p className="border-l-2 border-[#315C9F] pl-1.5 font-sans font-semibold">
-                                    <strong className="text-[#1F3557]">Pete Rogers:</strong> "Need leak repair update..."
-                                  </p>
-                                  <p className="border-l-2 border-[#9EC8EF] pl-1.5 font-sans text-[#5E7393]">
-                                    <strong className="text-[#5E7393]">System Warning:</strong> "Heat wave warning active..."
-                                  </p>
-                                </div>
+                                {dashboardConversations.length === 0 ? (
+                                  <p className="text-[9px] text-[#5E7393] font-sans font-semibold my-2">No conversations yet.</p>
+                                ) : (
+                                  <div className="space-y-1.5 my-2 text-[9px] text-[#1F3557]/85 leading-normal">
+                                    {[...dashboardConversations]
+                                      .sort((a: any, b: any) => (b.lastMessageTime || "").localeCompare(a.lastMessageTime || ""))
+                                      .slice(0, 2)
+                                      .map((c: any) => (
+                                        <p key={c.id} className="border-l-2 border-[#315C9F] pl-1.5 font-sans font-semibold truncate">
+                                          <strong className="text-[#1F3557]">{c.lastMessageSender || c.title}:</strong> "{c.lastMessage || "No messages yet"}"
+                                        </p>
+                                      ))}
+                                  </div>
+                                )}
 
-                                <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
-                                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                                  New Messages Available
-                                </span>
+                                {dashboardConversations.some((c: any) => (c.unreadCount || 0) > 0) && (
+                                  <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
+                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                    New Messages Available
+                                  </span>
+                                )}
                               </div>
                             </div>
                           );
@@ -5718,14 +5729,6 @@ Access to full financial telemetry is restricted.`;
                             <span className="select-none text-xl">📈</span> Company Revenue Analytics
                           </h2>
                           <p className="text-xs text-[#5E7393] font-sans font-semibold">Real-time financial metrics, labor costs, and operational tax projection matrix</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1 bg-[#EAF5FF] text-[#315C9F] text-xs font-mono font-bold rounded-xl border border-[#9EC8EF] uppercase">
-                            Secure Ledger
-                          </span>
-                          <span className="px-3 py-1 bg-[#EAF5FF] text-[#315C9F] text-xs font-mono font-bold rounded-xl border border-[#9EC8EF] uppercase">
-                            Revenue Module
-                          </span>
                         </div>
                       </div>
 

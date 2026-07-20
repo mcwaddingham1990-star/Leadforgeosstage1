@@ -815,17 +815,11 @@ export const DocumentsPage: React.FC = () => {
           setSnapshotStep("ai_review");
           const initialDocName = `AI_SCAN_${scannedDocType}_${Math.floor(100 + Math.random() * 900)}.pdf`;
           setTempDocName(initialDocName);
-          // Custom detection simulation based on scanned type
-          if (scannedDocType === "Receipts") {
-            setResolvedCustomer("Apex Plumb & Drain");
-            setResolvedVendor("Home Depot");
-          } else if (scannedDocType === "Contracts") {
-            setResolvedCustomer("Chevron Logistics");
-            setResolvedVendor("None");
-          } else {
-            setResolvedCustomer("None");
-            setResolvedVendor("None");
-          }
+          // No real OCR/AI extraction runs here -- leave customer/vendor
+          // unresolved so the owner fills in the real values themselves
+          // rather than showing a fabricated match.
+          setResolvedCustomer("None");
+          setResolvedVendor("None");
           return 100;
         }
         return prev + 10;
@@ -1992,56 +1986,10 @@ export const DocumentsPage: React.FC = () => {
               <button onClick={() => setIsGoogleDriveModalOpen(false)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
             </div>
             <div className="space-y-3.5 text-xs">
-              <p className="text-[10px] text-[#5E7393] font-black uppercase tracking-widest">Connect and Import Cloud Files:</p>
-              <div className="space-y-2">
-                {[
-                  { name: "Apex_Plumb_Main_Contract_Draft.gdoc", size: "12 KB", type: "Contracts", date: "Yesterday" },
-                  { name: "Q2_Corporate_Revenue_Tax_Filing.gsheet", size: "480 KB", type: "Payroll Documents", date: "July 2" },
-                  { name: "Commercial_Site_Blueprint_v3.gdraw", size: "4.2 MB", type: "Blueprints", date: "June 28" },
-                  { name: "Field_Service_Terms_Master.gdoc", size: "18 KB", type: "Contracts", date: "June 15" }
-                ].map((file, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      const importedDoc: DocumentItem = {
-                        id: `doc_gdrive_${Date.now()}_${i}`,
-                        name: file.name.replace(".gdoc", ".pdf").replace(".gsheet", ".pdf").replace(".gdraw", ".pdf"),
-                        customer: "Apex Plumb & Drain",
-                        employee: loggedInUser?.name || "System Admin",
-                        vendor: "None",
-                        job: "None",
-                        type: file.type,
-                        uploadedBy: "Google Drive Sync",
-                        date: new Date().toISOString().split('T')[0],
-                        size: file.size,
-                        status: "Unsigned",
-                        isFavorite: false,
-                        isArchived: false,
-                        notes: `Imported directly from connected GDrive directory. Originally saved: ${file.date}`,
-                        tags: ["GDrive", "Cloud", "Imported"],
-                        estimateId: "None",
-                        invoiceId: "None",
-                        lastModified: "Just now"
-                      };
-                      setDocuments(prev => [...prev, importedDoc]);
-                      setIsGoogleDriveModalOpen(false);
-                      triggerNotification(`✅ Successfully imported and synchronized '${importedDoc.name}' from Google Drive!`);
-                      if (logOperationalEvent) {
-                        logOperationalEvent("GDrive Import", `Synchronized cloud file '${importedDoc.name}'`, "☁️");
-                      }
-                    }}
-                    className="w-full bg-white hover:bg-[#BDDDF8] border border-[#9EC8EF]/40 rounded-xl p-3 flex items-center justify-between text-left transition-colors cursor-pointer shadow-sm group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Cloud className="w-5 h-5 text-cyan-600" />
-                      <div>
-                        <p className="font-bold text-[#1F3557] group-hover:text-cyan-800 truncate max-w-[240px]">{file.name}</p>
-                        <p className="text-[9px] text-[#5E7393] font-medium font-sans">Google Cloud Sync • {file.size}</p>
-                      </div>
-                    </div>
-                    <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold uppercase">IMPORT</span>
-                  </button>
-                ))}
+              <div className="py-8 text-center space-y-2">
+                <Cloud className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-500">Google Drive isn't connected yet</p>
+                <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Connect your Google account in Settings → Integrations to import files directly from Drive. Nothing here is imported until that's set up.</p>
               </div>
             </div>
             <button
@@ -2071,43 +2019,9 @@ export const DocumentsPage: React.FC = () => {
                 <QrCode className="w-32 h-32 text-slate-800" />
               </div>
               <p className="text-[10px] text-[#5E7393] leading-relaxed font-sans font-semibold">
-                Scan this QR Code with your smartphone camera to connect device, or click below to simulate immediate phone snapshot uploads!
+                Remote phone pairing isn't built yet. For now, upload photos from your phone the normal way: open this app in your phone's browser and use the regular Upload button.
               </p>
             </div>
-            <button
-              onClick={() => {
-                const simulatedUpload: DocumentItem = {
-                  id: `doc_phone_${Date.now()}`,
-                  name: `Phone_Snapshot_${new Date().toISOString().slice(0,10).replace(/-/g,"_")}.pdf`,
-                  customer: "Apex Plumb & Drain",
-                  employee: loggedInUser?.name || "Field Agent",
-                  vendor: "None",
-                  job: "None",
-                  type: "Photos",
-                  uploadedBy: "Phone Camera",
-                  date: new Date().toISOString().split('T')[0],
-                  size: "940 KB",
-                  status: "Unsigned",
-                  isFavorite: false,
-                  isArchived: false,
-                  notes: "Synchronized immediately from remote smartphone camera session.",
-                  tags: ["Camera", "Mobile", "Live Capture"],
-                  estimateId: "None",
-                  invoiceId: "None",
-                  lastModified: "Just now"
-                };
-                setDocuments(prev => [...prev, simulatedUpload]);
-                setIsPhoneUploadModalOpen(false);
-                triggerNotification("📱 Phone photo received and uploaded successfully!");
-                if (logOperationalEvent) {
-                  logOperationalEvent("Mobile Upload", "Transferred remote smartphone photo capture to records", "📱");
-                }
-              }}
-              className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
-            >
-              <Plus className="w-4 h-4" />
-              Simulate Phone Photo Upload
-            </button>
             <button
               onClick={() => setIsPhoneUploadModalOpen(false)}
               className="w-full py-2 bg-white border border-[#9EC8EF] text-[#1F3557] hover:bg-slate-50 font-bold rounded-xl text-xs uppercase cursor-pointer text-center"
@@ -2680,7 +2594,7 @@ export const DocumentsPage: React.FC = () => {
                 <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-center gap-2">
                   <Info className="w-4 h-4 text-blue-400 shrink-0" />
                   <p className="text-[10.5px] text-blue-200">
-                    <strong>AI Optical Result:</strong> Parsed file data with simulated ambiguity. Please confirm or edit fields before saving.
+                    <strong>No customer detected automatically.</strong> Pick one from your real customer list below, or leave it unlinked.
                   </p>
                 </div>
 
@@ -2691,30 +2605,28 @@ export const DocumentsPage: React.FC = () => {
                     Verify and Edit Parsed Fields
                   </h4>
 
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {[
-                      "Apex Plumb & Drain (Matched address)",
-                      "Chevron Logistics (Matched primary name)",
-                      "Oakridge Apartments (Matched local phone)"
-                    ].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setResolvedCustomer(opt.split(" (")[0]);
-                          triggerNotification(`Approved client link: ${opt.split(" (")[0]}`);
-                        }}
-                        className={`w-full text-left text-[11px] p-2 rounded-lg font-bold border transition-colors ${
-                          resolvedCustomer === opt.split(" (")[0]
-                            ? "bg-blue-600 border-blue-500 text-white"
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                        }`}
-                      >
-                        {resolvedCustomer === opt.split(" (")[0] ? "✓ " : ""}
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
+                  {customersList.length > 0 && (
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {customersList.slice(0, 5).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setResolvedCustomer(c.company);
+                            triggerNotification(`Linked to customer: ${c.company}`);
+                          }}
+                          className={`w-full text-left text-[11px] p-2 rounded-lg font-bold border transition-colors ${
+                            resolvedCustomer === c.company
+                              ? "bg-blue-600 border-blue-500 text-white"
+                              : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                          }`}
+                        >
+                          {resolvedCustomer === c.company ? "✓ " : ""}
+                          {c.company}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="pt-2 border-t border-slate-700 text-[10.5px] text-slate-300 space-y-3">
                     <div>
@@ -2880,9 +2792,9 @@ export const DocumentsPage: React.FC = () => {
                     className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
                   >
                     <option value="">-- Choose Customer --</option>
-                    <option value="Apex Plumb & Drain">Apex Plumb & Drain</option>
-                    <option value="Chevron Logistics">Chevron Logistics</option>
-                    <option value="Oakridge Apartments">Oakridge Apartments</option>
+                    {customersList.map(c => (
+                      <option key={c.id} value={c.company}>{c.company}</option>
+                    ))}
                   </select>
                 ) : attachTargetType === "Job" ? (
                   <select

@@ -87,26 +87,14 @@ const STATUSES: Array<DispatchEvent["status"]> = [
   "Cancelled"
 ];
 
-// Map Pin coordinates for preset locations to simulate a beautiful interactive spatial grid
-const MOCK_MAP_GRID = {
-  "Apex Plumb & Drain": { x: 35, y: 40, type: "job", address: "1024 Industrial Pkwy" },
-  "Clark Kent": { x: 55, y: 25, type: "job", address: "344 Clinton St" },
-  "Emma Watson": { x: 70, y: 65, type: "job", address: "42 Wallaby Way" },
-  "Clara Oswald": { x: 20, y: 75, type: "job", address: "4400 Oakridge Ln" },
-  "Marcus Vance": { x: 45, y: 15, type: "job", address: "1024 Industrial Pkwy, Ste B" },
-  "Sarah Jenkins": { x: 25, y: 30, type: "employee", role: "Owner" },
-  "Pete Rogers": { x: 60, y: 50, type: "employee", role: "Manager" },
-  "John Doe": { x: 40, y: 80, type: "employee", role: "Driver" },
-  "Truck 1 (Ford F-150)": { x: 30, y: 60, type: "vehicle" },
-  "Truck 2 (Chevrolet Express)": { x: 65, y: 35, type: "vehicle" },
-  "Van 3 (Mercedes Sprinter)": { x: 50, y: 70, type: "vehicle" }
-};
+// No preset/fake pins -- every real customer, employee, and vehicle name
+// gets a stable spot via the deterministic hash below instead.
+const MOCK_MAP_GRID: Record<string, { x: number; y: number; type: string; address?: string; role?: string }> = {};
 
-// Deterministic fallback grid position for a real name that isn't in the
-// small illustrative MOCK_MAP_GRID lookup above (i.e. almost always, for a
-// real customer/employee/vehicle) -- stable across re-renders instead of
-// jumping to a new random spot every time, while still not claiming to be
-// a real GPS location (that's what the actual Google Map page is for).
+// Deterministic fallback grid position for a real name -- stable across
+// re-renders instead of jumping to a new random spot every time, while
+// still not claiming to be a real GPS location (that's what the actual
+// Google Map page is for).
 function deterministicGridPosition(key: string, minX: number, spreadX: number, minY: number, spreadY: number): { x: number; y: number } {
   let hash = 0;
   for (let i = 0; i < key.length; i++) {

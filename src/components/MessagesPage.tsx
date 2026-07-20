@@ -432,49 +432,61 @@ export const MessagesPage: React.FC = () => {
     }
   };
 
-  // AI Chat response simulator using advanced custom prompts
-  const simulateAiResponse = (userPrompt: string) => {
+  // Real Gemini call, grounded in this account's actual data.
+  const simulateAiResponse = async (userPrompt: string) => {
     triggerRealTimeNotification("Owner's AI is analyzing your request...");
-    
-    setTimeout(() => {
-      let aiContent = "I've analyzed the query. How else can I support your operations?";
-      
-      const promptLower = userPrompt.toLowerCase();
-      if (promptLower.includes("revenue") || promptLower.includes("financial")) {
-        aiContent = "Operational Review: Commercial drainage jobs are yielding a high ROI at 34% margin this quarter, while residential leak calls show an increased volume but lower average tickets. I suggest prioritizing commercial routes this week.";
-      } else if (promptLower.includes("invoice") || promptLower.includes("payment")) {
-        aiContent = "Invoice I-2049 for Chevron Logistics was settled on 2026-07-05 for $12,450. I can auto-generate a thank you note or sync this directly to QuickBooks Online.";
-      } else if (promptLower.includes("inventory") || promptLower.includes("pvc")) {
-        aiContent = "Inventory Check: Current stock of 2-inch PVC Couplers is 4 units. I suggest ordering 20 units from Home Depot Pro to restore minimum safety stock levels.";
-      } else if (promptLower.includes("safety") || promptLower.includes("crew")) {
-        aiContent = "Safety Directive: Subterranean excavators require Level 2 gas masks and heavy steel-toed boots. I can broadcast this safety memo to Seattle Field Crew immediately.";
+    const convId = activeConv.id;
+
+    const businessSummary = [
+      `Customers on file: ${customersList.length}.`,
+      `Active jobs: ${mockJobs.length}.`,
+      `Estimates on file: ${estimates.length}.`,
+      `Invoices on file: ${invoices.length}.`
+    ].join(" ");
+
+    let aiContent = "Couldn't reach the AI right now — check your connection and try again.";
+    try {
+      const res = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: "messages",
+          pageName: "Messages",
+          isOwnerOrAdmin: true,
+          businessSummary,
+          query: userPrompt
+        })
+      });
+      const data = await res.json();
+      aiContent = data.text || "No response.";
+    } catch {
+      // aiContent already set to the fallback message above
+    }
+
+    const aiMsg: Message = {
+      id: "ai_" + Date.now(),
+      sender: "Owner's AI",
+      senderRole: "AI Assistant",
+      content: aiContent,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === convId) {
+        return {
+          ...c,
+          lastMessage: aiMsg.content,
+          lastMessageSender: "Owner's AI",
+          lastMessageTime: aiMsg.timestamp,
+          unreadCount: 0,
+          isRead: true,
+          messages: [...c.messages, aiMsg]
+        };
       }
+      return c;
+    }));
 
-      const aiMsg: Message = {
-        id: "ai_" + Date.now(),
-        sender: "Owner's AI",
-        senderRole: "AI Assistant",
-        content: aiContent,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
-      };
-
-      setConversations(prev => prev.map(c => {
-        if (c.id === "conv_4") {
-          return {
-            ...c,
-            lastMessage: aiMsg.content,
-            lastMessageSender: "Owner's AI",
-            lastMessageTime: aiMsg.timestamp,
-            unreadCount: c.id === activeConv.id ? 0 : c.unreadCount + 1,
-            isRead: c.id === activeConv.id,
-            messages: [...c.messages, aiMsg]
-          };
-        }
-        return c;
-      }));
-
-      triggerRealTimeNotification("Owner's AI completed response generation.");
-    }, 2000);
+    triggerRealTimeNotification("Owner's AI completed response generation.");
   };
 
   // AI Compose rewrite assistant

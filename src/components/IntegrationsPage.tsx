@@ -801,25 +801,12 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     }
   ]);
 
-  // Sync log entries
-  const [syncLogs, setSyncLogs] = useState<SyncLogEntry[]>([
-    { id: "log_1", date: "2026-07-06", time: "18:41", integrationId: "google_maps", integrationName: "Google Maps", recordsUpdated: 4, warnings: 0, errors: 0, status: "Success", message: "Optimized 4 current routing paths for Dispatch." },
-    { id: "log_2", date: "2026-07-06", time: "18:40", integrationId: "google_calendar", integrationName: "Google Calendar", recordsUpdated: 1, warnings: 0, errors: 0, status: "Success", message: "Synchronized active appointment 'Apex Plumb & Drain' to scheduling master." },
-    { id: "log_3", date: "2026-07-06", time: "18:40", integrationId: "twilio", integrationName: "Twilio", recordsUpdated: 3, warnings: 1, errors: 0, status: "Warning", message: "Received 3 inbound customer SMS logs. 1 delivery receipt warning." },
-    { id: "log_4", date: "2026-07-06", time: "18:35", integrationId: "webhook", integrationName: "Webhook", recordsUpdated: 0, warnings: 0, errors: 1, status: "Failed", message: "Connection refused (503 Service Unavailable) on external receiver. Will retry." },
-    { id: "log_5", date: "2026-07-06", time: "18:30", integrationId: "google_business", integrationName: "Google Business Profile", recordsUpdated: 2, warnings: 0, errors: 0, status: "Success", message: "Imported 2 new leads from search profile: Albert F., Theresa W." },
-    { id: "log_6", date: "2026-07-06", time: "18:15", integrationId: "google_drive", integrationName: "Google Drive", recordsUpdated: 12, warnings: 0, errors: 0, status: "Success", message: "Backed up 12 documents to folder '/OwnersLocal_Backups'." },
-    { id: "log_7", date: "2026-07-06", time: "18:00", integrationId: "quickbooks", integrationName: "QuickBooks", recordsUpdated: 1, warnings: 0, errors: 0, status: "Success", message: "Sent completed job E-1084 ledger updates to bookkeeping ledger." }
-  ]);
+  // Sync log entries -- starts empty; nothing here is a real connected
+  // integration yet, so no sync activity has actually happened.
+  const [syncLogs, setSyncLogs] = useState<SyncLogEntry[]>([]);
 
-  // Webhook history logs
-  const [webhookLogs, setWebhookLogs] = useState<WebhookHistoryEntry[]>([
-    { id: "wh_1", type: "Incoming", eventType: "lead.created", timestamp: "2026-07-06 18:30:15", payloadSize: "1.4 KB", status: "Delivered", retryCount: 0 },
-    { id: "wh_2", type: "Outgoing", eventType: "invoice.updated", timestamp: "2026-07-06 18:00:22", payloadSize: "3.2 KB", status: "Delivered", retryCount: 0 },
-    { id: "wh_3", type: "Outgoing", eventType: "job.completed", timestamp: "2026-07-06 17:45:00", payloadSize: "2.8 KB", status: "Failed", retryCount: 3 },
-    { id: "wh_4", type: "Incoming", eventType: "sms.received", timestamp: "2026-07-06 17:32:10", payloadSize: "0.8 KB", status: "Delivered", retryCount: 0 },
-    { id: "wh_5", type: "Outgoing", eventType: "calendar.event_shifted", timestamp: "2026-07-06 16:15:05", payloadSize: "2.1 KB", status: "Retrying", retryCount: 1 }
-  ]);
+  // Webhook history logs -- starts empty for the same reason.
+  const [webhookLogs, setWebhookLogs] = useState<WebhookHistoryEntry[]>([]);
 
   // UI state filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -956,112 +943,29 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     );
   };
 
-  // Perform Manual Sync side effect on specific integration
+  // Manual Sync -- none of these integrations have a real OAuth connection
+  // wired up yet, so this deliberately does NOT fabricate customers, leads,
+  // documents, or scheduling events into real collections. It just logs an
+  // honest "not connected" entry instead of pretending data was pulled.
   const triggerEventEngineSync = (id: string) => {
-    const timestamp = new Date().toISOString().replace("T", " ").substring(0, 16);
     const currentDateStr = new Date().toISOString().substring(0, 10);
     const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
-    // Custom updates per request instructions
-    if (id === "google_calendar") {
-      // "Google Calendar updates Scheduling."
-      const newEvt: SchedulingEvent = {
-        id: `evt_google_${Date.now()}`,
-        eventType: "Job",
-        date: currentDateStr,
-        startTime: "11:30",
-        endTime: "13:30",
-        customer: "Theresa Webb (Google Calendar Sync)",
-        customerPhone: "(206) 555-0153",
-        customerEmail: "theresa@webb.com",
-        customerAddress: "1102 Industrial Way, Seattle WA 98108",
-        assignedEmployee: "Theresa W.",
-        assignedCrew: "Crew Alpha",
-        location: "1102 Industrial Way, Seattle WA 98108",
-        priority: "High",
-        notes: "Inbound calendar appointment generated from Google Business Profile synchronization suite.",
-        status: "Scheduled"
-      };
-      setSchedulingEvents((prev) => [newEvt, ...prev]);
-      triggerNotification("📅 Shared Event Engine: Synced Google Calendar events to Scheduling module.");
-    } else if (id === "quickbooks") {
-      // "QuickBooks updates Revenue."
-      triggerNotification("💼 Shared Event Engine: Synced invoice registers with QuickBooks Online ledger.");
-    } else if (id === "stripe") {
-      // "Stripe updates Payments."
-      triggerNotification("💳 Shared Event Engine: Active downpayments and secure checkout metrics updated.");
-    } else if (id === "google_business") {
-      // "Google Business updates Leads."
-      const newLead = {
-        id: `lead_google_${Date.now()}`,
-        name: "Darren Finch (Google Lead)",
-        phone: "(206) 555-8902",
-        service: "Water Line Replacement",
-        status: "New Inquiry",
-        date: "Today, 18:41 PM"
-      };
-      setDashboardLeads((prev) => [newLead, ...prev]);
-      triggerNotification("🏪 Shared Event Engine: Imported 1 brand new customer lead from Google Business Profile.");
-    } else if (id === "twilio") {
-      // "Twilio updates Messages."
-      triggerNotification("📱 Shared Event Engine: Pulled recent Twilio text messaging queues securely.");
-    } else if (id === "google_drive") {
-      // "Google Drive updates Documents."
-      const newDoc: DocumentItem = {
-        id: `doc_google_${Date.now()}`,
-        name: "Site_Survey_Map_GoogleDrive.pdf",
-        customer: "Theresa Webb",
-        employee: "John Doe",
-        vendor: "Google Drive Sync",
-        job: "Drainage Project",
-        type: "Blueprint",
-        uploadedBy: "Google Drive Sync",
-        date: currentDateStr,
-        size: "3.4 MB",
-        status: "Pending",
-        isFavorite: false,
-        isArchived: false,
-        notes: "Synced technical blueprint PDF from Google Drive folder.",
-        tags: ["Google Sync", "Blueprint"],
-        estimateId: "",
-        invoiceId: "",
-        lastModified: currentDateStr,
-        url: "#"
-      };
-      setDocuments((prev) => [newDoc, ...prev]);
-      triggerNotification("💾 Shared Event Engine: Synced 1 new technical PDF schematic from Google Drive.");
-    } else if (id === "google_maps") {
-      // "Maps updates Routes."
-      triggerNotification("🗺️ Shared Event Engine: Refreshed high-fidelity transit lines for active technicians.");
-    } else if (id === "gemini" || id === "openai") {
-      // "AI services update AI Assistant."
-      const newAct = {
-        id: `act_ai_${Date.now()}`,
-        time: timeStr,
-        module: "Integrations",
-        action: "AI Assistant Sync",
-        reason: `${id.toUpperCase()} model analysis updated client-interaction parameters.`,
-        status: "Completed" as const,
-        approvedBy: loggedInUser?.name || "Unknown User"
-      };
-      setRecentAiActions((prev) => [newAct, ...prev]);
-      triggerNotification(`✨ Shared Event Engine: ${id.toUpperCase()} LLM pipeline verified with AI Assistant.`);
-    }
-
-    // Add success log entry
     const matchingInt = integrations.find((i) => i.id === id);
     const intName = matchingInt ? matchingInt.name : id;
+    triggerNotification(`${intName} isn't connected yet -- nothing to sync.`);
+
     const newLog: SyncLogEntry = {
       id: `log_manual_${Date.now()}`,
       date: currentDateStr,
       time: timeStr,
       integrationId: id,
       integrationName: intName,
-      recordsUpdated: Math.floor(Math.random() * 5) + 1,
-      warnings: 0,
+      recordsUpdated: 0,
+      warnings: 1,
       errors: 0,
-      status: "Success",
-      message: `Manual sync completed. Event Engine state updated successfully.`
+      status: "Warning",
+      message: `${intName} isn't connected with real credentials yet, so no records were synced.`
     };
     setSyncLogs((prev) => [newLog, ...prev]);
   };
