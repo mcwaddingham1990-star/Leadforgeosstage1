@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -58,14 +58,15 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { recentAiActions, setRecentAiActions } = useDomainData();
+  const { recentAiActions, setRecentAiActions, customers, leads, schedulingEvents, employees, invoices, transactions } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
-    logOperationalEvent
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
-  const [activeTab, setActiveTab] = useState<"command" | "reports" | "workflows" | "config" | "insights" | "settings">("command");
+  const [activeTab, setActiveTab] = useState<"command" | "reports" | "config" | "insights" | "settings">("command");
   
   // Local state for interactive configurations
   const [selectedKBDoc, setSelectedKBDoc] = useState<string>("pricebook");
@@ -73,47 +74,76 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
   const [aiTone, setAiTone] = useState<string>("analytical");
   const [showSaveToast, setShowSaveToast] = useState<boolean>(false);
 
-  // Mock conversation history for the Command Center
-  const [chatLogs, setChatLogs] = useState([
-    { id: "log_1", title: "Low stock alert for Copper Tubing", date: "Today, 04:15 PM", module: "Inventory", preview: "Determined that copper tubing levels dropped below safety parameters..." },
-    { id: "log_2", title: "Double booking on Route A conflict", date: "Today, 02:30 PM", module: "Scheduling", preview: "Suggested shifting technician Dave's 3 PM call to tomorrow morning..." },
-    { id: "log_3", title: "Invoice leakage analysis", date: "Jul 5, 2026", module: "Revenue", preview: "Reviewed outstanding unpaid balances for residential clients..." },
-    { id: "log_4", title: "VIP Loyalty pricing suggestion", date: "Jul 4, 2026", module: "Estimates", preview: "Computed discount parameters for Apex Plumbing based on historical margin..." }
-  ]);
+  // Real reports generated on-demand from this account's actual data (session-local, not a fake pre-seeded library).
+  const [reportsList, setReportsList] = useState<Array<{ id: string; title: string; date: string; content: string }>>([]);
+  const [isCompilingReport, setIsCompilingReport] = useState(false);
 
-  // Mock Business Insights telemetry chart data
-  const chartsData = [
-    { name: "Mon", "AI Recommendations": 42, "Auto Actions": 15, "Efficiency Gain %": 24 },
-    { name: "Tue", "AI Recommendations": 58, "Auto Actions": 24, "Efficiency Gain %": 28 },
-    { name: "Wed", "AI Recommendations": 65, "Auto Actions": 30, "Efficiency Gain %": 35 },
-    { name: "Thu", "AI Recommendations": 48, "Auto Actions": 18, "Efficiency Gain %": 31 },
-    { name: "Fri", "AI Recommendations": 72, "Auto Actions": 42, "Efficiency Gain %": 40 },
-    { name: "Sat", "AI Recommendations": 30, "Auto Actions": 10, "Efficiency Gain %": 42 },
-    { name: "Sun", "AI Recommendations": 20, "Auto Actions": 5, "Efficiency Gain %": 45 }
-  ];
-
-  // Mock AI Reports
-  const reportsList = [
-    { id: "rep_1", title: "Q3 Operational Bottleneck Forecast", size: "2.4 MB", type: "PDF Report", downloads: 14, date: "Jul 6, 2026" },
-    { id: "rep_2", title: "Lead to Close Velocity Audit", size: "1.2 MB", type: "Spreadsheet", downloads: 8, date: "Jul 5, 2026" },
-    { id: "rep_3", title: "Drive Time & Route Optimization Study", size: "950 KB", type: "PDF Report", downloads: 22, date: "Jul 3, 2026" },
-    { id: "rep_4", title: "Payroll & Labor Efficiency Breakdown", size: "1.8 MB", type: "PDF Report", downloads: 11, date: "Jun 30, 2026" }
-  ];
-
-  // Mock Workflows
-  const [workflows, setWorkflows] = useState([
-    { id: "wf_1", name: "Low Inventory Automatic PO", desc: "Instantly draft purchase orders when core items drop below minQuantity.", status: true, triggers: "Inventory", actions: "PO Draft" },
-    { id: "wf_2", name: "Lead Follow-up Auto Drafting", desc: "Draft professional reply proposals 30 mins after a new high-value lead arrives.", status: true, triggers: "Leads", actions: "Messages Draft" },
-    { id: "wf_3", name: "Technician Drive Time Guard", desc: "Alert scheduler automatically if dispatch drive time exceeds 45 mins between jobs.", status: false, triggers: "Routes", actions: "Conflict Alert" },
-    { id: "wf_4", name: "Customer Past Due Balance Hold", desc: "Automatically tag estimates as 'Review Required' if the client has invoices > 30 days outstanding.", status: true, triggers: "Estimates", actions: "Lock Status" }
-  ]);
-
-  const handleToggleWorkflow = (id: string) => {
-    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: !w.status } : w));
-    const workflow = workflows.find(w => w.id === id);
-    if (workflow) {
-      logOperationalEvent("AI Config", `Workflow '${workflow.name}' status toggled to ${!workflow.status ? "Enabled" : "Disabled"}.`, "🤖");
+  // Real weekly rollup of the actual AI action ledger -- no fabricated telemetry.
+  const chartsData = useMemo(() => {
+    const days: { key: string; name: string }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push({ key: d.toISOString().slice(0, 10), name: d.toLocaleDateString([], { weekday: "short" }) });
     }
+    return days.map(d => {
+      const dayActions = recentAiActions.filter((a: any) => a.date === d.key);
+      return {
+        name: d.name,
+        "AI Actions Logged": dayActions.length,
+        "Completed": dayActions.filter((a: any) => a.status === "Completed").length
+      };
+    });
+  }, [recentAiActions]);
+
+  const handleCompileAudit = async () => {
+    setIsCompilingReport(true);
+    logOperationalEvent("AI Reports", "Compiled a new performance audit from live account data.", "📋");
+    const businessSummary = [
+      `Customers on file: ${customers.length}.`,
+      `Open leads: ${leads.length}.`,
+      `Scheduling events on file: ${schedulingEvents.length}.`,
+      `Employees on roster: ${employees.length}.`,
+      `Invoices on file: ${invoices.length}.`,
+      `Logged transactions: ${transactions.length}.`,
+      `AI actions logged (all time): ${recentAiActions.length}, of which ${recentAiActions.filter((a: any) => a.status === "Undone").length} were undone.`
+    ].join(" ");
+
+    try {
+      const res = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: "ai_assistant",
+          pageName: "AI Command Center",
+          isOwnerOrAdmin: true,
+          businessSummary,
+          query: "Write a short operational audit report for the business owner covering current pipeline, staffing, and financial activity levels, using only the real figures given above. If a section has no data, say so plainly instead of inventing anything."
+        })
+      });
+      const data = await res.json();
+      setReportsList(prev => [{
+        id: `rep_${Date.now()}`,
+        title: `Operational Audit — ${new Date().toLocaleDateString()}`,
+        date: new Date().toLocaleDateString(),
+        content: data.text || "No response."
+      }, ...prev]);
+    } catch {
+      triggerNotification("Couldn't reach the AI right now — check your connection and try again.");
+    } finally {
+      setIsCompilingReport(false);
+    }
+  };
+
+  const handleDownloadReport = (rep: { title: string; content: string }) => {
+    const blob = new Blob([rep.content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${rep.title.replace(/[^a-z0-9]+/gi, "_")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    logOperationalEvent("AI Report Download", `Downloaded report: ${rep.title}`, "📥");
   };
 
   const handleSaveConfig = () => {
@@ -171,7 +201,6 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
         {[
           { id: "command", label: "Conversation History", icon: <History className="w-4 h-4" /> },
           { id: "reports", label: "AI Reports & Audits", icon: <FileText className="w-4 h-4" /> },
-          { id: "workflows", label: "Saved Workflows", icon: <Zap className="w-4 h-4" /> },
           { id: "insights", label: "Business Insights", icon: <BarChart2 className="w-4 h-4" /> },
           { id: "config", label: "Model Knowledge Configuration", icon: <Database className="w-4 h-4" /> },
           { id: "settings", label: "Global AI Settings", icon: <Settings className="w-4 h-4" /> }
@@ -202,49 +231,38 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="flex justify-between items-center border-b border-[#A9CDEE] pb-3">
                 <div>
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Historical AI Chats & Telemetries</h3>
-                  <p className="text-[10.5px] text-slate-500 mt-0.5">Access and resume past session context logs and decision streams.</p>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">AI Action History</h3>
+                  <p className="text-[10.5px] text-slate-500 mt-0.5">Every real AI-driven action taken across the app, logged as it happens.</p>
                 </div>
                 <span className="text-[10px] bg-white text-[#315C9F] border border-[#A9CDEE] px-2.5 py-1 rounded-xl font-mono font-bold">
-                  {chatLogs.length} Saved Logs
+                  {recentAiActions.length} Logged
                 </span>
               </div>
 
-              <div className="space-y-3">
-                {chatLogs.map((log) => (
-                  <div key={log.id} className="p-4 bg-white border border-[#9EC8EF]/40 hover:border-[#315C9F] rounded-2xl flex justify-between gap-4 transition-all">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2 py-0.5 bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF]/40 rounded text-[9px] font-mono font-bold uppercase">
-                          {log.module}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-bold font-mono">{log.date}</span>
+              {recentAiActions.length === 0 ? (
+                <div className="py-10 text-center space-y-2">
+                  <p className="text-3xl">🤖</p>
+                  <p className="text-xs font-bold text-slate-500">No AI activity yet</p>
+                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Actions the AI takes across the app — reports compiled, config changes, automated suggestions — will show up here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentAiActions.map((log: any) => (
+                    <div key={log.id} className="p-4 bg-white border border-[#9EC8EF]/40 hover:border-[#315C9F] rounded-2xl flex justify-between gap-4 transition-all">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF]/40 rounded text-[9px] font-mono font-bold uppercase">
+                            {log.module}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold font-mono">{log.date} {log.time}</span>
+                        </div>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide truncate">{log.action}</h4>
+                        <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2 font-sans font-medium">{log.reason}</p>
                       </div>
-                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide truncate">{log.title}</h4>
-                      <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2 font-sans font-medium">{log.preview}</p>
                     </div>
-                    
-                    <button
-                      onClick={() => {
-                        if (onOpenAIAnalysis) {
-                          onOpenAIAnalysis(log.module.toLowerCase(), log.module, log.preview);
-                        }
-                      }}
-                      className="h-fit px-3 py-2 bg-[#EAF5FF] hover:bg-[#315C9F] text-[#315C9F] hover:text-white border border-[#9EC8EF] hover:border-transparent rounded-xl text-[10px] font-black transition-colors uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                      <span>Resume</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-[#E3F3FF] p-4 rounded-xl border border-[#A9CDEE] text-[11px] leading-relaxed text-slate-600 font-sans font-medium flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Storage Policy:</strong> Conversations remain persistently logged in Firestore until cleared. Any model configuration parameters tweaked inside this hub dynamically alter downstream floating widget logic automatically.
-                </span>
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -256,100 +274,48 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Operational Audits & Diagnostic Reports</h3>
                   <p className="text-[10.5px] text-slate-500 mt-0.5">Download AI-compiled corporate health and dispatch analysis logs.</p>
                 </div>
-                <button 
-                  onClick={() => {
-                    logOperationalEvent("AI Reports", "Triggered live compilation of new company-wide performance audit.", "📋");
-                  }}
-                  className="px-3 py-1.5 bg-[#4A9BFF] hover:bg-[#3583E6] text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 shadow-sm transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3 animate-spin" style={{ animationDuration: '4s' }} />
-                  <span>Compile Audit</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {reportsList.map((rep) => (
-                  <div key={rep.id} className="p-4 bg-white border border-[#9EC8EF]/40 rounded-2xl flex flex-col justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-mono text-[#4A9BFF] font-bold uppercase">{rep.type}</span>
-                        <span className="text-[9px] text-slate-400 font-mono">{rep.date}</span>
-                      </div>
-                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider leading-snug">{rep.title}</h4>
-                      <p className="text-[10px] text-slate-400 font-bold font-mono">Size: {rep.size} • Total Downloads: {rep.downloads}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                      <span className="text-[9.5px] text-slate-500 font-sans font-semibold flex items-center gap-1 text-emerald-600">
-                        <CheckSquareIcon className="w-3.5 h-3.5" /> Verified Clean
-                      </span>
-                      <button
-                        onClick={() => {
-                          logOperationalEvent("AI Report Download", `Downloaded audit file: ${rep.title}`, "📥");
-                        }}
-                        className="p-1.5 bg-[#EAF5FF] hover:bg-[#315C9F] text-[#315C9F] hover:text-white border border-[#9EC8EF] hover:border-transparent rounded-lg transition-colors cursor-pointer"
-                        title="Download Report"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* SAVED WORKFLOWS TAB */}
-          {activeTab === "workflows" && (
-            <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
-              <div className="flex justify-between items-center border-b border-[#A9CDEE] pb-3">
-                <div>
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Autonomous AI Business Workflows</h3>
-                  <p className="text-[10.5px] text-slate-500 mt-0.5">Manage automated triggers that execute background system logic.</p>
-                </div>
                 <button
-                  onClick={() => onOpenPlaceholder("New Workflow Builder", "🤖")}
-                  className="px-3 py-1.5 bg-[#4A9BFF] hover:bg-[#3583E6] text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1.5 shadow-sm transition-colors"
+                  onClick={handleCompileAudit}
+                  disabled={isCompilingReport}
+                  className="px-3 py-1.5 bg-[#4A9BFF] hover:bg-[#3583E6] disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 shadow-sm transition-colors"
                 >
-                  <PlusSquare className="w-3.5 h-3.5" />
-                  <span>Create Trigger</span>
+                  <RefreshCw className={`w-3 h-3 ${isCompilingReport ? "animate-spin" : ""}`} />
+                  <span>{isCompilingReport ? "Compiling..." : "Compile Audit"}</span>
                 </button>
               </div>
 
-              <div className="space-y-3">
-                {workflows.map((wf) => (
-                  <div key={wf.id} className="p-4 bg-white border border-[#9EC8EF]/40 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1 flex-1 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[8.5px] rounded font-bold font-mono">
-                          IF: {wf.triggers}
-                        </span>
-                        <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8.5px] rounded font-bold font-mono">
-                          THEN: {wf.actions}
-                        </span>
+              {reportsList.length === 0 ? (
+                <div className="py-10 text-center space-y-2">
+                  <p className="text-3xl">📋</p>
+                  <p className="text-xs font-bold text-slate-500">No reports yet</p>
+                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Click "Compile Audit" to generate a real report from your account's current data. Reports are kept for this session and can be downloaded as text.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {reportsList.map((rep) => (
+                    <div key={rep.id} className="p-4 bg-white border border-[#9EC8EF]/40 rounded-2xl flex flex-col justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-mono text-[#4A9BFF] font-bold uppercase">AI Report</span>
+                          <span className="text-[9px] text-slate-400 font-mono">{rep.date}</span>
+                        </div>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider leading-snug">{rep.title}</h4>
+                        <p className="text-[10.5px] text-slate-500 leading-relaxed line-clamp-3 font-sans font-medium">{rep.content}</p>
                       </div>
-                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">{wf.name}</h4>
-                      <p className="text-slate-500 text-[10.5px] font-sans font-semibold leading-relaxed">{wf.desc}</p>
-                    </div>
 
-                    <div className="flex items-center gap-3 self-end md:self-auto">
-                      <span className={`text-[10px] font-mono font-bold uppercase ${wf.status ? "text-emerald-500" : "text-slate-400"}`}>
-                        {wf.status ? "● Active Trigger" : "○ Paused"}
-                      </span>
-                      <button
-                        onClick={() => handleToggleWorkflow(wf.id)}
-                        className={`w-12 h-6 rounded-full p-0.5 transition-colors cursor-pointer relative ${
-                          wf.status ? "bg-emerald-500" : "bg-slate-300"
-                        }`}
-                      >
-                        <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
-                          wf.status ? "translate-x-6" : "translate-x-0"
-                        }`} />
-                      </button>
+                      <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+                        <button
+                          onClick={() => handleDownloadReport(rep)}
+                          className="p-1.5 bg-[#EAF5FF] hover:bg-[#315C9F] text-[#315C9F] hover:text-white border border-[#9EC8EF] hover:border-transparent rounded-lg transition-colors cursor-pointer"
+                          title="Download Report"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -377,31 +343,31 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       <XAxis dataKey="name" stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <YAxis stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <Tooltip />
-                      <Area type="monotone" dataKey="AI Recommendations" stroke="#315C9F" fillOpacity={1} fill="url(#colorAI)" />
+                      <Area type="monotone" dataKey="AI Actions Logged" stroke="#315C9F" fillOpacity={1} fill="url(#colorAI)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
 
                 <div className="bg-white p-4 rounded-2xl border border-[#9EC8EF]/30 h-64">
-                  <p className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-2 text-left">Autonomous Actions Completed</p>
+                  <p className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-2 text-left">Actions Completed</p>
                   <ResponsiveContainer width="100%" height="90%">
                     <BarChart data={chartsData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                       <XAxis dataKey="name" stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <YAxis stroke="#94A3B8" fontSize={9} tickLine={false} />
                       <Tooltip />
-                      <Bar dataKey="Auto Actions" fill="#4A86F7" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Completed" fill="#4A86F7" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* KPI metrics row */}
+              {/* KPI metrics row -- real counts derived from the actual AI action ledger */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
-                  { label: "Est. Win Probability Lift", value: "+18.2%", desc: "Estimates suggested with custom AI price margins win more bids." },
-                  { label: "Dispatch Drive Saved", value: "34.5 hrs", desc: "Aggregated travel hours reduced via Route optimization algorithms." },
-                  { label: "Average Efficiency Boost", value: "32.4%", desc: "Calculated across total simulated employee rosters this month." }
+                  { label: "Total AI Actions Logged", value: String(recentAiActions.length), desc: "All-time count of real AI-driven actions recorded across the app." },
+                  { label: "Completed This Week", value: String(chartsData.reduce((s, d) => s + d["Completed"], 0)), desc: "Actions logged and completed in the last 7 days." },
+                  { label: "Undone / Reverted", value: String(recentAiActions.filter((a: any) => a.status === "Undone").length), desc: "Actions the owner marked as undone from the audit log." }
                 ].map((kpi, kIdx) => (
                   <div key={kIdx} className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 flex flex-col justify-between">
                     <div>

@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
+import { geocodeAddress } from "./InteractiveMapPage";
 import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -106,7 +107,7 @@ export interface Conversation {
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, estimates, invoices } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -235,31 +236,21 @@ export const MessagesPage: React.FC = () => {
   // Roster or staff for group setup, from the real team roster
   const mockStaff = recentRoster.map(r => ({ name: r.name, role: r.role }));
 
-  // Mock list of active Jobs in system
-  const mockJobs = [
-    { id: "Job #1024", name: "Main Facility Drainage", customer: "Apex Plumb & Drain" },
-    { id: "Job #1085", name: "Heavy Sewer Excavation", customer: "Chevron Logistics" },
-    { id: "Job #1022", name: "Subterranean Pipe Schematics", customer: "Oakridge Apartments" }
-  ];
+  // Real active jobs (scheduling events), pulled live from the shared Event Engine.
+  const mockJobs = schedulingEvents
+    .filter(e => e.status !== "Cancelled")
+    .map(e => ({ id: e.id, name: `${e.eventType}${e.customType ? ` — ${e.customType}` : ""}`, customer: e.customer }));
 
-  // Mock list of Estimates
-  const mockEstimates = [
-    { id: "E-1084", name: "Initial drainage line routing", amount: "$3,450" },
-    { id: "E-1085", name: "Sewer Line Excavation", amount: "$8,900" }
-  ];
+  // Real estimates on file.
+  const mockEstimates = estimates.map(e => ({ id: e.number, name: `${e.customerName} (${e.company})`, amount: `$${(e.amount || 0).toLocaleString()}` }));
 
-  // Mock list of Invoices
-  const mockInvoices = [
-    { id: "I-2049", name: "Excavation and backfill", amount: "$12,450", status: "Paid" },
-    { id: "I-2050", name: "Subterranean plumbing diagnostic", amount: "$850", status: "Pending" }
-  ];
+  // Real invoices on file.
+  const mockInvoices = invoices.map(i => ({ id: i.invoiceNumber, name: i.customer, amount: `$${(i.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)).toLocaleString()}`, status: i.status }));
 
-  // Mock list of GPS Locations
-  const mockLocations = [
-    { name: "Seattle Central Terminal", address: "812 Central Way, Seattle, WA", lat: 47.608, lng: -122.335 },
-    { name: "North Warehouse Depot", address: "401 Northgate Rd, Seattle, WA", lat: 47.701, lng: -122.312 },
-    { name: "Suburban Jobsite Alpha", address: "1924 Oakridge Blvd, Renton, WA", lat: 47.482, lng: -122.215 }
-  ];
+  // Real customer addresses, deterministically placed on the map (no true geocoding backend yet).
+  const mockLocations = customersList
+    .filter(c => c.address?.trim())
+    .map(c => ({ name: c.company, address: c.address, ...geocodeAddress(c.address, c.id) }));
 
   // Simple Notification banner for real-time alerts simulation
   const [latestNotification, setLatestNotification] = useState<string | null>(null);
@@ -433,58 +424,12 @@ export const MessagesPage: React.FC = () => {
     setInputText("");
     setDraftAttachments([]);
 
-    // Simulate real-time replies or AI trigger if conversation is with AI
+    // Real AI conversations get a real model response; other conversation
+    // types wait for an actual reply from the other real participant --
+    // nothing here fabricates a fake incoming message.
     if (activeConv.type === "AI Conversation") {
       simulateAiResponse(newMessage.content);
-    } else {
-      // Small simulated delayed reply for realistic demonstration
-      setTimeout(() => {
-        simulateIncomingReply(activeConv.id);
-      }, 3500);
     }
-  };
-
-  // Simulate incoming conversation replies to feel like a living enterprise OS
-  const simulateIncomingReply = (convId: string) => {
-    const target = conversations.find(c => c.id === convId);
-    if (!target) return;
-
-    let responseText = "Thanks for the details. I'll pass this to our technicians right away!";
-    let senderName = "Marcus Vance";
-    let senderRole = "Customer";
-
-    if (target.type === "Crew Chat" || target.type === "Team Chat") {
-      responseText = "Got it! Checked the job route and we are on schedule.";
-      senderName = "Pete Rogers";
-      senderRole = "Technician";
-    } else if (target.type === "System Notification") {
-      return; // system does not auto reply
-    }
-
-    const replyMsg: Message = {
-      id: "reply_" + Date.now(),
-      sender: senderName,
-      senderRole: senderRole,
-      content: responseText,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
-    };
-
-    setConversations(prev => prev.map(c => {
-      if (c.id === convId) {
-        return {
-          ...c,
-          lastMessage: replyMsg.content,
-          lastMessageSender: senderName,
-          lastMessageTime: replyMsg.timestamp,
-          unreadCount: c.id === activeConv.id ? 0 : c.unreadCount + 1,
-          isRead: c.id === activeConv.id,
-          messages: [...c.messages, replyMsg]
-        };
-      }
-      return c;
-    }));
-
-    triggerRealTimeNotification(`New message in "${target.title}" from ${senderName}`);
   };
 
   // AI Chat response simulator using advanced custom prompts
@@ -580,24 +525,20 @@ export const MessagesPage: React.FC = () => {
 
     setTimeout(() => {
       setScanningStatus("extracted");
-      // Set suggestions based on category
-      if (category === "Receipts") {
-        setExtractedSuggestions([
-          { action: "Attach to Customer", target: "Apex Plumb & Drain", reason: "Scanned items match ABS fittings for commercial drain job" },
-          { action: "Attach to Job", target: "Job #1024", reason: "Acquired materials matching Job #1024 active list" },
-          { action: "Attach to Documents", target: "Apex Plumb Contracts Folder", reason: "Save to finance records" }
-        ]);
-      } else if (category === "Contracts") {
-        setExtractedSuggestions([
-          { action: "Attach to Customer", target: "Chevron Logistics", reason: "Contract signs for Master Service excavation agreement" },
-          { action: "Attach to Revenue", target: "Project Budget Apex", reason: "Adds $12,450 to forecasted earnings" }
-        ]);
-      } else {
-        setExtractedSuggestions([
-          { action: "Attach to Documents", target: "Main Archives Folder", reason: "General documentation indexing" },
-          { action: "Attach to Job", target: "Job #1085", reason: "Equipment photo scan matches active trench excavation" }
-        ]);
+      // Suggestions reference this account's real customer/job on file when
+      // one exists; otherwise the suggestion stays generic instead of
+      // inventing a business name.
+      const conversationCustomer = activeConv?.customerName;
+      const realJob = mockJobs[0];
+      const suggestions: Array<{ action: string; target: string; reason: string }> = [];
+      if (conversationCustomer) {
+        suggestions.push({ action: "Attach to Customer", target: conversationCustomer, reason: "This conversation is linked to that customer." });
       }
+      if (realJob) {
+        suggestions.push({ action: "Attach to Job", target: realJob.name, reason: "Most recent active job on file." });
+      }
+      suggestions.push({ action: "Attach to Documents", target: "Documents Vault", reason: "Save to general records." });
+      setExtractedSuggestions(suggestions);
     }, 2800);
   };
 
@@ -614,7 +555,7 @@ export const MessagesPage: React.FC = () => {
         job: activeConv.jobId || "None",
         type: scannedDoc.category,
         uploadedBy: currentUserName,
-        date: "2026-07-06",
+        date: new Date().toISOString().slice(0, 10),
         size: "350 KB",
         status: "Signed",
         isFavorite: false,
@@ -623,7 +564,7 @@ export const MessagesPage: React.FC = () => {
         tags: ["AI Scanned", scannedDoc.category],
         estimateId: activeConv.estimateId || "None",
         invoiceId: "None",
-        lastModified: "2026-07-06 04:10 PM"
+        lastModified: new Date().toLocaleString([], { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
       };
       setDocuments(prev => [newDoc, ...prev]);
       triggerRealTimeNotification(`Success: Created formal document "${newDoc.name}" in Documents Vault.`);

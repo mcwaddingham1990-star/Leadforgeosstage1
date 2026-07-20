@@ -125,6 +125,59 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // their own yet (which won't work with their own API key/project).
   const mapId = (process.env.GOOGLE_MAPS_MAP_ID || "").trim() || "61f65bb1969a473a";
 
+  // Real default map center, resolved in priority order: real business
+  // address -> real device GPS -> DFW fallback -> last position the owner
+  // actually viewed (persisted locally). Never a hardcoded arbitrary city.
+  const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
+  const MAP_POSITION_STORAGE_KEY = "ownersLocalOS_lastMapPosition";
+  const [resolvedDefaultCenter, setResolvedDefaultCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (resolvedDefaultCenter) return;
+
+    // 1. Real business address on file.
+    if (businessAddresses?.[0]?.trim()) {
+      setResolvedDefaultCenter(geocodeAddress(businessAddresses[0], "office_hq"));
+      return;
+    }
+
+    // 2. Last position the owner actually viewed, saved locally.
+    try {
+      const saved = localStorage.getItem(MAP_POSITION_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.lat === "number" && typeof parsed?.lng === "number") {
+          setResolvedDefaultCenter(parsed);
+          return;
+        }
+      }
+    } catch {
+      // ignore malformed storage
+    }
+
+    // 3. Real device GPS, if the browser/user allows it.
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setResolvedDefaultCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => setResolvedDefaultCenter(DFW_FALLBACK),
+        { timeout: 5000 }
+      );
+      return;
+    }
+
+    // 4. DFW fallback -- never Oregon, never an arbitrary hardcoded city.
+    setResolvedDefaultCenter(DFW_FALLBACK);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessAddresses]);
+
+  const handleMapCameraChanged = (center: { lat: number; lng: number }) => {
+    try {
+      localStorage.setItem(MAP_POSITION_STORAGE_KEY, JSON.stringify(center));
+    } catch {
+      // ignore storage failures (private browsing, quota, etc.)
+    }
+  };
+
   // Map Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"All" | "Customer" | "Lead" | "Estimate" | "Job" | "Technician" | "Vehicle">("All");
@@ -203,13 +256,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedBasketIds, setSelectedBasketIds] = useState<string[]>([]);
 
-  // Vehicles Dataset (Linked to live GPS coordinates and Technicians)
-  const [vehicles, setVehicles] = useState([
-    { id: "veh_1", name: "Rapid Response Van #102", driver: "John Doe", fuel: 82, speed: 35, eta: 14, currentRoute: "Pine St to Pike Place", assignedJobs: 2 },
-    { id: "veh_2", name: "Heavy Duty Truck #205", driver: "David Vance", fuel: 58, speed: 0, eta: 0, currentRoute: "Stationary - SODO Yard", assignedJobs: 1 },
-    { id: "veh_3", name: "Elite Service SUV #310", driver: "Sarah Connor", fuel: 94, speed: 45, eta: 8, currentRoute: "I-5 Northbound Express", assignedJobs: 3 },
-    { id: "veh_4", name: "HVAC Sprinter #412", driver: "Marcus Vance", fuel: 42, speed: 28, eta: 22, currentRoute: "Eastlake Ave Eastbound", assignedJobs: 1 }
-  ]);
+  // Vehicles are real — one per technician who has a vehicle name assigned
+  // (no fleet CRUD exists yet, so this list starts empty for a new company
+  // instead of showing fabricated trucks).
+  const [vehicles, setVehicles] = useState<Array<{ id: string; name: string; driver: string; fuel: number; speed: number; eta: number; currentRoute: string; assignedJobs: number }>>([]);
 
   // Real technicians — one per real employee. Name and clocked-in/on-break/
   // off-duty status come from the real employees + time_clock_logs
@@ -1104,55 +1154,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     }
   };
 
-  // Simulated Lead Intake Intake Intake Intake!
-  const triggerSimulatedLead = () => {
-    const leadNames = ["Peter Parker", "Diana Prince", "Barry Allen", "Bruce Wayne", "Hal Jordan", "Arthur Curry"];
-    const addresses = ["1420 Pine St, Seattle, WA", "3400 Stone Way N, Seattle, WA", "2201 Westlake Ave, Seattle, WA", "1600 Eastlake Ave E, Seattle, WA"];
-    const sources = ["Google Search", "Yelp Local", "Direct Dispatcher Referral", "HomeAdvisor Pro"];
-    
-    const name = leadNames[Math.floor(Math.random() * leadNames.length)];
-    const address = addresses[Math.floor(Math.random() * addresses.length)];
-    const source = sources[Math.floor(Math.random() * sources.length)];
-    const id = `lead_sim_${Date.now()}`;
-
-    const newLead = {
-      id,
-      name,
-      company: `${name}'s Seattle Property`,
-      phone: "(206) 555-0199",
-      email: `${name.toLowerCase().replace(" ", "")}@seattlelocal.com`,
-      source,
-      salesRep: "Marcus Vance",
-      status: "New",
-      estimatedValue: Math.floor(Math.random() * 4500) + 1200,
-      dateAdded: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      addedDaysAgo: 0
-    };
-
-    setLeads(prev => [newLead, ...prev]);
-
-    // Zoom and highlight on map
-    const coords = geocodeAddress(address, id);
-    setSelectedPin({
-      id,
-      type: "Lead",
-      title: newLead.name,
-      subtitle: `Lead Source: ${source} | Value: $${newLead.estimatedValue.toLocaleString()}`,
-      address: newLead.company,
-      lat: coords.lat,
-      lng: coords.lng,
-      raw: newLead
-    });
-
-    if (logOperationalEvent) {
-      logOperationalEvent(
-        "Lead Ingested",
-        `Real-time lead intake captured: ${name} near ${address}`,
-        "🎯"
-      );
-    }
-  };
-
   // Traveling Salesperson (TSP) dynamic route order optimization metrics
   const optimizedRouteSummary = useMemo(() => {
     const selectedJobs = filteredPins.filter(p => p.type === "Job" && selectedBasketIds.includes(p.id));
@@ -1259,14 +1260,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       {/* TOP LEVEL ACTION RIGS */}
       <div className="relative z-10 flex flex-wrap gap-2.5">
         <button
-          id="btn_sim_lead"
-          onClick={triggerSimulatedLead}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl text-[11px] uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 shadow-[0_4px_12px_rgba(37,99,235,0.3)] hover:scale-102"
-        >
-          <Sparkles className="w-4 h-4 text-amber-300" /> Simulate Lead Intake
-        </button>
-
-        <button
           id="btn_toggle_heatmap"
           onClick={() => setShowRevenueHeatmap(!showRevenueHeatmap)}
           className={`px-4 py-2.5 font-extrabold rounded-xl text-[11px] uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 border ${
@@ -1313,9 +1306,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           <APIProvider apiKey={apiKey}>
             <Map
               id="gmp_mcp_codeassist_v1_aistudio"
-              defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
+              defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
               defaultZoom={11}
               mapId={mapId}
+              onCameraChanged={(e) => handleMapCameraChanged(e.detail.center)}
               style={{ width: "100%", height: "100%", borderRadius: "24px" }}
             >
               {/* Google maps overlays */}
@@ -1917,9 +1911,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <APIProvider apiKey={apiKey}>
                 <Map
                   id="gmp_mcp_codeassist_v1_aistudio"
-                  defaultCenter={businessAddresses?.[0] ? geocodeAddress(businessAddresses[0], "office_hq") : { lat: 47.6062, lng: -122.3321 }}
+                  defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
                   defaultZoom={11}
                   mapId={mapId}
+                  onCameraChanged={(e) => handleMapCameraChanged(e.detail.center)}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
                   {/* Google maps overlays */}
@@ -2698,29 +2693,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                             className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
                           >
                             <option value="">Unassigned...</option>
-                            <option value="John Doe">John Doe (Rapid Response Van)</option>
-                            <option value="David Vance">David Vance (Heavy Duty Truck)</option>
-                            <option value="Sarah Connor">Sarah Connor (Elite Service SUV)</option>
-                            <option value="Marcus Vance">Marcus Vance (HVAC Sprinter)</option>
+                            {activeTechnicians.length === 0 ? (
+                              <option value="" disabled>No employees on roster yet</option>
+                            ) : (
+                              activeTechnicians.map(t => (
+                                <option key={t.id} value={t.name}>{t.name}{t.vehicle && t.vehicle !== "Unassigned" ? ` (${t.vehicle})` : ""}</option>
+                              ))
+                            )}
                           </select>
-                        </div>
-                      )}
-
-                      {/* Dynamic distance matrices */}
-                      {selectedPin.raw.assignedEmployee && (
-                        <div className="bg-blue-950/40 border border-blue-500/20 rounded-xl p-3 text-xs space-y-1.5 font-sans">
-                          <p className="font-bold text-blue-400 uppercase text-[9px] tracking-wider flex items-center gap-1">
-                            <Compass className="w-3.5 h-3.5 animate-spin" /> Route Optimization Metrics
-                          </p>
-                          <p className="text-slate-300">
-                            Driving sequence optimized via Google Routes API. Stop sequence locks at <strong className="text-white">HQ base</strong>.
-                          </p>
-                          <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-2 text-[10px]">
-                            <p>Mileage: <strong className="text-white">4.8 miles</strong></p>
-                            <p>Duration: <strong className="text-white">14 mins</strong></p>
-                            <p>Traffic: <strong className="text-emerald-400">Clear</strong></p>
-                            <p>Fuel Usage: <strong className="text-white">0.2 gal</strong></p>
-                          </div>
                         </div>
                       )}
 

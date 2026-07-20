@@ -103,6 +103,7 @@ import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/In
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
+import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
 import { AIAssistantPage } from "./components/AIAssistantPage";
@@ -806,7 +807,6 @@ export default function App() {
   // New Sidebar & Workspace Simulation states
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
-  const [compareMockupMode, setCompareMockupMode] = useState(false);
   const [liveTime, setLiveTime] = useState(new Date());
 
   // Notification system states
@@ -4895,109 +4895,11 @@ Access to full financial telemetry is restricted.`;
                   )}
                 </div>
 
-                {/* View Mode Toggle: Live Workspace vs Screenshot reference */}
-                <div className="flex items-center bg-[#EAF5FF] rounded-xl p-0.5 border border-[#9EC8EF] self-end sm:self-auto">
-                  <button
-                    onClick={() => {
-                      setCompareMockupMode(false);
-                      triggerNotification("Switched to Live Responsive Workspace!");
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                      !compareMockupMode
-                        ? "bg-[#C7E3FA] text-[#1F3557] shadow-sm"
-                        : "text-[#5E7393] hover:text-[#1F3557]"
-                    }`}
-                  >
-                    <Laptop className="w-3.5 h-3.5 text-[#315C9F]" />
-                    <span>Live Workspace</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCompareMockupMode(true);
-                      triggerNotification("Switched to Reference Map!");
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                      compareMockupMode
-                        ? "bg-[#C7E3FA] text-[#1F3557] shadow-sm"
-                        : "text-[#5E7393] hover:text-[#1F3557]"
-                    }`}
-                  >
-                    <Activity className="w-3.5 h-3.5 text-[#22C55E]" />
-                    <span>Reference Map</span>
-                  </button>
-                </div>
               </div>
               )}
 
               {/* RENDER DYNAMIC SECTION */}
-              {compareMockupMode ? (
-                
-                /* MOCKUP REFERENCE VIEW WITH HOTSPOTS OVERLAY */
-                <div className="flex-1 p-4 md:p-5 flex flex-col gap-3 relative overflow-hidden bg-slate-900 justify-between">
-                  <div className="flex items-center justify-between px-1 font-mono text-[10px] text-slate-400">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>REFERENCE SOURCE MAP: {activeScreen.label}.jpg</span>
-                    </div>
-                    <span className="bg-emerald-500/20 px-2 py-0.5 rounded text-emerald-400 font-extrabold">HD MATCH OK</span>
-                  </div>
-
-                  {/* Hotspots Interactive Frame */}
-                  <div className="relative w-full aspect-[16/10] bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-white/5 group">
-                    <img
-                      src={activeScreen.url}
-                      alt={`Owner's Local OS ${activeScreen.label}`}
-                      className="w-full h-full object-cover select-none"
-                      referrerPolicy="no-referrer"
-                    />
-
-                    {/* Navigation Hotspot Overlays */}
-                    <div className="absolute top-0 left-0 bottom-0 w-[16%] flex flex-col select-none pointer-events-auto">
-                      <div className="h-[11%] w-full pointer-events-none" />
-                      <div className="flex-1 flex flex-col w-full relative">
-                        {getVisibleScreens().filter(screen => screen.id !== "owner_console").map((screen) => (
-                          <button
-                            key={screen.id}
-                            onClick={() => {
-                              setActiveScreen(screen);
-                              // Auto-clear notification dot for clicked screen
-                              setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
-                              triggerNotification(`Hotspot navigated to ${screen.label}`);
-                            }}
-                            style={{
-                              top: screen.top,
-                              height: `calc(${screen.bottom} - ${screen.top})`
-                            }}
-                            className="absolute left-0 right-0 w-full hover:bg-blue-500/15 border-l-2 border-transparent hover:border-blue-500/80 transition-all cursor-pointer flex items-center pl-3"
-                            title={`Jump to ${screen.label}`}
-                          >
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 opacity-0 group-hover:opacity-60 transition-opacity" />
-                            <span className="text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity truncate font-sans ml-1.5 font-bold">
-                              {screen.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="absolute top-4 right-4 bg-slate-950/90 backdrop-blur-md border border-white/10 text-slate-300 text-[10px] py-1 px-3 rounded-full pointer-events-none flex items-center gap-1.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span>Mockup Reference Layer • Click Hotspots to Navigate</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 text-[10.5px] text-slate-400 flex justify-between items-center">
-                    <span>Comparing layout with Owner's Local OS master screenshot asset.</span>
-                    <button
-                      onClick={() => setCompareMockupMode(false)}
-                      className="text-blue-400 hover:text-blue-300 font-bold"
-                    >
-                      Return to Live Interactive View ➔
-                    </button>
-                  </div>
-                </div>
-
-              ) : (
+              {(
 
                 /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
@@ -5714,6 +5616,9 @@ Access to full financial telemetry is restricted.`;
                   ) : activeScreen.id === "accounting" ? (
                     <AccountingPage />
 
+                  ) : activeScreen.id === "roster" ? (
+                    <RosterPage />
+
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />
 
@@ -6212,7 +6117,10 @@ Access to full financial telemetry is restricted.`;
                             </div>
                             
                             <button
-                              onClick={() => openPlaceholderPage("Corporate Roster Database", "📋")}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "roster");
+                                if (matched) setActiveScreen(matched);
+                              }}
                               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shrink-0"
                             >
                               View Roster
@@ -6274,7 +6182,10 @@ Access to full financial telemetry is restricted.`;
                                       return (
                                         <tr
                                           key={emp.email}
-                                          onClick={() => openPlaceholderPage(`Roster Profile: ${emp.firstName} ${emp.lastName}`, "👤")}
+                                          onClick={() => {
+                                            const matched = OS_SCREENS.find(s => s.id === "roster");
+                                            if (matched) setActiveScreen(matched);
+                                          }}
                                           className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
                                         >
                                           <td className="px-4 py-3 flex items-center gap-3">
@@ -6676,18 +6587,19 @@ Access to full financial telemetry is restricted.`;
 
                   ) : (
                     
-                    /* ALL OTHER WORKSPACE SCREENS AWAITING SETUP - RENDERED AS PRECISE PLACEHOLDERS */
+                    /* Screens that don't have a dedicated real implementation yet -- shown
+                       honestly as "not built yet" rather than dressed up with fake activity. */
                     <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm min-h-[420px] flex flex-col justify-between gap-5 animate-fade-in text-left">
                       <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
                         <div className="flex items-center gap-3">
                           <span className="text-2xl select-none">{activeScreen.icon}</span>
                           <div>
-                            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">{activeScreen.label} Page</h2>
-                            <p className="text-xs text-slate-500 font-sans font-semibold">Workspace module reserved for future operational mapping</p>
+                            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">{activeScreen.label}</h2>
+                            <p className="text-xs text-slate-500 font-sans font-semibold">This feature isn't built yet</p>
                           </div>
                         </div>
                         <span className="px-2.5 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-[9px] font-mono font-bold rounded-xl border border-[#A9CDEE] uppercase">
-                          Placeholder Page
+                          Not Built Yet
                         </span>
                       </div>
 
@@ -6695,15 +6607,10 @@ Access to full financial telemetry is restricted.`;
                         <div className="w-12 h-12 rounded-full bg-[#F5FAFF] text-[#4A9BFF] flex items-center justify-center text-xl font-bold border border-[#A9CDEE] shadow-sm mb-4">
                           {activeScreen.icon}
                         </div>
-                        <h4 className="text-xs font-black text-slate-700 font-sans uppercase tracking-wider">{activeScreen.label} Page Node</h4>
+                        <h4 className="text-xs font-black text-slate-700 font-sans uppercase tracking-wider">{activeScreen.label}</h4>
                         <p className="text-slate-600 text-[11px] mt-1.5 max-w-xs leading-relaxed font-sans font-semibold">
-                          This screen is currently reserved as a design placeholder. You can access other parts of the system or toggle simulation roles using the left sidebar menu.
+                          We haven't built this screen yet. Use the sidebar to get back to a working part of the app.
                         </p>
-                      </div>
-
-                      <div className="bg-[#E3F3FF] p-3 rounded-xl border border-[#A9CDEE] text-[10.5px] font-sans font-semibold text-slate-600 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping shrink-0" />
-                        <span>System telemetry active • Sandbox simulation mode enabled</span>
                       </div>
                     </div>
                   )}

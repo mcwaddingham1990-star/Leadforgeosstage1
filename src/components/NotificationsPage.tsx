@@ -160,11 +160,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     Office: ["customer", "leads", "estimates", "scheduling", "documents", "messages"]
   });
 
-  // 5. Shared Event Engine Simulator State (The cascading sequence)
-  const [simStep, setSimStep] = useState<number>(-1); // -1 = idle
-  const [simLogs, setSimLogs] = useState<string[]>([]);
-  const [isSimulating, setIsSimulating] = useState(false);
-
   // Helper: check if role has permission to see notification
   const currentSimulatedRole = activeRole || "Owner";
   const userHasPermission = (category: string) => {
@@ -282,64 +277,78 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     }
   };
 
-  // AI Summary generation mock
-  const generateAISummary = (type: string) => {
+  // AI Summary — real Gemini call grounded in this account's actual notifications/customers/schedule.
+  const generateAISummary = async (type: string) => {
     setAiSummaryLoading(true);
     setAiSummaryResult(null);
     triggerNotification(`Generating AI ${type}...`);
-    
-    setTimeout(() => {
-      let result = "";
-      if (type === "Daily Summary") {
-        result = "📋 **Owner's AI Daily Business Summary (July 6, 2026)**\n\n" +
-          "• **Financial Highlights**: One invoice PAID today ($4,850.00 for Drainage Project) and Theresa Webb's estimate approved ($6,200.00).\n" +
-          "• **Operational Alerts**: Crew Alpha scheduling conflict detected at 11:30. Crew Beta is running 25 minutes late to 1420 Pine St due to I-5 traffic.\n" +
-          "• **Inventory & Logistics**: Low stock warning active on PVC 3-inch pressure pipes (8 remaining). Suggest immediate restock approval.\n" +
-          "• **AI Recommendations**: Customer David Miller has been inactive for 72 hours since Estimate Sent. Recommendation: Dispatch promotional follow-up sequence.";
-      } else if (type === "Morning Brief") {
-        result = "☀️ **Owner's Local OS Morning Dispatch Brief**\n\n" +
-          "• 3 scheduled appointments active today starting at 09:00.\n" +
-          "• Double booking flag active: Crew Alpha is overlapping. Please adjust dispatch grid.\n" +
-          "• Stock limits checked: Auto-generated PO candidates ready for warehouse review.";
-      } else if (type === "Missed Items" || type === "Action Items") {
-        result = "⚠️ **High Priority Action Queue**\n\n" +
-          "1. **Crew Overlap**: Resolve Crew Alpha dual-allocation to Survey & Drainage Project immediately (Scheduling screen).\n" +
-          "2. **Pipeline Refill**: Dispatch Purchase Order PO-2026-991 to restock critical PVC pipe sizes.\n" +
-          "3. **Customer Re-engagement**: Lead David Miller requires manual review or automated follow-up dispatch.";
-      } else {
-        result = `🤖 **AI ${type} Module Matrix**\n\nCurrently analyzing system signals... Operational events look clean. 1 schedule change, 1 paid invoice, and 1 approved estimate are the core events. No duplicate signals detected in database.`;
-      }
-      setAiSummaryResult(result);
+
+    const unread = notifList.filter(n => !n.isRead && !n.isArchived);
+    const critical = notifList.filter(n => n.priority === "Critical" && !n.isArchived);
+    const todayEvents = schedulingEvents.filter((e: any) => e.date === new Date().toISOString().slice(0, 10));
+    const businessSummary = [
+      `Total notifications: ${notifList.length} (${unread.length} unread, ${critical.length} critical).`,
+      unread.length === 0 ? "No unread notifications." : `Unread notifications: ${unread.slice(0, 15).map(n => `"${n.title}" (${n.category}, ${n.priority})`).join("; ")}.`,
+      `Customers on file: ${customers.length}.`,
+      `Scheduling events today: ${todayEvents.length}.`,
+      `Open leads: ${dashboardLeads.length}.`,
+      `Documents on file: ${documents.length}.`
+    ].join(" ");
+
+    try {
+      const res = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: "notifications",
+          pageName: "Notification Center",
+          isOwnerOrAdmin: true,
+          businessSummary,
+          query: `Write a concise "${type}" for the business owner, using only the real data provided above. If there isn't enough data for a section, say so plainly instead of inventing anything.`
+        })
+      });
+      const data = await res.json();
+      setAiSummaryResult(data.text || "No response.");
+    } catch {
+      setAiSummaryResult("Couldn't reach the AI right now — check your connection and try again.");
+    } finally {
       setAiSummaryLoading(false);
-      triggerNotification("AI Summary compiled and ready!");
-    }, 1500);
+    }
   };
 
-  // AI Explain notification details mock
-  const runAIExplain = (notif: DetailedNotification) => {
+  // AI Explain — real Gemini call grounded in the actual notification's real fields.
+  const runAIExplain = async (notif: DetailedNotification) => {
     setAiExplainLoading(true);
     setAiExplainResult(null);
-    triggerNotification("AI Agent analyzing alert telemetry...");
+    triggerNotification("AI Agent analyzing alert...");
 
-    setTimeout(() => {
-      let explanation = "";
-      if (notif.category === "scheduling" && notif.priority === "Critical") {
-        explanation = "🚨 **AI Diagnosis & Recommended Dispatch Solution**:\n\n" +
-          "• **Core Cause**: Both appointments require 'Crew Alpha'. Owner's Local OS telemetry indicates Crew Alpha is physically located at site A, making B physically impossible.\n" +
-          "• **Next Best Action**: Shift the Site Survey to 14:00 PM (open slot detected). Open the Scheduling Page to perform the swap instantly.\n" +
-          "• **Automated Assistance**: Click 'Open Related Record' to navigate, or assign Crew Beta who is currently nearby and unallocated.";
-      } else if (notif.category === "revenue") {
-        explanation = "💰 **Financial Ledger Insight**:\n\n" +
-          "• **Impact**: Boosts active monthly gross goal by 4.2%. Profit margins on this Drainage Project are high (estimated 62%).\n" +
-          "• **Next Best Action**: Automatically sends tax reserve percentage (30%) to tax vault, and schedules material procurement on next batch loop.";
-      } else {
-        explanation = `ℹ️ **AI Analysis of '${notif.title}'**:\n\n` +
-          `• **Event Details**: This is a "${notif.category}" warning flagged with "${notif.priority}" priority.\n` +
-          `• **Operational Suggestion**: Ensure ${notif.assignedUser || "unassigned roles"} reviews notes: "${notif.notes || "None listed"}". Verify that timeline state updates correctly.`;
-      }
-      setAiExplainResult(explanation);
+    const businessSummary = [
+      `Notification: "${notif.title}" — ${notif.description}`,
+      `Category: ${notif.category}. Priority: ${notif.priority}.`,
+      `Assigned to: ${notif.assignedUser || "unassigned"}.`,
+      notif.relatedCustomer ? `Related customer: ${notif.relatedCustomer}.` : "",
+      notif.notes ? `Notes: ${notif.notes}` : ""
+    ].filter(Boolean).join(" ");
+
+    try {
+      const res = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: "notifications",
+          pageName: "Notification Center",
+          isOwnerOrAdmin: true,
+          businessSummary,
+          query: "Explain what this alert means and recommend the next best action, using only the real details given above."
+        })
+      });
+      const data = await res.json();
+      setAiExplainResult(data.text || "No response.");
+    } catch {
+      setAiExplainResult("Couldn't reach the AI right now — check your connection and try again.");
+    } finally {
       setAiExplainLoading(false);
-    }, 1200);
+    }
   };
 
   // Bulk Actions
@@ -354,7 +363,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   };
 
   const handleRefresh = () => {
-    triggerNotification("Synchronized with central Event Engine database. 0 duplicates found.");
+    triggerNotification("Notifications refreshed.");
   };
 
   // Create custom notification manual dispatch
@@ -365,21 +374,22 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
       return;
     }
 
+    const nowStamp = new Date().toISOString().slice(0, 16).replace("T", " ");
     const newNotif: DetailedNotification = {
       id: `notif_custom_${Date.now()}`,
       category: customCategory,
       title: customTitle,
       description: customDesc,
-      time: "2026-07-06 15:00",
+      time: nowStamp,
       isRead: false,
       isArchived: false,
       isPinned: false,
       priority: customPriority,
       assignedUser: customAssignedUser,
       relatedCustomer: customCustomer || undefined,
-      notes: "Custom manual override alert spawned by Owner console console.",
+      notes: "Manually created by Owner.",
       createdBy: "Owner",
-      history: ["2026-07-06 15:00: Manually created by Owner."]
+      history: [`${nowStamp}: Manually created by Owner.`]
     };
 
     setNotifList(prev => [newNotif, ...prev]);
@@ -387,85 +397,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     setCustomTitle("");
     setCustomDesc("");
     triggerNotification(`🔔 Custom Alert dispatched: ${customTitle}`);
-  };
-
-  // 8. Event Engine Simulator Cascade Trigger
-  const triggerEventCascade = () => {
-    if (isSimulating) return;
-    setIsSimulating(true);
-    setSimLogs([]);
-    setSimStep(0);
-    
-    const steps = [
-      { msg: "🤝 Step 1: Customer accepts Estimate #EST-1092 online.", delay: 1000 },
-      { msg: "📈 Step 2: Revenue ledger receives $6,200.00 approval, updating gross monthly forecast.", delay: 1200 },
-      { msg: "📅 Step 3: Scheduling engine registers auto-draft Site Survey on YYYY-MM-DD.", delay: 1200 },
-      { msg: "👥 Step 4: Customer Timeline updates with Estimate Approved status stamp.", delay: 1000 },
-      { msg: "🔔 Step 5: Unified Event Engine fires notification block to Notification Center.", delay: 1200 },
-      { msg: "🤖 Step 6: Gemini analyzes signals, generating 'Suggested Follow-up' AI action card.", delay: 1400 },
-      { msg: "📊 Step 7: Dashboard real-time KPIs re-calculate and re-render perfectly.", delay: 1000 }
-    ];
-
-    let currentLog: string[] = [];
-    let currentStep = 0;
-
-    const runNextStep = () => {
-      if (currentStep < steps.length) {
-        currentLog.push(steps[currentStep].msg);
-        setSimLogs([...currentLog]);
-        setSimStep(currentStep);
-        
-        // At step 4, let's inject a real new notification into the state!
-        if (currentStep === 4) {
-          const cascadeNotif: DetailedNotification = {
-            id: `notif_cascade_${Date.now()}`,
-            category: "estimates",
-            title: "Estimate Accepted (Engine Sync)",
-            description: "Shared Event Engine: Estimate #EST-1092 accepted ($6,200). Pipeline updated.",
-            time: "2026-07-06 15:10",
-            isRead: false,
-            isArchived: false,
-            isPinned: false,
-            priority: "High",
-            assignedUser: "Marcus Vance",
-            relatedCustomer: "Theresa Webb",
-            notes: "Automatic system event spawned via acceptance portal pipeline.",
-            createdBy: "Event Engine",
-            history: ["2026-07-06 15:10: Injected by Event Engine on estimate accept."]
-          };
-          setNotifList(prev => [cascadeNotif, ...prev]);
-        }
-
-        // At step 5, let's inject an AI recommendation notification
-        if (currentStep === 5) {
-          const aiCascadeNotif: DetailedNotification = {
-            id: `notif_cascade_ai_${Date.now()}`,
-            category: "ai",
-            title: "AI Project Recommendation",
-            description: "Suggested Purchase: Auto-allocate parts for Drainage Project to avoid low stock warning.",
-            time: "2026-07-06 15:11",
-            isRead: false,
-            isArchived: false,
-            isPinned: false,
-            priority: "Normal",
-            assignedUser: "Owner",
-            relatedCustomer: "Theresa Webb",
-            notes: "PVC pipes allocation recommended based on project scope checklist.",
-            createdBy: "Gemini Local AI",
-            history: ["2026-07-06 15:11: Auto-generated from project allocation patterns."]
-          };
-          setNotifList(prev => [aiCascadeNotif, ...prev]);
-        }
-
-        currentStep++;
-        setTimeout(runNextStep, steps[currentStep - 1].delay);
-      } else {
-        setIsSimulating(false);
-        triggerNotification("🔄 Shared Event Engine Simulation Complete! Live records updated.");
-      }
-    };
-
-    setTimeout(runNextStep, 500);
   };
 
   return (
@@ -630,53 +561,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
             </button>
           );
         })}
-      </div>
-
-      {/* EVENT ENGINE CASCADE SANDBOX CONTROL CARD */}
-      <div className="bg-[#C7E3FA] rounded-2xl p-5 border border-[#9EC8EF] shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#9EC8EF]/40 pb-3">
-          <div>
-            <h3 className="text-xs font-black uppercase text-[#1F3557] tracking-wider flex items-center gap-1.5">
-              <span>🔄</span> Event Engine Core Simulator
-            </h3>
-            <p className="text-[10.5px] text-[#5E7393] font-sans font-medium mt-0.5">
-              Watch a synchronized live estimate acceptance cascade. Witness state change propagation through the shared framework.
-            </p>
-          </div>
-          <button
-            onClick={triggerEventCascade}
-            disabled={isSimulating}
-            className={`px-3 py-2 text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer shadow-sm transition-all flex items-center gap-2 ${
-              isSimulating 
-                ? "bg-slate-300 text-slate-500 cursor-not-allowed" 
-                : "bg-[#315C9F] text-white hover:bg-[#25467A]"
-            }`}
-          >
-            {isSimulating ? "Cascading..." : "Trigger Accept Cascade"}
-          </button>
-        </div>
-
-        {/* Live visualization grid */}
-        {simLogs.length > 0 && (
-          <div className="p-4 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl space-y-3 font-sans text-xs">
-            <h4 className="text-[9.5px] font-black uppercase text-[#315C9F] tracking-widest">Active Propagation Signal Tracker</h4>
-            <div className="space-y-2">
-              {simLogs.map((log, idx) => (
-                <div 
-                  key={idx} 
-                  className={`flex items-center gap-2 p-1.5 rounded transition-all font-semibold ${
-                    idx === simStep ? "bg-[#BDDDF8] text-[#1F3557] font-bold border-l-2 border-[#315C9F]" : "text-slate-500"
-                  }`}
-                >
-                  <span className="shrink-0">
-                    {idx < simStep ? "🟢" : idx === simStep ? "⚡" : "⚪"}
-                  </span>
-                  <span>{log}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* SEARCH AND ADVANCED FILTERS PANEL */}

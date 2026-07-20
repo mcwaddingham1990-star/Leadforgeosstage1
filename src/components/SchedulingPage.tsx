@@ -1480,7 +1480,7 @@ export const SchedulingPage: React.FC = () => {
                       <input
                         value={formCustomName}
                         onChange={(e) => setFormCustomName(e.target.value)}
-                        placeholder="e.g. Clark Kent"
+                        placeholder="e.g. Jane Smith"
                         required={formCustomerMode === "custom"}
                         type="text"
                         className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"

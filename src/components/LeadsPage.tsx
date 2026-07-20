@@ -277,6 +277,19 @@ export const LeadsPage: React.FC = () => {
       icon: STATUS_ICON[lead.status] || "📌"
     }));
 
+  // Real, derived-from-actual-data insight metrics -- no fabricated figures.
+  const newThisWeek = leads.filter(l => (l.addedDaysAgo ?? 999) <= 7).length;
+  const highestValueLead = leads.length === 0 ? null : [...leads].sort((a, b) => (b.estimatedValue || 0) - (a.estimatedValue || 0))[0];
+  const oldestUncontacted = leads
+    .filter(l => l.status === "New" || l.status === "Contacted")
+    .sort((a, b) => (b.addedDaysAgo ?? 0) - (a.addedDaysAgo ?? 0))[0] || null;
+  const closedLeads = leads.filter(l => l.status === "Won" || l.status === "Lost");
+  const wonLeads = leads.filter(l => l.status === "Won");
+  const conversionRate = closedLeads.length === 0 ? null : Math.round((wonLeads.length / closedLeads.length) * 100);
+  const openPipelineValue = leads
+    .filter(l => l.status !== "Won" && l.status !== "Lost" && l.status !== "Archived")
+    .reduce((sum, l) => sum + (l.estimatedValue || 0), 0);
+
   return (
     <div className="space-y-6 animate-fade-in text-left">
       
@@ -727,11 +740,8 @@ export const LeadsPage: React.FC = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           
-          {/* INSIGHT 1: New Leads This Week */}
-          <div
-            onClick={() => onOpenPlaceholder("Leads Performance Center", "📊")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
+          {/* INSIGHT 1: New Leads This Week (real) */}
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between h-40 text-left">
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
@@ -741,19 +751,13 @@ export const LeadsPage: React.FC = () => {
               </div>
               <p className="text-xs font-extrabold text-[#1F3557] mt-3">Incoming This Week</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
-                4 high-priority inquiries logged via Website and Phone.
+                {newThisWeek === 0 ? "No new leads in the last 7 days." : `${newThisWeek} new lead${newThisWeek === 1 ? "" : "s"} added in the last 7 days.`}
               </p>
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              Inspect roster <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
 
-          {/* INSIGHT 2: Highest Value Leads */}
-          <div
-            onClick={() => onOpenPlaceholder("High Value Lead Analysis", "💎")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
+          {/* INSIGHT 2: Highest Value Lead (real) */}
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between h-40 text-left">
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
@@ -763,19 +767,13 @@ export const LeadsPage: React.FC = () => {
               </div>
               <p className="text-xs font-extrabold text-[#1F3557] mt-3">Top Value Pipeline</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
-                Bruce Wayne (Wayne Enterprises) valued at $35,000.
+                {highestValueLead ? `${highestValueLead.name} (${highestValueLead.company}) valued at $${(highestValueLead.estimatedValue || 0).toLocaleString()}.` : "No leads yet."}
               </p>
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              Review lead <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
 
-          {/* INSIGHT 3: Oldest Uncontacted */}
-          <div
-            onClick={() => onOpenPlaceholder("Stale Leads Review Hub", "⚠️")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
+          {/* INSIGHT 3: Oldest Uncontacted (real) */}
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between h-40 text-left">
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-rose-300 text-rose-600 px-2 py-0.5 rounded font-black uppercase tracking-wider">
@@ -785,19 +783,13 @@ export const LeadsPage: React.FC = () => {
               </div>
               <p className="text-xs font-extrabold text-[#1F3557] mt-3">Oldest Uncontacted</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
-                Wanda Maximoff - Pending touchpoint for 48 hours.
+                {oldestUncontacted ? `${oldestUncontacted.name} — no touchpoint for ${oldestUncontacted.addedDaysAgo} day${oldestUncontacted.addedDaysAgo === 1 ? "" : "s"}.` : "No uncontacted leads."}
               </p>
             </div>
-            <p className="text-[10px] font-bold text-rose-600 hover:underline inline-flex items-center gap-1 mt-2">
-              Call account <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
 
-          {/* INSIGHT 4: Conversion Rate */}
-          <div
-            onClick={() => onOpenPlaceholder("Conversion Performance Board", "📈")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
+          {/* INSIGHT 4: Conversion Rate (real) */}
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between h-40 text-left">
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
@@ -805,36 +797,27 @@ export const LeadsPage: React.FC = () => {
                 </span>
                 <TrendingUp className="w-4 h-4 text-[#1F3557]" />
               </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">LTM Conversion</p>
+              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Win Rate</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
-                Monthly average stable at 78.2% overall win probability.
+                {conversionRate === null ? "No closed leads yet." : `${conversionRate}% of closed leads were won (${wonLeads.length} of ${closedLeads.length}).`}
               </p>
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              View charts <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
 
-          {/* INSIGHT 5: Average Response Time */}
-          <div
-            onClick={() => onOpenPlaceholder("Response Time Auditing", "⚡")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
+          {/* INSIGHT 5: Open Pipeline Value (real) */}
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between h-40 text-left">
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Response SLA
+                  Pipeline
                 </span>
-                <Clock className="w-4 h-4 text-[#1F3557]" />
+                <Briefcase className="w-4 h-4 text-[#1F3557]" />
               </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Avg Response Time</p>
+              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Open Pipeline Value</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
-                Currently holding at 8.4 minutes from intake to SMS.
+                {openPipelineValue === 0 ? "No open leads with a value yet." : `$${openPipelineValue.toLocaleString()} across all open leads.`}
               </p>
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              Check SLA report <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
 
         </div>

@@ -990,7 +990,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                     type="text" 
                     value={formContact}
                     onChange={e => setFormContact(e.target.value)}
-                    placeholder="e.g. Marcus Vance"
+                    placeholder="e.g. Jane Smith"
                     className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                   />
                 </div>
@@ -1001,7 +1001,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                     type="text" 
                     value={formCompany}
                     onChange={e => setFormCompany(e.target.value)}
-                    placeholder="e.g. Apex Plumb & Drain"
+                    placeholder="e.g. Riverside Apartments"
                     className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                   />
                 </div>
@@ -1356,7 +1356,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                         type="text" 
                         value={formContact}
                         onChange={e => setFormContact(e.target.value)}
-                        placeholder="e.g. Marcus Vance"
+                        placeholder="e.g. Jane Smith"
                         className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                       />
                     </div>
@@ -1367,7 +1367,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                         type="text" 
                         value={formCompany}
                         onChange={e => setFormCompany(e.target.value)}
-                        placeholder="e.g. Apex Plumb & Drain"
+                        placeholder="e.g. Riverside Apartments"
                         className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                       />
                     </div>
