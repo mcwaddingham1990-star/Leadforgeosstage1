@@ -2770,21 +2770,21 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO BANNER - Full-bleed image that IS the card's top edge
-                      (baked-in rounded corners + gradient background), so it's
-                      laid flush edge-to-edge against the card container with no
-                      visible seam. Real aspect ratio (913x373) preserved. */}
+                  {/* LOGO BANNER - Fills the card exactly from the top edge
+                      down to the top of the Google button (same 27.2% the
+                      button div uses), flush with both side edges. object-cover
+                      crops to fill that box with zero distortion/stretching. */}
                   <div
                     style={{
-                      top: `${200 * scale}px`,
+                      top: 0,
                       left: 0,
                       width: "100%",
-                      height: `${cardWidth * (373 / 913)}px`
+                      height: "27.2%"
                     }}
                     className="absolute pointer-events-none"
                   >
                     <img
-                      src="/branding/CutPaste_2026-07-20_17-51-10-433.png"
+                      src="/branding/Logoactual.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
                       className="object-cover"
