@@ -2776,7 +2776,7 @@ Access to full financial telemetry is restricted.`;
                       visible seam. Real aspect ratio (913x373) preserved. */}
                   <div
                     style={{
-                      top: 0,
+                      top: `${200 * scale}px`,
                       left: 0,
                       width: "100%",
                       height: `${cardWidth * (373 / 913)}px`
