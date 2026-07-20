@@ -31,8 +31,10 @@ import {
   Lock,
   ChevronRight,
   AlertCircle,
-  X
+  X,
+  Users
 } from "lucide-react";
+import { CustomerPickerModal } from "./CustomerPickerModal";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -43,7 +45,8 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, recentRoster } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, recentRoster, customers } = useDomainData();
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -729,22 +732,31 @@ export const EstimatesPage: React.FC = () => {
             </div>
             
             <div className="p-6 overflow-y-auto space-y-4">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerPickerOpen(true)}
+                  className="text-[10.5px] font-bold text-[#315C9F] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Users className="w-3 h-3" /> Link an existing customer
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-[#5E7393]">Client Name *</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={formCustomerName}
                     onChange={e => setFormCustomerName(e.target.value)}
                     placeholder="e.g. Smith Residence"
                     className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                   />
                 </div>
-                
+
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company / Account Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={formCompany}
                     onChange={e => setFormCompany(e.target.value)}
                     placeholder="e.g. Riverside Apartments"
@@ -827,6 +839,18 @@ export const EstimatesPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {isCustomerPickerOpen && (
+        <CustomerPickerModal
+          customers={customers}
+          onClose={() => setIsCustomerPickerOpen(false)}
+          onSelect={(c) => {
+            setFormCustomerName(c.contact || c.company);
+            setFormCompany(c.company);
+            setIsCustomerPickerOpen(false);
+          }}
+        />
       )}
 
       {/* View / Edit Estimate Modal with Auto-Job Conversion */}

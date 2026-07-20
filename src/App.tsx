@@ -1119,6 +1119,74 @@ export default function App() {
 
   // Floating AI Widget UI States
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
+  // Draggable position for the Owner's AI floating widget -- null means
+  // "use the default bottom-right dock." Persisted so it stays wherever the
+  // owner last dragged it, across reloads, and clamped to the viewport so it
+  // can never end up stuck off-screen or covering something unreachable.
+  const [aiWidgetPos, setAiWidgetPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem("ownersLocalOS_aiWidgetPos");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const aiDragState = React.useRef<{ dragging: boolean; startX: number; startY: number; originX: number; originY: number }>({
+    dragging: false, startX: 0, startY: 0, originX: 0, originY: 0
+  });
+
+  const clampAiWidgetPos = (x: number, y: number, width: number, height: number) => ({
+    x: Math.min(Math.max(x, 8), window.innerWidth - width - 8),
+    y: Math.min(Math.max(y, 8), window.innerHeight - height - 8)
+  });
+
+  // Re-clamp whenever the panel opens (it's much larger than the toggle
+  // pill) so a position saved while collapsed can never open partly
+  // off-screen or hidden behind the edge of the viewport.
+  useEffect(() => {
+    if (isFloatingAiOpen && aiWidgetPos) {
+      setAiWidgetPos((prev) => (prev ? clampAiWidgetPos(prev.x, prev.y, 384, 550) : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFloatingAiOpen]);
+
+  const startAiWidgetDrag = (e: React.PointerEvent, widthGuess: number, heightGuess: number) => {
+    const target = e.currentTarget as HTMLElement;
+    const widget = target.closest("#floating-ai-widget") as HTMLElement | null;
+    const rect = widget?.getBoundingClientRect();
+    const originX = aiWidgetPos?.x ?? (rect ? rect.left : window.innerWidth - widthGuess - 24);
+    const originY = aiWidgetPos?.y ?? (rect ? rect.top : window.innerHeight - heightGuess - 96);
+    aiDragState.current = { dragging: false, startX: e.clientX, startY: e.clientY, originX, originY };
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - aiDragState.current.startX;
+      const dy = moveEvent.clientY - aiDragState.current.startY;
+      if (!aiDragState.current.dragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+        aiDragState.current.dragging = true;
+      }
+      if (aiDragState.current.dragging) {
+        const next = clampAiWidgetPos(aiDragState.current.originX + dx, aiDragState.current.originY + dy, widthGuess, heightGuess);
+        setAiWidgetPos(next);
+      }
+    };
+    const handleUp = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      if (aiDragState.current.dragging) {
+        setAiWidgetPos((prev) => {
+          try {
+            if (prev) localStorage.setItem("ownersLocalOS_aiWidgetPos", JSON.stringify(prev));
+          } catch {
+            // ignore storage failures
+          }
+          return prev;
+        });
+      }
+      aiDragState.current.dragging = false;
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  };
   const [floatingAiTab, setFloatingAiTab] = useState<"ask" | "actions" | "settings" | "recent">("ask");
   const [floatingAiInput, setFloatingAiInput] = useState("");
   const [floatingAiMessages, setFloatingAiMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([
@@ -6836,14 +6904,20 @@ Access to full financial telemetry is restricted.`;
         </div>
       )}
 
-      {/* GLOBAL FLOATING AI WIDGET */}
-      <div id="floating-ai-widget" className="fixed bottom-24 right-6 z-40 select-none">
-        
-        {/* Toggle Trigger Pill */}
+      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it */}
+      <div
+        id="floating-ai-widget"
+        className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
+        style={aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
+      >
+
+        {/* Toggle Trigger Pill (drag by pressing and moving) */}
         {!isFloatingAiOpen && isLoggedIn && (
           <button
-            onClick={() => setIsFloatingAiOpen(true)}
-            className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-pointer group font-sans font-black text-xs uppercase tracking-wider"
+            onClick={() => { if (!aiDragState.current.dragging) setIsFloatingAiOpen(true); }}
+            onPointerDown={(e) => startAiWidgetDrag(e, 180, 52)}
+            className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-grab active:cursor-grabbing group font-sans font-black text-xs uppercase tracking-wider"
+            title="Drag to move, click to open"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -6857,9 +6931,13 @@ Access to full financial telemetry is restricted.`;
         {/* Slide-Up Panel Overlay */}
         {isFloatingAiOpen && (
           <div className="w-96 h-[550px] bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl flex flex-col overflow-hidden animate-slide-up select-text">
-            
-            {/* Drawer Header */}
-            <div className="bg-[#1F3557] text-white px-4 py-3 flex items-center justify-between border-b border-white/10 shrink-0">
+
+            {/* Drawer Header (drag handle) */}
+            <div
+              onPointerDown={(e) => startAiWidgetDrag(e, 384, 550)}
+              className="bg-[#1F3557] text-white px-4 py-3 flex items-center justify-between border-b border-white/10 shrink-0 cursor-grab active:cursor-grabbing"
+              title="Drag to move"
+            >
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#315C9F] to-[#4A86F7] text-white flex items-center justify-center text-lg font-bold">
                   🤖
