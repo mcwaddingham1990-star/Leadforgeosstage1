@@ -5271,9 +5271,12 @@ Access to full financial telemetry is restricted.`;
                               </div>
                             </div>
                           );
-                        case "inventory":
+                        case "inventory": {
+                          const lowStockItems = inventoryList
+                            .filter(i => i.quantity <= i.minQuantity)
+                            .sort((a, b) => (a.quantity - a.minQuantity) - (b.quantity - b.minQuantity));
                           return (
-                            <div 
+                            <div
                               key={slotLabel}
                               onClick={() => {
                                 const matched = OS_SCREENS.find(s => s.id === "inventory");
@@ -5286,36 +5289,40 @@ Access to full financial telemetry is restricted.`;
                                 {getScreenIcon("inventory", "w-4 h-4 text-[#315C9F]")}
                                 <span className="text-[10px] font-black tracking-wider uppercase">INVENTORY MONITORS</span>
                               </div>
-                              
+
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
-                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">3 Alerts Active</p>
-                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Automatic warehouse scans active</p>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{lowStockItems.length} Alert{lowStockItems.length === 1 ? "" : "s"} Active</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">{inventoryList.length} item{inventoryList.length === 1 ? "" : "s"} on file</p>
                                 </div>
 
-                                <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
-                                  <div className="flex items-center justify-between text-[#1F3557]/90">
-                                    <span className="flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                                      1" Copper Elbows
-                                    </span>
-                                    <span>Qty: 3</span>
+                                {lowStockItems.length === 0 ? (
+                                  <p className="text-[9.5px] text-[#5E7393]/70 italic my-3">
+                                    {inventoryList.length === 0 ? "No inventory items yet." : "All items above their minimum quantity."}
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
+                                    {lowStockItems.slice(0, 2).map(item => (
+                                      <div key={item.id} className="flex items-center justify-between text-[#1F3557]/90">
+                                        <span className="flex items-center gap-1 truncate">
+                                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.quantity === 0 ? "bg-red-500" : "bg-[#F59E0B]"}`} />
+                                          <span className="truncate">{item.name}</span>
+                                        </span>
+                                        <span className="shrink-0">Qty: {item.quantity}</span>
+                                      </div>
+                                    ))}
                                   </div>
-                                  <div className="flex items-center justify-between text-[#1F3557]/90">
-                                    <span className="flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 bg-[#F59E0B] rounded-full" />
-                                      R-410A Ref Tank
-                                    </span>
-                                    <span>Qty: 1</span>
-                                  </div>
-                                </div>
+                                )}
 
-                                <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] hover:underline">
-                                  Auto-Reorder suggested ➔
-                                </span>
+                                {lowStockItems.length > 0 && (
+                                  <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] hover:underline">
+                                    Review low stock ➔
+                                  </span>
+                                )}
                               </div>
                             </div>
                           );
+                        }
                         default:
                           return null;
                       }
