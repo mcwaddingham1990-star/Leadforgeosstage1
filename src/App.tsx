@@ -2770,17 +2770,17 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO BANNER - Fills the card exactly from the top edge
-                      down to the top of the Google button (27.2%, matching
-                      the button div's own top offset), flush with both side
-                      edges. object-cover fills that box with zero stretching,
-                      cropping the image's outer edges as needed. */}
+                  {/* LOGO BANNER - Flush with the card's top and both side
+                      edges, sized at its own native aspect ratio (734x302).
+                      No cropping, no forced zoom -- shows the whole logo at
+                      its natural size, leaving empty card background above
+                      the Google button rather than stretching to meet it. */}
                   <div
                     style={{
                       top: 0,
                       left: 0,
                       width: "100%",
-                      height: "27.2%"
+                      height: `${cardWidth * (302 / 734)}px`
                     }}
                     className="absolute pointer-events-none"
                   >
@@ -2788,7 +2788,7 @@ Access to full financial telemetry is restricted.`;
                       src="/branding/Logoactual.png"
                       alt="Owner's Local OS"
                       style={{ width: "100%", height: "100%" }}
-                      className="object-cover"
+                      className="object-contain"
                       referrerPolicy="no-referrer"
                     />
                   </div>
