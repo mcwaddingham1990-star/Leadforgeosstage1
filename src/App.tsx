@@ -2771,16 +2771,16 @@ Access to full financial telemetry is restricted.`;
               {currentView === "login" ? (
                 <>
                   {/* LOGO BANNER - Flush with the card's top and both side
-                      edges, sized at its own native aspect ratio (734x302).
-                      No cropping, no forced zoom -- shows the whole logo at
-                      its natural size, leaving empty card background above
-                      the Google button rather than stretching to meet it. */}
+                      edges, sized at its own native aspect ratio (734x302)
+                      via CSS aspect-ratio so it always matches the box's real
+                      rendered width -- no JS-measured value to drift out of
+                      sync on any device. No cropping, no forced zoom. */}
                   <div
                     style={{
                       top: 0,
                       left: 0,
                       width: "100%",
-                      height: `${cardWidth * (302 / 734)}px`
+                      aspectRatio: "734 / 302"
                     }}
                     className="absolute pointer-events-none"
                   >
@@ -4632,17 +4632,6 @@ Access to full financial telemetry is restricted.`;
 
 
 
-            </div>
-
-            {/* Hint of source authenticity */}
-            <div className="mt-4 flex flex-col items-center gap-1">
-              <p className="text-[11px] text-slate-500 text-center">
-                Visual card dimensions modeled on raw GitHub resource resolution.
-              </p>
-              <div className="flex items-center gap-1.5 mt-1 text-slate-400 hover:text-slate-300 text-xs font-mono">
-                <Laptop className="w-3.5 h-3.5 text-blue-500" />
-                <span>Device Adaptive Frame Simulation</span>
-              </div>
             </div>
 
           </div>
