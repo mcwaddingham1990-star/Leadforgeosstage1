@@ -133,6 +133,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // actually viewed (persisted locally). Never a hardcoded arbitrary city.
   const MAP_POSITION_STORAGE_KEY = "ownersLocalOS_lastMapPosition";
   const [resolvedDefaultCenter, setResolvedDefaultCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const cameraSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (resolvedDefaultCenter) return;
@@ -172,12 +173,23 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessAddresses]);
 
-  const handleMapCameraChanged = (center: { lat: number; lng: number }) => {
-    try {
-      localStorage.setItem(MAP_POSITION_STORAGE_KEY, JSON.stringify(center));
-    } catch {
-      // ignore storage failures (private browsing, quota, etc.)
-    }
+  useEffect(() => () => {
+    if (cameraSaveTimer.current) clearTimeout(cameraSaveTimer.current);
+  }, []);
+
+  const handleMapCameraChanged = (center?: { lat: number; lng: number }) => {
+    if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng)) return;
+    if (cameraSaveTimer.current) clearTimeout(cameraSaveTimer.current);
+
+    // Camera events fire continuously while a finger is moving. Writing to
+    // synchronous browser storage on every frame can lock up mobile Chrome.
+    cameraSaveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(MAP_POSITION_STORAGE_KEY, JSON.stringify(center));
+      } catch {
+        // ignore storage failures (private browsing, quota, etc.)
+      }
+    }, 500);
   };
 
   // Map Filter States
@@ -1585,7 +1597,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
                   defaultZoom={11}
                   mapId={mapId}
-                  onCameraChanged={(e) => handleMapCameraChanged(e.detail.center)}
+                  onCameraChanged={(e) => handleMapCameraChanged(e?.detail?.center)}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
                   {/* Google maps overlays */}
