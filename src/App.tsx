@@ -2770,16 +2770,14 @@ Access to full financial telemetry is restricted.`;
               {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
               {currentView === "login" ? (
                 <>
-                  {/* LOGO BANNER - Flush with the card's top and both side
-                      edges, sized at its own native aspect ratio (734x302)
-                      via CSS aspect-ratio so it always matches the box's real
-                      rendered width -- no JS-measured value to drift out of
-                      sync on any device. No cropping, no forced zoom. */}
+                  {/* LOGO BANNER - Centered to the inset login-card edges.
+                      Keep the complete source image at its native 734:302
+                      aspect ratio: no crop, distortion, or asset changes. */}
                   <div
                     style={{
                       top: 0,
-                      left: 0,
-                      width: "100%",
+                      left: "8%",
+                      width: "84%",
                       aspectRatio: "734 / 302"
                     }}
                     className="absolute pointer-events-none"
