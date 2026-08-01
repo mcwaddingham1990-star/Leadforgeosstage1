@@ -56,6 +56,27 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
+ * Firestore rejects undefined values anywhere inside a document. UI records
+ * commonly use optional fields, so remove undefined properties recursively
+ * before persisting while preserving arrays and all other values.
+ */
+function removeUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(removeUndefined);
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, nestedValue]) => nestedValue !== undefined)
+        .map(([key, nestedValue]) => [key, removeUndefined(nestedValue)])
+    );
+  }
+
+  return value;
+}
+
+/**
  * Syncs changes from a local state array back to Firestore.
  * Performs highly efficient individual document writes and deletions.
  */
@@ -78,11 +99,11 @@ export async function syncArrayToFirestore(
     if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
       const docRef = doc(db, collectionName, item.id);
       try {
-        await setDoc(docRef, {
+        await setDoc(docRef, removeUndefined({
           ...item,
           businessId,
           updatedAt: new Date().toISOString()
-        });
+        }) as Record<string, unknown>);
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `${collectionName}/${item.id}`);
       }
