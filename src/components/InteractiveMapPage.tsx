@@ -120,6 +120,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
+  const [mapsApiError, setMapsApiError] = useState(false);
   // Map IDs are tied to a specific Google Cloud project — falls back to the
   // original demo project's Map ID only if a real business hasn't set
   // their own yet (which won't work with their own API key/project).
@@ -207,7 +208,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // Generated Large Performance Nodes (Simulated 20K)
   const simulatedLargeNodes = useMemo(() => {
     if (!isPerformanceSimActive) return [];
-    // Generate 500 nodes for high performance smooth canvas rendering (virtualized count representation of 20,000 across Seattle)
+    // Generate 500 nodes for high performance smooth canvas rendering (virtualized count representation of 20,000 across DFW)
     const list = [];
     for (let i = 0; i < 500; i++) {
       const id = `sim_node_${i}`;
@@ -300,7 +301,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         !lastLog || lastLog.type === "Clock Out" ? "Offline" :
         lastLog.type === "Break Start" ? "Lunch" : "Available";
       const lastRealFix = lastLog ? parseGpsString(lastLog.gps) : null;
-      const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Seattle, WA", er.email);
+      const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Dallas, TX", er.email);
       return {
         id: er.email,
         name: `${er.firstName} ${er.lastName}`.trim(),
@@ -537,7 +538,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     leads.forEach(l => {
-      const addr = l.address || "Seattle, WA";
+      const addr = l.address || "Dallas, TX";
       const cacheKey = `lead_${l.id}_${addr}`;
       if (!geocodedCache[cacheKey]) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -545,7 +546,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     estimates.forEach(e => {
-      const addr = e.company || e.customerName || "Seattle, WA";
+      const addr = e.company || e.customerName || "Dallas, TX";
       const cacheKey = `est_${e.id}_${addr}`;
       if (!geocodedCache[cacheKey]) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -553,7 +554,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     schedulingEvents.forEach(evt => {
-      const addr = evt.customerAddress || evt.location || "Seattle, WA";
+      const addr = evt.customerAddress || evt.location || "Dallas, TX";
       const cacheKey = `evt_${evt.id}_${addr}`;
       if (!geocodedCache[cacheKey]) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -619,7 +620,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 3. Customers (Blue)
     if (showCustomers) {
       customers.forEach(c => {
-        const addressStr = c.address || "Seattle, WA";
+        const addressStr = c.address || "Dallas, TX";
         const cacheKey = `cust_${c.id}_${addressStr}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(addressStr, c.id);
         list.push({
@@ -638,7 +639,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 4. Leads (Purple)
     if (showLeads) {
       leads.forEach(l => {
-        const address = l.address || l.company || l.name || "Seattle, WA";
+        const address = l.address || l.company || l.name || "Dallas, TX";
         const cacheKey = `lead_${l.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, l.id);
         list.push({
@@ -657,7 +658,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 5. Estimates (Purple files)
     if (showEstimates) {
       estimates.forEach(e => {
-        const address = e.address || e.company || e.customerName || "Seattle, WA";
+        const address = e.address || e.company || e.customerName || "Dallas, TX";
         const cacheKey = `est_${e.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, e.id);
         list.push({
@@ -676,7 +677,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 6. Jobs (from schedulingEvents with eventType === "Job") (Orange)
     if (showJobs) {
       schedulingEvents.forEach(evt => {
-        const address = evt.customerAddress || evt.location || "Seattle, WA";
+        const address = evt.customerAddress || evt.location || "Dallas, TX";
         const cacheKey = `evt_${evt.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, evt.id);
         list.push({
@@ -700,7 +701,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           type: "Technician",
           title: `Tech: ${t.name}`,
           subtitle: `Status: ${t.status} | Vehicle: ${t.vehicle}`,
-          address: `Mobile Location - Seattle Metro`,
+          address: `Mobile Location - DFW Metro`,
           lat: t.lat,
           lng: t.lng,
           raw: t
@@ -901,7 +902,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       contact: lead.name,
       phone: lead.phone,
       email: lead.email,
-      address: lead.company || "Seattle, WA",
+      address: lead.company || "Dallas, TX",
       openJobs: 1,
       outstandingBalance: 0,
       lifetimeValue: lead.estimatedValue || 2400,
@@ -952,7 +953,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // Start movement route towards the job location
     setActiveTechnicians(prev => prev.map(tech => {
       if (tech.name === techName) {
-        const dest = geocodeAddress(selectedPin?.address || "Seattle, WA", jobId);
+        const dest = geocodeAddress(selectedPin?.address || "Dallas, TX", jobId);
         return {
           ...tech,
           status: "Traveling" as const,
@@ -1299,345 +1300,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   return (
     <div className="flex flex-col gap-6 animate-fade-in text-left">
       
-      {/* MAP CANVAS (REAL GOOGLE MAP OR HIGH-FIDELITY FALLBACK VECTOR CANVAS) */}
-      <div className="bg-slate-950/60 rounded-[32px] p-2.5 border-2 border-white/10 overflow-hidden relative shadow-[0_12px_48px_rgba(0,0,0,0.5)] mb-6" style={{ height: "660px" }}>
-        
-        {hasValidKey ? (
-          // Full Google Maps implementation with our customized components
-          <APIProvider apiKey={apiKey} onLoad={() => setMapsApiLoaded(true)}>
-            <Map
-              id="gmp_mcp_codeassist_v1_aistudio"
-              defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
-              defaultZoom={11}
-              mapId={mapId}
-              onCameraChanged={(e) => handleMapCameraChanged(e.detail.center)}
-              style={{ width: "100%", height: "100%", borderRadius: "24px" }}
-            >
-              {/* Google maps overlays */}
-              {filteredPins.map(pin => (
-                <AdvancedMarker
-                  key={pin.id}
-                  position={{ lat: pin.lat, lng: pin.lng }}
-                  title={pin.title}
-                  onClick={() => {
-                    if (isMultiSelectMode) {
-                      setSelectedBasketIds(prev => 
-                        prev.includes(pin.id) ? prev.filter(x => x !== pin.id) : [...prev, pin.id]
-                      );
-                    } else {
-                      openLocationEditor(pin);
-                    }
-                  }}
-                >
-                  {/* Interactive responsive Google Maps icons */}
-                  <div className="relative cursor-pointer transition-transform hover:scale-115">
-                    
-                    {/* Selected overlay ring */}
-                    {(selectedPin?.id === pin.id || selectedBasketIds.includes(pin.id)) && (
-                      <span className="absolute -inset-2.5 rounded-full border-2 border-blue-400 animate-ping" />
-                    )}
-
-                    {pin.type === "Office" && (
-                      <div className="bg-rose-600 text-white p-2.5 rounded-full border border-white shadow-md animate-pulse">
-                        <Building className="w-4.5 h-4.5" />
-                      </div>
-                    )}
-                    {pin.type === "Warehouse" && (
-                      <div className="bg-amber-600 text-white p-2.5 rounded-full border border-white shadow-md">
-                        <Package className="w-4.5 h-4.5" />
-                      </div>
-                    )}
-                    {pin.type === "Customer" && (
-                      <div className="bg-blue-600 text-white p-2 rounded-full border border-white shadow-md">
-                        <User className="w-4 h-4" />
-                      </div>
-                    )}
-                    {pin.type === "Lead" && (
-                      <div className="bg-purple-600 text-white p-2 rounded-full border border-white shadow-md">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                    )}
-                    {pin.type === "Estimate" && (
-                      <div className="bg-yellow-500 text-slate-900 p-2 rounded-full border border-white shadow-md">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                    )}
-                    {pin.type === "Job" && (
-                      <div className="bg-orange-500 text-white p-2 rounded-full border border-white shadow-md">
-                        <Wrench className="w-4 h-4" />
-                      </div>
-                    )}
-                    {pin.type === "Technician" && (
-                      <div className="bg-emerald-500 text-white p-2.5 rounded-full border border-white shadow-md">
-                        <UserCheck className="w-4 h-4" />
-                      </div>
-                    )}
-                    {pin.type === "Vehicle" && (
-                      <div className="bg-cyan-500 text-white p-2.5 rounded-full border border-white shadow-md">
-                        <Truck className="w-4 h-4" />
-                      </div>
-                    )}
-
-                  </div>
-                </AdvancedMarker>
-              ))}
-            </Map>
-          </APIProvider>
-        ) : (
-          // Outstanding Seattle fallback vector map canvas
-          <div className="w-full h-full bg-slate-900 rounded-[24px] relative overflow-hidden" style={{ height: "100%" }}>
-            
-            {/* Real Map Key Setup Splash Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-6 z-20">
-              <div className="max-w-md w-full bg-slate-900/95 border border-white/15 rounded-2xl p-6 shadow-2xl text-center space-y-4">
-                <div className="mx-auto w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center border border-blue-400/30">
-                  <Compass className="w-6 h-6 text-blue-400 animate-spin" style={{ animationDuration: '12s' }} />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-sans font-extrabold text-white tracking-tight">Real Google Map API Key Required</h4>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    You are currently viewing our customized Seattle Fallback Vector Map. To load the live interactive 3D satellite and street maps, you need a Google Maps Platform API key.
-                  </p>
-                </div>
-                <div className="bg-slate-950/60 rounded-xl p-4 text-[10px] text-left text-slate-300 font-sans border border-white/5 space-y-2">
-                  <p className="font-extrabold text-white uppercase tracking-wider text-[9px] text-blue-400">Setup Instructions:</p>
-                  <p>
-                    <strong className="text-white">1. Get an API key:</strong> <a href="https://console.cloud.google.com/google/maps-apis/start?utm_campaign=gmp-code-assist-ais" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-0.5">console.cloud.google.com <ExternalLink className="w-3 h-3 inline" /></a>
-                  </p>
-                  <p>
-                    <strong className="text-white">2. Paste Key:</strong> When the <span className="text-amber-300">"Enter your environment variable to continue"</span> popup appears, paste your key and press <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-white">Enter</span>.
-                  </p>
-                  <p>
-                    <strong className="text-white">3. Or Manually:</strong> Open <span className="text-white font-bold">Settings</span> (⚙️ gear icon, top-right corner) → <span className="text-white font-bold">Secrets</span> → Add secret name <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_PLATFORM_KEY</code> → paste key.
-                  </p>
-                  <p>
-                    <strong className="text-white">4. Map ID (required too):</strong> In the same Google Cloud project, go to <span className="text-white font-bold">Maps → Map Management</span>, create a Map ID, then add secret <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300">GOOGLE_MAPS_MAP_ID</code> with that value. A Map ID from a different project than your key won't work.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Visual grid background */}
-            <div className="absolute inset-0 select-none opacity-20" style={{ backgroundImage: "radial-gradient(#ffffff 1.2px, transparent 1.2px)", backgroundSize: "28px 28px" }} />
-
-            {/* SVG Stylized water bodies and geographic paths */}
-            <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: "none" }}>
-              {/* Elliot Bay water body */}
-              <path d="M 0,100 C 60,160 80,240 50,330 C 30,390 40,470 0,510 L 0,640 L 120,640 C 150,550 110,440 120,380 C 130,320 170,220 140,100 Z" fill="#1e293b" opacity="0.8" stroke="#334155" strokeWidth="2" />
-              
-              {/* Lake Union center body */}
-              <ellipse cx="440" cy="180" rx="50" ry="34" fill="#1e293b" opacity="0.8" stroke="#334155" strokeWidth="2" />
-              <path d="M 440,180 L 390,240 C 390,240 360,300 310,320" stroke="#1e293b" strokeWidth="12" fill="none" opacity="0.8" />
-              
-              {/* Lake Washington right side */}
-              <path d="M 850,50 C 780,150 810,280 790,420 C 770,520 820,590 850,640 L 1000,640 L 1000,50 Z" fill="#1e293b" opacity="0.8" stroke="#334155" strokeWidth="2" />
-
-              {/* Highway overlay grid networks */}
-              <path d="M 470,0 C 450,150 480,280 460,410 C 440,510 450,590 470,640" stroke="#334155" strokeWidth="4" strokeDasharray="8,6" fill="none" opacity="0.6" />
-              <path d="M 0,450 C 200,440 400,460 800,440" stroke="#334155" strokeWidth="4" strokeDasharray="8,6" fill="none" opacity="0.6" />
-
-              {/* SERVICE TERRITORIES COLORED OVERLAY POLYGONS */}
-              {showTerritories && serviceTerritories.map(t => {
-                // Translate coordinate points dynamically into SVG coordinate bounds
-                const svgPath = t.points.map((p, idx) => {
-                  const latCenter = 47.6062;
-                  const lngCenter = -122.3321;
-                  const x = 450 + (p.lng - lngCenter) * 1100;
-                  const y = 300 - (p.lat - latCenter) * 1200;
-                  return `${idx === 0 ? "M" : "L"} ${x},${y}`;
-                }).join(" ") + " Z";
-
-                return (
-                  <g key={t.id}>
-                    <path
-                      d={svgPath}
-                      fill={t.color}
-                      fillOpacity="0.08"
-                      stroke={t.color}
-                      strokeWidth="2.5"
-                      strokeOpacity="0.45"
-                      strokeDasharray="4,4"
-                      className="transition-all hover:fill-opacity-15 cursor-pointer"
-                    />
-                    {/* Text center label */}
-                    <foreignObject
-                      x={450 + (t.points[0].lng - -122.3321) * 1100 - 40}
-                      y={300 - (t.points[0].lat - 47.6062) * 1200 + 10}
-                      width="120"
-                      height="40"
-                    >
-                      <div className="bg-slate-900/90 border border-white/10 px-1.5 py-0.5 rounded text-[8px] font-sans text-slate-300 font-extrabold shadow text-center truncate select-none">
-                        {t.name}
-                      </div>
-                    </foreignObject>
-                  </g>
-                );
-              })}
-
-              {/* REVENUE HEATMAP GRADIENT BUBBLES */}
-              {showRevenueHeatmap && (
-                <g opacity="0.45">
-                  {/* High value hubs in north, central & south */}
-                  <circle cx="480" cy="220" r="140" fill="url(#heat_radial_1)" />
-                  <circle cx="380" cy="380" r="110" fill="url(#heat_radial_2)" />
-                  <circle cx="620" cy="120" r="90" fill="url(#heat_radial_3)" />
-                </g>
-              )}
-
-              <defs>
-                <radialGradient id="heat_radial_1" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#ec4899" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#ec4899" stopOpacity="0" />
-                </radialGradient>
-                <radialGradient id="heat_radial_2" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.75" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                </radialGradient>
-                <radialGradient id="heat_radial_3" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#eab308" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#eab308" stopOpacity="0" />
-                </radialGradient>
-              </defs>
-            </svg>
-
-            {/* HQ & Warehouse HUD Floating Pins */}
-            <div className="absolute top-4 left-4 bg-slate-950/90 border border-white/10 rounded-xl p-2.5 text-[9px] font-semibold text-slate-300 shadow-xl space-y-1 z-10 select-none">
-              <p className="text-blue-400 font-extrabold uppercase flex items-center gap-1">
-                <Compass className="w-3 h-3 animate-spin" /> Dispatch Grid Activated
-              </p>
-              <p>📍 Office HQ: 800 5th Ave</p>
-              <p>📦 SODO Depot: Airport Way S</p>
-            </div>
-
-            {/* DYNAMIC FALLBACK VECTOR MARKER RENDERER */}
-            {filteredPins.map(pin => {
-              const latCenter = 47.6062;
-              const lngCenter = -122.3321;
-              const x = 50 + (pin.lng - lngCenter) * 1100;
-              const y = 50 - (pin.lat - latCenter) * 1200;
-
-              const posX = Math.max(5, Math.min(x, 95));
-              const posY = Math.max(5, Math.min(y, 95));
-
-              const isSelected = selectedPin?.id === pin.id;
-              const isBasketItem = selectedBasketIds.includes(pin.id);
-
-              let markerBg = "bg-blue-600";
-              let markerIcon = <User className="w-3.5 h-3.5" />;
-              let pulseColor = "border-blue-400";
-
-              if (pin.type === "Office") {
-                markerBg = "bg-rose-600";
-                markerIcon = <Building className="w-3.5 h-3.5 animate-pulse" />;
-                pulseColor = "border-rose-400";
-              } else if (pin.type === "Warehouse") {
-                markerBg = "bg-amber-600";
-                markerIcon = <Package className="w-3.5 h-3.5" />;
-                pulseColor = "border-amber-400";
-              } else if (pin.type === "Lead") {
-                markerBg = "bg-purple-600";
-                pulseColor = "border-purple-400";
-                const leadStatus = pin.raw.status || "New";
-                if (leadStatus === "Won") markerIcon = <Star className="w-3.5 h-3.5 text-yellow-300" />;
-                else if (leadStatus === "Lost") markerIcon = <Skull className="w-3.5 h-3.5" />;
-                else if (leadStatus === "Contacted") markerIcon = <Phone className="w-3.5 h-3.5" />;
-                else if (leadStatus === "Qualified") markerIcon = <Shield className="w-3.5 h-3.5 text-emerald-300" />;
-                else markerIcon = <MapPin className="w-3.5 h-3.5" />;
-              } else if (pin.type === "Estimate") {
-                markerBg = "bg-yellow-500 text-slate-900";
-                markerIcon = <FileText className="w-3.5 h-3.5" />;
-                pulseColor = "border-yellow-400";
-              } else if (pin.type === "Job") {
-                pulseColor = "border-orange-400";
-                const isHigh = pin.raw.priority === "High";
-                markerBg = isHigh ? "bg-rose-500" : "bg-orange-500";
-                markerIcon = <Wrench className="w-3.5 h-3.5" />;
-              } else if (pin.type === "Technician") {
-                markerBg = "bg-emerald-600";
-                markerIcon = <UserCheck className="w-3.5 h-3.5" />;
-                pulseColor = "border-emerald-400";
-              } else if (pin.type === "Vehicle") {
-                markerBg = "bg-cyan-600";
-                markerIcon = <Truck className="w-3.5 h-3.5 text-cyan-200 animate-bounce" />;
-                pulseColor = "border-cyan-400";
-              }
-
-              return (
-                <button
-                  key={pin.id}
-                  onClick={() => {
-                    if (isMultiSelectMode) {
-                      setSelectedBasketIds(prev => 
-                        prev.includes(pin.id) ? prev.filter(x => x !== pin.id) : [...prev, pin.id]
-                      );
-                    } else {
-                      openLocationEditor(pin);
-                    }
-                  }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20 focus:outline-none hover:scale-125 transition-transform"
-                  style={{ left: `${posX}%`, top: `${posY}%` }}
-                >
-                  <div className="relative">
-                    {(isSelected || isBasketItem) && (
-                      <span className={`absolute -inset-3.5 rounded-full border-2 ${pulseColor} animate-ping`} />
-                    )}
-
-                    <div className={`p-2 rounded-full border border-white text-white shadow-lg ${markerBg}`}>
-                      {markerIcon}
-                    </div>
-
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-slate-950/95 border border-white/10 rounded px-1.5 py-0.5 whitespace-nowrap text-[8px] font-sans font-black tracking-wide text-white select-none pointer-events-none shadow-md uppercase">
-                      {pin.title}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-
-          </div>
-        )}
-
-        {/* FLOATING ACTION BOTTOM BAR */}
-        <div className="absolute bottom-4 left-4 right-4 bg-slate-950/90 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-2xl flex flex-wrap gap-4 items-center justify-between z-30">
-          
-          <div className="flex items-center gap-3">
-            <span className="p-2 bg-blue-500/15 rounded-xl border border-blue-400/20">
-              <LayersIcon className="w-5 h-5 text-blue-400" />
-            </span>
-            <div>
-              <h4 className="text-[11px] font-extrabold text-white uppercase tracking-wider">Spatial Index Ledger</h4>
-              <p className="text-[10px] text-slate-400 font-bold">
-                Currently streaming {filteredPins.length} geospatial items across Seattle.
-              </p>
-            </div>
-          </div>
-
-          {/* STAT KPIs */}
-          <div className="flex gap-4 text-xs font-semibold">
-            <div className="text-center">
-              <p className="text-xs font-extrabold text-blue-400">{customers.length}</p>
-              <p className="text-[8px] text-slate-400 font-extrabold uppercase">Clients</p>
-            </div>
-            <div className="text-center border-l border-white/10 pl-4">
-              <p className="text-xs font-extrabold text-purple-400">{leads.length}</p>
-              <p className="text-[8px] text-slate-400 font-extrabold uppercase">Leads</p>
-            </div>
-            <div className="text-center border-l border-white/10 pl-4">
-              <p className="text-xs font-extrabold text-orange-400">
-                {schedulingEvents.filter(e => e.eventType === "Job" && e.status !== "Completed").length}
-              </p>
-              <p className="text-[8px] text-slate-400 font-extrabold uppercase">Active Jobs</p>
-            </div>
-            <div className="text-center border-l border-white/10 pl-4">
-              <p className="text-xs font-extrabold text-emerald-400">${counts.revenueToday.toLocaleString()}</p>
-              <p className="text-[8px] text-slate-400 font-extrabold uppercase">Revenue</p>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
       {/* CORE LAYOUT GRID: Left Sidebar, Main Stage, Right Panel */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         
@@ -1907,9 +1569,17 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           {/* MAP CANVAS (REAL GOOGLE MAP OR HIGH-FIDELITYFALLBACK VECTOR CANVAS) */}
           <div className="bg-slate-950/60 rounded-[32px] p-2.5 border-2 border-white/10 overflow-hidden relative shadow-[0_12px_48px_rgba(0,0,0,0.5)]" style={{ height: "660px" }}>
             
-            {hasValidKey ? (
+            {hasValidKey && !mapsApiError ? (
               // Full Google Maps implementation with our customized components
-              <APIProvider apiKey={apiKey} onLoad={() => setMapsApiLoaded(true)}>
+              <APIProvider
+                  apiKey={apiKey}
+                  onLoad={() => setMapsApiLoaded(true)}
+                  onError={(error) => {
+                    console.error("Google Maps failed to initialize:", error);
+                    setMapsApiLoaded(false);
+                    setMapsApiError(true);
+                  }}
+                >
                 <Map
                   id="gmp_mcp_codeassist_v1_aistudio"
                   defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
@@ -1989,7 +1659,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 </Map>
               </APIProvider>
             ) : (
-              // Outstanding Seattle fallback vector map canvas
+              // DFW fallback vector map canvas
               <div className="w-full h-full bg-slate-900 rounded-[24px] relative overflow-hidden" style={{ height: "100%" }}>
                 
                 {/* Real Map Key Setup Splash Overlay */}
@@ -2001,7 +1671,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     <div className="space-y-1">
                       <h4 className="text-sm font-sans font-extrabold text-white tracking-tight">Real Google Map API Key Required</h4>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        You are currently viewing our customized Seattle Fallback Vector Map. To load the live interactive 3D satellite and street maps, you need a Google Maps Platform API key.
+                        You are currently viewing our customized DFW Fallback Vector Map. To load the live interactive 3D satellite and street maps, you need a Google Maps Platform API key.
                       </p>
                     </div>
                     <div className="bg-slate-950/60 rounded-xl p-4 text-[10px] text-left text-slate-300 font-sans border border-white/5 space-y-2">
@@ -2231,7 +1901,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 <div>
                   <h4 className="text-[11px] font-extrabold text-white uppercase tracking-wider">Spatial Index Ledger</h4>
                   <p className="text-[10px] text-slate-400 font-bold">
-                    Currently streaming {filteredPins.length} geospatial items across Seattle.
+                    Currently streaming {filteredPins.length} geospatial items across DFW.
                   </p>
                 </div>
               </div>
