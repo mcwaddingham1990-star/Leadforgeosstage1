@@ -3458,7 +3458,10 @@ Access to full financial telemetry is restricted.`;
                             className="w-full bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 font-bold focus:outline-none transition-all shadow-sm appearance-none cursor-pointer"
                           >
                             <option value="">+ Add a team role...</option>
-                            {/* Filter out Owner since they are already added, show other default roles */}
+                            <option value="__create_custom__" className="text-blue-600 font-bold">
+                              ★ + Create Custom Role from scratch...
+                            </option>
+                            {/* Custom Role stays first; Owner is already added. */}
                             {Object.entries(DEFAULT_ROLES_DATA)
                               .filter(([key]) => key !== "owner")
                               .map(([key, role]) => {
@@ -3469,9 +3472,6 @@ Access to full financial telemetry is restricted.`;
                                   </option>
                                 );
                               })}
-                            <option value="__create_custom__" className="text-blue-600 font-bold">
-                              ★ + Create Custom Role from scratch...
-                            </option>
                           </select>
                           <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                             <ChevronDown className="w-4 h-4" />
