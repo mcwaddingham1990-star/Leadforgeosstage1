@@ -10,8 +10,10 @@ export function parseAddress(value = ""): AddressParts {
   const parts = value.split(",").map(part => part.trim()).filter(Boolean);
   const street = parts.shift() || "";
   const remainder = parts.join(", ");
-  const zipMatch = remainder.match(/\b\d{5}(?:-\d{4})?\b\s*$/);
-  const zip = zipMatch?.[0]?.trim() || "";
+  // Treat an in-progress ZIP as a ZIP too. Requiring all five digits here makes
+  // digits 1-4 get reparsed into City/State after every controlled-input update.
+  const zipMatch = remainder.match(/(?:^|,\s*)(\d{1,5}(?:-\d{0,4})?)\s*$/);
+  const zip = zipMatch?.[1]?.trim() || "";
   const cityState = zip ? remainder.slice(0, remainder.lastIndexOf(zip)).replace(/,\s*$/, "").trim() : remainder;
   return { street, cityState, zip };
 }
