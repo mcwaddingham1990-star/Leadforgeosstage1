@@ -55,24 +55,24 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, AdvancedMarker, Pin, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, AdvancedMarker, Pin } from "@vis.gl/react-google-maps";
 
-// Deterministic geocoding in Seattle area to place markers on fallbacks & real map
+const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
+
+// Deterministic DFW-area fallback coordinates until Google returns a real geocode.
 export function geocodeAddress(address: string, id: string = ""): { lat: number; lng: number } {
   let hash = 0;
-  const combined = (address || "Seattle, WA") + id;
+  const combined = (address || "Dallas, TX") + id;
   for (let i = 0; i < combined.length; i++) {
     hash = combined.charCodeAt(i) + ((hash << 5) - hash);
   }
   
-  // Center: 47.6062, -122.3321
-  // Seattle bounds: lat [47.52, 47.72], lng [-122.42, -122.25]
-  const latDelta = ((Math.abs(hash) % 1000) / 1000) * 0.16 - 0.08; // -0.08 to +0.08
-  const lngDelta = ((Math.abs(hash >> 3) % 1000) / 1000) * 0.12 - 0.06; // -0.06 to +0.06
+  const latDelta = ((Math.abs(hash) % 1000) / 1000) * 0.30 - 0.15;
+  const lngDelta = ((Math.abs(hash >> 3) % 1000) / 1000) * 0.36 - 0.18;
   
   return {
-    lat: 47.6062 + latDelta,
-    lng: -122.3321 + lngDelta
+    lat: DFW_FALLBACK.lat + latDelta,
+    lng: DFW_FALLBACK.lng + lngDelta
   };
 }
 
@@ -117,9 +117,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     timeClockLogs
   } = useDomainData();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
-  const map = useMap();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
+  const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
   // Map IDs are tied to a specific Google Cloud project — falls back to the
   // original demo project's Map ID only if a real business hasn't set
   // their own yet (which won't work with their own API key/project).
@@ -130,7 +130,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // Real default map center, resolved in priority order: real business
   // address -> real device GPS -> DFW fallback -> last position the owner
   // actually viewed (persisted locally). Never a hardcoded arbitrary city.
-  const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
   const MAP_POSITION_STORAGE_KEY = "ownersLocalOS_lastMapPosition";
   const [resolvedDefaultCenter, setResolvedDefaultCenter] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -525,7 +524,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [geocodedCache, setGeocodedCache] = useState<Record<string, { lat: number, lng: number }>>({});
 
   useEffect(() => {
-    if (!map || typeof google === "undefined" || !google.maps?.Geocoder) return;
+    if (!mapsApiLoaded || typeof google === "undefined" || !google.maps?.Geocoder) return;
 
     const geocoder = new google.maps.Geocoder();
     const addressesToGeocode: Array<{ key: string, address: string }> = [];
@@ -583,7 +582,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         });
       });
     }
-  }, [map, customers, leads, estimates, schedulingEvents, geocodedCache]);
+  }, [mapsApiLoaded, customers, leads, estimates, schedulingEvents, geocodedCache]);
 
   // Static Offices & Warehouses
   const fixedFacilities = useMemo(() => {
@@ -1305,7 +1304,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         
         {hasValidKey ? (
           // Full Google Maps implementation with our customized components
-          <APIProvider apiKey={apiKey}>
+          <APIProvider apiKey={apiKey} onLoad={() => setMapsApiLoaded(true)}>
             <Map
               id="gmp_mcp_codeassist_v1_aistudio"
               defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
@@ -1910,7 +1909,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             
             {hasValidKey ? (
               // Full Google Maps implementation with our customized components
-              <APIProvider apiKey={apiKey}>
+              <APIProvider apiKey={apiKey} onLoad={() => setMapsApiLoaded(true)}>
                 <Map
                   id="gmp_mcp_codeassist_v1_aistudio"
                   defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
