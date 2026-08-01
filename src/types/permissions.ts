@@ -1,8 +1,11 @@
-// Per-module permissions. Every module gets exactly one setting, chosen
-// from four levels -- no separate per-action toggles, no global switch
-// that applies across modules. Each module is fully independent.
+// Per-module permissions. View, Create & Edit, and Delete are independent
+// capabilities. Legacy single-level values are still accepted so existing
+// employee accounts and role templates continue to work after this upgrade.
 
-export type PermissionLevel = "none" | "view" | "edit" | "delete";
+export type PermissionAction = "view" | "edit" | "delete";
+export type PermissionLevel = "none" | PermissionAction;
+export type PermissionFlags = Record<PermissionAction, boolean>;
+export type ModulePermission = PermissionLevel | PermissionFlags;
 
 export const PERMISSION_LEVELS: PermissionLevel[] = ["none", "view", "edit", "delete"];
 
@@ -13,53 +16,71 @@ export const PERMISSION_LEVEL_LABELS: Record<PermissionLevel, string> = {
   delete: "Delete"
 };
 
-// Levels are ordered/hierarchical: Delete implies Create & Edit implies View.
-const LEVEL_RANK: Record<PermissionLevel, number> = { none: 0, view: 1, edit: 2, delete: 3 };
+export type GranularPermissions = Record<string, ModulePermission>;
 
-export type GranularPermissions = Record<string, PermissionLevel>;
+const EMPTY_FLAGS: PermissionFlags = { view: false, edit: false, delete: false };
 
-/**
- * `action` is checked against the module's single level using the same
- * hierarchy the levels are ordered in -- e.g. hasPermission(perms, "jobs",
- * "view") is true for a module set to "edit" or "delete" too, since those
- * levels include viewing.
- */
+export function normalizePermission(value: ModulePermission | undefined): PermissionFlags {
+  if (!value || value === "none") return { ...EMPTY_FLAGS };
+  if (typeof value === "object") {
+    return {
+      view: value.view === true,
+      edit: value.edit === true,
+      delete: value.delete === true
+    };
+  }
+
+  // Preserve the old hierarchical meaning for records saved before
+  // multi-select permissions existed.
+  if (value === "delete") return { view: true, edit: true, delete: true };
+  if (value === "edit") return { view: true, edit: true, delete: false };
+  return { view: true, edit: false, delete: false };
+}
+
 export function hasPermission(
   granular: GranularPermissions | undefined,
   moduleId: string,
-  action: "view" | "edit" | "delete"
+  action: PermissionAction
 ): boolean {
   if (!granular) return false;
-  const level = granular[moduleId] || "none";
-  return LEVEL_RANK[level] >= LEVEL_RANK[action];
+  return normalizePermission(granular[moduleId])[action];
 }
 
-export function getPermissionLevel(granular: GranularPermissions | undefined, moduleId: string): PermissionLevel {
-  if (!granular) return "none";
-  return granular[moduleId] || "none";
+export function getPermissionFlags(
+  granular: GranularPermissions | undefined,
+  moduleId: string
+): PermissionFlags {
+  return normalizePermission(granular?.[moduleId]);
 }
 
-/**
- * Builds a granular permission set with every listed module set to the
- * same level -- used for role-template defaults, e.g. a fresh custom
- * role starting at "view" until the owner customizes it further.
- */
+// Kept for older callers. A multi-select module is reported as the highest
+// enabled capability, while all authorization checks use hasPermission().
+export function getPermissionLevel(
+  granular: GranularPermissions | undefined,
+  moduleId: string
+): PermissionLevel {
+  const flags = getPermissionFlags(granular, moduleId);
+  if (flags.delete) return "delete";
+  if (flags.edit) return "edit";
+  if (flags.view) return "view";
+  return "none";
+}
+
 export function defaultGranularFromModuleList(
   modules: string[],
   level: PermissionLevel = "view"
 ): GranularPermissions {
   const result: GranularPermissions = {};
-  for (const moduleId of modules) {
-    result[moduleId] = level;
-  }
+  const flags = normalizePermission(level);
+  for (const moduleId of modules) result[moduleId] = { ...flags };
   return result;
 }
 
-/** Owners always have full (Delete-tier, i.e. everything) access to every module. */
+/** Owners always have every capability in every module. */
 export function fullAccessGranular(modules: string[]): GranularPermissions {
   const result: GranularPermissions = {};
   for (const moduleId of modules) {
-    result[moduleId] = "delete";
+    result[moduleId] = { view: true, edit: true, delete: true };
   }
   return result;
 }
