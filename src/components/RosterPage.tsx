@@ -15,6 +15,8 @@ function genInviteCode(role: string): string {
   return `${cleanRolePrefix}-${randomStr}`;
 }
 
+import { StructuredAddressFields } from "./StructuredAddressFields";
+
 export const RosterPage: React.FC = () => {
   const { employees, setEmployees, timeClockLogs } = useDomainData();
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
@@ -188,7 +190,13 @@ export const RosterPage: React.FC = () => {
               <input value={editingEmployee.lastName} onChange={e => setEditingEmployee({ ...editingEmployee, lastName: e.target.value })} placeholder="Last name" className="border border-slate-200 rounded-xl px-3 py-2" />
             </div>
             <input value={editingEmployee.phone} onChange={e => setEditingEmployee({ ...editingEmployee, phone: e.target.value })} placeholder="Phone" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
-            <input value={editingEmployee.address} onChange={e => setEditingEmployee({ ...editingEmployee, address: e.target.value })} placeholder="Address" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
+            <StructuredAddressFields
+              label="Home Address"
+              value={editingEmployee.address}
+              onChange={address => setEditingEmployee({ ...editingEmployee, address })}
+              compact
+              inputClassName="w-full border border-slate-200 rounded-xl px-3 py-2"
+            />
             <input value={editingEmployee.role} onChange={e => setEditingEmployee({ ...editingEmployee, role: e.target.value })} placeholder="Role" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <input type="number" value={editingEmployee.hourlyRate} onChange={e => setEditingEmployee({ ...editingEmployee, hourlyRate: parseFloat(e.target.value) || 0 })} placeholder="Hourly rate" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <div className="flex gap-2 pt-2">
