@@ -55,7 +55,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, AdvancedMarker, Pin } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, Marker } from "@vis.gl/react-google-maps";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
 
@@ -121,12 +121,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const hasValidKey = apiKey !== "";
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
   const [mapsApiError, setMapsApiError] = useState(false);
-  // Map IDs are tied to a specific Google Cloud project — falls back to the
-  // original demo project's Map ID only if a real business hasn't set
-  // their own yet (which won't work with their own API key/project).
-  // Google's documented demo Map ID supports Advanced Markers until a
-  // project-specific Map ID is configured in Render.
-  const mapId = (process.env.GOOGLE_MAPS_MAP_ID || "").trim() || "DEMO_MAP_ID";
 
   // Real default map center, resolved in priority order: real business
   // address -> real device GPS -> DFW fallback -> last position the owner
@@ -1606,77 +1600,26 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   id="gmp_mcp_codeassist_v1_aistudio"
                   defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
                   defaultZoom={11}
-                  mapId={mapId}
                   onCameraChanged={(e) => handleMapCameraChanged(e?.detail?.center)}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
-                  {/* Google maps overlays */}
+                  {/* Standard markers do not require a cloud Map ID and are
+                      substantially more reliable on mobile browsers. */}
                   {filteredPins.map(pin => (
-                    <AdvancedMarker
-                      key={pin.id}
+                    <Marker
+                      key={`${pin.type}_${pin.id}`}
                       position={{ lat: pin.lat, lng: pin.lng }}
                       title={pin.title}
                       onClick={() => {
                         if (isMultiSelectMode) {
-                          setSelectedBasketIds(prev => 
+                          setSelectedBasketIds(prev =>
                             prev.includes(pin.id) ? prev.filter(x => x !== pin.id) : [...prev, pin.id]
                           );
                         } else {
                           openLocationEditor(pin);
                         }
                       }}
-                    >
-                      {/* Interactive responsive Google Maps icons */}
-                      <div className="relative cursor-pointer transition-transform hover:scale-115">
-                        
-                        {/* Selected overlay ring */}
-                        {(selectedPin?.id === pin.id || selectedBasketIds.includes(pin.id)) && (
-                          <span className="absolute -inset-2.5 rounded-full border-2 border-blue-400 animate-ping" />
-                        )}
-
-                        {pin.type === "Office" && (
-                          <div className="bg-rose-600 text-white p-2.5 rounded-full border border-white shadow-md animate-pulse">
-                            <Building className="w-4.5 h-4.5" />
-                          </div>
-                        )}
-                        {pin.type === "Warehouse" && (
-                          <div className="bg-amber-500 text-white p-2.5 rounded-full border border-white shadow-md">
-                            <Package className="w-4.5 h-4.5" />
-                          </div>
-                        )}
-                        {pin.type === "Customer" && (
-                          <div className="bg-blue-600 text-white p-2 rounded-full border border-white shadow-md">
-                            <User className="w-4 h-4" />
-                          </div>
-                        )}
-                        {pin.type === "Lead" && (
-                          <div className="bg-purple-600 text-white p-2 rounded-full border border-white shadow-md">
-                            <MapPin className="w-4 h-4" />
-                          </div>
-                        )}
-                        {pin.type === "Estimate" && (
-                          <div className="bg-yellow-500 text-slate-900 p-2 rounded-full border border-white shadow-md">
-                            <FileText className="w-4 h-4" />
-                          </div>
-                        )}
-                        {pin.type === "Job" && (
-                          <div className="bg-orange-500 text-white p-2 rounded-full border border-white shadow-md">
-                            <Wrench className="w-4 h-4" />
-                          </div>
-                        )}
-                        {pin.type === "Technician" && (
-                          <div className="bg-emerald-500 text-white p-2.5 rounded-full border border-white shadow-md">
-                            <UserCheck className="w-4 h-4" />
-                          </div>
-                        )}
-                        {pin.type === "Vehicle" && (
-                          <div className="bg-cyan-500 text-white p-2.5 rounded-full border border-white shadow-md">
-                            <Truck className="w-4 h-4" />
-                          </div>
-                        )}
-
-                      </div>
-                    </AdvancedMarker>
+                    />
                   ))}
                 </Map>
               </APIProvider>
