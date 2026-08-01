@@ -180,6 +180,9 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
   const [isScanningActive, setIsScanningActive] = useState(false);
   const [fillAllEmployeeSigs, setFillAllEmployeeSigs] = useState(true);
   const [fillAllEmployeeInits, setFillAllEmployeeInits] = useState(true);
+  const [saveEmployeeMark, setSaveEmployeeMark] = useState(false);
+  const [savedEmployeeSignature, setSavedEmployeeSignature] = useState<string>(() => localStorage.getItem("ownerslocal_employee_signature") || "");
+  const [savedEmployeeInitials, setSavedEmployeeInitials] = useState<string>(() => localStorage.getItem("ownerslocal_employee_initials") || "");
 
   // Load audit trail and signing options from documentItem if available
   const [auditTrail, setAuditTrail] = useState<any[]>(() => {
@@ -219,6 +222,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
   // Touch & Mouse Gesture tracking state
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const doubleTapRef = useRef<{ lastTime: number; x: number; y: number }>({ lastTime: 0, x: 0, y: 0 });
+  const lastObjectTouchRef = useRef<{ objectId: string; time: number }>({ objectId: "", time: 0 });
   const objectTouchStartRef = useRef<{ objectId: string; x: number; y: number; time: number; hasMoved: boolean } | null>(null);
   const resizeStartRef = useRef<{
     objectId: string;
@@ -676,6 +680,15 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     
     const role = (activeSignObject.props as any).role || "customer";
     const nameToLog = signerFullName.trim() || (role === "customer" ? "Authorized Customer" : "Staff Member");
+
+    // Saved marks are employee-only. Customer and witness signatures are
+    // intentionally never retained for one-tap reuse or bulk completion.
+    if (saveEmployeeMark && (role === "employee" || role === "owner")) {
+      const storageKey = isInitials ? "ownerslocal_employee_initials" : "ownerslocal_employee_signature";
+      localStorage.setItem(storageKey, sigValue);
+      if (isInitials) setSavedEmployeeInitials(sigValue);
+      else setSavedEmployeeSignature(sigValue);
+    }
     
     let updatedObjects = objects.map(o => {
       if (o.id === activeSignObject.id) {
@@ -734,6 +747,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     saveToHistory(updatedObjects);
     addAuditTrailEntry(nameToLog, role, "signed");
     setIsSignModalOpen(false);
+    setSaveEmployeeMark(false);
     triggerNotification(`Successfully signed ${activeSignObject.type} field as ${nameToLog}!`);
 
     if (logOperationalEvent) {
@@ -1172,6 +1186,19 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
 
+    // On touch screens, movement is deliberately armed only by tap-release,
+    // then tap-and-hold on the same item. A normal one-finger swipe remains
+    // document navigation and cannot accidentally create or move a field.
+    if ("touches" in e) {
+      const now = Date.now();
+      const armed = lastObjectTouchRef.current.objectId === obj.id && now - lastObjectTouchRef.current.time < 500;
+      lastObjectTouchRef.current = { objectId: obj.id, time: now };
+      if (!armed) {
+        setSelectedIds([obj.id]);
+        return;
+      }
+    }
+
     objectTouchStartRef.current = {
       objectId: obj.id,
       x: clientX,
@@ -1427,11 +1454,10 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
 
     doubleTapRef.current = { lastTime: now, x: clientX, y: clientY };
 
-    if (timeDiff < 300 && dist < 15) {
-      // Double tap! Trigger zoom toggler
+    if (timeDiff < 350 && dist < 18) {
+      // Double tap on empty page opens the insertion menu at that exact spot.
       e.preventDefault();
-      setZoomLevel(prev => (prev > 1.1 ? 1.0 : 1.5));
-      triggerNotification(zoomLevel > 1.1 ? "Zoom reset" : "Zoomed 150%");
+      setCanvasContextMenu({ x: clientX, y: clientY });
       return;
     }
 
@@ -2706,6 +2732,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
             { type: "checkbox", label: "Checkbox Item" },
             { type: "dropdown", label: "Selection Dropdown" },
             { type: "signature", label: "Signature Block" },
+            { type: "initial", label: "Initials Block" },
             { type: "comment", label: "Sticky Comment" },
             { type: "qrcode", label: "Live QR Code" }
           ].map(lnk => (
@@ -3153,6 +3180,30 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
                   onChange={(e) => setSignerFullName(e.target.value)}
                 />
               </div>
+
+              {(signerRole === "employee" || signerRole === "owner") && (
+                <div className="bg-white/70 border border-[#9EC8EF] rounded-2xl p-3 space-y-2">
+                  {(activeSignObject.type === "initial" ? savedEmployeeInitials : savedEmployeeSignature) && (
+                    <button
+                      type="button"
+                      onClick={() => handleApplySignature(activeSignObject.type === "initial" ? savedEmployeeInitials : savedEmployeeSignature, activeSignObject.type === "initial")}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] uppercase font-black"
+                    >
+                      Tap to insert saved {activeSignObject.type === "initial" ? "initials" : "signature"}
+                    </button>
+                  )}
+                  <label className="flex items-center gap-2 text-[9px] uppercase font-black text-[#5E7393] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveEmployeeMark}
+                      onChange={(e) => setSaveEmployeeMark(e.target.checked)}
+                      className="rounded border-[#9EC8EF] text-[#315C9F]"
+                    />
+                    Save this {activeSignObject.type === "initial" ? "initials" : "signature"} for this employee
+                  </label>
+                  <p className="text-[8px] text-[#5E7393] font-medium">Customer and witness marks are never saved or bulk-filled.</p>
+                </div>
+              )}
 
               {/* Method Selection Tabs */}
               <div className="flex bg-[#EAF5FF] rounded-xl p-0.5 border border-[#9EC8EF]/40">

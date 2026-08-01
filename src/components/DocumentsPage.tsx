@@ -80,7 +80,7 @@ export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; perEntity?: "cus
   { id: "Accounting", icon: "🧮", subfolders: ["Bank Statements", "Sales Tax", "Income Tax", "Financial Statements", "Budgets", "Loans", "CPA Documents", "Reconciliations"] },
   { id: "AI Generated", icon: "🤖", subfolders: ["Reports", "Business Analysis", "Summaries", "Emails", "Letters", "Marketing", "Images", "Documents"] },
   { id: "PDF Editor", icon: "🖊️", subfolders: ["Draft PDFs", "Edited PDFs", "Merged PDFs", "Split PDFs", "Compressed PDFs", "OCR Documents", "Templates", "Fillable Forms", "Scanned Documents"] },
-  { id: "eSign", icon: "✍️", subfolders: ["Pending", "Sent", "Viewed", "Completed", "Rejected", "Expired", "Signature Templates", "Saved Employee Signatures", "Saved Initials", "Audit Logs", "Certificates of Completion"] },
+  { id: "eSign", icon: "✍️", subfolders: ["Awaiting Signature", "Sent", "Signed", "Viewed", "Declined", "Expired", "Standard Documents", "Saved Employee Signatures", "Saved Initials", "Audit Logs", "Certificates of Completion"] },
   { id: "Reports", icon: "📊", subfolders: ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Custom Reports", "Exports"] }
 ];
 
@@ -157,6 +157,7 @@ export const DocumentsPage: React.FC = () => {
   const [isPhotoToPDFModalOpen, setIsPhotoToPDFModalOpen] = useState(false);
   const [isMainShareModalOpen, setIsMainShareModalOpen] = useState(false);
   const [shareDocItem, setShareDocItem] = useState<DocumentItem | null>(null);
+  const [shareRecipient, setShareRecipient] = useState("");
 
   // Photo-to-PDF selection state
   const [photoToPdfName, setPhotoToPdfName] = useState("Photo Compilation.pdf");
@@ -235,9 +236,35 @@ export const DocumentsPage: React.FC = () => {
       setPdfEditorDocName(doc.name);
       setPdfEditorInitialObjects((doc as any).metaObjects || []);
     } else {
-      setPdfEditorDocId(null);
-      setPdfEditorDocName("New Blank Document.pdf");
+      const blankId = `doc_blank_${Date.now()}`;
+      const blankName = "New Blank Document.pdf";
+      setPdfEditorDocId(blankId);
+      setPdfEditorDocName(blankName);
       setPdfEditorInitialObjects([]);
+      // Blank eSign work is saved immediately so closing the editor cannot
+      // lose it. It starts in Awaiting Signature and moves to Sent/Signed as
+      // the signing workflow advances.
+      setDocuments(prev => [...prev, {
+        id: blankId,
+        name: blankName,
+        customer: "None",
+        employee: loggedInUser?.name || "Staff Administrator",
+        vendor: "None",
+        job: "None",
+        type: "Contracts",
+        folder: "eSign",
+        uploadedBy: loggedInUser?.name || "Staff Administrator",
+        date: new Date().toISOString().split("T")[0],
+        size: "0 KB",
+        status: "Awaiting Signature",
+        isFavorite: false,
+        isArchived: false,
+        notes: "Autosaved blank eSign document.",
+        tags: ["eSign", "Awaiting Signature", "Blank Document"],
+        estimateId: "None",
+        invoiceId: "None",
+        lastModified: new Date().toISOString()
+      }]);
     }
     setIsPDFEditorOpen(true);
     triggerNotification(doc ? `Opening PDF Editor for ${doc.name}` : "Opening clean blank PDF Canvas");
@@ -259,7 +286,8 @@ export const DocumentsPage: React.FC = () => {
                 id: copyId,
                 name: `Copy of ${updatedName}`,
                 isFavorite: false,
-                status: metaProperties?.status || "Draft",
+                status: metaProperties?.status || "Awaiting Signature",
+                folder: "eSign",
                 lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
                 metaObjects: metaProperties?.objects || [],
                 auditTrail: metaProperties?.auditTrail || [],
@@ -291,7 +319,8 @@ export const DocumentsPage: React.FC = () => {
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: "150 KB",
-          status: metaProperties?.status || "Draft",
+          status: metaProperties?.status || "Awaiting Signature",
+          folder: "eSign",
           isFavorite: false,
           isArchived: false,
           notes: "Generated from Owner'sLocal Native PDF Editor tool.",
@@ -1971,6 +2000,7 @@ export const DocumentsPage: React.FC = () => {
           onSave={handleSavePDFEditor}
           triggerNotification={triggerNotification}
           logOperationalEvent={logOperationalEvent}
+          loggedInUser={loggedInUser}
         />
       )}
 
@@ -2144,14 +2174,35 @@ export const DocumentsPage: React.FC = () => {
             <div className="space-y-4">
               <p className="text-[10px] text-[#5E7393] uppercase tracking-wider">Choose Delivery / Export Channels:</p>
 
+              <div className="bg-white/70 border border-[#9EC8EF] rounded-2xl p-3 space-y-1.5">
+                <label className="text-[9px] uppercase tracking-wider font-black text-[#5E7393]">Customer or employee recipient</label>
+                <select
+                  value={shareRecipient}
+                  onChange={(e) => setShareRecipient(e.target.value)}
+                  className="w-full bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-xs font-bold"
+                >
+                  <option value="">Choose a contact…</option>
+                  {customersList.map((customer) => (
+                    <option key={`customer-${customer.id}`} value={`customer|${customer.contact}|${customer.email || ""}|${customer.phone || ""}`}>
+                      Customer — {customer.contact || customer.company}
+                    </option>
+                  ))}
+                  {recentRoster.map((employee: any) => (
+                    <option key={`employee-${employee.id || employee.email}`} value={`employee|${employee.name || `${employee.firstName || ""} ${employee.lastName || ""}`.trim()}|${employee.email || employee.businessEmail || ""}|${employee.phone || ""}`}>
+                      Employee — {employee.name || `${employee.firstName || ""} ${employee.lastName || ""}`.trim()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Share Channels */}
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => {
-                    // No real email-sending provider is connected yet (needs
-                    // a service like SendGrid/Postmark wired up server-side)
-                    // — say so honestly instead of claiming it was sent.
-                    triggerNotification("📧 Email sending isn't connected to a real provider yet.");
+                    const [, name = "", email = ""] = shareRecipient.split("|");
+                    if (!email) return triggerNotification("Choose a contact with an email address first.");
+                    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(shareDocItem.name)}&body=${encodeURIComponent(`Hi ${name},\n\nPlease review the attached Owner'sLocal document: ${shareDocItem.name}`)}`;
+                    setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2163,10 +2214,10 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    // No real SMS provider is connected yet (needs Twilio
-                    // or similar wired up server-side) — say so honestly
-                    // instead of claiming a text was sent.
-                    triggerNotification("💬 SMS sending isn't connected to a real provider yet.");
+                    const [, name = "", , phone = ""] = shareRecipient.split("|");
+                    if (!phone) return triggerNotification("Choose a contact with a mobile number first.");
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from Owner'sLocal.`)}`;
+                    setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2174,6 +2225,32 @@ export const DocumentsPage: React.FC = () => {
                 >
                   <MessageCircle className="w-5 h-5 text-emerald-600" />
                   <span className="text-[10px] font-black uppercase mt-1">Send Text SMS</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const [, name = "", email = ""] = shareRecipient.split("|");
+                    if (!email) return triggerNotification("Choose a contact with an email address first.");
+                    localStorage.setItem(`ownerslocal_email_draft_${shareDocItem.id}`, JSON.stringify({ to: email, name, documentId: shareDocItem.id, subject: shareDocItem.name, savedAt: new Date().toISOString() }));
+                    triggerNotification(`Email draft saved for ${name}.`);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <Mail className="w-5 h-5 text-violet-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Draft Email</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const [, name = "", , phone = ""] = shareRecipient.split("|");
+                    if (!phone) return triggerNotification("Choose a contact with a mobile number first.");
+                    localStorage.setItem(`ownerslocal_text_draft_${shareDocItem.id}`, JSON.stringify({ to: phone, name, documentId: shareDocItem.id, body: `Please review ${shareDocItem.name}`, savedAt: new Date().toISOString() }));
+                    triggerNotification(`Text draft saved for ${name}.`);
+                  }}
+                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
+                >
+                  <MessageCircle className="w-5 h-5 text-orange-600" />
+                  <span className="text-[10px] font-black uppercase mt-1">Draft Text</span>
                 </button>
 
                 <button
