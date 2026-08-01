@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { Shield, Settings } from "lucide-react";
 import {
   GranularPermissions,
-  PermissionLevel,
-  PERMISSION_LEVELS,
+  PermissionAction,
   PERMISSION_LEVEL_LABELS,
-  getPermissionLevel
+  getPermissionFlags
 } from "../types/permissions";
 
 export interface EditableRole {
@@ -46,9 +45,10 @@ export const MODULE_CATALOG: Array<{ id: string; label: string }> = [
 ];
 
 function derivePermissionsList(modulePermissions: GranularPermissions): string[] {
-  return Object.entries(modulePermissions)
-    .filter(([, level]) => level !== "none")
-    .map(([moduleId]) => moduleId);
+  return Object.keys(modulePermissions).filter((moduleId) => {
+    const flags = getPermissionFlags(modulePermissions, moduleId);
+    return flags.view || flags.edit || flags.delete;
+  });
 }
 
 interface RolePermissionEditorModalProps<T extends EditableRole> {
@@ -73,8 +73,18 @@ export function RolePermissionEditorModal<T extends EditableRole>({
 }: RolePermissionEditorModalProps<T>) {
   const [modulePermissions, setModulePermissions] = useState<GranularPermissions>(role.modulePermissions);
 
-  const setLevel = (moduleId: string, level: PermissionLevel) => {
-    setModulePermissions(prev => ({ ...prev, [moduleId]: level }));
+  const setNoAccess = (moduleId: string) => {
+    setModulePermissions(prev => ({
+      ...prev,
+      [moduleId]: { view: false, edit: false, delete: false }
+    }));
+  };
+
+  const toggleAction = (moduleId: string, action: PermissionAction) => {
+    setModulePermissions(prev => {
+      const current = getPermissionFlags(prev, moduleId);
+      return { ...prev, [moduleId]: { ...current, [action]: !current[action] } };
+    });
   };
 
   const handleSave = () => {
@@ -110,38 +120,55 @@ export function RolePermissionEditorModal<T extends EditableRole>({
 
         <div className="flex-1 overflow-y-auto my-3 pr-1 space-y-2 scrollbar-thin scrollbar-thumb-blue-100">
           <p style={{ fontSize: "9px" }} className="text-slate-400 font-sans leading-normal pb-1">
-            Every module is independent — pick one level for each. No Access hides it entirely.
+            Every module is independent — select any combination of View, Create & Edit, and Delete. No Access clears all three.
           </p>
 
           {MODULE_CATALOG.map((mod) => {
-            const currentLevel = getPermissionLevel(modulePermissions, mod.id);
+            const flags = getPermissionFlags(modulePermissions, mod.id);
+            const noAccess = !flags.view && !flags.edit && !flags.delete;
+            const actions: PermissionAction[] = ["view", "edit", "delete"];
             return (
               <div key={mod.id} className="p-2 bg-slate-50/70 border border-slate-100 rounded-xl">
                 <p style={{ fontSize: "10.5px" }} className="font-sans font-extrabold text-slate-700 mb-1.5">
                   {mod.label}
                 </p>
                 <div className="grid grid-cols-4 gap-1">
-                  {PERMISSION_LEVELS.map((level) => {
-                    const isSelected = currentLevel === level;
+                  <button
+                    type="button"
+                    onClick={() => setNoAccess(mod.id)}
+                    aria-pressed={noAccess}
+                    className={`px-1 py-1.5 text-[8.5px] font-black rounded-lg border cursor-pointer select-none transition-all uppercase leading-tight ${
+                      noAccess
+                        ? "bg-slate-200 text-slate-600 border-slate-300"
+                        : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {PERMISSION_LEVEL_LABELS.none}
+                  </button>
+                  {actions.map((action) => {
+                    const isSelected = flags[action];
                     return (
                       <button
-                        key={level}
+                        key={action}
                         type="button"
-                        onClick={() => setLevel(mod.id, level)}
+                        onClick={() => toggleAction(mod.id, action)}
+                        aria-pressed={isSelected}
                         className={`px-1 py-1.5 text-[8.5px] font-black rounded-lg border cursor-pointer select-none transition-all uppercase leading-tight ${
                           isSelected
-                            ? level === "none"
-                              ? "bg-slate-200 text-slate-600 border-slate-300"
-                              : level === "delete"
+                            ? action === "delete"
                               ? "bg-rose-100 text-rose-700 border-rose-300"
                               : "bg-indigo-100 text-indigo-700 border-indigo-300"
                             : "bg-white text-slate-400 border-slate-200 hover:bg-slate-100"
                         }`}
                       >
-                        {PERMISSION_LEVEL_LABELS[level]}
+                        {PERMISSION_LEVEL_LABELS[action]}
                       </button>
                     );
                   })}
+                </div>
+              </div>
+            );
+          })}
                 </div>
               </div>
             );
