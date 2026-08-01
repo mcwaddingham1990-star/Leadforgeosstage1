@@ -169,10 +169,6 @@ export function RolePermissionEditorModal<T extends EditableRole>({
               </div>
             );
           })}
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         <div className="flex gap-2.5 pt-2 border-t border-slate-100 shrink-0">
