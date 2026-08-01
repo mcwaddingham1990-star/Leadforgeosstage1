@@ -2398,3 +2398,661 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 <p className="text-xl font-extrabold text-white mt-1.5">{counts.techs}</p>
               </div>
 
+              <div className="bg-slate-800/50 border border-white/5 p-3 rounded-2xl">
+                <div className="flex justify-between items-start">
+                  <span className="p-1 bg-cyan-500/10 rounded-lg"><Truck className="w-4 h-4 text-cyan-400" /></span>
+                  <span className="text-xs text-slate-400 font-bold font-sans">Fleet Cars</span>
+                </div>
+                <p className="text-xl font-extrabold text-white mt-1.5">{counts.vehicles}</p>
+              </div>
+
+            </div>
+
+            <div className="border-t border-white/10 pt-3 space-y-2">
+              <div className="flex justify-between items-center text-xs text-slate-400 font-bold">
+                <span>Revenue Generated:</span>
+                <span className="text-emerald-400 font-extrabold">${counts.revenueToday.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs text-slate-400 font-bold">
+                <span>Active Emergency Alerts:</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] ${counts.emergency > 0 ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse" : "bg-slate-800 text-slate-400"}`}>
+                  {counts.emergency} Alert{counts.emergency !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* DYNAMIC RIGHT SLIDE INSPECTOR PANEL */}
+      <AnimatePresence>
+        {selectedPin && (
+          <motion.div
+            initial={{ x: 440, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 440, opacity: 0 }}
+            transition={{ type: "spring", damping: 24, stiffness: 160 }}
+            className="fixed top-0 right-0 w-[440px] h-full bg-slate-900/95 backdrop-blur-2xl border-l border-white/10 shadow-3xl z-50 flex flex-col p-6 text-left"
+          >
+            {/* INSPECTOR HEADER */}
+            <div className="flex justify-between items-start border-b border-white/10 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-md border ${
+                    selectedPin.type === "Customer" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                    selectedPin.type === "Lead" ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
+                    selectedPin.type === "Estimate" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                    selectedPin.type === "Job" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                    "bg-slate-800 text-slate-300 border-white/5"
+                  }`}>
+                    {selectedPin.type} Profile
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-400 font-semibold">ID: {selectedPin.id}</span>
+                </div>
+                <h3 className="text-base font-extrabold text-white tracking-tight">{selectedPin.title}</h3>
+                <p className="text-xs text-slate-400 font-sans font-medium flex items-center gap-1 mt-0.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-400" /> {selectedPin.address}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPin(null)}
+                className="p-1 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* TAB SELECTORS WITHIN PANEL */}
+            <div className="flex border-b border-white/5 text-xs py-2 gap-1 overflow-x-auto scrollbar-none">
+              {(["Overview", "Timeline", "Notes", "Dispatch", "Finance"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setInspectorTab(tab)}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
+                    inspectorTab === tab 
+                      ? "bg-slate-800 text-white" 
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* SCROLLABLE PANEL CONTENTS */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-5 scrollbar-none">
+              
+              {inspectorTab === "Overview" && (
+                <div className="space-y-4">
+                  
+                  {/* METADATA GRID */}
+                  <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 space-y-3">
+                    <h4 className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider border-b border-white/5 pb-1">
+                      Target Demographics
+                    </h4>
+
+                    {selectedPin.type === "Customer" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Contact:</span> <strong>{selectedPin.raw.contact}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Phone:</span> <strong>{selectedPin.raw.phone}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Email:</span> <strong>{selectedPin.raw.email}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Lifetime Revenue:</span> <strong className="text-emerald-400">${(selectedPin.raw.lifetimeValue || 0).toLocaleString()}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Outstanding Balance:</span> <strong className="text-rose-400">${(selectedPin.raw.outstandingBalance || 0).toLocaleString()}</strong></p>
+                      </div>
+                    )}
+
+                    {selectedPin.type === "Lead" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Source:</span> <strong>{selectedPin.raw.source}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Value Estimate:</span> <strong className="text-purple-400">${(selectedPin.raw.estimatedValue || 0).toLocaleString()}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Assigned Rep:</span> <strong>{selectedPin.raw.salesRep || "None"}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Created:</span> <strong>{selectedPin.raw.dateAdded}</strong></p>
+                      </div>
+                    )}
+
+                    {selectedPin.type === "Estimate" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Client:</span> <strong>{selectedPin.raw.customerName}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Quote:</span> <strong className="text-yellow-400">${(selectedPin.raw.amount || 0).toLocaleString()}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Expiration:</span> <strong>{selectedPin.raw.expirationDate}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Status:</span> <strong>{selectedPin.raw.status}</strong></p>
+                      </div>
+                    )}
+
+                    {selectedPin.type === "Job" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Client:</span> <strong>{selectedPin.raw.customer}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Technician:</span> <strong>{selectedPin.raw.assignedEmployee || "Unassigned"}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Crew Unit:</span> <strong>{selectedPin.raw.assignedCrew || "None"}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Appointment:</span> <strong>{selectedPin.raw.startTime} - {selectedPin.raw.endTime}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Priority:</span> <strong className={selectedPin.raw.priority === "High" ? "text-rose-400" : "text-slate-300"}>{selectedPin.raw.priority}</strong></p>
+                      </div>
+                    )}
+
+                    {selectedPin.type === "Technician" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Vehicle:</span> <strong>{selectedPin.raw.vehicle}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Status:</span> <strong className="text-emerald-400">{selectedPin.raw.status}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Latitude:</span> <strong>{selectedPin.raw.lat.toFixed(5)}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Longitude:</span> <strong>{selectedPin.raw.lng.toFixed(5)}</strong></p>
+                      </div>
+                    )}
+
+                    {selectedPin.type === "Vehicle" && (
+                      <div className="space-y-2 text-xs font-sans text-slate-300">
+                        <p className="flex justify-between"><span className="text-slate-400">Driver:</span> <strong>{selectedPin.raw.driver}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Fuel Level:</span> <strong className={selectedPin.raw.fuel < 30 ? "text-rose-400" : "text-cyan-400"}>{selectedPin.raw.fuel}%</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Speed:</span> <strong>{selectedPin.raw.speed} mph</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Active Jobs:</span> <strong>{selectedPin.raw.assignedJobs}</strong></p>
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* DIRECT CRM ACTION BUTTONS */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] uppercase font-extrabold text-slate-400">Direct Contact Rig</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => alert(`Initiating direct voice bridge to phone line of ${selectedPin.title}`)}
+                        className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call Client
+                      </button>
+                      <button
+                        onClick={() => alert(`Launching dispatch SMS composer for ${selectedPin.title}`)}
+                        className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <Send className="w-3.5 h-3.5" /> SMS Text
+                      </button>
+                      <button
+                        onClick={() => alert(`Opening template email editor for ${selectedPin.title}`)}
+                        className="px-3 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <Mail className="w-3.5 h-3.5" /> Send Email
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* QUICK CONVERT BUTTONS FOR LEADS / ESTIMATES */}
+                  {selectedPin.type === "Lead" && selectedPin.raw.status !== "Won" && (
+                    <button
+                      onClick={() => handleConvertLead(selectedPin.id)}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 shadow"
+                    >
+                      <UserCheck className="w-4 h-4" /> Convert Lead to Customer Profile
+                    </button>
+                  )}
+
+                  {selectedPin.type === "Estimate" && selectedPin.raw.status !== "Accepted" && (
+                    <button
+                      onClick={() => handleApproveEstimate(selectedPin.id)}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 shadow"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Approve Quote &amp; Dispatch Job
+                    </button>
+                  )}
+
+                </div>
+              )}
+
+              {inspectorTab === "Timeline" && (
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                    Interactive Activity Log
+                  </h4>
+                  
+                  <div className="space-y-3 font-sans text-xs">
+                    <div className="border-l-2 border-blue-500 pl-3 py-1 space-y-0.5">
+                      <p className="text-slate-400 text-[10px] font-bold">10 mins ago - Dispatch Engine</p>
+                      <p className="text-white font-semibold">Geospatial coordinate geocoded successfully.</p>
+                    </div>
+                    <div className="border-l-2 border-purple-500 pl-3 py-1 space-y-0.5">
+                      <p className="text-slate-400 text-[10px] font-bold">1 hour ago - CRM Ledger</p>
+                      <p className="text-white font-semibold">Record updated instantly without duplicate entries.</p>
+                    </div>
+                    <div className="border-l-2 border-yellow-500 pl-3 py-1 space-y-0.5">
+                      <p className="text-slate-400 text-[10px] font-bold">Yesterday - System Dispatch</p>
+                      <p className="text-white font-semibold">Route travel optimizations applied to dispatch queue.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {inspectorTab === "Notes" && (
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                    Notes &amp; Photo Logs
+                  </h4>
+
+                  {/* Render existing notes */}
+                  <div className="bg-slate-950/60 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 border border-white/5">
+                    {selectedPin.type === "Job" && selectedPin.raw.notes ? (
+                      <p className="text-xs text-slate-300 font-sans whitespace-pre-line leading-relaxed">
+                        {selectedPin.raw.notes}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic font-sans">No dispatcher notes yet.</p>
+                    )}
+                  </div>
+
+                  {/* Add Notes Form */}
+                  <div className="space-y-2">
+                    <textarea
+                      placeholder="Type a note or log updates..."
+                      value={newNoteText}
+                      onChange={(e) => setNewNoteText(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={handleAddInspectorNote}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold uppercase transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Save Note
+                    </button>
+                  </div>
+
+                  {/* Interactive Photos Attachments Grid */}
+                  <div className="border-t border-white/5 pt-4 space-y-2">
+                    <p className="text-[10px] uppercase font-extrabold text-slate-400">Photo Ledger</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="relative bg-slate-800 border border-white/5 rounded-xl aspect-square flex flex-col items-center justify-center text-slate-500 hover:text-white cursor-pointer transition-colors">
+                        <Camera className="w-5 h-5 mb-1" />
+                        <span className="text-[8px] font-extrabold uppercase">Add Photo</span>
+                      </div>
+                      <div className="bg-slate-800 border border-white/5 rounded-xl overflow-hidden aspect-square relative group">
+                        <img referrerPolicy="no-referrer" src="https://images.unsplash.com/photo-1581094288338-2314dddb7eed?w=120&auto=format&fit=crop&q=60" className="w-full h-full object-cover" alt="site work" />
+                        <span className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] text-white uppercase font-bold">View</span>
+                      </div>
+                      <div className="bg-slate-800 border border-white/5 rounded-xl overflow-hidden aspect-square relative group">
+                        <img referrerPolicy="no-referrer" src="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=120&auto=format&fit=crop&q=60" className="w-full h-full object-cover" alt="site work" />
+                        <span className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] text-white uppercase font-bold">View</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {inspectorTab === "Dispatch" && (
+                <div className="space-y-4">
+                  
+                  {/* TECH DISPATCH ASSIGNER */}
+                  {selectedPin.type === "Job" && (
+                    <div className="space-y-4">
+                      
+                      {selectedPin.raw.status !== "Completed" && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-extrabold text-slate-400 flex items-center gap-1">
+                            <Navigation className="w-3.5 h-3.5 text-blue-400 animate-pulse" /> Dispatch Technician
+                          </label>
+                          <select
+                            value={selectedPin.raw.assignedEmployee || ""}
+                            onChange={(e) => handleAssignTechnician(selectedPin.id, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+                          >
+                            <option value="">Unassigned...</option>
+                            {activeTechnicians.length === 0 ? (
+                              <option value="" disabled>No employees on roster yet</option>
+                            ) : (
+                              activeTechnicians.map(t => (
+                                <option key={t.id} value={t.name}>{t.name}{t.vehicle && t.vehicle !== "Unassigned" ? ` (${t.vehicle})` : ""}</option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* INVENTORY ALLOCATOR */}
+                      {selectedPin.raw.status !== "Completed" && (
+                        <div className="space-y-2 border-t border-white/5 pt-3">
+                          <label className="text-[10px] uppercase font-extrabold text-slate-400 flex items-center gap-1">
+                            <Package className="w-3.5 h-3.5 text-blue-400" /> Allocate Stock Parts
+                          </label>
+                          <div className="flex gap-2">
+                            <select
+                              value={selectedInventoryItem}
+                              onChange={(e) => setSelectedInventoryItem(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-slate-800 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+                            >
+                              <option value="">Select inventory part...</option>
+                              {inventoryList.filter(i => i.quantity > 0).map(i => (
+                                <option key={i.id} value={i.id}>{i.name} (Qty: {i.quantity})</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                if (selectedInventoryItem) {
+                                  handleAttachInventory(selectedPin.id, selectedInventoryItem, 1);
+                                  setSelectedInventoryItem("");
+                                }
+                              }}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
+                            >
+                              Allocate
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* DOCUMENT LOG MOCK ATTACHMENT */}
+                      {selectedPin.raw.status !== "Completed" && (
+                        <div className="space-y-2 border-t border-white/5 pt-3">
+                          <label className="text-[10px] uppercase font-extrabold text-slate-400 flex items-center gap-1">
+                            <FileCode className="w-3.5 h-3.5 text-blue-400" /> Upload Signed Files
+                          </label>
+                          <input
+                            type="file"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadDocument(selectedPin.id, e.target.files[0].name);
+                              }
+                            }}
+                            className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:hover:bg-slate-700 cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
+                  {selectedPin.type !== "Job" && (
+                    <p className="text-xs text-slate-500 italic">No direct route or tech assignments needed for this node type.</p>
+                  )}
+
+                </div>
+              )}
+
+              {inspectorTab === "Finance" && (
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                    Financial Ledger
+                  </h4>
+
+                  {selectedPin.type === "Customer" && (
+                    <div className="space-y-3 font-sans text-xs text-slate-300 bg-slate-800/40 p-3 rounded-xl border border-white/5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Total Lifetime Invoiced:</span>
+                        <strong className="text-emerald-400">${(selectedPin.raw.lifetimeValue || 0).toLocaleString()}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Total Outstanding Balance:</span>
+                        <strong className="text-rose-400">${(selectedPin.raw.outstandingBalance || 0).toLocaleString()}</strong>
+                      </div>
+                      <div className="flex justify-between border-t border-white/5 pt-2 font-bold text-white">
+                        <span>Net Value Yield:</span>
+                        <span>${((selectedPin.raw.lifetimeValue || 0) - (selectedPin.raw.outstandingBalance || 0)).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPin.type === "Job" && (
+                    <div className="space-y-3">
+                      <div className="bg-slate-800/40 p-3 rounded-xl border border-white/5 text-xs text-slate-300 font-sans space-y-2">
+                        <div className="flex justify-between">
+                          <span>Standard Flat Service Fee:</span>
+                          <strong>$150.00</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Labor cost (Estimated):</span>
+                          <strong>$400.00</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Parts &amp; Inventory allocations:</span>
+                          <strong>$900.00</strong>
+                        </div>
+                        <div className="flex justify-between border-t border-white/5 pt-2 font-bold text-white">
+                          <span>Total Job Bid Quote:</span>
+                          <span className="text-emerald-400">$1,450.00</span>
+                        </div>
+                      </div>
+
+                      {selectedPin.raw.status !== "Completed" && (
+                        <button
+                          onClick={() => handleCompleteJob(selectedPin.id)}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-md"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Mark Job Complete &amp; Invoice
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedPin.type !== "Customer" && selectedPin.type !== "Job" && (
+                    <p className="text-xs text-slate-500 italic">No core financial data recorded for this node type.</p>
+                  )}
+
+                </div>
+              )}
+
+            </div>
+
+            {/* INSPECTOR FOOTER BUTTONS */}
+            <div className="border-t border-white/10 pt-4 flex gap-2">
+              <button
+                onClick={() => {
+                  if (onNavigateToScreen) {
+                    if (selectedPin.type === "Customer") onNavigateToScreen("customers", { customerId: selectedPin.id });
+                    else if (selectedPin.type === "Lead") onNavigateToScreen("leads");
+                    else if (selectedPin.type === "Estimate") onNavigateToScreen("estimates");
+                    else if (selectedPin.type === "Job") onNavigateToScreen("scheduling", { date: selectedPin.raw.date });
+                  }
+                }}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-colors cursor-pointer text-center"
+              >
+                🔍 Open Full Workspace View
+              </button>
+              <button
+                onClick={() => setSelectedPin(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* INTERACTIVE LOCATION MASTER FILE & EDITOR POPUP MODAL */}
+      <AnimatePresence>
+        {isLocationModalOpen && selectedPin && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-lg bg-slate-900 border border-white/15 rounded-[24px] p-6 shadow-3xl text-left flex flex-col space-y-4 max-h-[90vh] overflow-y-auto scrollbar-none"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 text-blue-400">
+                    <MapPin className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-white tracking-wider uppercase">
+                      📍 {selectedPin.type} Master File
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold font-mono">
+                      ID Reference: {selectedPin.id}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsLocationModalOpen(false)}
+                  className="p-1 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Form */}
+              <div className="space-y-4 py-2">
+                
+                {/* Name / Business Name */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-extrabold text-slate-400">
+                    Lead / Customer / Business Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Enter Name or Business Name"
+                    className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Email (if applicable) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-extrabold text-slate-400">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="e.g. contact@domain.com"
+                    className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Phone Numbers array with +/- widgets */}
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-extrabold text-slate-400 flex justify-between items-center">
+                    <span>Phone Numbers</span>
+                    <span className="text-[9px] text-slate-500 font-normal">Add up to 5 contact lines</span>
+                  </label>
+                  
+                  <div className="space-y-2">
+                    {editPhones.map((phone, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          value={phone}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditPhones(prev => prev.map((p, i) => i === idx ? val : p));
+                          }}
+                          placeholder="(206) 555-0100"
+                          className="flex-1 px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                        />
+                        
+                        <div className="flex gap-1.5">
+                          {/* Plus button */}
+                          {idx === editPhones.length - 1 && editPhones.length < 5 && (
+                            <button
+                              type="button"
+                              onClick={() => setEditPhones([...editPhones, ""])}
+                              className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl border border-blue-500/20 transition-all cursor-pointer"
+                              title="Add Phone Number"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Minus button */}
+                          {(editPhones.length > 1 || phone.trim() !== "") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (editPhones.length > 1) {
+                                  setEditPhones(prev => prev.filter((_, i) => i !== idx));
+                                } else {
+                                  setEditPhones([""]);
+                                }
+                              }}
+                              className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/20 transition-all cursor-pointer"
+                              title="Remove Phone Number"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Structured Addresses Inputs */}
+                <div className="border-t border-white/5 pt-3 space-y-3">
+                  <p className="text-[10px] uppercase font-extrabold text-blue-400 tracking-wider">
+                    Geospatial Location Data
+                  </p>
+
+                  {/* Street Address */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-extrabold text-slate-400">
+                      Street Address
+                    </label>
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      placeholder="e.g. 1200 4th Ave"
+                      className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  {/* Row of City/State and Zip */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-extrabold text-slate-400">
+                        City, State
+                      </label>
+                      <input
+                        type="text"
+                        value={editCityState}
+                        onChange={(e) => setEditCityState(e.target.value)}
+                        placeholder="e.g. Seattle, WA"
+                        className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-extrabold text-slate-400">
+                        Zip Code
+                      </label>
+                      <input
+                        type="text"
+                        value={editZip}
+                        onChange={(e) => setEditZip(e.target.value)}
+                        placeholder="e.g. 98101"
+                        className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Action Buttons */}
+              <div className="border-t border-white/10 pt-4 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLocationEdits}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer hover:shadow-lg"
+                >
+                  Save Master File
+                </button>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+    </div>
+  );
+};
