@@ -28,6 +28,8 @@ import {
   ArrowRight
 } from "lucide-react";
 
+import { StructuredAddressFields } from "./StructuredAddressFields";
+
 export type { SchedulingEvent } from "../types/domain";
 import type { SchedulingEvent } from "../types/domain";
 import { useAuth } from "../context/AuthContext";
@@ -1588,16 +1590,12 @@ export const SchedulingPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4">
                 {/* Specific Location field */}
-                <div className="space-y-1">
-                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Site / Job Location</label>
-                  <input
-                    value={formLocation}
-                    onChange={(e) => setFormLocation(e.target.value)}
-                    placeholder="Same as Billing Address unless specified"
-                    type="text"
-                    className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 focus:outline-none"
-                  />
-                </div>
+                <StructuredAddressFields
+                  label="Site / Job Location"
+                  value={formLocation}
+                  onChange={setFormLocation}
+                  inputClassName="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 focus:outline-none"
+                />
 
                 {/* Notes */}
                 <div className="space-y-1">
