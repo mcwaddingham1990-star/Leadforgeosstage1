@@ -50,6 +50,8 @@ import { defaultGranularFromModuleList } from "../types/permissions";
 import type { SelectedRole } from "../App";
 
 // Types for SettingsPage
+import { StructuredAddressFields } from "./StructuredAddressFields";
+
 export interface SettingsPageProps {
   businessNames: string[];
   setBusinessNames: React.Dispatch<React.SetStateAction<string[]>>;
@@ -953,19 +955,14 @@ export default function SettingsPage({
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-slate-500">Business Headquarters Address</label>
-                    <input
-                      type="text"
-                      value={businessAddresses[0] || ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setBusinessAddresses(prev => [val, ...prev.slice(1)]);
-                        setHasUnsavedChanges(true);
-                      }}
-                      className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                    />
-                  </div>
+                  <StructuredAddressFields
+                    label="Business Headquarters Address"
+                    value={businessAddresses[0] || ""}
+                    onChange={(value) => {
+                      setBusinessAddresses(prev => [value, ...prev.slice(1)]);
+                      setHasUnsavedChanges(true);
+                    }}
+                  />
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-1">
