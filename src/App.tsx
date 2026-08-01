@@ -2775,7 +2775,7 @@ Access to full financial telemetry is restricted.`;
                       aspect ratio: no crop, distortion, or asset changes. */}
                   <div
                     style={{
-                      top: 0,
+                      top: "11.65%",
                       left: "8%",
                       width: "84%",
                       aspectRatio: "734 / 302"
