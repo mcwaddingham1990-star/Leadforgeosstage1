@@ -535,6 +535,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   };
 
   const [geocodedCache, setGeocodedCache] = useState<Record<string, { lat: number, lng: number }>>({});
+  const pendingGeocodes = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!mapsApiLoaded || typeof google === "undefined" || !google.maps?.Geocoder) return;
@@ -544,7 +545,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
     customers.forEach(c => {
       const cacheKey = `cust_${c.id}_${c.address}`;
-      if (c.address && !geocodedCache[cacheKey]) {
+      if (c.address && !geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: c.address });
       }
     });
@@ -552,7 +553,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     leads.forEach(l => {
       const addr = l.address || "Dallas, TX";
       const cacheKey = `lead_${l.id}_${addr}`;
-      if (!geocodedCache[cacheKey]) {
+      if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
       }
     });
@@ -560,7 +561,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     estimates.forEach(e => {
       const addr = e.company || e.customerName || "Dallas, TX";
       const cacheKey = `est_${e.id}_${addr}`;
-      if (!geocodedCache[cacheKey]) {
+      if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
       }
     });
@@ -568,7 +569,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     schedulingEvents.forEach(evt => {
       const addr = evt.customerAddress || evt.location || "Dallas, TX";
       const cacheKey = `evt_${evt.id}_${addr}`;
-      if (!geocodedCache[cacheKey]) {
+      if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
       }
     });
@@ -577,7 +578,12 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       // Process a small subset (up to 5 at a time) to respect rate limits
       const subset = addressesToGeocode.slice(0, 5);
       subset.forEach(({ key, address }) => {
+        // Geocoder callbacks are asynchronous. Without tracking requests that
+        // are already in flight, each cache update starts the same requests
+        // again and can overwhelm the browser immediately after map load.
+        pendingGeocodes.current.add(key);
         geocoder.geocode({ address }, (results, status) => {
+          pendingGeocodes.current.delete(key);
           if (status === "OK" && results?.[0]?.geometry?.location) {
             const loc = results[0].geometry.location;
             setGeocodedCache(prev => ({
@@ -747,6 +753,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // Apply Search Query & Filter Categories
   const filteredPins = useMemo(() => {
     return allPins.filter(pin => {
+      // One malformed imported record must never crash Google Maps or the
+      // entire panel. AdvancedMarker requires finite, in-range coordinates.
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return false;
+      if (pin.lat < -90 || pin.lat > 90 || pin.lng < -180 || pin.lng > 180) return false;
       // 1. Sidebar Universal filter categories
       if (filterType !== "All") {
         if (pin.type !== filterType) return false;
