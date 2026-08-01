@@ -126,6 +126,37 @@ import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataC
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 
+class MapPageErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  declare readonly props: Readonly<{ children: React.ReactNode }>;
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Interactive map failed safely:", error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="rounded-3xl border border-red-200 bg-white p-6 text-left shadow-sm">
+          <h2 className="text-base font-extrabold text-slate-800">The map could not load</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Owner'sLocal is still running. Close this page and reopen the map to try again.
+          </p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export interface SelectedRole {
   id: string;
   name: string;
@@ -6499,9 +6530,11 @@ Access to full financial telemetry is restricted.`;
                     <DispatchPage />
 
                   ) : activeScreen.id === "routes" ? (
-                    <InteractiveMapPage
-                      businessAddresses={businessAddresses}
-                    />
+                    <MapPageErrorBoundary>
+                      <InteractiveMapPage
+                        businessAddresses={businessAddresses}
+                      />
+                    </MapPageErrorBoundary>
 
                   ) : activeScreen.id === "bulletins" ? (
                     
