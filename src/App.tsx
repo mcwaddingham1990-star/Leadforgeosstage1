@@ -72,7 +72,6 @@ import {
   Flame,
   UserCheck,
   Compass,
-  Activity,
   PlusCircle,
   Wrench,
   Bell,
@@ -126,6 +125,14 @@ import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
+
+const BRAND_ICON_URL = "/ownerslocal-pulse-icon.jpg";
+
+const BrandPulseIcon = ({ className = "" }: { className?: string }) => (
+  <span className={`inline-flex shrink-0 overflow-hidden rounded-[22%] ${className}`} aria-hidden="true">
+    <img src={BRAND_ICON_URL} alt="" className="h-full w-full scale-[1.16] object-cover" />
+  </span>
+);
 
 export interface SelectedRole {
   id: string;
@@ -456,7 +463,7 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
     case "dashboard":
       return <LayoutDashboard className={className} />;
     case "revenue":
-      return <Activity className={className} />;
+      return <BrandPulseIcon className={className} />;
     case "accounting":
       return <Landmark className={className} />;
     case "customers":
@@ -498,7 +505,7 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
     case "notifications":
       return <Bell className={className} />;
     default:
-      return <Activity className={className} />;
+      return <BrandPulseIcon className={className} />;
   }
 };
 
@@ -3199,19 +3206,9 @@ Access to full financial telemetry is restricted.`;
                               height: `${36 * scale}px`,
                               borderRadius: `${9 * scale}px`,
                             }}
-                            className="bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0"
+                            className="overflow-hidden bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0"
                           >
-                            <svg 
-                              viewBox="0 0 24 24" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              strokeWidth="3.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round" 
-                              className="w-5 h-5 animate-pulse text-white"
-                            >
-                              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                            </svg>
+                            <BrandPulseIcon className="h-full w-full" />
                           </div>
                           <div>
                             <h2 style={getFontSize(14.5)} className="font-sans font-bold text-slate-900 tracking-tight leading-tight uppercase">
@@ -4657,15 +4654,15 @@ Access to full financial telemetry is restricted.`;
                 <div className="flex items-center justify-between">
                   {!isSidebarCollapsed ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md shrink-0">
-                        <Activity className="w-5 h-5 stroke-[2.5]" />
+                      <div className="w-8 h-8 overflow-hidden rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md shrink-0">
+                        <BrandPulseIcon className="h-full w-full" />
                       </div>
                       <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">Owner's Local OS</span>
                       <span className="text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider select-none">Local OS</span>
                     </div>
                   ) : (
-                    <div className="mx-auto w-8 h-8 rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md">
-                      <Activity className="w-5 h-5 stroke-[2.5]" />
+                    <div className="mx-auto w-8 h-8 overflow-hidden rounded-lg bg-[#4A86F7] text-white flex items-center justify-center shadow-md">
+                      <BrandPulseIcon className="h-full w-full" />
                     </div>
                   )}
 
