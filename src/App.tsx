@@ -108,6 +108,7 @@ import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
 import { AIAssistantPage } from "./components/AIAssistantPage";
 import SettingsPage from "./components/SettingsPage";
+import { StructuredAddressFields } from "./components/StructuredAddressFields";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
@@ -3240,7 +3241,12 @@ Access to full financial telemetry is restricted.`;
                         {renderDynamicField("owner phone", ownerPhones, setOwnerPhones, "e.g. (206) 555-0199")}
                         {renderDynamicField("business name", businessNames, setBusinessNames, "e.g. Ironclad Plumbing & HVAC")}
                         {renderDynamicField("business phone", businessPhones, setBusinessPhones, "e.g. (206) 565-0144")}
-                        {renderDynamicField("business address", businessAddresses, setBusinessAddresses, "e.g. 1102 Industrial Way")}
+                        <StructuredAddressFields
+                          label="Business Headquarters Address"
+                          value={businessAddresses[0] || ""}
+                          onChange={(value) => setBusinessAddresses(prev => [value, ...prev.slice(1)])}
+                          required
+                        />
                         {renderDynamicField("business logo", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
                         
                         {/* Billing Methods Dropdown/Field */}
@@ -3822,20 +3828,14 @@ Access to full financial telemetry is restricted.`;
                             />
                           </div>
 
-                          <div className="space-y-1">
-                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
-                              Home Address
-                            </label>
-                            <input
-                              type="text"
-                              value={empAddress}
-                              onChange={(e) => setEmpAddress(e.target.value)}
-                              placeholder="123 Maple St, Seattle WA"
-                              required
-                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
-                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-                            />
-                          </div>
+                          <StructuredAddressFields
+                            label="Home Address"
+                            value={empAddress}
+                            onChange={setEmpAddress}
+                            required
+                            compact
+                            inputClassName="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-sans text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                          />
 
                           <div className="space-y-1">
                             <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
