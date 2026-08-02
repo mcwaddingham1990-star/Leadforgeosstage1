@@ -55,7 +55,7 @@ export default defineConfig(() => {
       // restricted browser key is kept as a fallback so the deployed map works
       // when the Render build environment has not been configured yet.
       'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(
-        process.env.GOOGLE_MAPS_PLATFORM_KEY || 'AIzaSyAnMwJ9MILdtewRIQYQnwSDTcGtnDKl3nk'
+        process.env.GOOGLE_MAPS_PLATFORM_KEY || 'AIzaSyCqtCSh5-yPgZrGeD3QcqnBuXm4IAKnI8Y'
       ),
       // Map IDs are tied to a specific Google Cloud project — a Map ID from
       // a different project than the one the API key belongs to will fail
