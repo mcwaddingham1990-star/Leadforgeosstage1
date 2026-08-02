@@ -122,6 +122,19 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
   const [mapsApiError, setMapsApiError] = useState(false);
 
+  // Google calls window.gm_authFailure when the Maps JS script itself loaded
+  // fine but the key is invalid, unbilled, restricted to the wrong domain, or
+  // the Maps JavaScript API isn't enabled on that key's project. That failure
+  // happens after APIProvider's onLoad already fired, so without this hook it
+  // renders as a broken/gray tile area with only a browser console error
+  // instead of falling back to our vector map.
+  useEffect(() => {
+    (window as any).gm_authFailure = () => setMapsApiError(true);
+    return () => {
+      if ((window as any).gm_authFailure) delete (window as any).gm_authFailure;
+    };
+  }, []);
+
   // Real default map center, resolved in priority order: real business
   // address -> real device GPS -> DFW fallback -> last position the owner
   // actually viewed (persisted locally). Never a hardcoded arbitrary city.

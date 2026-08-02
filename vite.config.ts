@@ -51,9 +51,13 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aiApiDevMiddleware()],
     define: {
-      // Owner'sLocal production browser key. Kept explicit so a stale Render
-      // environment variable cannot silently override the configured Maps key.
-      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify('AIzaSyCqtCSh5-yPgZrGeD3QcqnBuXm4IAKnI8Y'),
+      // Render's GOOGLE_MAPS_PLATFORM_KEY env var is the real, owner-configured
+      // key and must win. A hardcoded fallback here previously forced every
+      // build to use a guessed literal key regardless of what was set in
+      // Render, which is what broke the map -- restricted/unbilled/deleted
+      // keys committed straight into source are not a substitute for a real
+      // key configured in the Google Cloud Console for this deployment.
+      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(process.env.GOOGLE_MAPS_PLATFORM_KEY || ''),
       // Map IDs are tied to a specific Google Cloud project — a Map ID from
       // a different project than the one the API key belongs to will fail
       // to render Advanced Markers. Configurable per-deployment instead of
