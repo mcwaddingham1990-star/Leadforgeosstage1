@@ -51,9 +51,11 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), aiApiDevMiddleware()],
     define: {
-      // Owner'sLocal production browser key. Kept explicit so a stale Render
-      // environment variable cannot silently override the configured Maps key.
-      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify('AIzaSyCqtCSh5-yPgZrGeD3QcqnBuXm4IAKnI8Y'),
+      // Render supplies the restricted browser key at build time through the
+      // linked environment group. Do not hard-code credentials into the app.
+      'process.env.GOOGLE_MAPS_PLATFORM_KEY': JSON.stringify(
+        process.env.GOOGLE_MAPS_PLATFORM_KEY || ''
+      ),
       // Map IDs are tied to a specific Google Cloud project — a Map ID from
       // a different project than the one the API key belongs to will fail
       // to render Advanced Markers. Configurable per-deployment instead of
