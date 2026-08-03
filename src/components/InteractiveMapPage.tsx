@@ -121,6 +121,58 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const hasValidKey = apiKey !== "";
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
   const [mapsApiError, setMapsApiError] = useState(false);
+  const [mapsApiDiagnostic, setMapsApiDiagnostic] = useState<string | null>(null);
+
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    const previousAuthFailure = (window as any).gm_authFailure;
+
+    const recordMapsError = (...args: unknown[]) => {
+      const message = args
+        .map((value) => {
+          if (value instanceof Error) return value.message;
+          if (typeof value === "string") return value;
+          try {
+            return JSON.stringify(value);
+          } catch {
+            return String(value);
+          }
+        })
+        .join(" ");
+
+      const googleMapsError = message.match(
+        /Google Maps JavaScript API error:\s*([A-Za-z0-9]+(?:MapError)?)/i
+      );
+
+      if (googleMapsError?.[1]) {
+        setMapsApiDiagnostic(googleMapsError[1]);
+      }
+    };
+
+    console.error = (...args: unknown[]) => {
+      recordMapsError(...args);
+      originalConsoleError(...args);
+    };
+
+    (window as any).gm_authFailure = () => {
+      setMapsApiLoaded(false);
+      setMapsApiError(true);
+      setMapsApiDiagnostic((current) => current || "GoogleMapsAuthenticationFailure");
+
+      if (typeof previousAuthFailure === "function") {
+        previousAuthFailure();
+      }
+    };
+
+    return () => {
+      console.error = originalConsoleError;
+      if (previousAuthFailure) {
+        (window as any).gm_authFailure = previousAuthFailure;
+      } else {
+        delete (window as any).gm_authFailure;
+      }
+    };
+  }, []);
 
   // Real default map center, resolved in priority order: real business
   // address -> real device GPS -> DFW fallback -> last position the owner
@@ -1584,6 +1636,19 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
           {/* MAP CANVAS (REAL GOOGLE MAP OR HIGH-FIDELITYFALLBACK VECTOR CANVAS) */}
           <div className="bg-slate-950/60 rounded-[32px] p-2.5 border-2 border-white/10 overflow-hidden relative shadow-[0_12px_48px_rgba(0,0,0,0.5)]" style={{ height: "660px" }}>
+            {mapsApiDiagnostic && (
+              <div className="absolute top-5 left-5 right-5 z-50 rounded-xl border border-rose-400/60 bg-rose-950/95 p-4 text-left shadow-2xl">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
+                  Google Maps diagnostic
+                </p>
+                <p className="mt-1 break-words font-mono text-sm font-bold text-white">
+                  {mapsApiDiagnostic}
+                </p>
+                <p className="mt-1 text-[10px] text-rose-200">
+                  Screenshot this exact code so the remaining Google Cloud setting can be corrected.
+                </p>
+              </div>
+            )}
             
             {hasValidKey && !mapsApiError ? (
               // Full Google Maps implementation with our customized components
@@ -1591,9 +1656,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   apiKey={apiKey}
                   onLoad={() => setMapsApiLoaded(true)}
                   onError={(error) => {
+                    const message = error instanceof Error ? error.message : String(error);
                     console.error("Google Maps failed to initialize:", error);
                     setMapsApiLoaded(false);
                     setMapsApiError(true);
+                    setMapsApiDiagnostic(message || "GoogleMapsLoaderFailure");
                   }}
                 >
                 <Map
