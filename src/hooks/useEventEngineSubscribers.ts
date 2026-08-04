@@ -15,11 +15,29 @@ function generateRevenueEventId(): string {
  * no other file needs to change.
  */
 export function useEventEngineSubscribers(): void {
-  const { estimates, setRevenueEvents } = useDomainData();
+  const { estimates, setCustomers, setRevenueEvents } = useDomainData();
   const { logOperationalEvent, triggerNotification } = useNavTelemetry();
 
   useEffect(() => {
     const unsubscribe = onCollectionEvent("scheduling_events", (evt: CollectionEvent<SchedulingEvent>) => {
+      if (evt.item.eventType !== "Job") return;
+
+      // Keep the customer's open-job counter synchronized no matter which
+      // module created, completed, cancelled, reopened, or deleted the job.
+      const closed = (status?: SchedulingEvent["status"]) => status === "Completed" || status === "Cancelled";
+      let openJobDelta = 0;
+      if (evt.type === "created" && !closed(evt.item.status)) openJobDelta = 1;
+      if (evt.type === "deleted" && !closed(evt.item.status)) openJobDelta = -1;
+      if (evt.type === "updated" && closed(evt.previous?.status) !== closed(evt.item.status)) {
+        openJobDelta = closed(evt.item.status) ? -1 : 1;
+      }
+      if (openJobDelta) {
+        setCustomers(prev => prev.map(customer => {
+          const matches = customer.id === evt.item.customerId || customer.contact === evt.item.customer || customer.company === evt.item.customer;
+          return matches ? { ...customer, openJobs: Math.max(0, customer.openJobs + openJobDelta) } : customer;
+        }));
+      }
+
       if (evt.type !== "updated") return;
       const { item, previous } = evt;
       const justCompleted = previous?.status !== "Completed" && item.status === "Completed";
