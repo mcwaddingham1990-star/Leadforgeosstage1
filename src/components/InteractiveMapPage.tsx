@@ -377,60 +377,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employees, timeClockLogs, businessAddresses]);
 
-  // Editable Service Territories with Polygons
-  const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([
-    {
-      id: "territory_north",
-      name: "Seattle Northshore Unit",
-      color: "#3b82f6", // Blue
-      points: [
-        { lat: 47.6800, lng: -122.3800 },
-        { lat: 47.7200, lng: -122.3400 },
-        { lat: 47.7000, lng: -122.2800 },
-        { lat: 47.6500, lng: -122.3200 }
-      ],
-      revenue: 84500,
-      customersCount: 32,
-      leadsCount: 14,
-      jobsCount: 18,
-      techniciansCount: 1,
-      completionRate: 94
-    },
-    {
-      id: "territory_central",
-      name: "Metro Central Core",
-      color: "#ec4899", // Pink
-      points: [
-        { lat: 47.6500, lng: -122.3600 },
-        { lat: 47.6400, lng: -122.3000 },
-        { lat: 47.5900, lng: -122.3000 },
-        { lat: 47.5800, lng: -122.3600 }
-      ],
-      revenue: 142000,
-      customersCount: 58,
-      leadsCount: 22,
-      jobsCount: 34,
-      techniciansCount: 2,
-      completionRate: 98
-    },
-    {
-      id: "territory_south",
-      name: "SODO & Industrial South",
-      color: "#10b981", // Emerald
-      points: [
-        { lat: 47.5800, lng: -122.3800 },
-        { lat: 47.5800, lng: -122.3000 },
-        { lat: 47.5200, lng: -122.2800 },
-        { lat: 47.5200, lng: -122.3600 }
-      ],
-      revenue: 61200,
-      customersCount: 21,
-      leadsCount: 11,
-      jobsCount: 12,
-      techniciansCount: 1,
-      completionRate: 88
-    }
-  ]);
+  // Service territories start empty. Only owner-created, real territories belong here.
+  const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([]);
 
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [editingTerritoryName, setEditingTerritoryName] = useState("");
