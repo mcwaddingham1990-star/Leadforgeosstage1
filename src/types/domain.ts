@@ -251,7 +251,23 @@ export interface SchedulingEvent {
   location?: string;
   priority: "Low" | "Medium" | "High" | "Urgent";
   notes?: string;
-  status: "Scheduled" | "Completed" | "Cancelled";
+  status: "Scheduled" | "Unassigned" | "Assigned" | "En Route" | "Arrived" | "Working" | "On Hold" | "Completed" | "Cancelled";
   /** Set when this job was created via Estimate->Job conversion (useDomainActions.approveEstimateToJob); lets the Event Engine's job-completion cascade find a real revenue amount instead of guessing. */
   sourceEstimateId?: string;
+  /** Jobs use the scheduling record as their canonical Event Engine entity. */
+  jobNumber?: string;
+  title?: string;
+  description?: string;
+  customerId?: string;
+  progress?: number;
+  jobType?: string;
+  tags?: string[];
+  purchaseOrder?: string;
+  budget?: number;
+  laborRate?: number;
+  checklist?: Array<{ id: string; label: string; completed: boolean; completedAt?: string; completedBy?: string }>;
+  materials?: Array<{ inventoryId: string; name: string; quantity: number; unitCost: number }>;
+  activity?: Array<{ id: string; timestamp: string; action: string; by: string; detail?: string }>;
+  createdAt?: string;
+  updatedAt?: string;
 }
