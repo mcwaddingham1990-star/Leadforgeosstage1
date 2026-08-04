@@ -271,18 +271,18 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     for (let i = 0; i < 500; i++) {
       const id = `sim_node_${i}`;
       const angle = (i * 137.5) * (Math.PI / 180);
-      const r = 0.08 * Math.sqrt(i); // spiral distribution centered in Seattle
-      const lat = 47.6062 + r * Math.sin(angle);
-      const lng = -122.3321 + r * Math.cos(angle);
+      const r = 0.08 * Math.sqrt(i); // spiral distribution centered in DFW
+      const lat = DFW_FALLBACK.lat + r * Math.sin(angle);
+      const lng = DFW_FALLBACK.lng + r * Math.cos(angle);
       list.push({
         id,
         type: "Customer" as const,
         title: `Simulated Client #${i * 40}`,
         subtitle: `Cluster Node | Revenue: $${(Math.abs(Math.sin(i)) * 2500).toFixed(0)}`,
-        address: `${Math.round(4000 + i * 2.5)} Seattle Blvd, Seattle, WA`,
+        address: `DFW performance test node ${i + 1}`,
         lat,
         lng,
-        raw: { outstandingBalance: 0, lifetimeValue: 800, phone: "(206) 555-0000" }
+        raw: { outstandingBalance: 0, lifetimeValue: 800, phone: "" }
       });
     }
     return list;
@@ -597,14 +597,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     }
   }, [mapsApiLoaded, customers, leads, estimates, schedulingEvents, geocodedCache]);
 
-  // Static Offices & Warehouses
+  // Only show an office when the owner has supplied a real business address.
+  // Never manufacture facilities or locations for a new account.
   const fixedFacilities = useMemo(() => {
-    const hqAddr = businessAddresses?.[0] || "1102 Industrial Way, Seattle WA 98108";
+    const hqAddr = businessAddresses?.find(address => address.trim().length > 0);
+    if (!hqAddr) return [];
     const hqCoords = geocodeAddress(hqAddr, "office_hq");
     return [
-      { id: "office_hq", type: "Office" as const, title: "Business HQ", subtitle: "Dispatch & Core Operations Hub", address: hqAddr, lat: hqCoords.lat, lng: hqCoords.lng, raw: {} },
-      { id: "warehouse_north", type: "Warehouse" as const, title: "North Seattle Inventory Facility", subtitle: "HVAC, Pipes & Supply Storage", address: "1005 NE 45th St, Seattle, WA 98105", lat: 47.6615, lng: -122.3126, raw: {} },
-      { id: "warehouse_south", type: "Warehouse" as const, title: "SODO Dispatch Depot", subtitle: "Heavy Fleet Solder Depot", address: "3200 Airport Way S, Seattle, WA 98134", lat: 47.5642, lng: -122.3218, raw: {} }
+      { id: "office_hq", type: "Office" as const, title: "Business HQ", subtitle: "Primary business location", address: hqAddr, lat: hqCoords.lat, lng: hqCoords.lng, raw: {} }
     ];
   }, [businessAddresses]);
 
@@ -726,8 +726,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       vehicles.forEach(v => {
         // Retrieve matching tech coordinates
         const tech = activeTechnicians.find(t => t.name === v.driver);
-        const lat = tech ? tech.lat + 0.003 : 47.6097 - 0.01;
-        const lng = tech ? tech.lng - 0.003 : -122.3331 + 0.01;
+        const fallback = geocodeAddress(v.currentRoute || v.name, v.id);
+        const lat = tech ? tech.lat + 0.003 : fallback.lat;
+        const lng = tech ? tech.lng - 0.003 : fallback.lng;
         list.push({
           id: v.id,
           type: "Vehicle",
@@ -810,11 +811,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           let updatedLat = tech.lat + latJitter;
           let updatedLng = tech.lng + lngJitter;
 
-          // Keep in Seattle bounds
-          if (updatedLat < 47.52) updatedLat = 47.54;
-          if (updatedLat > 47.72) updatedLat = 47.70;
-          if (updatedLng < -122.42) updatedLng = -122.38;
-          if (updatedLng > -122.25) updatedLng = -122.28;
+          // Keep simulated movement within the DFW fallback area.
+          if (updatedLat < 32.60) updatedLat = 32.62;
+          if (updatedLat > 32.95) updatedLat = 32.93;
+          if (updatedLng < -97.05) updatedLng = -97.03;
+          if (updatedLng > -96.55) updatedLng = -96.57;
 
           return {
             ...tech,
@@ -1408,6 +1409,13 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             </h3>
 
             <div className="space-y-3.5">
+              {serviceTerritories.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 px-4 py-5 text-center">
+                  <MapPin className="mx-auto mb-2 h-5 w-5 text-slate-500" />
+                  <p className="text-xs font-bold text-slate-300">No service territories created</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Territories you create will appear here. Owner’sLocal will never fill this area with demo data.</p>
+                </div>
+              )}
               {serviceTerritories.map(t => (
                 <div key={t.id} className="bg-slate-800/40 border border-white/5 rounded-2xl p-3 space-y-2">
                   <div className="flex justify-between items-center">
@@ -1695,8 +1703,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   {showTerritories && serviceTerritories.map(t => {
                     // Translate coordinate points dynamically into SVG coordinate bounds
                     const svgPath = t.points.map((p, idx) => {
-                      const latCenter = 47.6062;
-                      const lngCenter = -122.3321;
+                      const latCenter = DFW_FALLBACK.lat;
+                      const lngCenter = DFW_FALLBACK.lng;
                       const x = 450 + (p.lng - lngCenter) * 1100;
                       const y = 300 - (p.lat - latCenter) * 1200;
                       return `${idx === 0 ? "M" : "L"} ${x},${y}`;
@@ -1716,8 +1724,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                         />
                         {/* Text center label */}
                         <foreignObject
-                          x={450 + (t.points[0].lng - -122.3321) * 1100 - 40}
-                          y={300 - (t.points[0].lat - 47.6062) * 1200 + 10}
+                          x={450 + (t.points[0].lng - DFW_FALLBACK.lng) * 1100 - 40}
+                          y={300 - (t.points[0].lat - DFW_FALLBACK.lat) * 1200 + 10}
                           width="120"
                           height="40"
                         >
@@ -1760,14 +1768,13 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   <p className="text-blue-400 font-extrabold uppercase flex items-center gap-1">
                     <Compass className="w-3 h-3 animate-spin" /> Dispatch Grid Activated
                   </p>
-                  <p>📍 Office HQ: 800 5th Ave</p>
-                  <p>📦 SODO Depot: Airport Way S</p>
+                  <p>{fixedFacilities.length > 0 ? `📍 Office HQ: ${fixedFacilities[0].address}` : "No business facility added"}</p>
                 </div>
 
                 {/* DYNAMIC FALLBACK VECTOR MARKER RENDERER */}
                 {filteredPins.map(pin => {
-                  const latCenter = 47.6062;
-                  const lngCenter = -122.3321;
+                  const latCenter = DFW_FALLBACK.lat;
+                  const lngCenter = DFW_FALLBACK.lng;
                   const x = 50 + (pin.lng - lngCenter) * 1100;
                   const y = 50 - (pin.lat - latCenter) * 1200;
 
