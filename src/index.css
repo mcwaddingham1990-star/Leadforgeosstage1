@@ -318,3 +318,15 @@ select option {
 .workspace-theme .space-y-8 {
   --spacing-y: 2.75rem !important;
 }
+/* Shared compact form control used by Jobs' Event Engine record editor. */
+.input {
+  width: 100%;
+  border: 1px solid #9ec8ef;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.625rem 0.75rem;
+  color: #1f3557;
+  font-size: 0.75rem;
+  outline: none;
+}
+.input:focus { border-color: #4a86f7; box-shadow: 0 0 0 3px rgba(74,134,247,.12); }
