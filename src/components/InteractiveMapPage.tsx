@@ -1268,7 +1268,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             <Compass className="w-5 h-5 text-blue-400 animate-spin" style={{ animationDuration: "12s" }} />
           </span>
           <h2 className="text-xl font-sans font-extrabold text-white tracking-tight">
-            Interactive Map Command Center
+            Interactive Map
           </h2>
         </div>
         <p className="text-xs text-slate-400 font-semibold max-w-xl leading-relaxed">
@@ -1297,7 +1297,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             if (logOperationalEvent) {
               logOperationalEvent(
                 "Performance Mode",
-                isPerformanceSimActive ? "Switched to standard database rendering." : "Initialized viewport spatial rendering. Loaded 20,000+ spatial data nodes seamlessly at 60fps.",
+                isPerformanceSimActive ? "Returned to the standard map view." : "Loaded a 20,000-location performance test.",
                 "🚀"
               );
             }
@@ -1308,7 +1308,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               : "bg-slate-800/80 border-white/10 text-slate-300 hover:bg-slate-800"
           }`}
         >
-          <Zap className="w-4 h-4 text-yellow-300 animate-pulse" /> Simulate 20,000+ Nodes
+          <Zap className="w-4 h-4 text-yellow-300 animate-pulse" /> Test 20,000 Locations
         </button>
       </div>
     </div>
@@ -1932,7 +1932,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
                     <p className="text-xs font-extrabold text-white uppercase tracking-wider">
-                      🎯 Multi-Select Batch Rig ({selectedBasketIds.length} Nodes selected)
+                      🎯 Selected Locations ({selectedBasketIds.length})
                     </p>
                   </div>
                   <button
@@ -1965,7 +1965,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 leading-relaxed font-sans font-medium">
-                    Select 2 or more job nodes to generate optimized route itineraries and dispatch fleets in one click.
+                    Select at least two jobs to build a faster route and send it to dispatch.
                   </p>
                 )}
 
@@ -2008,7 +2008,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           {/* GLASS WIDGET: STAT COUNTS */}
           <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-[28px] p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-extrabold text-slate-200 uppercase tracking-wider border-b border-white/10 pb-2 flex items-center justify-between">
-              <span>Core Operational Nodes</span>
+              <span>Map Locations</span>
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
             </h3>
 
