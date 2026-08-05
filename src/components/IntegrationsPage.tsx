@@ -323,7 +323,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Facebook",
       apiType: "REST",
       logo: "💬",
-      description: "Inject customer direct-messages directly into the Owner's Local OS unified Message center.",
+      description: "Inject customer direct-messages directly into the OwnersLOCAL unified Message center.",
       connected: false,
       lastSync: "Never",
       aiEnabled: true,
@@ -659,7 +659,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Custom",
       apiType: "REST",
       logo: "🔗",
-      description: "Direct server-to-server HTTP request endpoints for custom Owner's Local OS automation.",
+      description: "Direct server-to-server HTTP request endpoints for custom OwnersLOCAL automation.",
       connected: true,
       lastSync: "2026-07-06 18:35",
       aiEnabled: false,
@@ -1087,7 +1087,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Custom Client",
       apiType: "REST",
       logo: "📡",
-      description: newIntegrationDesc || "User specified REST endpoint mapped securely to Owner's Local OS internal JSON schemas.",
+      description: newIntegrationDesc || "User specified REST endpoint mapped securely to OwnersLOCAL internal JSON schemas.",
       connected: true,
       lastSync: new Date().toISOString().replace("T", " ").substring(0, 16),
       aiEnabled: false,
@@ -1136,7 +1136,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                 Integrations Control Node
               </h1>
               <p className="text-xs text-slate-500 font-sans font-medium">
-                Owner's Local OS Central API Bridge & Real-Time Event Engine Sync
+                OwnersLOCAL Central API Bridge & Real-Time Event Engine Sync
               </p>
             </div>
           </div>
@@ -1577,7 +1577,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
-                  Owner's Local OS API Hook Registries & Handlers
+                  OwnersLOCAL API Hook Registries & Handlers
                 </h3>
                 <p className="text-xs text-slate-500 font-sans mt-0.5">
                   Receive new leads or send billing and service records to another system.
@@ -1615,7 +1615,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   Outgoing Delivery Webhooks
                 </span>
                 <p className="text-[11px] text-slate-500 leading-normal">
-                  Owner's Local OS triggers POST queries to Zapier or internal endpoints when jobs finish.
+                  OwnersLOCAL triggers POST queries to Zapier or internal endpoints when jobs finish.
                 </p>
                 <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
                   https://hooks.zapier.com/hooks/catch/91845/leads_sync_endpoint
@@ -1990,7 +1990,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     <h4 className="font-bold text-slate-800 uppercase text-[9.5px] tracking-wider mb-1">
                       Payload Guidelines
                     </h4>
-                    Incoming webhooks update the related Owner'sLocal records when outside data changes. Review your webhook settings carefully to prevent duplicate records.
+                    Incoming webhooks update the related OwnersLOCAL records when outside data changes. Review your webhook settings carefully to prevent duplicate records.
                   </div>
                 </div>
               )}

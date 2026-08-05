@@ -1912,7 +1912,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
             
             <div className="flex justify-between items-center border-b border-[#A9CDEE]/40 pb-2">
               <h3 className="text-xs font-sans font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
-                <Camera className="w-5 h-5 text-indigo-500 animate-pulse" /> Owner's Local OS Snapshot AI Camera
+                <Camera className="w-5 h-5 text-indigo-500 animate-pulse" /> OwnersLOCAL Snapshot AI Camera
               </h3>
               <button 
                 onClick={() => { 

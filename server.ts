@@ -70,5 +70,5 @@ app.get('*', (_req, res) => {
 
 const port = Number(process.env.PORT) || 8080;
 app.listen(port, () => {
-  console.log(`Owner'sLocal server listening on port ${port}`);
+  console.log(`OwnersLOCAL server listening on port ${port}`);
 });

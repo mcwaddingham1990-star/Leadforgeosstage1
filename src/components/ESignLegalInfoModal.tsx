@@ -19,7 +19,7 @@ const CHECKLIST: Array<{ done: boolean; text: string }> = [
 
 const FAQ: Array<{ q: string; a: string }> = [
   {
-    q: "Is an electronic signature made in Owner'sLocal as legally binding as a wet-ink signature?",
+    q: "Is an electronic signature made in OwnersLOCAL as legally binding as a wet-ink signature?",
     a: "For most ordinary business contracts, yes. Federal law (the ESIGN Act) and state law (UETA, or your state's own equivalent statute) generally give a properly-executed electronic signature the same legal effect as a handwritten one. That depends on the requirements below actually being met, and on the document type itself being eligible (see the next question)."
   },
   {
@@ -27,7 +27,7 @@ const FAQ: Array<{ q: string; a: string }> = [
     a: "Yes. ESIGN and UETA both carve out categories that federal or state law excludes regardless of the signing tool — common examples include wills and testamentary trusts, certain family-law documents (divorce, adoption), court orders and official court filings, and certain statutory notices (utility cancellation, eviction, foreclosure, product recalls) depending on your state. This is a general summary, not a complete list — check with an attorney before relying on e-signature for anything in a gray area."
   },
   {
-    q: "Does using Owner'sLocal replace the need for a lawyer to review my contracts?",
+    q: "Does using OwnersLOCAL replace the need for a lawyer to review my contracts?",
     a: "No. This feature provides the electronic signing mechanism — capturing intent, consent, the signature itself, and a verifiable audit trail. It doesn't draft, review, or guarantee the legal sufficiency of whatever terms are actually written into your document."
   },
   {
@@ -46,7 +46,7 @@ export function ESignLegalInfoModal({ onClose }: ESignLegalInfoModalProps) {
             <Scale className="w-5 h-5" />
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider">ESIGN Act &amp; UETA Compliance</h2>
-              <p className="text-[10px] text-blue-100 font-sans font-medium">How Owner'sLocal's eSign feature is designed to work</p>
+              <p className="text-[10px] text-blue-100 font-sans font-medium">How OwnersLOCAL's eSign feature is designed to work</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="text-white/80 hover:text-white cursor-pointer">
@@ -70,7 +70,7 @@ export function ESignLegalInfoModal({ onClose }: ESignLegalInfoModalProps) {
 
           <section className="space-y-2.5">
             <h3 className="text-[11px] font-black uppercase tracking-wider text-[#1F3557] flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#315C9F]" /> Legal Requirements &amp; How Owner'sLocal Addresses Them
+              <ShieldCheck className="w-3.5 h-3.5 text-[#315C9F]" /> Legal Requirements &amp; How OwnersLOCAL Addresses Them
             </h3>
             <div className="space-y-3">
               {[
@@ -98,7 +98,7 @@ export function ESignLegalInfoModal({ onClose }: ESignLegalInfoModalProps) {
                 <div key={item.req} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl">
                   <p className="font-black text-[#1F3557] text-[10.5px] mb-1">{item.req}</p>
                   <p className="text-slate-600 mb-1.5"><span className="font-bold text-slate-500">Plain English: </span>{item.plain}</p>
-                  <p className="text-emerald-700"><span className="font-bold">How Owner'sLocal addresses it: </span>{item.how}</p>
+                  <p className="text-emerald-700"><span className="font-bold">How OwnersLOCAL addresses it: </span>{item.how}</p>
                 </div>
               ))}
             </div>
@@ -139,7 +139,7 @@ export function ESignLegalInfoModal({ onClose }: ESignLegalInfoModalProps) {
               <Fingerprint className="w-3.5 h-3.5 text-[#315C9F]" /> Identity Verification Explanation
             </h3>
             <p>
-              Today, Owner'sLocal confirms who is signing through: being logged into an authenticated account (for employees
+              Today, OwnersLOCAL confirms who is signing through: being logged into an authenticated account (for employees
               and owners) or being the person physically present at the device at the time of signing (for in-person customer
               signing), combined with the signer's typed name, role, and a real drawn/typed/uploaded signature, all captured
               in the audit trail above. This is the same standard most everyday e-signature tools use for routine business
@@ -181,9 +181,9 @@ export function ESignLegalInfoModal({ onClose }: ESignLegalInfoModalProps) {
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-amber-800">
               <strong>Disclaimer:</strong> This page provides general, plain-English information about the ESIGN Act, UETA, and
-              how Owner'sLocal's eSign feature works. It is provided for informational purposes only and is <strong>not legal
+              how OwnersLOCAL's eSign feature works. It is provided for informational purposes only and is <strong>not legal
               advice</strong>. Laws vary by state and by document type, and applying them to your specific situation requires a
-              licensed attorney. Owner'sLocal and its developers are not a law firm and do not provide legal advice.
+              licensed attorney. OwnersLOCAL and its developers are not a law firm and do not provide legal advice.
             </p>
           </section>
 

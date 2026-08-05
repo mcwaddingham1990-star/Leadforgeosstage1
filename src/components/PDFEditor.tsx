@@ -294,7 +294,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
           groupId: null,
           zIndex: 2,
           props: {
-            text: "Owner's Local OS Operational Systems • Field Service Standard Template",
+            text: "OwnersLOCAL Operational Systems • Field Service Standard Template",
             fontFamily: "Inter",
             fontSize: 12,
             color: "#5E7393"

@@ -34,7 +34,7 @@ function plaidClient(): PlaidApi {
 export async function createPlaidLinkToken(clientUserId: string) {
   const response = await plaidClient().linkTokenCreate({
     user: { client_user_id: clientUserId || 'ownerslocal-sandbox-owner' },
-    client_name: "Owner'sLocal",
+    client_name: "OwnersLOCAL",
     language: 'en',
     country_codes: [CountryCode.Us],
     products: [Products.Auth, Products.Transactions, Products.Identity],
@@ -66,4 +66,3 @@ export async function exchangePlaidPublicToken(publicToken: string, institutionN
     })),
   };
 }
-

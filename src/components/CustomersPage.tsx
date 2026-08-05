@@ -50,7 +50,7 @@ export interface CustomersPageProps {
   onOpenPlaceholder: (label: string, icon: string) => void;
 }
 
-// 10 high-quality realistic Owner's Local OS customers
+// 10 high-quality realistic OwnersLOCAL customers
 export const INITIAL_CUSTOMERS: Customer[] = [];
 
 export const CustomersPage: React.FC<CustomersPageProps> = ({

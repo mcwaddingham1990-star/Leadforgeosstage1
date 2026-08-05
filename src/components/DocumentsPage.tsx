@@ -323,7 +323,7 @@ export const DocumentsPage: React.FC = () => {
           folder: "eSign",
           isFavorite: false,
           isArchived: false,
-          notes: "Generated from Owner'sLocal Native PDF Editor tool.",
+          notes: "Generated from OwnersLOCAL Native PDF Editor tool.",
           tags: ["Editor", "Draft"],
           estimateId: "None",
           invoiceId: "None",
@@ -1793,7 +1793,7 @@ export const DocumentsPage: React.FC = () => {
                       triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
                     } else {
                       // Create simulated plain text file download for seed data
-                      const textContent = `Owner's Local OS Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
+                      const textContent = `OwnersLOCAL Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
                       const blob = new Blob([textContent], { type: 'text/plain' });
                       const blobUrl = URL.createObjectURL(blob);
                       const link = document.createElement('a');
@@ -2201,7 +2201,7 @@ export const DocumentsPage: React.FC = () => {
                   onClick={() => {
                     const [, name = "", email = ""] = shareRecipient.split("|");
                     if (!email) return triggerNotification("Choose a contact with an email address first.");
-                    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(shareDocItem.name)}&body=${encodeURIComponent(`Hi ${name},\n\nPlease review the attached Owner'sLocal document: ${shareDocItem.name}`)}`;
+                    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(shareDocItem.name)}&body=${encodeURIComponent(`Hi ${name},\n\nPlease review the attached OwnersLOCAL document: ${shareDocItem.name}`)}`;
                     setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
@@ -2216,7 +2216,7 @@ export const DocumentsPage: React.FC = () => {
                   onClick={() => {
                     const [, name = "", , phone = ""] = shareRecipient.split("|");
                     if (!phone) return triggerNotification("Choose a contact with a mobile number first.");
-                    window.location.href = `sms:${phone}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from Owner'sLocal.`)}`;
+                    window.location.href = `sms:${phone}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from OwnersLOCAL.`)}`;
                     setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);

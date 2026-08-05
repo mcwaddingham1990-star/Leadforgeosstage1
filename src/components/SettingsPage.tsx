@@ -1855,7 +1855,7 @@ export default function SettingsPage({
               {/* AI SETTINGS SECTION */}
               {activeCategory === "ai_settings" && (
                 <div className="space-y-4">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Master AI Engine Configuration</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">OwnersLOCAL Master AI Engine Configuration</h3>
                   
                   <div className="space-y-2 bg-white p-4 rounded-xl border border-[#A9CDEE]">
                     <div className="flex items-center justify-between pb-2 border-b border-[#A9CDEE]/30">
@@ -2093,7 +2093,7 @@ export default function SettingsPage({
                 <div className="space-y-4">
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Integration API Keys</h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed font-sans font-medium">
-                    API keys let outside services connect to Owner'sLocal. Store them securely and never share them publicly.
+                    API keys let outside services connect to OwnersLOCAL. Store them securely and never share them publicly.
                   </p>
                   <div className="space-y-3">
                     {[
@@ -2281,7 +2281,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-3">
                 <Sparkles className="w-6 h-6 text-[#4A9BFF] animate-pulse" />
                 <div>
-                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Artificial Intelligence Audit</h3>
+                  <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">OwnersLOCAL Artificial Intelligence Audit</h3>
                   <p className="text-xs text-[#5E7393] font-sans font-semibold">Review recommended settings based on how your business is configured</p>
                 </div>
               </div>

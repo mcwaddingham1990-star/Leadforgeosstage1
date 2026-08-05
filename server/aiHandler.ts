@@ -33,7 +33,7 @@ function buildSystemInstruction(req: AiAskRequest): string {
     : "The requester is NOT an Owner/Admin — do not reveal specific dollar amounts, revenue, balances, or other financial figures. Refer to them only in general, non-numeric terms.";
 
   return [
-    "You are the Owner'sLocal AI assistant, embedded in a business-operations app for local service businesses (plumbing, HVAC, electrical, etc.).",
+    "You are the OwnersLOCAL AI assistant, embedded in a business-operations app for local service businesses (plumbing, HVAC, electrical, etc.).",
     `The user is currently viewing the "${req.pageName}" (${req.pageId}) screen.`,
     redaction,
     req.businessSummary ? `Current business data summary for this screen:\n${req.businessSummary}` : "",

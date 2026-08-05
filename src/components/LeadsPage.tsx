@@ -39,7 +39,7 @@ import {
 export type { Lead } from "../types/domain";
 import type { Lead } from "../types/domain";
 
-// 10 high-quality realistic Owner's Local OS leads
+// 10 high-quality realistic OwnersLOCAL leads
 export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC = () => {

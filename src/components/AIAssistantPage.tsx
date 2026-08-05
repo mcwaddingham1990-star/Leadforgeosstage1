@@ -148,7 +148,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
   const handleSaveConfig = () => {
     setShowSaveToast(true);
-    logOperationalEvent("AI Config", "Owner's Local OS Global AI Knowledge database and tone configs saved.", "⚙️");
+    logOperationalEvent("AI Config", "OwnersLOCAL Global AI Knowledge database and tone configs saved.", "⚙️");
     setTimeout(() => setShowSaveToast(false), 3000);
   };
 
@@ -657,7 +657,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
           <div>
             <p className="font-bold text-white mb-0.5">Configuration Saved</p>
-            <p className="text-slate-400 font-medium text-xs leading-tight">Neural parameters applied successfully to Owner's Local OS Core.</p>
+            <p className="text-slate-400 font-medium text-xs leading-tight">Neural parameters applied successfully to OwnersLOCAL Core.</p>
           </div>
         </div>
       )}

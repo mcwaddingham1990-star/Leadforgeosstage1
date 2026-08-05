@@ -1413,7 +1413,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 px-4 py-5 text-center">
                   <MapPin className="mx-auto mb-2 h-5 w-5 text-slate-500" />
                   <p className="text-xs font-bold text-slate-300">No service territories created</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Territories you create will appear here. Owner’sLocal will never fill this area with demo data.</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Territories you create will appear here. OwnersLOCAL will never fill this area with demo data.</p>
                 </div>
               )}
               {serviceTerritories.map(t => (
