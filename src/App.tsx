@@ -670,7 +670,7 @@ const DAILY_VIEW_OPTIONS = [
   { value: "revenue", label: "📊 Company Revenue Graph" },
   { value: "leads", label: "🎯 Active Leads Count" },
   { value: "scheduling", label: "📅 Jobs Scheduled Today" },
-  { value: "fleet", label: "🚚 Fleet Telemetry Hub" },
+  { value: "fleet", label: "🚚 Fleet Status" },
   { value: "messages", label: "💬 Messages Feed Board" },
   { value: "inventory", label: "📦 Warehouse Inventory Scans" },
 ];
@@ -4528,9 +4528,9 @@ Access to full financial telemetry is restricted.`;
                       <Shield className="w-4 h-4 text-emerald-600" /> Platform Privacy Protocol
                     </h3>
                     <p className="text-[10px] text-slate-500 leading-relaxed space-y-2 max-h-[160px] overflow-y-auto pr-1 mb-4">
-                      <span>We employ industry standard AES-256 cloud encryption nodes to protect your business intelligence operations.</span>
+                      <span>We use industry-standard AES-256 encryption to protect your business data.</span>
                       <br /><br />
-                      <span>Any details cached or entered in this local runtime sandbox are purely client-side local variables. Your password data is never transmitted to outside networks.</span>
+                      <span>Information stored locally stays on this device. Your password is not sent to outside services.</span>
                     </p>
                     <button
                       type="button"
@@ -5831,7 +5831,7 @@ Access to full financial telemetry is restricted.`;
                           <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
                             <span className="select-none text-xl">📈</span> Company Revenue Analytics
                           </h2>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Real-time financial metrics, labor costs, and operational tax projection matrix</p>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
                         </div>
                       </div>
 
@@ -6143,7 +6143,7 @@ Access to full financial telemetry is restricted.`;
                       <div className="space-y-3">
                         <div className="flex justify-between items-center px-1">
                           <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
-                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">12 Cost Nodes Accrued</span>
+                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">12 Expenses Recorded</span>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -6476,7 +6476,7 @@ Access to full financial telemetry is restricted.`;
                         <div className="border-b border-[#9EC8EF]/30 pb-3">
                           <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
                           <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect your local enterprise nodes to leading accounting API integrations</p>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect Owner'sLocal with your accounting software</p>
                         </div>
                         
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -6802,7 +6802,7 @@ Access to full financial telemetry is restricted.`;
                     Owner's AI Option
                   </h3>
                   <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
-                    Workspace diagnostic assistant • {aiPageName}
+                    AI help for this page • {aiPageName}
                   </p>
                 </div>
               </div>
