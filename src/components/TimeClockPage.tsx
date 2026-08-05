@@ -568,7 +568,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Corporate Time Clock Dashboard</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-sans font-semibold">
-            Track shifts, breaks, and payroll live syncing across all terminal nodes.
+            Track shifts and breaks, then send approved hours to payroll.
           </p>
         </div>
         
@@ -1482,7 +1482,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       {/* FRAMEWORK CONNECTIONS (As required by the guideline exactly) */}
       <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 text-left">
         <h4 className="text-[10px] font-black uppercase tracking-wider text-[#342D7E] mb-2">
-          Owner's Local OS Framework Connections
+          Time Clock Connections
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-sans">
           <div>
