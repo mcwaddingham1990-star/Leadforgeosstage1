@@ -720,7 +720,7 @@ export const SchedulingPage: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              Core Event Engine matrix supporting shared scheduling, service dispatching, and appointment calendars
+              Plan appointments, assign crews, and keep dispatch schedules up to date
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -1231,9 +1231,9 @@ export const SchedulingPage: React.FC = () => {
       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
         <div className="border-b border-[#9EC8EF] pb-3 text-left">
           <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-            Operational Framework Connections Index
+            How Scheduling Connects
           </h3>
-          <p className="text-xs text-slate-500">Cross-page shared Event Engine sync telemetry ledger</p>
+          <p className="text-xs text-slate-500">See how schedule changes update the rest of the app</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
@@ -1246,7 +1246,7 @@ export const SchedulingPage: React.FC = () => {
             <ul className="space-y-2 text-slate-600 text-left pl-1">
               <li className="flex items-start gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Customers Database:</strong> Schedule job buttons are operational and seamlessly route to the new scheduling wizard.</span>
+                <span><strong>Customers:</strong> Use Schedule Job to open the scheduling form for that customer.</span>
               </li>
               <li className="flex items-start gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
