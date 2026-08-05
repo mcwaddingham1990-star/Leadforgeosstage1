@@ -673,7 +673,7 @@ export const MessagesPage: React.FC = () => {
             </h2>
           </div>
           <p className="text-xs text-slate-500 font-sans mt-1">
-            Secure enterprise chat linked with corporate assets, schedules, dispatches, and diagnostics
+            Keep conversations connected with customers, schedules, dispatch, and job details
           </p>
         </div>
 
@@ -1693,7 +1693,7 @@ export const MessagesPage: React.FC = () => {
                   <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
                     Snapshot AI Scanner
                   </h4>
-                  <p className="text-[10px] text-slate-400 font-semibold">Optical character translation and diagnostic auto-indexing</p>
+                  <p className="text-[10px] text-slate-400 font-semibold">Read text from images and organize it automatically</p>
                 </div>
               </div>
               <button onClick={() => setIsSnapshotAiOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
@@ -1871,10 +1871,10 @@ export const MessagesPage: React.FC = () => {
       <div className="p-4 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl space-y-3.5 text-left">
         <div>
           <h4 className="text-xs font-black uppercase text-[#342D7E] tracking-wider">
-            Owner's Local OS Intercom Framework Connections
+            Messages Connections
           </h4>
           <p className="text-[10.5px] text-slate-500 leading-normal font-medium mt-0.5">
-            Real-time event sync nodes mapped across all corporate departments.
+            Messages stay connected with the people and work across your business.
           </p>
         </div>
 
