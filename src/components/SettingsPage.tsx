@@ -1148,25 +1148,25 @@ export default function SettingsPage({
               {/* PERMISSIONS SECTION */}
               {activeCategory === "permissions" && (
                 <div className="space-y-4 text-xs">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Granular Security Capability Matrix</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Role Permissions</h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed font-sans font-medium">
-                    Modify capabilities mapping globally for all operations. Enable or restrict CRUD controls, administrative functions, and artificial intelligence access.
+                    Choose what each role can view, create, edit, delete, approve, export, and do with AI.
                   </p>
                   
                   <div className="bg-white rounded-2xl border border-[#A9CDEE] overflow-hidden">
                     <div className="p-3 bg-[#E3F3FF] border-b border-[#A9CDEE] font-bold text-[#342D7E] uppercase tracking-wider text-[9.5px] flex justify-between">
-                      <span>Capability Override Control</span>
-                      <span className="text-slate-400 font-mono">Global State</span>
+                      <span>Permission</span>
+                      <span className="text-slate-400 font-mono">Access</span>
                     </div>
                     <div className="divide-y divide-[#A9CDEE]/30">
                       {[
-                        { key: "view", title: "View Core Screens", desc: "Allow reading operational indices, metrics, logs, and dispatch states." },
-                        { key: "create", title: "Create Operations", desc: "Allow generating new records (leads, jobs, estimates, invoices, etc.)." },
-                        { key: "edit", title: "Edit Documents & Records", desc: "Authorize full modification of parameters, amounts, and dates." },
-                        { key: "delete", title: "Destructive Delete Security Authorization", desc: "Permit permanently wiping out inventory, jobs, or customer entries." },
-                        { key: "approve", title: "Approve Estimates & Payroll", desc: "Allow digital sign-off on cost sheets, payroll multipliers, and POs." },
-                        { key: "export", title: "Data Export & Print Archive", desc: "Allow compiling local databases to JSON, Excel, or PDF structures." },
-                        { key: "ai", title: "Master AI Autonomous Actions", desc: "Authorize AI agent to schedule, draft POs, or dispatch without approval." }
+                        { key: "view", title: "View Screens", desc: "View business records, reports, activity, and dispatch status." },
+                        { key: "create", title: "Create Records", desc: "Create leads, jobs, estimates, invoices, and other records." },
+                        { key: "edit", title: "Edit Documents & Records", desc: "Change record details, amounts, and dates." },
+                        { key: "delete", title: "Delete Records", desc: "Permanently delete inventory, jobs, customer records, and other data." },
+                        { key: "approve", title: "Approve Estimates & Payroll", desc: "Approve estimates, payroll, and purchase orders." },
+                        { key: "export", title: "Export & Print", desc: "Export data to JSON, Excel, or PDF and print records." },
+                        { key: "ai", title: "AI Actions", desc: "Allow AI to schedule work, draft purchase orders, or dispatch without approval." }
                       ].map((item) => (
                         <div key={item.key} className="p-3.5 flex items-center justify-between gap-4">
                           <div>
@@ -2091,9 +2091,9 @@ export default function SettingsPage({
               {/* API KEYS SECTION */}
               {activeCategory === "api_keys" && (
                 <div className="space-y-4">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Third-Party Security API Keys</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Integration API Keys</h3>
                   <p className="text-[11px] text-slate-500 leading-relaxed font-sans font-medium">
-                    Secret API keys to authorize external software synchronization pipelines. Keep these tokens highly secure.
+                    API keys let outside services connect to Owner'sLocal. Store them securely and never share them publicly.
                   </p>
                   <div className="space-y-3">
                     {[
@@ -2121,7 +2121,7 @@ export default function SettingsPage({
               {/* ADVANCED SETTINGS */}
               {activeCategory === "advanced" && (
                 <div className="space-y-4 text-xs font-medium">
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">System Infrastructure Administrative Controls</h3>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Advanced Settings</h3>
                   <div className="bg-white p-4 rounded-xl border border-[#A9CDEE] space-y-3">
                     <div className="flex items-center justify-between cursor-pointer pb-2 border-b border-[#A9CDEE]/30">
                       <div>
@@ -2139,20 +2139,20 @@ export default function SettingsPage({
                             : "bg-[#F5FAFF] text-slate-600 border-[#A9CDEE]"
                         }`}
                       >
-                        {employeeRedoOnboardingAllowed ? "● Signal Active" : "○ Signal Inactive"}
+                        {employeeRedoOnboardingAllowed ? "● Enabled" : "○ Disabled"}
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between pt-2">
                       <div>
-                        <p className="font-extrabold text-slate-800">Master Factory Clean Re-Index</p>
-                        <p className="text-[10px] text-slate-400 font-sans mt-0.5">Recalculate internal maps routing distance index vectors.</p>
+                        <p className="font-extrabold text-slate-800">Rebuild Route Data</p>
+                        <p className="text-[10px] text-slate-400 font-sans mt-0.5">Recalculate saved map routes and distances.</p>
                       </div>
                       <button
                         onClick={() => triggerNotification("🔄 Operational maps index table fully recalculated and re-indexed.")}
                         className="px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-black rounded-lg transition-all cursor-pointer uppercase tracking-wider"
                       >
-                        Clean Index
+                        Rebuild
                       </button>
                     </div>
 
@@ -2160,14 +2160,14 @@ export default function SettingsPage({
                     <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE]/30">
                       <div>
                         <p className="font-extrabold text-slate-800">Owner Control Console</p>
-                        <p className="text-[10px] text-slate-400 font-sans mt-0.5">God-Mode Operating System administration deck.</p>
+                        <p className="text-[10px] text-slate-400 font-sans mt-0.5">Owner-only tools for managing the entire account.</p>
                       </div>
                       {activeRole === "Owner" ? (
                         <button
                           onClick={() => {
                             if (onNavigateToScreen) {
                               onNavigateToScreen("owner_console");
-                              triggerNotification("🔑 Entering Owner Control Console. God Mode Active.");
+                              triggerNotification("🔑 Owner Console opened.");
                             }
                           }}
                           className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-lg transition-all cursor-pointer uppercase tracking-wider shadow-sm border border-amber-400 text-[10px]"
@@ -2176,7 +2176,7 @@ export default function SettingsPage({
                         </button>
                       ) : (
                         <span className="text-[10px] text-red-600 font-bold bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1">
-                          <ShieldAlert className="w-3.5 h-3.5 text-red-600 shrink-0" /> Restrict: Owner Only
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-600 shrink-0" /> Owner Only
                         </span>
                       )}
                     </div>
@@ -2191,13 +2191,13 @@ export default function SettingsPage({
           {hasUnsavedChanges && (
             <div className="mt-6 bg-amber-50 border border-amber-200 p-3.5 rounded-2xl flex items-center justify-between text-xs animate-pulse">
               <span className="font-bold text-amber-800 flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-amber-600" /> System holds unsaved local parameters.
+                <Info className="w-4 h-4 text-amber-600" /> You have unsaved changes.
               </span>
               <button
                 onClick={handleSave}
                 className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black rounded-xl uppercase tracking-wider cursor-pointer"
               >
-                Apply Parameters Now
+                Save Changes
               </button>
             </div>
           )}
@@ -2209,10 +2209,10 @@ export default function SettingsPage({
           {/* FRAMEWORK CONNECTIONS */}
           <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] shadow-sm space-y-4">
             <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider border-b border-[#A9CDEE]/50 pb-2 flex items-center gap-1.5">
-              <RefreshCw className="w-4 h-4 text-[#315C9F] animate-spin" /> Framework Connections
+              <RefreshCw className="w-4 h-4 text-[#315C9F] animate-spin" /> Connected Areas
             </h3>
             <p className="text-[10.5px] text-slate-500 font-sans font-medium leading-relaxed">
-              Every system setting updates active local runtime modules immediately with zero lag.
+              Settings apply across these areas of the app.
             </p>
 
             <div className="space-y-2">
@@ -2282,7 +2282,7 @@ export default function SettingsPage({
                 <Sparkles className="w-6 h-6 text-[#4A9BFF] animate-pulse" />
                 <div>
                   <h3 className="text-base font-extrabold text-[#342D7E] uppercase tracking-wider">Owner's Local OS Artificial Intelligence Audit</h3>
-                  <p className="text-xs text-[#5E7393] font-sans font-semibold">Instant settings optimization diagnostics based on active business parameters</p>
+                  <p className="text-xs text-[#5E7393] font-sans font-semibold">Review recommended settings based on how your business is configured</p>
                 </div>
               </div>
               <button
