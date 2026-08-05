@@ -1225,7 +1225,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-[#315C9F]" />
                 <h3 className="text-sm font-black uppercase text-[#1F3557] tracking-wider">
-                  Notification Channel Router Matrix
+                  Notification Preferences
                 </h3>
               </div>
               <button 
@@ -1237,7 +1237,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 leading-normal font-sans font-medium">
-              Configure independent notification dispatch behaviors independently for every corporate module. Keep your communication lines fully optimized.
+              Choose how you want to receive notifications from each area of the app.
             </p>
 
             {/* Matrix Table */}
@@ -1290,11 +1290,11 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
               <button
                 onClick={() => {
                   setShowSettingsModal(false);
-                  triggerNotification("Saved notification channel matrix configuration.");
+                  triggerNotification("Notification preferences saved.");
                 }}
                 className="px-5 py-2.5 bg-[#315C9F] hover:bg-[#25467A] text-white font-black uppercase tracking-wider rounded-xl cursor-pointer shadow-sm text-xs"
               >
-                Save Operational Preferences
+                Save Preferences
               </button>
             </div>
           </div>
