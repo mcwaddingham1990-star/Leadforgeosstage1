@@ -1138,7 +1138,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   {filteredInventory.length === 0 ? (
                     <tr>
                       <td colSpan={13} className="py-12 text-center text-slate-400 font-semibold uppercase tracking-wider">
-                        No matches found in active inventory nodes. Try adjusting query or filters.
+                        No inventory items match your search. Try changing the search or filters.
                       </td>
                     </tr>
                   ) : (
@@ -2167,7 +2167,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
               </div>
 
               <div className="flex flex-col gap-1 text-[10px] text-slate-400">
-                <p>💡 Quick Reference SKU Nodes to scan:</p>
+                <p>💡 Sample SKUs to scan:</p>
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   <span 
                     onClick={() => setScanInputCode("032054110022")}
@@ -2365,7 +2365,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
             <div className="text-xs font-semibold text-slate-700 space-y-3">
               <p className="text-xs text-slate-600 font-medium">
-                The following {reorderCandidates.length} stock nodes have fallen below minimum safety threshold levels. We have calculated optimal replenishment quantities to bring them up to maximum capacities:
+                These {reorderCandidates.length} items are below their minimum stock level. Suggested order quantities will restore them to their target level:
               </p>
 
               <div className="max-h-[220px] overflow-y-auto border border-[#A9CDEE] rounded-2xl bg-white divide-y divide-slate-100">
@@ -2422,7 +2422,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
       {/* FRAMEWORK CONNECTIONS SUMMARY */}
       <div className="p-4 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl space-y-3 font-sans font-medium text-slate-600">
-        <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Framework Connections Summary</h4>
+        <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Inventory Connections</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-y-2 gap-x-4 text-xs font-semibold">
           <div className="flex items-center gap-2">
             <span className="text-emerald-500">✓</span>
