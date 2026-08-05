@@ -680,7 +680,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "OpenAI",
       apiType: "REST",
       logo: "🤖",
-      description: "Power GPT intelligence for auto-categorization of client files and smart messaging.",
+      description: "Use AI to organize client files and help draft messages.",
       connected: false,
       lastSync: "Never",
       aiEnabled: true,
@@ -743,7 +743,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Anthropic",
       apiType: "REST",
       logo: "🌐",
-      description: "Secondary LLM pipeline connection to distribute processing loads for deep background analysis.",
+      description: "Connect another AI model for additional analysis.",
       connected: false,
       lastSync: "Never",
       aiEnabled: false,
@@ -989,7 +989,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
   // Global Refresh All Handler
   const handleRefreshAll = () => {
-    triggerNotification("🔄 Dispatching global sync signals across all active Event Engine nodes...");
+    triggerNotification("🔄 Syncing all connected services...");
     
     // Simulate refreshing all connected integrations
     setTimeout(() => {
@@ -1386,7 +1386,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
               <div className="flex items-center gap-1.5">
                 <Database className="h-4 w-4 text-[#315C9F]" />
                 <span className="text-xs font-bold text-slate-800 font-sans uppercase tracking-wider">
-                  Framework Connections (Shared Event Engine Matrix)
+                  Connected App Features
                 </span>
               </div>
               <span className="px-2 py-0.5 bg-[#C7E3FB] text-[#315C9F] text-[9.5px] font-extrabold uppercase rounded-lg border border-[#A9CDEE]">
@@ -1580,7 +1580,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   Owner's Local OS API Hook Registries & Handlers
                 </h3>
                 <p className="text-xs text-slate-500 font-sans mt-0.5">
-                  Listen to inbound lead captures or push billing and diagnostic records externally.
+                  Receive new leads or send billing and service records to another system.
                 </p>
               </div>
               <button
@@ -1874,7 +1874,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                         {selectedIntegration.id === "twilio" && "✓ updates CRM Inbox message logs and triggers confirmation dispatch SMS."}
                         {selectedIntegration.id === "google_drive" && "✓ uploads diagnostic site layouts and contract PDF documents."}
                         {selectedIntegration.id === "google_maps" && "✓ updates Dispatch travel matrices and driver active route maps."}
-                        {selectedIntegration.id === "gemini" && "✓ powers smart intelligence algorithms in AI Assistant page."}
+                        {selectedIntegration.id === "gemini" && "✓ powers features on the AI Assistant page."}
                         {!["google_calendar", "quickbooks", "stripe", "google_business", "twilio", "google_drive", "google_maps", "gemini"].includes(selectedIntegration.id) && 
                           "No direct shared modules currently connected. Create custom webhook trigger logic to link modules."}
                       </p>
@@ -1990,7 +1990,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     <h4 className="font-bold text-slate-800 uppercase text-[9.5px] tracking-wider mb-1">
                       Payload Guidelines
                     </h4>
-                    All inbound webhooks trigger structural sync queries directly within our Owner's Local OS Shared Event Engine. Every completed module automatically updates when external data changes. There is never duplicate data.
+                    Incoming webhooks update the related Owner'sLocal records when outside data changes. Review your webhook settings carefully to prevent duplicate records.
                   </div>
                 </div>
               )}
@@ -2033,7 +2033,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                         AI Autonomy Mode
                       </span>
                       <p className="text-[10px] text-slate-500 font-sans">
-                        Let AI parse incoming webhook records or request sync logs autonomously.
+                        Let AI review incoming webhook records and sync history.
                       </p>
                     </div>
 
@@ -2061,14 +2061,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   {selectedIntegration.aiEnabled && (
                     <div className="space-y-2.5 pt-2 border-t border-[#A9CDEE]/50">
                       <span className="block text-[10px] font-bold uppercase text-slate-500">
-                        Autonomy Autopilot Level
+                        AI Action Level
                       </span>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         {[
-                          { key: "OFF", label: "OFF", desc: "No intelligence parsing on endpoints." },
-                          { key: "ASSIST", label: "ASSIST", desc: "Generates suggestions for logs." },
-                          { key: "ASSIST + APPROVAL", label: "APPROVAL MODE", desc: "Generates changes, demands owner click authorization." },
-                          { key: "AUTO", label: "AUTOPILOT", desc: "Directly executes mutations into Event Engine." }
+                          { key: "OFF", label: "OFF", desc: "AI does not review incoming data." },
+                          { key: "ASSIST", label: "ASSIST", desc: "AI suggests changes but does not apply them." },
+                          { key: "ASSIST + APPROVAL", label: "REQUIRE APPROVAL", desc: "AI prepares changes for the owner to approve." },
+                          { key: "AUTO", label: "AUTOMATIC", desc: "AI applies allowed changes automatically." }
                         ].map((m) => (
                           <div
                             key={m.key}
@@ -2093,7 +2093,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded border border-slate-200 text-[10px] text-slate-500 font-sans leading-relaxed">
                         <Info className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
-                        <span>AI decisions will strictly respect configured Owner/Manager permissions matrix.</span>
+                        <span>AI actions follow the permissions set for owners and managers.</span>
                       </div>
                     </div>
                   )}
@@ -2145,7 +2145,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                         : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
                     }`}
                   >
-                    Force Sync Now
+                    Sync Now
                   </button>
                   <button
                     type="submit"
@@ -2168,7 +2168,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
               <div className="flex items-center gap-2">
                 <Brain className="h-5 w-5 text-indigo-600" />
                 <h3 className="text-sm font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
-                  Global Integration AI Setup
+                  AI Settings for Integrations
                 </h3>
               </div>
               <button
@@ -2180,14 +2180,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed font-sans">
-              Each connected integration can independently run background AI pipelines. Suggestions always respect the owner's module permissions configuration.
+              Choose how AI can help with connected services. AI actions always follow the owner's permission settings.
             </p>
 
             <div className="space-y-3">
               {[
-                { key: "all_auto", label: "Trigger Autopilot globally", desc: "Enables 'AUTO' mode across all connected integrations." },
-                { key: "all_approval", label: "Require approval globally", desc: "Forces 'ASSIST + APPROVAL' mode on all nodes." },
-                { key: "all_off", label: "Disable Integration AI completely", desc: "Resets all nodes to 'OFF'." }
+                { key: "all_auto", label: "Allow automatic actions", desc: "Turns on automatic mode for every connected integration." },
+                { key: "all_approval", label: "Require approval", desc: "Requires owner approval for every AI-proposed change." },
+                { key: "all_off", label: "Turn off integration AI", desc: "Turns off AI for every integration." }
               ].map((opt) => (
                 <button
                   key={opt.key}
