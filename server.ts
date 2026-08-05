@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
+import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +44,22 @@ app.post('/api/ai/scan-financial-document', async (req, res) => {
 
 app.get('/api/client-info', (req, res) => {
   res.json({ ip: getClientIp(req) });
+});
+
+app.post('/api/plaid/create-link-token', async (req, res) => {
+  try {
+    res.json(await createPlaidLinkToken(String(req.body?.clientUserId || 'ownerslocal-sandbox-owner')));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to start Plaid Link' });
+  }
+});
+
+app.post('/api/plaid/exchange-public-token', async (req, res) => {
+  try {
+    res.json(await exchangePlaidPublicToken(req.body?.publicToken, req.body?.institutionName));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to connect bank account' });
+  }
 });
 
 const distDir = path.join(__dirname, 'dist');

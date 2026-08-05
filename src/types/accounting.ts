@@ -114,10 +114,10 @@ export interface BankAccount {
   openingBalance: number;
   openingBalanceDate: string;
   linkedAccountId?: string; // Chart of Accounts account this rolls up into
-  // Always false until a real Plaid/bank API integration exists -- never
-  // set true by anything in this app today. Kept on the type now so wiring
-  // a real integration later is a data change, not a schema change.
   isPlaidConnected: boolean;
+  plaidAccountId?: string;
+  plaidItemId?: string;
+  plaidInstitutionName?: string;
   createdAt: string;
 }
 

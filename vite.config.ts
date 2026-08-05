@@ -4,6 +4,7 @@ import path from 'path';
 import {defineConfig, Plugin, Connect} from 'vite';
 import {handleAiAsk, handleScanReceipt, handleScanFinancialDocument} from './server/aiHandler';
 import {getClientIp} from './server/clientInfo';
+import {createPlaidLinkToken, exchangePlaidPublicToken} from './server/plaidHandler';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 // Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
@@ -39,6 +40,12 @@ function aiApiDevMiddleware(): Plugin {
       server.middlewares.use('/api/ai/ask', jsonRoute(handleAiAsk));
       server.middlewares.use('/api/ai/scan-receipt', jsonRoute(handleScanReceipt));
       server.middlewares.use('/api/ai/scan-financial-document', jsonRoute(handleScanFinancialDocument));
+      server.middlewares.use('/api/plaid/create-link-token', jsonRoute(body =>
+        createPlaidLinkToken(String(body?.clientUserId || 'ownerslocal-sandbox-owner'))
+      ));
+      server.middlewares.use('/api/plaid/exchange-public-token', jsonRoute(body =>
+        exchangePlaidPublicToken(body?.publicToken, body?.institutionName)
+      ));
       server.middlewares.use('/api/client-info', (req: IncomingMessage, res: ServerResponse) => {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ip: getClientIp(req) }));

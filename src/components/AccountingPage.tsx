@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { usePlaidLink } from "react-plaid-link";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
@@ -144,7 +145,7 @@ export const AccountingPage: React.FC = () => {
     inventoryList
   } = useDomainData();
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const canEdit = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "accounting", "edit");
   const canDelete = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "accounting", "delete");
@@ -319,7 +320,7 @@ export const AccountingPage: React.FC = () => {
       )}
 
       {activeTab === "banking" && (
-        <BankingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} accounts={accounts} canEdit={canEdit} triggerNotification={triggerNotification} />
+        <BankingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} accounts={accounts} canEdit={canEdit} triggerNotification={triggerNotification} businessId={businessId} />
       )}
 
       {activeTab === "chart_of_accounts" && (
@@ -1059,14 +1060,92 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
 }
 
 // ============================================================================
-// BANKING (real BankAccount CRUD now; Plaid/sync features honestly Coming Soon)
+// BANKING
 // ============================================================================
-function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerNotification }: any) {
+function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerNotification, businessId }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<BankAccountType>("checking");
   const [last4, setLast4] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [isConnectingPlaid, setIsConnectingPlaid] = useState(false);
+
+  const { open: openPlaid, ready: plaidReady } = usePlaidLink({
+    token: linkToken,
+    onSuccess: async (publicToken, metadata) => {
+      try {
+        setIsConnectingPlaid(true);
+        const response = await fetch('/api/plaid/exchange-public-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            publicToken,
+            institutionName: metadata.institution?.name,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to connect bank account.');
+
+        const connectedAccounts: BankAccount[] = result.accounts.map((account: any) => ({
+          id: `plaid_${account.account_id}`,
+          name: account.official_name || account.name,
+          type: account.type === 'credit'
+            ? 'credit_card'
+            : account.type === 'loan'
+              ? 'loan'
+              : account.subtype === 'savings'
+                ? 'savings'
+                : 'checking',
+          accountNumberLast4: account.mask || undefined,
+          openingBalance: account.current_balance || 0,
+          openingBalanceDate: todayStr(),
+          isPlaidConnected: true,
+          plaidAccountId: account.account_id,
+          plaidItemId: result.item_id,
+          plaidInstitutionName: result.institution_name,
+          createdAt: new Date().toISOString(),
+        }));
+
+        setBankAccounts((previous: BankAccount[]) => {
+          const connectedIds = new Set(connectedAccounts.map(account => account.plaidAccountId));
+          return [...previous.filter(account => !connectedIds.has(account.plaidAccountId)), ...connectedAccounts];
+        });
+        triggerNotification(`Connected ${connectedAccounts.length} account${connectedAccounts.length === 1 ? '' : 's'} through Plaid.`);
+      } catch (error) {
+        triggerNotification(error instanceof Error ? error.message : 'Plaid connection failed.');
+      } finally {
+        setIsConnectingPlaid(false);
+        setLinkToken(null);
+      }
+    },
+    onExit: error => {
+      if (error) triggerNotification(error.display_message || 'Plaid connection was not completed.');
+      setIsConnectingPlaid(false);
+      setLinkToken(null);
+    },
+  });
+
+  React.useEffect(() => {
+    if (linkToken && plaidReady) openPlaid();
+  }, [linkToken, plaidReady, openPlaid]);
+
+  const handleConnectPlaid = async () => {
+    try {
+      setIsConnectingPlaid(true);
+      const response = await fetch('/api/plaid/create-link-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientUserId: businessId || 'ownerslocal-sandbox-owner' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to start Plaid Link.');
+      setLinkToken(result.link_token);
+    } catch (error) {
+      setIsConnectingPlaid(false);
+      triggerNotification(error instanceof Error ? error.message : 'Unable to start Plaid Link.');
+    }
+  };
 
   const handleAdd = () => {
     if (!name.trim() || !openingBalance) {
@@ -1092,7 +1171,6 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
   };
 
   const comingSoon = [
-    "Connect via Plaid",
     "Automatic Bank Sync",
     "Credit Card Sync",
     "Automatic Transaction Import",
@@ -1108,11 +1186,14 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
     <div className="space-y-5">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Bank &amp; Financial Accounts</h3>
-        {canEdit && (
-          <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Add Account
+        {canEdit && <div className="flex gap-2">
+          <button onClick={handleConnectPlaid} disabled={isConnectingPlaid} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
+            {isConnectingPlaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />} Connect Bank
           </button>
-        )}
+          <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
+            <Plus className="w-3.5 h-3.5" /> Add Manually
+          </button>
+        </div>}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -1125,13 +1206,14 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
             </div>
             <p className="text-[9px] text-[#5E7393] font-bold uppercase mt-0.5">{BANK_TYPE_LABELS[b.type]}{b.accountNumberLast4 ? ` •••• ${b.accountNumberLast4}` : ""}</p>
             <p className="text-base font-black text-[#1F3557] mt-1.5">{fmt(b.openingBalance)}</p>
-            <p className="text-[8px] text-[#5E7393] mt-0.5">Manually entered balance as of {b.openingBalanceDate} — updates until bank sync is connected.</p>
+            <p className="text-[8px] text-[#5E7393] mt-0.5">{b.isPlaidConnected ? `Connected through ${b.plaidInstitutionName || 'Plaid'} • Balance checked ${b.openingBalanceDate}` : `Manually entered balance as of ${b.openingBalanceDate}`}</p>
+            {b.isPlaidConnected && <span className="inline-block mt-2 px-2 py-1 bg-emerald-100 text-emerald-700 text-[8px] font-black uppercase rounded-full">Plaid Connected</span>}
           </div>
         ))}
       </div>
 
       <div className="bg-white/60 border border-dashed border-[#9EC8EF] rounded-2xl p-4">
-        <p className="text-[10px] font-black uppercase text-[#5E7393] mb-3">Coming Soon — the architecture already exists, these just need real credentials to enable</p>
+        <p className="text-[10px] font-black uppercase text-[#5E7393] mb-3">Next banking features</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {comingSoon.map(feature => (
             <div key={feature} className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-center opacity-60 grayscale">
