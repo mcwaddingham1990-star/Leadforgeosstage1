@@ -235,7 +235,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   // --- Event Node definition & placement for SVG flow diagram ---
   const EVENT_NODES: EventEngineNode[] = [
     { id: "cust_created", label: "Customer Created", category: "customer", description: "Customer profile added to local database registry.", origin: "Owner's Local OS Portal / Roster Intake", destination: "Leads Processor", changesMade: "Added name, contact, physical dispatch coordinates.", triggeredModules: ["Customers", "Leads"], x: 60, y: 50 },
-    { id: "lead_created", label: "Lead Created", category: "leads", description: "Sales funnel registers a new pipeline prospect.", origin: "Customers Intake Engine", destination: "Estimates Compiler", changesMade: "Initialized closing probability vector & conversion trackers.", triggeredModules: ["Leads", "AI Optimizer"], x: 260, y: 50 },
+    { id: "lead_created", label: "Lead Created", category: "leads", description: "A new sales opportunity was added.", origin: "Customer Intake", destination: "Estimates", changesMade: "Added the lead and started tracking its progress.", triggeredModules: ["Leads", "AI Assistant"], x: 260, y: 50 },
     { id: "est_created", label: "Estimate Created", category: "estimates", description: "Quote or service bid generated.", origin: "Leads AI Analyzer", destination: "Scheduling Dispatcher", changesMade: "Saved price quotes, materials array, and signature hooks.", triggeredModules: ["Estimates", "Revenue Matrix"], x: 460, y: 50 },
     { id: "sched_updated", label: "Schedule Updated", category: "scheduling", description: "Appointment allocated on central scheduling board.", origin: "Estimates Approval Pipeline", destination: "Dispatch Controller", changesMade: "Pinned block on Gantt dispatch layout, reserved the assigned crew.", triggeredModules: ["Scheduling", "Notifications Center"], x: 60, y: 180 },
     { id: "disp_updated", label: "Dispatch Updated", category: "dispatch", description: "Crew allocation instructions pushed to field technician dashboard.", origin: "Scheduling Event Trigger", destination: "Routes Optimizer", changesMade: "Sent dispatch ticket, mobile app coordinates activated.", triggeredModules: ["Dispatch", "Time Clock"], x: 260, y: 180 },
@@ -244,7 +244,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     { id: "rev_updated", label: "Revenue Updated", category: "revenue", description: "Finance engine recalculates direct margins & labor metrics.", origin: "Inventory Depletion Log", destination: "Dashboard KPI Compiler", changesMade: "Pushed invoice approval, verified stripe transaction ledger.", triggeredModules: ["Revenue", "Settings Configuration"], x: 260, y: 310 },
     { id: "dash_updated", label: "Dashboard Updated", category: "dashboard", description: "System dashboard widgets updated with latest cash metrics.", origin: "Revenue Financial Sweep", destination: "Notifications Dispatcher", changesMade: "Refreshed charts, recalculated gross margin gauge.", triggeredModules: ["Dashboard", "AI Business Insights"], x: 460, y: 310 },
     { id: "notif_sent", label: "Notifications Sent", category: "notifications", description: "Multi-channel notification alerts pushed to correct users.", origin: "Dashboard KPI Updates", destination: "AI Context Optimizer", changesMade: "Emailed owner report, text-messaged technician status.", triggeredModules: ["Notifications", "Messages Suite"], x: 160, y: 440 },
-    { id: "ai_context", label: "AI Context Updated", category: "ai", description: "Gemini vector memory refreshed with current operating metrics.", origin: "Notifications Telemetry", destination: "Event Engine Core", changesMade: "Embedded latest pipeline and revenue parameters into local context.", triggeredModules: ["AI Assistant", "Integrations Manager"], x: 360, y: 440 }
+    { id: "ai_context", label: "AI Context Updated", category: "ai", description: "Gemini received the latest business metrics.", origin: "Notifications", destination: "App Data", changesMade: "Added current sales and revenue figures to the AI context.", triggeredModules: ["AI Assistant", "Integrations"], x: 360, y: 440 }
   ];
 
   // --- 2. LIVE EVENT QUEUE DATA STATE ---
@@ -430,7 +430,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     if (signalAnimationActive) return;
     setSignalAnimationActive(true);
     setAnimatedPacketIndex(0);
-    triggerNotification("⚡ Playing Event Engine architecture animation...");
+    triggerNotification("⚡ Showing how updates move through the app...");
 
     const intervals = [800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800];
     let currentIndex = 0;
@@ -525,7 +525,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   Owner Administrative Control Console
                 </h1>
                 <p className="text-xs text-[#BDDDF8] font-medium font-sans">
-                  God Mode Deck. Central Event Engine monitors, real-time telemetry, AI decision logs, and system diagnostics.
+                  Owner-only controls for app activity, AI actions, permissions, and system health.
                 </p>
               </div>
             </div>
@@ -554,7 +554,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
             <button
               onClick={triggerSignalPacketFlow}
               className="flex items-center gap-1.5 px-3 py-2 bg-[#2D4F7F] hover:bg-[#3D69A5] border border-[#4873B0] text-xs font-bold rounded-xl transition-all cursor-pointer text-white"
-              title="Re-run pipeline signals"
+              title="Replay update flow"
             >
               <Play className="w-3.5 h-3.5" />
               <span>Event Engine Monitor</span>
@@ -669,7 +669,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   <span className="animate-pulse">🟢</span> Live Event Engine Visualizer Diagram
                 </h4>
                 <p className="text-[10px] text-slate-400 font-sans mt-0.5">
-                  Animated signal routing deck. Scroll to zoom, double-click on nodes to explore operational telemetry.
+                  See how updates move through the app. Scroll to zoom and double-click an item for details.
                 </p>
               </div>
 
@@ -829,8 +829,8 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
           {/* TELEMETRY DESCRIPTION SIDE CARD */}
           <div className="bg-white rounded-3xl p-6 border border-[#BDDDF8] shadow-sm xl:col-span-4 flex flex-col gap-4 text-left">
             <div>
-              <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Node Telemetry Panel</h4>
-              <p className="text-[10px] text-slate-400 font-sans mt-0.5">Explore how data structures mutate along the Event pipeline.</p>
+              <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Update Details</h4>
+              <p className="text-[10px] text-slate-400 font-sans mt-0.5">See how a change moves through connected areas of the app.</p>
             </div>
 
             {selectedNodeData ? (
@@ -1006,8 +1006,8 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
           <div className="bg-white rounded-3xl p-6 border border-[#BDDDF8] shadow-sm space-y-5">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-[#BDDDF8]/40 pb-3">
               <div>
-                <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Gemini Local Context Controller</h4>
-                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Audit agent learning curves, token expenditures, and decision pipelines.</p>
+                <h4 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider">Gemini Context Settings</h4>
+                <p className="text-[10px] text-slate-400 font-sans mt-0.5">Review AI usage, costs, and recent actions.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
