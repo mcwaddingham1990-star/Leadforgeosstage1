@@ -301,7 +301,7 @@ export const LeadsPage: React.FC = () => {
               Lead Management
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              Sales automation pipeline, incoming opportunities, and acquisition logs
+              Track new opportunities, follow-ups, and sales progress
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
