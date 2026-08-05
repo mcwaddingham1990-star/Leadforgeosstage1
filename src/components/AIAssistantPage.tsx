@@ -115,7 +115,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pageId: "ai_assistant",
-          pageName: "AI Command Center",
+          pageName: "AI Assistant",
           isOwnerOrAdmin: true,
           businessSummary,
           query: "Write a short operational audit report for the business owner covering current pipeline, staffing, and financial activity levels, using only the real figures given above. If a section has no data, say so plainly instead of inventing anything."
@@ -176,10 +176,10 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-              Owner's AI Command Center
+              Owner's AI Assistant
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold">
-              The neural core of Owner's Local OS • Intelligent routing, automations & business diagnostics
+              Ask questions, create reports, and get practical help using your business data
             </p>
           </div>
         </div>
@@ -187,12 +187,12 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
         {/* Quick Snapshot Action */}
         <button
           onClick={() => {
-            if (onTakeSnapshot) onTakeSnapshot("ai_assistant", "AI Assistant Command Center");
+            if (onTakeSnapshot) onTakeSnapshot("ai_assistant", "AI Assistant");
           }}
           className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-xs font-bold text-[#315C9F] flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Capture UI State</span>
+          <span>Save Snapshot</span>
         </button>
       </div>
 
@@ -202,7 +202,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           { id: "command", label: "Conversation History", icon: <History className="w-4 h-4" /> },
           { id: "reports", label: "AI Reports & Audits", icon: <FileText className="w-4 h-4" /> },
           { id: "insights", label: "Business Insights", icon: <BarChart2 className="w-4 h-4" /> },
-          { id: "config", label: "Model Knowledge Configuration", icon: <Database className="w-4 h-4" /> },
+          { id: "config", label: "AI Knowledge", icon: <Database className="w-4 h-4" /> },
           { id: "settings", label: "Global AI Settings", icon: <Settings className="w-4 h-4" /> }
         ].map((tab) => (
           <button
@@ -323,14 +323,14 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           {activeTab === "insights" && (
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="border-b border-[#A9CDEE] pb-3">
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">AI Operations Productivity Telemetry</h3>
+                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">AI Activity</h3>
                 <p className="text-[10.5px] text-slate-500 mt-0.5">Real-time charts plotting model efficiency and automated dispatch metrics.</p>
               </div>
 
               {/* Chart Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-[#9EC8EF]/30 h-64">
-                  <p className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-2 text-left">Daily Optimization Telemetry</p>
+                  <p className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-2 text-left">Today's Usage</p>
                   <ResponsiveContainer width="100%" height="90%">
                     <AreaChart data={chartsData}>
                       <defs>
