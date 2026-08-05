@@ -164,7 +164,7 @@ export const JobsPage: React.FC = () => {
   return <div className="space-y-5 animate-fade-in text-left">
     <div className="rounded-3xl border border-[#9EC8EF] bg-[#C7E3FA] p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div><p className="text-[10px] font-black uppercase tracking-[.2em] text-[#315C9F]">Operations Command Center</p><h2 className="text-xl font-black text-[#1F3557]">Jobs</h2><p className="text-xs font-semibold text-[#5E7393]">One live job record across the Event Engine and every connected module.</p></div>
+        <div><p className="text-[10px] font-black uppercase tracking-[.2em] text-[#315C9F]">Job Management</p><h2 className="text-xl font-black text-[#1F3557]">Jobs</h2><p className="text-xs font-semibold text-[#5E7393]">Manage job details, status, assignments, and materials in one place.</p></div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => navigateToScreen("dispatch")} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2 text-xs font-bold text-[#315C9F]"><Truck className="mr-1 inline h-4 w-4"/>Dispatch</button>
           <button onClick={() => navigateToScreen("routes")} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2 text-xs font-bold text-[#315C9F]"><MapPin className="mr-1 inline h-4 w-4"/>Map</button>
