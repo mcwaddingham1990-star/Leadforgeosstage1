@@ -250,7 +250,7 @@ export const EstimatesPage: React.FC = () => {
               <span>📝</span> Estimates & Bids
             </h2>
             <p className="text-xs text-[#5E7393] font-bold mt-1 uppercase tracking-wider">
-              System quotation customizer, pipeline diagnostic panel & proposal dispatch nodes
+              Create, review, send, and track customer estimates
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -281,7 +281,7 @@ export const EstimatesPage: React.FC = () => {
                   onTakeSnapshot("estimates", "Estimates & Bids", {
                     recordCount: filteredEstimates.length,
                     filters: `Status: ${activeStatusFilter}`,
-                    details: `Estimates pipeline logged. Total open: ${metrics.openEstimates}, Total Revenue Pending: $${metrics.revenuePending.toLocaleString()}`
+                    details: `Estimate summary created. Open estimates: ${metrics.openEstimates}. Pending revenue: $${metrics.revenuePending.toLocaleString()}`
                   })
                 }
                 className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
@@ -585,7 +585,7 @@ export const EstimatesPage: React.FC = () => {
             </span>
             <div>
               <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">
-                AI Estimate Assistant Nodes
+                AI Estimate Tools
               </h3>
               <p className="text-[10px] text-[#5E7393] font-semibold">
                 Predict profit margins, recommend catalog items, and scan cost indices
@@ -671,10 +671,10 @@ export const EstimatesPage: React.FC = () => {
             </span>
             <div>
               <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">
-                Integrated Operational Schema Connectivity Index
+                Connected Features
               </h3>
               <p className="text-[10px] text-[#5E7393] font-semibold">
-                Dynamic pipelines connecting quotation inputs to back-office bookkeeping and field team dispatchers
+                Keep estimates connected with accounting, scheduling, and field teams
               </p>
             </div>
           </div>
