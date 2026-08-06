@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { usePlaidLink } from "react-plaid-link";
+import { PlaidConnectButton } from "./PlaidConnectButton";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
@@ -1068,85 +1068,6 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
   const [type, setType] = useState<BankAccountType>("checking");
   const [last4, setLast4] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [isConnectingPlaid, setIsConnectingPlaid] = useState(false);
-
-  const { open: openPlaid, ready: plaidReady } = usePlaidLink({
-    token: linkToken,
-    onSuccess: async (publicToken, metadata) => {
-      try {
-        setIsConnectingPlaid(true);
-        const response = await fetch('/api/plaid/exchange-public-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            publicToken,
-            institutionName: metadata.institution?.name,
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Unable to connect bank account.');
-
-        const connectedAccounts: BankAccount[] = result.accounts.map((account: any) => ({
-          id: `plaid_${account.account_id}`,
-          name: account.official_name || account.name,
-          type: account.type === 'credit'
-            ? 'credit_card'
-            : account.type === 'loan'
-              ? 'loan'
-              : account.subtype === 'savings'
-                ? 'savings'
-                : 'checking',
-          accountNumberLast4: account.mask || undefined,
-          openingBalance: account.current_balance || 0,
-          openingBalanceDate: todayStr(),
-          isPlaidConnected: true,
-          plaidAccountId: account.account_id,
-          plaidItemId: result.item_id,
-          plaidInstitutionName: result.institution_name,
-          createdAt: new Date().toISOString(),
-        }));
-
-        setBankAccounts((previous: BankAccount[]) => {
-          const connectedIds = new Set(connectedAccounts.map(account => account.plaidAccountId));
-          return [...previous.filter(account => !connectedIds.has(account.plaidAccountId)), ...connectedAccounts];
-        });
-        triggerNotification(`Connected ${connectedAccounts.length} account${connectedAccounts.length === 1 ? '' : 's'} through Plaid.`);
-      } catch (error) {
-        triggerNotification(error instanceof Error ? error.message : 'Plaid connection failed.');
-      } finally {
-        setIsConnectingPlaid(false);
-        setLinkToken(null);
-      }
-    },
-    onExit: error => {
-      if (error) triggerNotification(error.display_message || 'Plaid connection was not completed.');
-      setIsConnectingPlaid(false);
-      setLinkToken(null);
-    },
-  });
-
-  React.useEffect(() => {
-    if (linkToken && plaidReady) openPlaid();
-  }, [linkToken, plaidReady, openPlaid]);
-
-  const handleConnectPlaid = async () => {
-    try {
-      setIsConnectingPlaid(true);
-      const response = await fetch('/api/plaid/create-link-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientUserId: businessId || 'ownerslocal-sandbox-owner' }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Unable to start Plaid Link.');
-      setLinkToken(result.link_token);
-    } catch (error) {
-      setIsConnectingPlaid(false);
-      triggerNotification(error instanceof Error ? error.message : 'Unable to start Plaid Link.');
-    }
-  };
-
   const handleAdd = () => {
     if (!name.trim() || !openingBalance) {
       triggerNotification("Enter an account name and opening balance.");
@@ -1187,9 +1108,7 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Bank &amp; Financial Accounts</h3>
         {canEdit && <div className="flex gap-2">
-          <button onClick={handleConnectPlaid} disabled={isConnectingPlaid} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
-            {isConnectingPlaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />} Connect Bank
-          </button>
+          <PlaidConnectButton />
           <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> Add Manually
           </button>

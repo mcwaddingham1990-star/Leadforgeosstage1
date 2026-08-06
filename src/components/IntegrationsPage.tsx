@@ -43,6 +43,7 @@ import {
 import { SchedulingEvent } from "./SchedulingPage";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
+import { PlaidConnectButton } from "./PlaidConnectButton";
 
 // Let's define interfaces for custom integration items
 export interface Integration {
@@ -1144,6 +1145,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
         {/* TOP BUTTON ACTIONS */}
         <div className="flex flex-wrap items-center gap-2">
+          <PlaidConnectButton />
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="px-3 py-1.5 bg-[#315C9F] text-white hover:bg-[#254A84] rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
