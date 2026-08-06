@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 151415)
-Total output lines: 7390
-
 import React, { useState, useEffect } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
