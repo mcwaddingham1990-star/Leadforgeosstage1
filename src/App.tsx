@@ -2869,9 +2869,9 @@ Access to full financial telemetry is restricted.`;
                     <span
                       style={{
                         right: "3.5%",
-                        bottom: "4%",
+                        bottom: "27%",
+                        fontSize: `${Math.max(6, Math.round(7 * scale))}px`,
                         letterSpacing: "0.08em",
-                        ...getFontSize(9)
                       }}
                       className="absolute font-sans font-semibold text-[#315C9F]/65"
                     >
