@@ -2866,6 +2866,17 @@ Access to full financial telemetry is restricted.`;
                       className="object-contain"
                       referrerPolicy="no-referrer"
                     />
+                    <span
+                      style={{
+                        right: "3.5%",
+                        bottom: "4%",
+                        letterSpacing: "0.08em",
+                        ...getFontSize(9)
+                      }}
+                      className="absolute font-sans font-semibold text-[#315C9F]/65"
+                    >
+                      by Stuffapp
+                    </span>
                   </div>
 
                   {/* CONTINUE WITH GOOGLE BUTTON */}
@@ -6777,6 +6788,15 @@ Access to full financial telemetry is restricted.`;
         )}
 
       </main>
+
+      {!isLoggedIn && (
+        <div
+          aria-label="Created by Stuffapp"
+          className="fixed bottom-3 right-4 z-20 pointer-events-none font-sans text-[10px] sm:text-xs font-semibold tracking-[0.08em] text-[#315C9F]/55"
+        >
+          by Stuffapp
+        </div>
+      )}
 
       {/* CAMERA SHUTTER SNAPSHOT FLASH SIMULATION */}
       {isFlashing && (
