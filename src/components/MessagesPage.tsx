@@ -169,7 +169,20 @@ export const MessagesPage: React.FC = () => {
       const items: Conversation[] = [];
       snapshot.forEach((docSnap) => {
         const { businessId: _, updatedAt: __, ...convData } = docSnap.data();
-        items.push(convData as Conversation);
+        const stored = convData as Partial<Conversation>;
+        items.push({
+          ...stored,
+          id: stored.id || docSnap.id,
+          title: stored.title || "Untitled conversation",
+          lastMessage: stored.lastMessage || "",
+          lastMessageTime: stored.lastMessageTime || "",
+          lastMessageSender: stored.lastMessageSender || "",
+          participants: Array.isArray(stored.participants) ? stored.participants : [],
+          messages: Array.isArray(stored.messages) ? stored.messages : [],
+          unreadCount: Number(stored.unreadCount) || 0,
+          isArchived: Boolean(stored.isArchived),
+          isRead: stored.isRead !== false
+        } as Conversation);
       });
       _setConversations(items);
     });
@@ -651,6 +664,18 @@ export const MessagesPage: React.FC = () => {
     setIsNewGroupModalOpen(false);
     triggerRealTimeNotification(`Created new channel: ${newC.title}`);
   };
+
+  if (!activeConv) {
+    return (
+      <div className="rounded-3xl border border-[#A9CDEE] bg-[#C7E3FB] p-6 text-left shadow-sm">
+        <div className="rounded-2xl border border-[#A9CDEE] bg-[#E3F3FF] p-8 text-center">
+          <MessageSquare className="mx-auto h-8 w-8 text-[#315C9F]" />
+          <h2 className="mt-3 text-base font-extrabold text-[#342D7E]">No conversations yet</h2>
+          <p className="mt-1 text-xs text-slate-500">Your customer and team conversations will appear here after you start one.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">

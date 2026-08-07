@@ -126,8 +126,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Clock In fields
   const [clockInJobId, setClockInJobId] = useState("");
-  const [clockInRoute, setClockInRoute] = useState("Route Alpha");
-  const [clockInVehicle, setClockInVehicle] = useState("Sprinter Van #14");
+  const [clockInRoute, setClockInRoute] = useState("");
+  const [clockInVehicle, setClockInVehicle] = useState("");
 
   // Manual Time fields
   const [manualEmpId, setManualEmpId] = useState("");
@@ -139,8 +139,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [manualHours, setManualHours] = useState("8.0");
   const [manualTimeStr, setManualTimeStr] = useState("08:00 AM");
   const [manualJobId, setManualJobId] = useState("");
-  const [manualRoute, setManualRoute] = useState("Route Alpha");
-  const [manualVehicle, setManualVehicle] = useState("Sprinter Van #14");
+  const [manualRoute, setManualRoute] = useState("");
+  const [manualVehicle, setManualVehicle] = useState("");
 
   // Edit Time fields
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -1228,33 +1228,25 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               {/* Route selection */}
               <div className="space-y-1">
                 <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Dispatch Route</label>
-                <select
+                <input
+                  type="text"
                   value={clockInRoute}
                   onChange={(e) => setClockInRoute(e.target.value)}
+                  placeholder="Optional route"
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-                >
-                  <option value="Route Alpha">Route Alpha (Seattle Downtown)</option>
-                  <option value="Route Beta">Route Beta (Bellevue East)</option>
-                  <option value="Route Gamma">Route Gamma (Tacoma South)</option>
-                  <option value="Route Delta">Route Delta (Everett North)</option>
-                  <option value="None">None / Office Only</option>
-                </select>
+                />
               </div>
 
               {/* Vehicle selection */}
               <div className="space-y-1">
                 <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Service Vehicle</label>
-                <select
+                <input
+                  type="text"
                   value={clockInVehicle}
                   onChange={(e) => setClockInVehicle(e.target.value)}
+                  placeholder="Optional vehicle"
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-                >
-                  <option value="Sprinter Van #14">Sprinter Van #14</option>
-                  <option value="Service Truck #03">Service Truck #03</option>
-                  <option value="Flatbed Truck #07">Flatbed Truck #07</option>
-                  <option value="Transit Van #09">Transit Van #09</option>
-                  <option value="None">No Corporate Vehicle (Personal)</option>
-                </select>
+                />
               </div>
 
               {/* Real GPS captured via the browser's Geolocation API at the moment of clock-in/out */}
