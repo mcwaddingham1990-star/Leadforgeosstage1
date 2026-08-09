@@ -166,8 +166,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Real GPS via the browser Geolocation API — no fabricated coordinates. Falls back to an
   // honest "unavailable" string (not a fake location) when unsupported/denied/timed out.
+  // The `timeout` option only bounds the browser's own position-acquisition attempt — some
+  // mobile browsers/WebViews never invoke either callback if the permission prompt itself
+  // stalls, which would hang the clock-in/out button (stuck on punchPending) forever. The
+  // outer race guarantees this always resolves.
   const getCurrentGPSString = (): Promise<string> => {
-    return new Promise((resolve) => {
+    const geolocationAttempt = new Promise<string>((resolve) => {
       if (!navigator.geolocation) {
         resolve("Location unavailable (not supported by this browser)");
         return;
@@ -186,6 +190,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         { timeout: 8000, enableHighAccuracy: true }
       );
     });
+    const hardTimeout = new Promise<string>((resolve) => {
+      setTimeout(() => resolve("Location unavailable (timed out)"), 9000);
+    });
+    return Promise.race([geolocationAttempt, hardTimeout]);
   };
 
   // Is current user allowed to edit records? (Owner, Manager, Office, Payroll)
@@ -407,7 +415,11 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const logsShowActiveShift = !!latestCurrentUserLog && latestCurrentUserLog.type !== "Clock Out";
 
   const performClockIn = async (jobId: string, route: string, vehicle: string, verifier = verifiedBy) => {
-    if (!loggedInUser?.email || !businessId || punchPending) return;
+    if (punchPending) return;
+    if (!loggedInUser?.email || !businessId) {
+      triggerLocalNotification("Your session isn't ready yet — please reload and try again.");
+      return;
+    }
     if (logsShowActiveShift) {
       triggerLocalNotification("You are already clocked in.");
       setIsClockedIn(true);
@@ -467,7 +479,11 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Action: Clock Out
   const performClockOut = async (verifier = verifiedBy) => {
-    if (!loggedInUser?.email || !businessId || punchPending) return;
+    if (punchPending) return;
+    if (!loggedInUser?.email || !businessId) {
+      triggerLocalNotification("Your session isn't ready yet — please reload and try again.");
+      return;
+    }
     if (!logsShowActiveShift) {
       triggerLocalNotification("No active shift exists to clock out.");
       setIsClockedIn(false);
@@ -724,10 +740,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               <button
                 onClick={handleClockOut}
                 disabled={punchPending}
-                className="px-4.5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                className="px-4.5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-60 disabled:cursor-wait"
               >
                 <X className="w-4 h-4" />
-                Clock Out
+                {punchPending ? "Clocking Out…" : "Clock Out"}
               </button>
             )}
 
@@ -1394,9 +1410,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               </button>
               <button
                 onClick={() => handleClockIn(clockInJobId, clockInRoute, clockInVehicle)}
-                className="px-4.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl text-xs uppercase shadow-xs cursor-pointer"
+                disabled={punchPending}
+                className="px-4.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl text-xs uppercase shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                Confirm Clock In
+                {punchPending ? "Clocking In…" : "Confirm Clock In"}
               </button>
             </div>
           </div>
