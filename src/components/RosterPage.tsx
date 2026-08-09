@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from "react";
-import { doc, setDoc } from "firebase/firestore";
+import React, { useState, useMemo, useEffect } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { MODULE_CATALOG } from "./RolePermissionEditorModal";
-import { defaultGranularFromModuleList } from "../types/permissions";
+import { defaultGranularFromModuleList, GranularPermissions, getPermissionFlags, PermissionAction } from "../types/permissions";
 import { Search, UserPlus, Edit3, X, Copy, Shield, Phone, Mail, MapPin } from "lucide-react";
 import type { EmployeeRecord } from "../types/domain";
 
@@ -14,6 +14,38 @@ function genInviteCode(role: string): string {
   const cleanRolePrefix = role.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || "STAFF";
   return `${cleanRolePrefix}-${randomStr}`;
 }
+
+type InviteRole = { id: string; name: string; permissions: string[]; modulePermissions: GranularPermissions; isCustom?: boolean };
+
+const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
+  ["owner", "Owner", MODULE_CATALOG.map(m => m.id)],
+  ["general_manager", "General Manager", ["customers","leads","estimates","jobs","scheduling","dispatch","routes","inventory","documents","messages","timeclock","ai_assistant","settings"]],
+  ["office_manager", "Office Manager", ["customers","leads","estimates","invoices","scheduling","documents","pdf_editor","esign","messages","reports","settings"]],
+  ["operations_manager", "Operations Manager", ["scheduling","dispatch","routes","jobs","inventory","documents","messages"]],
+  ["dispatcher", "Dispatcher", ["dispatch","routes","scheduling","jobs","customers"]],
+  ["scheduler", "Scheduler", ["scheduling","customers","jobs","messages"]],
+  ["sales_manager", "Sales Manager", ["customers","leads","estimates","messages","ai_assistant"]],
+  ["sales_representative", "Sales Representative", ["customers","leads","estimates","messages","ai_assistant"]],
+  ["estimator", "Estimator", ["customers","leads","estimates","documents","pdf_editor","esign"]],
+  ["project_manager", "Project Manager", ["customers","scheduling","dispatch","routes","jobs","inventory","documents","messages"]],
+  ["field_supervisor", "Field Supervisor", ["jobs","scheduling","dispatch","routes","inventory","documents","messages"]],
+  ["technician", "Technician", ["jobs","timeclock","messages","documents"]],
+  ["apprentice", "Apprentice", ["jobs","timeclock","messages"]],
+  ["installer", "Installer", ["jobs","timeclock","inventory","documents","messages"]],
+  ["driver", "Driver", ["routes","jobs","timeclock","messages"]],
+  ["warehouse_manager", "Warehouse / Inventory Manager", ["inventory","documents","messages"]],
+  ["purchasing_manager", "Purchasing Manager", ["inventory","documents"]],
+  ["customer_service", "Customer Service Representative", ["customers","leads","scheduling","messages"]],
+  ["marketing_manager", "Marketing Manager", ["customers","leads","marketing","ai_assistant"]],
+  ["accountant", "Accountant / Bookkeeper", ["customers","estimates","invoices","accounting","reports"]],
+  ["hr_manager", "HR Manager", ["documents","timeclock"]],
+  ["safety_manager", "Safety Manager", ["jobs","documents"]],
+  ["it_administrator", "IT Administrator", MODULE_CATALOG.map(m => m.id)]
+];
+
+const DEFAULT_INVITE_ROLES: InviteRole[] = ONBOARDING_ROLE_TEMPLATES.map(([id, name, permissions]) => ({
+  id, name, permissions, modulePermissions: defaultGranularFromModuleList(permissions, id === "owner" ? "delete" : "edit")
+}));
 
 import { StructuredAddressFields } from "./StructuredAddressFields";
 
@@ -25,8 +57,43 @@ export const RosterPage: React.FC = () => {
   const [search, setSearch] = useState("");
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
   const [isInviting, setIsInviting] = useState(false);
-  const [inviteRole, setInviteRole] = useState("Technician");
+  const [availableRoles, setAvailableRoles] = useState<InviteRole[]>(DEFAULT_INVITE_ROLES);
+  const [inviteRoleId, setInviteRoleId] = useState("technician");
+  const [invitePermissions, setInvitePermissions] = useState<GranularPermissions>(DEFAULT_INVITE_ROLES.find(r => r.id === "technician")!.modulePermissions);
+  const [customRoleName, setCustomRoleName] = useState("");
+  const [customRoleReady, setCustomRoleReady] = useState(false);
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!businessId) return;
+    getDoc(doc(db, "business_profiles", businessId)).then(snap => {
+      const saved = snap.data()?.selectedRoles as InviteRole[] | undefined;
+      if (!saved?.length) return;
+      const merged = [...DEFAULT_INVITE_ROLES];
+      for (const role of saved) {
+        const normalized = { ...role, modulePermissions: role.modulePermissions || defaultGranularFromModuleList(role.permissions || [], "edit") };
+        const index = merged.findIndex(r => r.id === normalized.id);
+        if (index >= 0) merged[index] = normalized; else merged.push(normalized);
+      }
+      setAvailableRoles(merged);
+    }).catch(err => console.error("Couldn't load onboarding roles:", err));
+  }, [businessId]);
+
+  const selectedInviteRole = availableRoles.find(r => r.id === inviteRoleId);
+  const chooseRole = (roleId: string) => {
+    setInviteRoleId(roleId);
+    setCustomRoleName("");
+    setCustomRoleReady(false);
+    const role = availableRoles.find(r => r.id === roleId);
+    setInvitePermissions(role ? structuredClone(role.modulePermissions) : {});
+  };
+
+  const togglePermission = (moduleId: string, action: PermissionAction) => {
+    setInvitePermissions(prev => {
+      const flags = getPermissionFlags(prev, moduleId);
+      return { ...prev, [moduleId]: { ...flags, [action]: !flags[action] } };
+    });
+  };
 
   const statusFor = (email: string): "Clocked In" | "On Break" | "Off Duty" | "Not Clocked In Yet" => {
     const logs = timeClockLogs.filter(l => l.employeeEmail === email);
@@ -60,19 +127,25 @@ export const RosterPage: React.FC = () => {
       triggerNotification("Missing business account — please sign in again.");
       return;
     }
-    const code = genInviteCode(inviteRole);
+    const roleName = inviteRoleId === "__custom__" ? customRoleName.trim() : selectedInviteRole?.name;
+    if (!roleName) { triggerNotification("Enter a name for the custom role."); return; }
+    const code = genInviteCode(roleName);
+    const permissions = MODULE_CATALOG.filter(m => {
+      const flags = getPermissionFlags(invitePermissions, m.id);
+      return flags.view || flags.edit || flags.delete;
+    }).map(m => m.id);
     try {
       await setDoc(doc(db, "employee_invites", code), {
         code,
-        role: inviteRole,
+        role: roleName,
         businessEmail: businessId,
-        permissions: MODULE_CATALOG.map(m => m.id),
-        granularPermissions: defaultGranularFromModuleList(MODULE_CATALOG.map(m => m.id), "view"),
+        permissions,
+        granularPermissions: invitePermissions,
         status: "pending",
         createdAt: new Date().toISOString()
       });
       setGeneratedInviteCode(code);
-      triggerNotification(`Invite code generated for ${inviteRole}.`);
+      triggerNotification(`Invite code generated for ${roleName}.`);
     } catch (err) {
       console.error("Error generating invite:", err);
       triggerNotification("Couldn't generate an invite code — check your connection and try again.");
@@ -216,12 +289,35 @@ export const RosterPage: React.FC = () => {
             </div>
             {!generatedInviteCode ? (
               <>
-                <label className="text-[9px] uppercase text-slate-400 font-bold">Role</label>
-                <input value={inviteRole} onChange={e => setInviteRole(e.target.value)} placeholder="e.g. Technician" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
-                <p className="text-[10px] text-slate-400 leading-relaxed">
-                  Generates a real invite code with a safe view-only default across every module — fine-tune exact access afterward in Settings → Roles.
-                </p>
-                <button onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2">Generate Invite Code</button>
+                <label className="text-[9px] uppercase text-slate-400 font-bold">Choose position / role</label>
+                <select value={inviteRoleId} onChange={e => chooseRole(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white">
+                  {availableRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+                  <option value="__custom__">+ Add Custom Role</option>
+                </select>
+                {inviteRoleId === "__custom__" && (
+                  <div className="flex gap-2">
+                    <input autoFocus value={customRoleName} onChange={e => { setCustomRoleName(e.target.value); setCustomRoleReady(false); }} placeholder="Enter custom role name" className="flex-1 border border-slate-200 rounded-xl px-3 py-2" />
+                    <button type="button" disabled={!customRoleName.trim()} onClick={() => setCustomRoleReady(true)} className="px-4 rounded-xl bg-[#315C9F] text-white font-bold disabled:opacity-40">OK</button>
+                  </div>
+                )}
+                {(inviteRoleId !== "__custom__" || customRoleReady) && <details className="border border-slate-200 rounded-xl overflow-hidden" open>
+                  <summary className="px-3 py-2 bg-slate-50 font-bold text-[#1F3557] cursor-pointer">Choose permissions</summary>
+                  <div className="max-h-[260px] overflow-y-auto p-2 space-y-1.5">
+                    {MODULE_CATALOG.map(mod => {
+                      const flags = getPermissionFlags(invitePermissions, mod.id);
+                      return <div key={mod.id} className="rounded-lg border border-slate-100 p-2">
+                        <div className="font-bold text-[10px] text-[#1F3557] mb-1.5">{mod.label}</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
+                            <input type="checkbox" checked={flags[action]} onChange={() => togglePermission(mod.id, action)} />
+                            {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
+                          </label>)}
+                        </div>
+                      </div>;
+                    })}
+                  </div>
+                </details>}
+                <button disabled={inviteRoleId === "__custom__" && !customRoleReady} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
               </>
             ) : (
               <>
