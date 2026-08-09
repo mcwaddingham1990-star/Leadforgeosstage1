@@ -1,5 +1,5 @@
-import { useEffect, useState, Dispatch, SetStateAction } from "react";
-import { syncArrayToFirestore, subscribeToCollection } from "../lib/firestoreService";
+import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
+import { syncArrayToFirestore, subscribeToCollection, fetchCollectionFromServer } from "../lib/firestoreService";
 import { emitCollectionEvent } from "../lib/eventBus";
 import { db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -21,8 +21,10 @@ export function useFirestoreCollection<T extends WithId>(
   collectionName: string,
   businessId: string | undefined,
   options?: { normalize?: (item: T) => T }
-): [T[], Dispatch<SetStateAction<T[]>>] {
+): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
   const [items, _setItems] = useState<T[]>([]);
+  const collectionItemsRef = useRef<T[]>([]);
+  const compatibilityItemsRef = useRef<T[]>([]);
 
   const setItems: Dispatch<SetStateAction<T[]>> = (value) => {
     _setItems((prev) => {
@@ -40,22 +42,20 @@ export function useFirestoreCollection<T extends WithId>(
       _setItems([]);
       return;
     }
-    let collectionItems: T[] = [];
-    let compatibilityItems: T[] = [];
     const publish = () => {
       const merged = new Map<string | undefined, T>();
-      compatibilityItems.forEach(item => merged.set(item.id, item));
-      collectionItems.forEach(item => merged.set(item.id, item));
+      compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
+      collectionItemsRef.current.forEach(item => merged.set(item.id, item));
       _setItems([...merged.values()]);
     };
     const unsubscribe = subscribeToCollection(collectionName, businessId, (docs) => {
-      collectionItems = docs as T[];
+      collectionItemsRef.current = docs as T[];
       publish();
     }, collectionName === "time_clock_logs" ? () => publish() : undefined);
     const unsubscribeCompatibility = collectionName === "time_clock_logs"
       ? onSnapshot(doc(db, "business_profiles", businessId), snapshot => {
           const stored = snapshot.data()?.timeClockLogs || {};
-          compatibilityItems = Object.values(stored).map((item: any) => {
+          compatibilityItemsRef.current = Object.values(stored).map((item: any) => {
             const { businessId: _, updatedAt: __, ...uiData } = item;
             return uiData as T;
           });
@@ -69,7 +69,21 @@ export function useFirestoreCollection<T extends WithId>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, businessId]);
 
-  return [items, setItems];
+  // A live onSnapshot listener that hits a permission-denied/unavailable
+  // error terminates for good rather than retrying — this gives the UI a
+  // way to recover with a genuine server read instead of a listener that's
+  // already dead, without triggering the two-way sync-to-Firestore writes
+  // that the returned setItems performs.
+  const refresh = async () => {
+    if (!businessId) return;
+    collectionItemsRef.current = (await fetchCollectionFromServer(collectionName, businessId)) as T[];
+    const merged = new Map<string | undefined, T>();
+    compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
+    collectionItemsRef.current.forEach(item => merged.set(item.id, item));
+    _setItems([...merged.values()]);
+  };
+
+  return [items, setItems, refresh];
 }
 
 function emitDiffEvents<T extends WithId>(collection: string, prev: T[], next: T[]): void {

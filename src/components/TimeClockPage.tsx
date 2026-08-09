@@ -101,7 +101,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     schedulingEvents: events,
     employees: employeeRecords,
     timeClockLogs,
-    setTimeClockLogs
+    setTimeClockLogs,
+    refreshTimeClockLogs,
+    refreshEmployees
   } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -135,6 +137,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedBy, setVerifiedBy] = useState<{ email: string; role: string } | null>(null);
   const [punchPending, setPunchPending] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Clock In fields
   const [clockInJobId, setClockInJobId] = useState("");
@@ -304,6 +307,23 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     setActiveSummaryFilter("All");
     if (logOperationalEvent) {
       logOperationalEvent("Filters Reset", "All time clock search queries and dropdown filters have been cleared", "🔄");
+    }
+  };
+
+  // Pulls a fresh server read of punch logs and roster data. The realtime
+  // listeners that normally keep this page current don't retry after a
+  // permission/connectivity error, so this is the recovery path when the
+  // dashboard stops reflecting new punches.
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refreshTimeClockLogs(), refreshEmployees()]);
+      triggerLocalNotification("Time clock data refreshed");
+    } catch (error) {
+      triggerLocalNotification(error instanceof Error ? error.message : "Refresh failed.");
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -691,6 +711,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               <button
                 onClick={() => {
                   setClockInJobId("");
+                  setClockInRoute("");
+                  setClockInVehicle("");
                   setShowClockInModal(true);
                 }}
                 className="px-4.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
@@ -748,11 +770,15 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             </button>
 
             <button
-              onClick={handleResetFilters}
-              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
-              title="Refresh time logs"
+              onClick={() => {
+                void handleRefresh();
+                handleResetFilters();
+              }}
+              disabled={isRefreshing}
+              className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-wait"
+              title="Refresh time logs from the server"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </button>
           </div>
@@ -1312,45 +1338,41 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             </div>
 
             <div className="space-y-3 text-xs">
-              
-              {/* Job selection */}
+
+              {/* Wage — read-only, sourced from the employee's roster record, never editable here */}
               <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Job Duty</label>
-                <select
-                  value={clockInJobId}
-                  onChange={(e) => setClockInJobId(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-                >
-                  <option value="">General Office / No Specific Job</option>
-                  {activeJobs.map(j => (
-                    <option key={j.id} value={j.id}>{j.eventType} for {j.customer} ({j.startTime} - {j.date})</option>
-                  ))}
-                </select>
+                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Wage</label>
+                <div className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-slate-700">
+                  ${(currentEmployeeRecord?.hourlyRate ?? 0).toFixed(2)}/hr
+                </div>
               </div>
 
-              {/* Route selection */}
-              <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Dispatch Route</label>
-                <input
-                  type="text"
-                  value={clockInRoute}
-                  onChange={(e) => setClockInRoute(e.target.value)}
-                  placeholder="Optional route"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-                />
-              </div>
+              {/* Route/vehicle only apply to the Driver role */}
+              {activeRole === "Driver" && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Dispatch Route</label>
+                    <input
+                      type="text"
+                      value={clockInRoute}
+                      onChange={(e) => setClockInRoute(e.target.value)}
+                      placeholder="Optional route"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
+                    />
+                  </div>
 
-              {/* Vehicle selection */}
-              <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Service Vehicle</label>
-                <input
-                  type="text"
-                  value={clockInVehicle}
-                  onChange={(e) => setClockInVehicle(e.target.value)}
-                  placeholder="Optional vehicle"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-                />
-              </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Assigned Service Vehicle</label>
+                    <input
+                      type="text"
+                      value={clockInVehicle}
+                      onChange={(e) => setClockInVehicle(e.target.value)}
+                      placeholder="Optional vehicle"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Real GPS captured via the browser's Geolocation API at the moment of clock-in/out */}
               <div className="p-3 bg-[#E3F3FF] rounded-xl border border-[#A9CDEE] text-[10.5px] leading-tight space-y-1">

@@ -926,8 +926,8 @@ export default function App() {
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
-  const [employees, setEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
-  const [timeClockLogs, setTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
+  const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
+  const [timeClockLogs, setTimeClockLogs, refreshTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
   const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
   const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
   const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
@@ -2809,8 +2809,10 @@ Access to full financial telemetry is restricted.`;
     completedJobsRevenue,
     employees,
     setEmployees,
+    refreshEmployees,
     timeClockLogs,
     setTimeClockLogs,
+    refreshTimeClockLogs,
     transactions,
     setTransactions,
     accounts,
