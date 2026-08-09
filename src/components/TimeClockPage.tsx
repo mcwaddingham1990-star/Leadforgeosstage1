@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 import { TimeClockLog } from "../types/domain";
+import { clockInTransaction, clockOutTransaction } from "../lib/timeClockService";
 
 export interface TimeLog {
   id: string;
@@ -133,6 +134,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [verificationError, setVerificationError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifiedBy, setVerifiedBy] = useState<{ email: string; role: string } | null>(null);
+  const [punchPending, setPunchPending] = useState(false);
 
   // Clock In fields
   const [clockInJobId, setClockInJobId] = useState("");
@@ -377,20 +379,27 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   // Action: Clock In
   const currentEmployeeRecord = employeeRecords.find(employee => employee.email === loggedInUser?.email);
   const requiresVerification = !!loggedInUser?.isEmployee && !!currentEmployeeRecord?.requireTimeClockVerification;
+  const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
+  const currentUserLogs = timeClockLogs
+    .filter(log => log.employeeEmail === loggedInUser?.email)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  const latestCurrentUserLog = currentUserLogs[currentUserLogs.length - 1];
+  const logsShowActiveShift = !!latestCurrentUserLog && latestCurrentUserLog.type !== "Clock Out";
 
   const performClockIn = async (jobId: string, route: string, vehicle: string, verifier = verifiedBy) => {
-    if (!loggedInUser?.email) return;
+    if (!loggedInUser?.email || !businessId || punchPending) return;
+    if (logsShowActiveShift) {
+      triggerLocalNotification("You are already clocked in.");
+      setIsClockedIn(true);
+      return;
+    }
+    setPunchPending(true);
     const { timeStr, dateStr, iso } = nowStamp();
-    const gps = await getCurrentGPSString();
-
-    setIsClockedIn(true);
-    setClockInTime(timeStr);
-    setClockInDuration(0);
-
-    const userName = loggedInUser?.name || "Unknown User";
-    const selectedJob = activeJobs.find(j => j.id === jobId);
-
-    setTimeClockLogs(prev => [...prev, {
+    try {
+      const gps = await getCurrentGPSString();
+      const userName = loggedInUser?.name || "Unknown User";
+      const selectedJob = activeJobs.find(j => j.id === jobId);
+      const log: TimeClockLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       employeeEmail: loggedInUser.email,
       employeeName: userName,
@@ -405,17 +414,26 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       vehicle: vehicle || undefined,
       verifiedBy: verifier?.email,
       verifierRole: verifier?.role
-    }]);
+      };
+      await clockInTransaction(businessId, log);
+      setIsClockedIn(true);
+      setClockInTime(timeStr);
+      setClockInDuration(0);
 
     // Update shared Event Engine (create framework action / log event)
-    if (logOperationalEvent) {
-      logOperationalEvent("Clocked In", `${userName} punched in to shift. Assigned: ${route}, vehicle ${vehicle}.`, "⏱️");
-    }
+      if (logOperationalEvent) {
+        logOperationalEvent("Clocked In", `${userName} punched in to shift. Assigned: ${route}, vehicle ${vehicle}.`, "⏱️");
+      }
 
     // Trigger notification
-    triggerLocalNotification(`Punched in successfully at ${timeStr}`);
-    setShowClockInModal(false);
-    setVerifiedBy(null);
+      triggerLocalNotification(`Punched in successfully at ${timeStr}`);
+      setShowClockInModal(false);
+      setVerifiedBy(null);
+    } catch (error) {
+      triggerLocalNotification(error instanceof Error ? error.message : "Clock-in could not be saved.");
+    } finally {
+      setPunchPending(false);
+    }
   };
 
   const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
@@ -429,12 +447,18 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Action: Clock Out
   const performClockOut = async (verifier = verifiedBy) => {
-    if (!loggedInUser?.email) return;
+    if (!loggedInUser?.email || !businessId || punchPending) return;
+    if (!logsShowActiveShift) {
+      triggerLocalNotification("No active shift exists to clock out.");
+      setIsClockedIn(false);
+      return;
+    }
+    setPunchPending(true);
     const { timeStr, dateStr, iso } = nowStamp();
-    const gps = await getCurrentGPSString();
-    const userName = loggedInUser?.name || "Unknown User";
-
-    setTimeClockLogs(prev => [...prev, {
+    try {
+      const gps = await getCurrentGPSString();
+      const userName = loggedInUser?.name || "Unknown User";
+      const log: TimeClockLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       employeeEmail: loggedInUser.email,
       employeeName: userName,
@@ -445,17 +469,23 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       gps,
       verifiedBy: verifier?.email,
       verifierRole: verifier?.role
-    }]);
+      };
+      await clockOutTransaction(businessId, log, logsShowActiveShift);
 
-    setIsClockedIn(false);
-    setClockInTime(null);
-    setClockInDuration(0);
+      setIsClockedIn(false);
+      setClockInTime(null);
+      setClockInDuration(0);
 
-    if (logOperationalEvent) {
-      logOperationalEvent("Clocked Out", `${userName} punched out of shift safely. Completed operational telemetry.`, "🚪");
+      if (logOperationalEvent) {
+        logOperationalEvent("Clocked Out", `${userName} punched out of shift safely. Completed operational telemetry.`, "🚪");
+      }
+      triggerLocalNotification(`Punched out successfully at ${timeStr}`);
+      setVerifiedBy(null);
+    } catch (error) {
+      triggerLocalNotification(error instanceof Error ? error.message : "Clock-out could not be saved.");
+    } finally {
+      setPunchPending(false);
     }
-    triggerLocalNotification(`Punched out successfully at ${timeStr}`);
-    setVerifiedBy(null);
   };
 
   const handleClockOut = async () => {
@@ -671,6 +701,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             ) : (
               <button
                 onClick={handleClockOut}
+                disabled={punchPending}
                 className="px-4.5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
               >
                 <X className="w-4 h-4" />

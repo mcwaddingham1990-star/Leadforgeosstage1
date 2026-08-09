@@ -92,5 +92,17 @@ service cloud.firestore {
       allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
+
+    // Time punches are permanent company records. active_shifts is the
+    // transactional lock that makes an unmatched clock-in company-wide and
+    // prevents a second clock-out, even from another device.
+    match /time_clock_logs/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /active_shifts/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
   }
 }

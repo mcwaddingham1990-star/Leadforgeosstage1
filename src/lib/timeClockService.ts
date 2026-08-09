@@ -1,0 +1,72 @@
+import { deleteDoc, doc, runTransaction } from "firebase/firestore";
+import { db } from "../firebase";
+import { TimeClockLog } from "../types/domain";
+
+const activeShiftId = (businessId: string, employeeEmail: string) =>
+  encodeURIComponent(`${businessId}::${employeeEmail.toLowerCase()}`);
+
+const persistedLog = (businessId: string, log: TimeClockLog) =>
+  Object.fromEntries(
+    Object.entries({ ...log, businessId, updatedAt: log.timestamp })
+      .filter(([, value]) => value !== undefined)
+  );
+
+export async function clockInTransaction(businessId: string, log: TimeClockLog): Promise<void> {
+  const activeRef = doc(db, "active_shifts", activeShiftId(businessId, log.employeeEmail));
+  const logRef = doc(db, "time_clock_logs", log.id);
+
+  await runTransaction(db, async transaction => {
+    const active = await transaction.get(activeRef);
+    if (active.exists()) throw new Error("This employee is already clocked in.");
+
+    transaction.set(activeRef, {
+      businessId,
+      employeeEmail: log.employeeEmail,
+      employeeName: log.employeeName,
+      clockInLogId: log.id,
+      clockedInAt: log.timestamp,
+      updatedAt: log.timestamp
+    });
+    transaction.set(logRef, persistedLog(businessId, log));
+  });
+}
+
+export async function clockOutTransaction(
+  businessId: string,
+  log: TimeClockLog,
+  legacyLogsShowActive: boolean
+): Promise<void> {
+  const activeRef = doc(db, "active_shifts", activeShiftId(businessId, log.employeeEmail));
+
+  // Older active shifts predate active_shifts. Claim one exactly once so the
+  // following transaction still gives duplicate clock-outs backend protection.
+  if (legacyLogsShowActive) {
+    await runTransaction(db, async transaction => {
+      const active = await transaction.get(activeRef);
+      if (!active.exists()) {
+        transaction.set(activeRef, {
+          businessId,
+          employeeEmail: log.employeeEmail,
+          employeeName: log.employeeName,
+          migratedFromLogs: true,
+          updatedAt: log.timestamp
+        });
+      }
+    });
+  }
+
+  const logRef = doc(db, "time_clock_logs", log.id);
+  await runTransaction(db, async transaction => {
+    const active = await transaction.get(activeRef);
+    if (!active.exists()) throw new Error("No active shift exists to clock out.");
+
+    transaction.set(logRef, persistedLog(businessId, log));
+    transaction.delete(activeRef);
+  });
+}
+
+// Kept separate for administrative repair tools that may need to clear an
+// orphaned active marker after deleting/correcting its source punch.
+export async function clearActiveShift(businessId: string, employeeEmail: string): Promise<void> {
+  await deleteDoc(doc(db, "active_shifts", activeShiftId(businessId, employeeEmail)));
+}
