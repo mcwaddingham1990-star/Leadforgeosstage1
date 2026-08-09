@@ -131,7 +131,8 @@ export async function syncArrayToFirestore(
 export function subscribeToCollection(
   collectionName: string,
   businessId: string,
-  onUpdate: (data: any[]) => void
+  onUpdate: (data: any[]) => void,
+  onError?: (error: unknown) => void
 ) {
   const q = query(collection(db, collectionName), where("businessId", "==", businessId));
   
@@ -148,6 +149,10 @@ export function subscribeToCollection(
       onUpdate(items);
     },
     (error) => {
+      if (onError) {
+        onError(error);
+        return;
+      }
       handleFirestoreError(error, OperationType.LIST, collectionName);
     }
   );

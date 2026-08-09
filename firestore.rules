@@ -104,5 +104,8 @@ service cloud.firestore {
       allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
       allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
+    match /timeclock_states/{docId} {
+      allow read, write: if isAuthenticated() && request.auth.token.email == docId;
+    }
   }
 }

@@ -15,20 +15,25 @@ export async function clockInTransaction(businessId: string, log: TimeClockLog):
   const activeRef = doc(db, "active_shifts", activeShiftId(businessId, log.employeeEmail));
   const logRef = doc(db, "time_clock_logs", log.id);
 
-  await runTransaction(db, async transaction => {
-    const active = await transaction.get(activeRef);
-    if (active.exists()) throw new Error("This employee is already clocked in.");
+  try {
+    await runTransaction(db, async transaction => {
+      const active = await transaction.get(activeRef);
+      if (active.exists()) throw new Error("This employee is already clocked in.");
 
-    transaction.set(activeRef, {
-      businessId,
-      employeeEmail: log.employeeEmail,
-      employeeName: log.employeeName,
-      clockInLogId: log.id,
-      clockedInAt: log.timestamp,
-      updatedAt: log.timestamp
+      transaction.set(activeRef, {
+        businessId,
+        employeeEmail: log.employeeEmail,
+        employeeName: log.employeeName,
+        clockInLogId: log.id,
+        clockedInAt: log.timestamp,
+        updatedAt: log.timestamp
+      });
+      transaction.set(logRef, persistedLog(businessId, log));
     });
-    transaction.set(logRef, persistedLog(businessId, log));
-  });
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+    await clockInViaBusinessProfile(businessId, log);
+  }
 }
 
 export async function clockOutTransaction(
@@ -56,12 +61,58 @@ export async function clockOutTransaction(
   }
 
   const logRef = doc(db, "time_clock_logs", log.id);
-  await runTransaction(db, async transaction => {
-    const active = await transaction.get(activeRef);
-    if (!active.exists()) throw new Error("No active shift exists to clock out.");
+  try {
+    await runTransaction(db, async transaction => {
+      const active = await transaction.get(activeRef);
+      if (!active.exists()) throw new Error("No active shift exists to clock out.");
 
-    transaction.set(logRef, persistedLog(businessId, log));
-    transaction.delete(activeRef);
+      transaction.set(logRef, persistedLog(businessId, log));
+      transaction.delete(activeRef);
+    });
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+    await clockOutViaBusinessProfile(businessId, log, legacyLogsShowActive);
+  }
+}
+
+const isPermissionError = (error: unknown) =>
+  typeof error === "object" && error !== null &&
+  "code" in error && String((error as { code?: unknown }).code).includes("permission-denied");
+
+// Compatibility storage for projects where the web app has deployed before
+// the new collection rules. Business-profile access already follows company
+// membership, so punches remain shared across devices instead of failing.
+async function clockInViaBusinessProfile(businessId: string, log: TimeClockLog): Promise<void> {
+  const profileRef = doc(db, "business_profiles", businessId);
+  const key = encodeURIComponent(log.employeeEmail.toLowerCase());
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(profileRef);
+    const data = snapshot.data() || {};
+    const active = { ...(data.timeClockActiveShifts || {}) };
+    if (active[key]) throw new Error("This employee is already clocked in.");
+    active[key] = { employeeEmail: log.employeeEmail, employeeName: log.employeeName, clockInLogId: log.id, clockedInAt: log.timestamp };
+    transaction.set(profileRef, {
+      timeClockActiveShifts: active,
+      timeClockLogs: { ...(data.timeClockLogs || {}), [log.id]: persistedLog(businessId, log) },
+      updatedAt: log.timestamp
+    }, { merge: true });
+  });
+}
+
+async function clockOutViaBusinessProfile(businessId: string, log: TimeClockLog, legacyLogsShowActive: boolean): Promise<void> {
+  const profileRef = doc(db, "business_profiles", businessId);
+  const key = encodeURIComponent(log.employeeEmail.toLowerCase());
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(profileRef);
+    const data = snapshot.data() || {};
+    const active = { ...(data.timeClockActiveShifts || {}) };
+    if (!active[key] && !legacyLogsShowActive) throw new Error("No active shift exists to clock out.");
+    delete active[key];
+    transaction.set(profileRef, {
+      timeClockActiveShifts: active,
+      timeClockLogs: { ...(data.timeClockLogs || {}), [log.id]: persistedLog(businessId, log) },
+      updatedAt: log.timestamp
+    }, { merge: true });
   });
 }
 

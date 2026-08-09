@@ -1,6 +1,8 @@
 import { useEffect, useState, Dispatch, SetStateAction } from "react";
 import { syncArrayToFirestore, subscribeToCollection } from "../lib/firestoreService";
 import { emitCollectionEvent } from "../lib/eventBus";
+import { db } from "../firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 type WithId = { id?: string };
 
@@ -38,10 +40,32 @@ export function useFirestoreCollection<T extends WithId>(
       _setItems([]);
       return;
     }
+    let collectionItems: T[] = [];
+    let compatibilityItems: T[] = [];
+    const publish = () => {
+      const merged = new Map<string | undefined, T>();
+      compatibilityItems.forEach(item => merged.set(item.id, item));
+      collectionItems.forEach(item => merged.set(item.id, item));
+      _setItems([...merged.values()]);
+    };
     const unsubscribe = subscribeToCollection(collectionName, businessId, (docs) => {
-      _setItems(docs as T[]);
-    });
-    return () => unsubscribe();
+      collectionItems = docs as T[];
+      publish();
+    }, collectionName === "time_clock_logs" ? () => publish() : undefined);
+    const unsubscribeCompatibility = collectionName === "time_clock_logs"
+      ? onSnapshot(doc(db, "business_profiles", businessId), snapshot => {
+          const stored = snapshot.data()?.timeClockLogs || {};
+          compatibilityItems = Object.values(stored).map((item: any) => {
+            const { businessId: _, updatedAt: __, ...uiData } = item;
+            return uiData as T;
+          });
+          publish();
+        })
+      : undefined;
+    return () => {
+      unsubscribe();
+      unsubscribeCompatibility?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, businessId]);
 
