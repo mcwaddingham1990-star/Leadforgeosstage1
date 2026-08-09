@@ -39,8 +39,12 @@ export interface DomainDataContextValue {
   completedJobsRevenue: number;
   employees: EmployeeRecord[];
   setEmployees: Dispatch<SetStateAction<EmployeeRecord[]>>;
+  /** Forces a fresh server read of employees, bypassing the realtime listener (see refreshTimeClockLogs). */
+  refreshEmployees: () => Promise<void>;
   timeClockLogs: TimeClockLog[];
   setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
+  /** Forces a fresh server read of time clock logs — recovers a view stuck on stale data if the realtime listener died (Firestore listeners don't auto-retry after a permission/unavailable error). */
+  refreshTimeClockLogs: () => Promise<void>;
   transactions: Transaction[];
   setTransactions: Dispatch<SetStateAction<Transaction[]>>;
   accounts: Account[];

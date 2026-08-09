@@ -7,7 +7,8 @@ import {
   doc,
   setDoc,
   deleteDoc,
-  getDocFromServer
+  getDocFromServer,
+  getDocsFromServer
 } from "firebase/firestore";
 
 export enum OperationType {
@@ -156,4 +157,25 @@ export function subscribeToCollection(
       handleFirestoreError(error, OperationType.LIST, collectionName);
     }
   );
+}
+
+/**
+ * One-off, bypass-the-local-cache read of a collection, filtered by
+ * businessId. The realtime onSnapshot listener in subscribeToCollection
+ * normally keeps state current, but a Firestore JS SDK listener that hits a
+ * permission-denied/unavailable error terminates permanently rather than
+ * retrying — so a stuck view needs a way to force a brand-new server read
+ * rather than waiting on a listener that's already dead. Used by manual
+ * "Refresh" actions in the UI.
+ */
+export async function fetchCollectionFromServer(collectionName: string, businessId: string): Promise<any[]> {
+  const q = query(collection(db, collectionName), where("businessId", "==", businessId));
+  const snapshot = await getDocsFromServer(q);
+  const items: any[] = [];
+  snapshot.forEach((docSnap) => {
+    const data = docSnap.data();
+    const { businessId: _, updatedAt: __, ...uiData } = data;
+    items.push({ id: docSnap.id, ...uiData });
+  });
+  return items;
 }
