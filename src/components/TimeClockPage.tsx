@@ -1,4 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { deleteApp, initializeApp } from "firebase/app";
+import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc, getFirestore } from "firebase/firestore";
+import { firebaseConfig } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -123,6 +127,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [showClockInModal, setShowClockInModal] = useState(false);
   const [showManualTimeModal, setShowManualTimeModal] = useState(false);
   const [showEditTimeModal, setShowEditTimeModal] = useState(false);
+  const [verificationAction, setVerificationAction] = useState<"clock-in" | "clock-out" | null>(null);
+  const [verifierEmail, setVerifierEmail] = useState("");
+  const [verifierPassword, setVerifierPassword] = useState("");
+  const [verificationError, setVerificationError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifiedBy, setVerifiedBy] = useState<{ email: string; role: string } | null>(null);
 
   // Clock In fields
   const [clockInJobId, setClockInJobId] = useState("");
@@ -191,16 +201,15 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   // running counter that could drift from what actually happened.
   const computeHoursFromLogs = (logs: TimeClockLog[], since: Date): number => {
     const sorted = [...logs]
-      .filter(l => new Date(l.timestamp) >= since)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     let totalMs = 0;
     let segmentStart: number | null = null;
     for (const log of sorted) {
       const ts = new Date(log.timestamp).getTime();
       if (log.type === "Clock In" || log.type === "Break End") {
-        segmentStart = ts;
+        segmentStart = Math.max(ts, since.getTime());
       } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
-        totalMs += ts - segmentStart;
+        if (ts >= since.getTime()) totalMs += Math.max(0, ts - segmentStart);
         segmentStart = null;
       }
     }
@@ -280,7 +289,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     }
 
     return roster;
-  }, [employeeRecords, timeClockLogs, loggedInUser, activeRole]);
+  }, [employeeRecords, timeClockLogs, loggedInUser, activeRole, clockInDuration]);
 
   // Reset Filters helper
   const handleResetFilters = () => {
@@ -366,7 +375,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   // Action: Clock In
-  const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
+  const currentEmployeeRecord = employeeRecords.find(employee => employee.email === loggedInUser?.email);
+  const requiresVerification = !!loggedInUser?.isEmployee && !!currentEmployeeRecord?.requireTimeClockVerification;
+
+  const performClockIn = async (jobId: string, route: string, vehicle: string, verifier = verifiedBy) => {
     if (!loggedInUser?.email) return;
     const { timeStr, dateStr, iso } = nowStamp();
     const gps = await getCurrentGPSString();
@@ -390,7 +402,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       jobId: jobId || undefined,
       jobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
       route: route || undefined,
-      vehicle: vehicle || undefined
+      vehicle: vehicle || undefined,
+      verifiedBy: verifier?.email,
+      verifierRole: verifier?.role
     }]);
 
     // Update shared Event Engine (create framework action / log event)
@@ -401,10 +415,20 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     // Trigger notification
     triggerLocalNotification(`Punched in successfully at ${timeStr}`);
     setShowClockInModal(false);
+    setVerifiedBy(null);
+  };
+
+  const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
+    if (requiresVerification && !verifiedBy) {
+      setVerificationAction("clock-in");
+      setVerificationError("");
+      return;
+    }
+    await performClockIn(jobId, route, vehicle);
   };
 
   // Action: Clock Out
-  const handleClockOut = async () => {
+  const performClockOut = async (verifier = verifiedBy) => {
     if (!loggedInUser?.email) return;
     const { timeStr, dateStr, iso } = nowStamp();
     const gps = await getCurrentGPSString();
@@ -418,7 +442,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       date: dateStr,
       time: timeStr,
       timestamp: iso,
-      gps
+      gps,
+      verifiedBy: verifier?.email,
+      verifierRole: verifier?.role
     }]);
 
     setIsClockedIn(false);
@@ -429,6 +455,52 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       logOperationalEvent("Clocked Out", `${userName} punched out of shift safely. Completed operational telemetry.`, "🚪");
     }
     triggerLocalNotification(`Punched out successfully at ${timeStr}`);
+    setVerifiedBy(null);
+  };
+
+  const handleClockOut = async () => {
+    if (requiresVerification && !verifiedBy) {
+      setVerificationAction("clock-out");
+      setVerificationError("");
+      return;
+    }
+    await performClockOut();
+  };
+
+  const verifyManagerAndContinue = async () => {
+    if (!verifierEmail.trim() || !verifierPassword) {
+      setVerificationError("Enter the owner or manager email and password.");
+      return;
+    }
+    setIsVerifying(true);
+    setVerificationError("");
+    const secondaryApp = initializeApp(firebaseConfig, `clock-verifier-${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
+    try {
+      const credential = await signInWithEmailAndPassword(secondaryAuth, verifierEmail.trim(), verifierPassword);
+      const verifierDb = getFirestore(secondaryApp, firebaseConfig.firestoreDatabaseId || "(default)");
+      const profileSnap = await getDoc(doc(verifierDb, "user_profiles", credential.user.uid));
+      const profile = profileSnap.data();
+      const role = String(profile?.role || "");
+      const verifierBusiness = profile?.isEmployee ? profile?.businessEmail : credential.user.email;
+      const isManager = role === "Owner" || role.toLowerCase().includes("manager");
+      if (!profileSnap.exists() || !isManager || verifierBusiness !== loggedInUser?.businessEmail) {
+        throw new Error("This account is not an owner or manager for this business.");
+      }
+      const verifier = { email: credential.user.email || verifierEmail.trim(), role };
+      setVerifiedBy(verifier);
+      const action = verificationAction;
+      setVerificationAction(null);
+      setVerifierPassword("");
+      if (action === "clock-in") await performClockIn(clockInJobId, clockInRoute, clockInVehicle, verifier);
+      if (action === "clock-out") await performClockOut(verifier);
+    } catch (error) {
+      setVerificationError(error instanceof Error ? error.message : "Verification failed.");
+    } finally {
+      await signOut(secondaryAuth).catch(() => undefined);
+      await deleteApp(secondaryApp).catch(() => undefined);
+      setIsVerifying(false);
+    }
   };
 
   // Action: Start Break
@@ -1279,6 +1351,28 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       )}
 
       {/* ADD MANUAL TIME MODAL */}
+      {verificationAction && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[10000] p-4">
+          <div className="bg-white max-w-sm w-full rounded-3xl p-6 border border-[#A9CDEE] shadow-2xl space-y-4 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-black uppercase text-[#342D7E] tracking-wider">Owner / Manager Verification</h4>
+                <p className="text-[10px] text-slate-500 mt-1">An owner or manager for this business must authenticate before this employee can {verificationAction === "clock-in" ? "clock in" : "clock out"}.</p>
+              </div>
+              <button onClick={() => { setVerificationAction(null); setVerifierPassword(""); setVerificationError(""); }} className="text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-2">
+              <input type="email" value={verifierEmail} onChange={e => setVerifierEmail(e.target.value)} placeholder="Owner or manager email" autoComplete="username" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs" />
+              <input type="password" value={verifierPassword} onChange={e => setVerifierPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void verifyManagerAndContinue(); }} placeholder="Password" autoComplete="current-password" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs" />
+              {verificationError && <p className="text-[10px] text-rose-600 font-bold">{verificationError}</p>}
+            </div>
+            <button disabled={isVerifying} onClick={verifyManagerAndContinue} className="w-full py-2.5 bg-[#315C9F] text-white rounded-xl text-xs font-extrabold uppercase disabled:opacity-50">
+              {isVerifying ? "Verifying…" : `Verify & ${verificationAction === "clock-in" ? "Clock In" : "Clock Out"}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showManualTimeModal && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[9999] animate-fade-in p-4">
           <div className="bg-[#C7E3FB] max-w-md w-full rounded-3xl p-6 border border-[#A9CDEE] shadow-2xl space-y-4 text-left">

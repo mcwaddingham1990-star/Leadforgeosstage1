@@ -12,5 +12,4 @@ const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
 
 const auth = getAuth(app);
 
-export { app, db, auth };
-
+export { app, db, auth, firebaseConfig };

@@ -62,6 +62,7 @@ export const RosterPage: React.FC = () => {
   const [invitePermissions, setInvitePermissions] = useState<GranularPermissions>(DEFAULT_INVITE_ROLES.find(r => r.id === "technician")!.modulePermissions);
   const [customRoleName, setCustomRoleName] = useState("");
   const [customRoleReady, setCustomRoleReady] = useState(false);
+  const [requireTimeClockVerification, setRequireTimeClockVerification] = useState(false);
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -141,6 +142,7 @@ export const RosterPage: React.FC = () => {
         businessEmail: businessId,
         permissions,
         granularPermissions: invitePermissions,
+        requireTimeClockVerification,
         status: "pending",
         createdAt: new Date().toISOString()
       });
@@ -272,6 +274,10 @@ export const RosterPage: React.FC = () => {
             />
             <input value={editingEmployee.role} onChange={e => setEditingEmployee({ ...editingEmployee, role: e.target.value })} placeholder="Role" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <input type="number" value={editingEmployee.hourlyRate} onChange={e => setEditingEmployee({ ...editingEmployee, hourlyRate: parseFloat(e.target.value) || 0 })} placeholder="Hourly rate" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3">
+              <input type="checkbox" checked={!!editingEmployee.requireTimeClockVerification} onChange={e => setEditingEmployee({ ...editingEmployee, requireTimeClockVerification: e.target.checked })} className="mt-0.5" />
+              <span><strong className="block text-[#1F3557]">Require clock verification</strong><span className="text-[9px] text-slate-500">An owner or manager must verify this employee's clock-in and clock-out.</span></span>
+            </label>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setEditingEmployee(null)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancel</button>
               <button onClick={handleSaveEdit} className="flex-1 py-2 bg-[#315C9F] text-white rounded-xl font-bold">Save</button>
@@ -317,6 +323,10 @@ export const RosterPage: React.FC = () => {
                     })}
                   </div>
                 </details>}
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <input type="checkbox" checked={requireTimeClockVerification} onChange={e => setRequireTimeClockVerification(e.target.checked)} className="mt-0.5" />
+                  <span><strong className="block text-[#1F3557]">Require owner/manager clock verification</strong><span className="text-[9px] text-slate-500">The employee cannot clock in or out until an owner or manager authenticates.</span></span>
+                </label>
                 <button disabled={inviteRoleId === "__custom__" && !customRoleReady} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
               </>
             ) : (

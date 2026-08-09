@@ -185,6 +185,8 @@ export interface EmployeeRecord {
   hourlyRate: number;
   role: string;
   businessEmail: string;
+  /** When enabled, an owner/manager must authenticate before this employee can clock in or out. */
+  requireTimeClockVerification?: boolean;
   createdAt: string;
 }
 
@@ -210,6 +212,8 @@ export interface TimeClockLog {
   vehicle?: string;
   approved?: boolean;
   enteredManually?: boolean;
+  verifiedBy?: string;
+  verifierRole?: string;
 }
 
 /**
