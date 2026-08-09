@@ -43,21 +43,34 @@ export async function clockOutTransaction(
 ): Promise<void> {
   const activeRef = doc(db, "active_shifts", activeShiftId(businessId, log.employeeEmail));
 
-  // Older active shifts predate active_shifts. Claim one exactly once so the
-  // following transaction still gives duplicate clock-outs backend protection.
+  // Older active shifts predate active_shifts, and a clock-in can also have
+  // landed only in the business-profile compatibility store if writing
+  // active_shifts directly hit a permission error (see clockInTransaction's
+  // own fallback). Claim/confirm one exactly once so the following
+  // transaction still gives duplicate clock-outs backend protection — but a
+  // permission failure on this best-effort migration step must not abort
+  // the clock-out outright, or every clock-out for an account that needs
+  // the compatibility path fails with a confusing "no active shift" error
+  // while the employee is very much still clocked in.
   if (legacyLogsShowActive) {
-    await runTransaction(db, async transaction => {
-      const active = await transaction.get(activeRef);
-      if (!active.exists()) {
-        transaction.set(activeRef, {
-          businessId,
-          employeeEmail: log.employeeEmail,
-          employeeName: log.employeeName,
-          migratedFromLogs: true,
-          updatedAt: log.timestamp
-        });
-      }
-    });
+    try {
+      await runTransaction(db, async transaction => {
+        const active = await transaction.get(activeRef);
+        if (!active.exists()) {
+          transaction.set(activeRef, {
+            businessId,
+            employeeEmail: log.employeeEmail,
+            employeeName: log.employeeName,
+            migratedFromLogs: true,
+            updatedAt: log.timestamp
+          });
+        }
+      });
+    } catch (error) {
+      if (!isPermissionError(error)) throw error;
+      await clockOutViaBusinessProfile(businessId, log, legacyLogsShowActive);
+      return;
+    }
   }
 
   const logRef = doc(db, "time_clock_logs", log.id);
