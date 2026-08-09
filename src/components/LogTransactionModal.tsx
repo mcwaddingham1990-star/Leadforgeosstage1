@@ -129,7 +129,10 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
             </p>
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                sessionStorage.setItem("ownerslocal_pending_financial_scan", type);
+                fileInputRef.current?.click();
+              }}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
             >
               <Camera className="w-4 h-4" /> Scan a Photo
