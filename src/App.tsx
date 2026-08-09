@@ -900,9 +900,6 @@ export default function App() {
     google_maps: true,
     gmail: false
   });
-  const [newRosterName, setNewRosterName] = useState("");
-  const [newRosterRole, setNewRosterRole] = useState("Technician");
-
   // Core Event Engine & CRM Shared States back-ended by Firestore.
   // Each collection is backed by useFirestoreCollection, which centralizes the
   // sync-to-Firestore + realtime-subscribe + clear-on-logout behavior that used
@@ -2701,6 +2698,8 @@ Access to full financial telemetry is restricted.`;
 
       // 3. Save detailed employees entry
       const newEmployee = {
+        id: cleanEmail,
+        userUid: user.uid,
         email: cleanEmail,
         firstName: empFirstName,
         lastName: empLastName,
@@ -5723,110 +5722,7 @@ Access to full financial telemetry is restricted.`;
                     <EstimatesPage />
 
                   ) : activeScreen.id === "roster" ? (
-                    
-                    /* ROSTER VIEW */
-                    <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-4 animate-fade-in">
-                      <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
-                        <div>
-                          <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Corporate Roster</h2>
-                          <p className="text-xs text-slate-500">Employee database and secure roster logs</p>
-                        </div>
-                        <span className="px-3 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-xs font-mono font-bold rounded-xl border border-[#A9CDEE]">
-                          Secure Node Connected
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Interactive Invite Creator */}
-                        <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] space-y-3.5 h-fit">
-                          <h4 className="text-xs font-black uppercase text-[#342D7E] tracking-wider flex items-center gap-1.5">
-                            <PlusCircle className="w-4 h-4 text-[#4A9BFF]" /> Create Security Invitation
-                          </h4>
-                          <p className="text-[10.5px] text-slate-500 leading-normal font-medium">
-                            Generate temporary secure invitation keys for onboarding new employees.
-                          </p>
-                          
-                          <div className="space-y-1">
-                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">New Employee Name</label>
-                            <input
-                              value={newRosterName}
-                              onChange={(e) => setNewRosterName(e.target.value)}
-                              type="text"
-                              placeholder="e.g. Sarah Jenkins"
-                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Assigned Role Node</label>
-                            <select
-                              value={newRosterRole}
-                              onChange={(e) => setNewRosterRole(e.target.value)}
-                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-2 py-2.5 focus:outline-none cursor-pointer text-slate-700 font-medium"
-                            >
-                              <option value="Technician">Technician / Specialist</option>
-                              <option value="Driver">Driver / Installer</option>
-                              <option value="Office Manager">Office Manager</option>
-                              <option value="Salesperson">Sales Representative</option>
-                            </select>
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              if (!newRosterName.trim()) {
-                                triggerNotification("Please enter employee name.");
-                                return;
-                              }
-                              const nameClean = newRosterName.trim();
-                              const randomCode = `${newRosterRole.toUpperCase().replace(/ /g, "_")}-${Math.floor(1000 + Math.random() * 9000)}`;
-                              const newEntry = {
-                                name: nameClean,
-                                role: newRosterRole,
-                                code: randomCode,
-                                status: "Awaiting Login"
-                              };
-                              setRecentRoster(prev => [...prev, newEntry]);
-                              triggerNotification(`Invite generated for ${nameClean}! Code: ${randomCode}`);
-                              setNewRosterName("");
-                            }}
-                            className="w-full py-2.5 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
-                          >
-                            + Generate Invite Code
-                          </button>
-                        </div>
-
-                        {/* Roster Listing Grid */}
-                        <div className="md:col-span-2 space-y-3">
-                          <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Active Invitation Database</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {recentRoster.map((item, idx) => (
-                              <div key={idx} className="p-4 bg-[#E3F3FF] hover:bg-[#E3F3FF]/80 rounded-2xl border border-[#A9CDEE] flex flex-col justify-between gap-3 shadow-sm hover:shadow transition-all relative group">
-                                <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-emerald-500" />
-                                
-                                <div>
-                                  <p className="text-xs font-extrabold text-slate-800 font-sans">{item.name}</p>
-                                  <p className="text-[10px] text-slate-400 font-mono tracking-wider mt-0.5">{item.role}</p>
-                                </div>
-
-                                <div className="p-2 bg-[#F5FAFF] rounded-xl border border-[#A9CDEE]/30 flex items-center justify-between">
-                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold font-sans">Access Key</span>
-                                  <code 
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(item.code);
-                                      triggerNotification(`Copied security key: ${item.code}`);
-                                    }}
-                                    className="bg-[#F5FAFF] hover:bg-[#E3F3FF] text-[#4A9BFF] border border-[#A9CDEE] px-2 py-0.5 rounded text-[10px] font-black cursor-pointer select-all"
-                                    title="Click to copy security key"
-                                  >
-                                    {item.code}
-                                  </code>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <RosterPage />
 
                   ) : activeScreen.id === "timeclock" ? (
                     <TimeClockPage
@@ -5846,9 +5742,6 @@ Access to full financial telemetry is restricted.`;
 
                   ) : activeScreen.id === "accounting" ? (
                     <AccountingPage />
-
-                  ) : activeScreen.id === "roster" ? (
-                    <RosterPage />
 
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />

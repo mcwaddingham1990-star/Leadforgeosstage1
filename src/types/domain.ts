@@ -175,6 +175,8 @@ export interface RevenueEvent {
 /** A real employee record, written once at employee-onboarding completion (see handleCompleteEmployeeOnboarding in App.tsx). Doc id is the employee's email. */
 export interface EmployeeRecord {
   id: string; // employee's email
+  /** Firebase account id, used by authorized managers to update the employee's live access profile. */
+  userUid?: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -184,6 +186,9 @@ export interface EmployeeRecord {
   goals: string;
   hourlyRate: number;
   role: string;
+  /** The employee-specific, owner/manager-editable permissions inherited from their selected role. */
+  granularPermissions?: import("./permissions").GranularPermissions;
+  permissions?: string[];
   businessEmail: string;
   /** When enabled, an owner/manager must authenticate before this employee can clock in or out. */
   requireTimeClockVerification?: boolean;

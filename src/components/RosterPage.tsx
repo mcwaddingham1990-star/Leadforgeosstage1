@@ -16,6 +16,7 @@ function genInviteCode(role: string): string {
 }
 
 type InviteRole = { id: string; name: string; permissions: string[]; modulePermissions: GranularPermissions; isCustom?: boolean };
+type InviteMode = "" | "select" | "custom";
 
 const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
   ["owner", "Owner", MODULE_CATALOG.map(m => m.id)],
@@ -58,12 +59,15 @@ export const RosterPage: React.FC = () => {
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
   const [isInviting, setIsInviting] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<InviteRole[]>(DEFAULT_INVITE_ROLES);
-  const [inviteRoleId, setInviteRoleId] = useState("technician");
-  const [invitePermissions, setInvitePermissions] = useState<GranularPermissions>(DEFAULT_INVITE_ROLES.find(r => r.id === "technician")!.modulePermissions);
+  const [inviteMode, setInviteMode] = useState<InviteMode>("");
+  const [inviteRoleId, setInviteRoleId] = useState("");
+  const [invitePermissions, setInvitePermissions] = useState<GranularPermissions>({});
   const [customRoleName, setCustomRoleName] = useState("");
   const [customRoleReady, setCustomRoleReady] = useState(false);
   const [requireTimeClockVerification, setRequireTimeClockVerification] = useState(false);
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
+  const managerRole = (loggedInUser?.role || "").toLowerCase();
+  const canManageRoles = !loggedInUser?.isEmployee || managerRole.includes("owner") || managerRole.includes("manager") || managerRole.includes("admin");
 
   useEffect(() => {
     if (!businessId) return;
@@ -81,6 +85,13 @@ export const RosterPage: React.FC = () => {
   }, [businessId]);
 
   const selectedInviteRole = availableRoles.find(r => r.id === inviteRoleId);
+  const startInviteMode = (mode: InviteMode) => {
+    setInviteMode(mode);
+    setInviteRoleId(mode === "custom" ? "__custom__" : "");
+    setCustomRoleName("");
+    setCustomRoleReady(false);
+    setInvitePermissions({});
+  };
   const chooseRole = (roleId: string) => {
     setInviteRoleId(roleId);
     setCustomRoleName("");
@@ -115,12 +126,54 @@ export const RosterPage: React.FC = () => {
     );
   }, [employees, search]);
 
-  const handleSaveEdit = () => {
+  const openEmployeeEditor = (employee: EmployeeRecord) => {
+    const role = availableRoles.find(item => item.name === employee.role);
+    setEditingEmployee({
+      ...employee,
+      granularPermissions: employee.granularPermissions || (role ? structuredClone(role.modulePermissions) : {})
+    });
+  };
+
+  const handleSaveEdit = async () => {
     if (!editingEmployee) return;
-    setEmployees(prev => prev.map(e => (e.email === editingEmployee.email ? editingEmployee : e)));
+    const permissions = MODULE_CATALOG.filter(mod => {
+      const flags = getPermissionFlags(editingEmployee.granularPermissions, mod.id);
+      return flags.view || flags.edit || flags.delete;
+    }).map(mod => mod.id);
+    const savedEmployee = { ...editingEmployee, permissions };
+    setEmployees(prev => prev.map(e => (e.email === savedEmployee.email ? savedEmployee : e)));
+    if (savedEmployee.userUid) {
+      await setDoc(doc(db, "user_profiles", savedEmployee.userUid), {
+        role: savedEmployee.role,
+        permissions,
+        granularPermissions: savedEmployee.granularPermissions,
+        requireTimeClockVerification: !!savedEmployee.requireTimeClockVerification
+      }, { merge: true });
+    }
     triggerNotification(`Updated ${editingEmployee.firstName} ${editingEmployee.lastName}.`);
     if (logOperationalEvent) logOperationalEvent("Employee Updated", `${editingEmployee.firstName} ${editingEmployee.lastName}`, "👤");
     setEditingEmployee(null);
+  };
+
+  const chooseEmployeeRole = (roleId: string) => {
+    if (!editingEmployee) return;
+    const role = availableRoles.find(item => item.id === roleId);
+    if (!role) return;
+    setEditingEmployee({
+      ...editingEmployee,
+      role: role.name,
+      granularPermissions: structuredClone(role.modulePermissions)
+    });
+  };
+
+  const toggleEmployeePermission = (moduleId: string, action: PermissionAction) => {
+    if (!editingEmployee) return;
+    const current = editingEmployee.granularPermissions || {};
+    const flags = getPermissionFlags(current, moduleId);
+    setEditingEmployee({
+      ...editingEmployee,
+      granularPermissions: { ...current, [moduleId]: { ...flags, [action]: !flags[action] } }
+    });
   };
 
   const handleGenerateInvite = async () => {
@@ -136,6 +189,18 @@ export const RosterPage: React.FC = () => {
       return flags.view || flags.edit || flags.delete;
     }).map(m => m.id);
     try {
+      if (inviteMode === "custom") {
+        const customRole: InviteRole = {
+          id: `custom_${customRoleName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+          name: customRoleName.trim(),
+          permissions,
+          modulePermissions: invitePermissions,
+          isCustom: true
+        };
+        const nextRoles = [...availableRoles.filter(role => role.id !== customRole.id), customRole];
+        setAvailableRoles(nextRoles);
+        await setDoc(doc(db, "business_profiles", businessId), { selectedRoles: nextRoles }, { merge: true });
+      }
       await setDoc(doc(db, "employee_invites", code), {
         code,
         role: roleName,
@@ -171,12 +236,12 @@ export const RosterPage: React.FC = () => {
             <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">Roster</h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-0.5">Real employee directory — {employees.length} team member{employees.length === 1 ? "" : "s"}</p>
           </div>
-          <button
+          {canManageRoles && <button
             onClick={() => { setIsInviting(true); setGeneratedInviteCode(null); }}
             className="px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase tracking-wide flex items-center gap-1.5 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" /> Invite Employee
-          </button>
+          </button>}
         </div>
 
         <div className="relative mt-4">
@@ -219,9 +284,9 @@ export const RosterPage: React.FC = () => {
                       <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-wide">{emp.role}</p>
                     </div>
                   </div>
-                  <button onClick={() => setEditingEmployee(emp)} title="Edit employee" className="text-[#5E7393] hover:text-[#1F3557] cursor-pointer">
+                  {canManageRoles && <button onClick={() => openEmployeeEditor(emp)} title="Edit employee" className="text-[#5E7393] hover:text-[#1F3557] cursor-pointer">
                     <Edit3 className="w-3.5 h-3.5" />
-                  </button>
+                  </button>}
                 </div>
 
                 <div className="space-y-1 text-[10.5px] text-[#1F3557]">
@@ -272,7 +337,32 @@ export const RosterPage: React.FC = () => {
               compact
               inputClassName="w-full border border-slate-200 rounded-xl px-3 py-2"
             />
-            <input value={editingEmployee.role} onChange={e => setEditingEmployee({ ...editingEmployee, role: e.target.value })} placeholder="Role" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
+            <label className="text-[9px] uppercase text-slate-400 font-bold">Role</label>
+            <select
+              value={availableRoles.find(role => role.name === editingEmployee.role)?.id || ""}
+              onChange={e => chooseEmployeeRole(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white"
+            >
+              <option value="" disabled>{editingEmployee.role || "Select role"}</option>
+              {availableRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+            </select>
+            <details className="border border-slate-200 rounded-xl overflow-hidden">
+              <summary className="px-3 py-2 bg-slate-50 font-bold text-[#1F3557] cursor-pointer">Edit employee permissions</summary>
+              <div className="max-h-[240px] overflow-y-auto p-2 space-y-1.5">
+                {MODULE_CATALOG.map(mod => {
+                  const flags = getPermissionFlags(editingEmployee.granularPermissions, mod.id);
+                  return <div key={mod.id} className="rounded-lg border border-slate-100 p-2">
+                    <div className="font-bold text-[10px] text-[#1F3557] mb-1.5">{mod.label}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
+                        <input type="checkbox" checked={flags[action]} onChange={() => toggleEmployeePermission(mod.id, action)} />
+                        {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
+                      </label>)}
+                    </div>
+                  </div>;
+                })}
+              </div>
+            </details>
             <input type="number" value={editingEmployee.hourlyRate} onChange={e => setEditingEmployee({ ...editingEmployee, hourlyRate: parseFloat(e.target.value) || 0 })} placeholder="Hourly rate" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3">
               <input type="checkbox" checked={!!editingEmployee.requireTimeClockVerification} onChange={e => setEditingEmployee({ ...editingEmployee, requireTimeClockVerification: e.target.checked })} className="mt-0.5" />
@@ -295,18 +385,26 @@ export const RosterPage: React.FC = () => {
             </div>
             {!generatedInviteCode ? (
               <>
-                <label className="text-[9px] uppercase text-slate-400 font-bold">Choose position / role</label>
-                <select value={inviteRoleId} onChange={e => chooseRole(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white">
-                  {availableRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
-                  <option value="__custom__">+ Add Custom Role</option>
+                <label className="text-[9px] uppercase text-slate-400 font-bold">Role setup</label>
+                <select value={inviteMode} onChange={e => startInviteMode(e.target.value as InviteMode)} className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white">
+                  <option value="" disabled>Choose one...</option>
+                  <option value="select">Select Role</option>
+                  <option value="custom">Custom Role</option>
                 </select>
-                {inviteRoleId === "__custom__" && (
-                  <div className="flex gap-2">
+                {inviteMode === "select" && (
+                  <select value={inviteRoleId} onChange={e => chooseRole(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white">
+                    <option value="" disabled>Select an onboarding role...</option>
+                    {availableRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+                  </select>
+                )}
+                {inviteMode === "custom" && !customRoleReady && (
+                  <div className="space-y-2 rounded-xl border border-slate-200 p-3">
+                    <label className="block text-[9px] uppercase text-slate-400 font-bold">Custom role name</label>
                     <input autoFocus value={customRoleName} onChange={e => { setCustomRoleName(e.target.value); setCustomRoleReady(false); }} placeholder="Enter custom role name" className="flex-1 border border-slate-200 rounded-xl px-3 py-2" />
-                    <button type="button" disabled={!customRoleName.trim()} onClick={() => setCustomRoleReady(true)} className="px-4 rounded-xl bg-[#315C9F] text-white font-bold disabled:opacity-40">OK</button>
+                    <button type="button" disabled={!customRoleName.trim()} onClick={() => { setInvitePermissions({}); setCustomRoleReady(true); }} className="w-full py-2 rounded-xl bg-[#315C9F] text-white font-bold disabled:opacity-40">Save Role</button>
                   </div>
                 )}
-                {(inviteRoleId !== "__custom__" || customRoleReady) && <details className="border border-slate-200 rounded-xl overflow-hidden" open>
+                {((inviteMode === "select" && !!inviteRoleId) || (inviteMode === "custom" && customRoleReady)) && <details className="border border-slate-200 rounded-xl overflow-hidden" open>
                   <summary className="px-3 py-2 bg-slate-50 font-bold text-[#1F3557] cursor-pointer">Choose permissions</summary>
                   <div className="max-h-[260px] overflow-y-auto p-2 space-y-1.5">
                     {MODULE_CATALOG.map(mod => {
@@ -327,7 +425,7 @@ export const RosterPage: React.FC = () => {
                   <input type="checkbox" checked={requireTimeClockVerification} onChange={e => setRequireTimeClockVerification(e.target.checked)} className="mt-0.5" />
                   <span><strong className="block text-[#1F3557]">Require owner/manager clock verification</strong><span className="text-[9px] text-slate-500">The employee cannot clock in or out until an owner or manager authenticates.</span></span>
                 </label>
-                <button disabled={inviteRoleId === "__custom__" && !customRoleReady} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
+                <button disabled={!inviteMode || !inviteRoleId || (inviteMode === "custom" && !customRoleReady)} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
               </>
             ) : (
               <>
