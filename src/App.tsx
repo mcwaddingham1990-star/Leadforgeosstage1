@@ -1360,7 +1360,23 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          // createUserWithEmailAndPassword (owner sign-up, and employee
+          // onboarding via invite code) fires this listener the instant the
+          // account exists — before that same caller's own follow-up
+          // setDoc(user_profiles/...) has necessarily landed. Read that
+          // profile too early and this branches into "brand-new account,
+          // needs onboarding" and stomps whatever state the in-flight
+          // signup/onboarding flow is about to set once its writes finish.
+          // For owner sign-up this race is invisible (both land on the same
+          // "placeholder_password" screen), but employee onboarding has no
+          // such luck — it gets bounced to the owner setup screen instead of
+          // into the app. A few short retries covers the write long enough
+          // to land while still treating a truly new account as new.
+          let profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          for (let attempt = 0; !profileSnap.exists() && attempt < 4; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 400));
+            profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          }
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             const isEmployee = profileData.isEmployee ?? false;
