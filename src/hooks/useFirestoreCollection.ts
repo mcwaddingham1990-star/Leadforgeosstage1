@@ -20,7 +20,7 @@ type WithId = { id?: string };
 export function useFirestoreCollection<T extends WithId>(
   collectionName: string,
   businessId: string | undefined,
-  options?: { normalize?: (item: T) => T }
+  options?: { normalize?: (item: T) => T; onSyncError?: (error: unknown) => void }
 ): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
   const [items, _setItems] = useState<T[]>([]);
   const collectionItemsRef = useRef<T[]>([]);
@@ -31,7 +31,14 @@ export function useFirestoreCollection<T extends WithId>(
       const nextList = typeof value === "function" ? (value as (prev: T[]) => T[])(prev) : value;
       const normalizedNext = options?.normalize ? nextList.map(options.normalize) : nextList;
       const normalizedPrev = options?.normalize ? prev.map(options.normalize) : prev;
-      syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId);
+      // This write runs in the background relative to the optimistic local
+      // update above (a React state setter can't be async). Without this
+      // catch, a rejected write — permission-denied, offline, a dropped
+      // auth token — vanished silently: the UI kept showing the edit as
+      // saved while Firestore never received it. Surface it so callers can
+      // tell the user their change didn't actually persist.
+      syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId)
+        .catch((error) => options?.onSyncError?.(error));
       emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
       return normalizedNext;
     });

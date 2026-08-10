@@ -926,7 +926,9 @@ export default function App() {
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
-  const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
+  const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId, {
+    onSyncError: () => triggerNotification("Couldn't save employee changes — check your connection and try again.")
+  });
   const [timeClockLogs, setTimeClockLogs, refreshTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
   const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
   const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
