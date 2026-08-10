@@ -126,6 +126,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [activeFilterDrawer, setActiveFilterDrawer] = useState(false);
   const [filterWarehouse, setFilterWarehouse] = useState("all");
   const [filterVendor, setFilterVendor] = useState("all");
+  const [activeSummaryCard, setActiveSummaryCard] = useState<string | null>(null);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [addedCategoryShortcuts, setAddedCategoryShortcuts] = useState<string[]>(() => {
     try {
@@ -225,6 +226,29 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       favoriteCount
     };
   }, [inventoryList]);
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const usedTodayItems = useMemo(() => inventoryList.flatMap(item =>
+    (item.usageHistory || [])
+      .filter(entry => entry.date.slice(0, 10) === todayKey)
+      .map(entry => ({ item, entry, value: entry.amount * item.unitCost }))
+  ), [inventoryList, todayKey]);
+  const pendingDeliveries = useMemo(() => (events || []).filter(event =>
+    event.eventType === "Inventory Delivery" &&
+    !["Completed", "Cancelled"].includes(event.status)
+  ), [events]);
+  const dailyUsageValue = usedTodayItems.reduce((total, usage) => total + usage.value, 0);
+
+  const showInventorySelection = (filter: string, category: string | null = null) => {
+    setCurrentView("list");
+    setActiveTabFilter(filter);
+    setSelectedCategory(category);
+  };
+
+  const openInventoryItem = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setIsDetailsPopupOpen(true);
+  };
 
   const visibleCategoryShortcuts = INVENTORY_CATEGORIES.filter(category =>
     DEFAULT_CATEGORY_SHORTCUTS.includes(category.name) || addedCategoryShortcuts.includes(category.name)
@@ -880,11 +904,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         </div>
       </div>
 
-      {/* SUMMARY STATS CARDS */}
+      {/* LIVE INVENTORY CONNECTIONS */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         
-        <div 
-          onClick={() => { setActiveTabFilter("all"); setSelectedCategory(null); }}
+        <button type="button"
+          onClick={() => { showInventorySelection("all"); setActiveSummaryCard(activeSummaryCard === "catalog" ? null : "catalog"); }}
           className={`bg-[#E3F3FF] p-3.5 rounded-2xl border transition-all cursor-pointer ${activeTabFilter === "all" && !selectedCategory ? "border-blue-500 ring-2 ring-blue-200" : "border-[#A9CDEE] hover:border-blue-400"}`}
         >
           <span className="p-1.5 bg-[#C7E3FB] rounded-lg inline-block mb-1.5 text-[#342D7E]">
@@ -892,10 +916,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Total Catalog</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{stats.totalItems}</p>
-        </div>
+        </button>
 
-        <div 
-          onClick={() => { setActiveTabFilter("all"); }}
+        <button type="button"
+          onClick={() => setActiveSummaryCard(activeSummaryCard === "value" ? null : "value")}
           className="bg-[#E3F3FF] p-3.5 rounded-2xl border border-[#A9CDEE] hover:border-blue-400 transition-all cursor-pointer"
         >
           <span className="p-1.5 bg-[#C7E3FB] rounded-lg inline-block mb-1.5 text-emerald-600">
@@ -903,10 +927,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Ledger Value</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">${stats.totalVal.toLocaleString()}</p>
-        </div>
+        </button>
 
-        <div 
-          onClick={() => { setActiveTabFilter("low_stock"); setSelectedCategory(null); }}
+        <button type="button"
+          onClick={() => { showInventorySelection("low_stock"); setActiveSummaryCard(activeSummaryCard === "low" ? null : "low"); }}
           className={`bg-[#E3F3FF] p-3.5 rounded-2xl border transition-all cursor-pointer ${activeTabFilter === "low_stock" ? "border-amber-500 ring-2 ring-amber-100" : "border-[#A9CDEE] hover:border-amber-400"}`}
         >
           <span className="p-1.5 bg-amber-100 rounded-lg inline-block mb-1.5 text-amber-600">
@@ -914,10 +938,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Low Stock</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{stats.lowStockCount}</p>
-        </div>
+        </button>
 
-        <div 
-          onClick={() => { setActiveTabFilter("out_of_stock"); setSelectedCategory(null); }}
+        <button type="button"
+          onClick={() => { showInventorySelection("out_of_stock"); setActiveSummaryCard(activeSummaryCard === "out" ? null : "out"); }}
           className={`bg-[#E3F3FF] p-3.5 rounded-2xl border transition-all cursor-pointer ${activeTabFilter === "out_of_stock" ? "border-rose-500 ring-2 ring-rose-100" : "border-[#A9CDEE] hover:border-rose-400"}`}
         >
           <span className="p-1.5 bg-rose-100 rounded-lg inline-block mb-1.5 text-rose-600">
@@ -925,10 +949,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Out of Stock</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{stats.outOfStockCount}</p>
-        </div>
+        </button>
 
-        <div 
-          onClick={() => { setActiveTabFilter("favorites"); setSelectedCategory(null); }}
+        <button type="button"
+          onClick={() => { showInventorySelection("favorites"); setActiveSummaryCard(activeSummaryCard === "favorites" ? null : "favorites"); }}
           className={`bg-[#E3F3FF] p-3.5 rounded-2xl border transition-all cursor-pointer ${activeTabFilter === "favorites" ? "border-indigo-500 ring-2 ring-indigo-100" : "border-[#A9CDEE] hover:border-indigo-400"}`}
         >
           <span className="p-1.5 bg-indigo-100 rounded-lg inline-block mb-1.5 text-indigo-600">
@@ -936,42 +960,97 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">My Favorites</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{stats.favoriteCount}</p>
-        </div>
+        </button>
 
-        <div 
-          onClick={() => { triggerToast("Filtered to materials consumed on tasks today."); }}
+        <button type="button"
+          onClick={() => setActiveSummaryCard(activeSummaryCard === "used" ? null : "used")}
           className="bg-[#E3F3FF] p-3.5 rounded-2xl border border-[#A9CDEE] hover:border-blue-400 transition-all cursor-pointer"
         >
           <span className="p-1.5 bg-sky-100 rounded-lg inline-block mb-1.5 text-sky-600">
             <CheckSquare className="w-4 h-4" />
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Used Today</p>
-          <p className="text-lg font-mono font-black text-slate-800 mt-0.5">3 items</p>
-        </div>
+          <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{usedTodayItems.length} items</p>
+        </button>
 
-        <div 
-          onClick={() => { triggerToast("Opening inbound supply shipments schedule."); }}
+        <button type="button"
+          onClick={() => setActiveSummaryCard(activeSummaryCard === "deliveries" ? null : "deliveries")}
           className="bg-[#E3F3FF] p-3.5 rounded-2xl border border-[#A9CDEE] hover:border-blue-400 transition-all cursor-pointer"
         >
           <span className="p-1.5 bg-orange-100 rounded-lg inline-block mb-1.5 text-orange-600">
             <Truck className="w-4 h-4" />
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Pending Deliveries</p>
-          <p className="text-lg font-mono font-black text-slate-800 mt-0.5">2 POs</p>
-        </div>
+          <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{pendingDeliveries.length}</p>
+        </button>
 
-        <div 
-          onClick={() => { triggerToast("Report compiled for Today's material usage."); }}
+        <button type="button"
+          onClick={() => setActiveSummaryCard(activeSummaryCard === "usage" ? null : "usage")}
           className="bg-[#E3F3FF] p-3.5 rounded-2xl border border-[#A9CDEE] hover:border-blue-400 transition-all cursor-pointer"
         >
           <span className="p-1.5 bg-purple-100 rounded-lg inline-block mb-1.5 text-purple-600">
             <FileSpreadsheet className="w-4 h-4" />
           </span>
           <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Daily Usage</p>
-          <p className="text-lg font-mono font-black text-[#342D7E] mt-0.5">$315.00</p>
-        </div>
+          <p className="text-lg font-mono font-black text-[#342D7E] mt-0.5">${dailyUsageValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </button>
 
       </div>
+
+      {activeSummaryCard && (
+        <div className="bg-[#F5FAFF] border border-[#A9CDEE] rounded-2xl p-4 shadow-sm" role="region" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-[#342D7E]">
+                {{ catalog: "Catalog Items", value: "Ledger Value by Category", low: "Low Stock Items", out: "Out of Stock Items", favorites: "Favorite Items", used: "Items Used Today", deliveries: "Pending Inventory Deliveries", usage: "Today's Usage Value" }[activeSummaryCard]}
+              </h3>
+              <p className="text-[10px] font-semibold text-slate-500">Live information from inventory and scheduling. Select a row to open the connected record.</p>
+            </div>
+            <button type="button" onClick={() => setActiveSummaryCard(null)} className="p-1.5 rounded-lg hover:bg-[#D5EAFF] text-slate-500" aria-label="Close summary"><X className="w-4 h-4" /></button>
+          </div>
+
+          {(activeSummaryCard === "catalog" || activeSummaryCard === "low" || activeSummaryCard === "out" || activeSummaryCard === "favorites") && (() => {
+            const items = activeSummaryCard === "low"
+              ? inventoryList.filter(item => item.quantity > 0 && item.quantity <= item.minQuantity)
+              : activeSummaryCard === "out"
+                ? inventoryList.filter(item => item.quantity === 0)
+                : activeSummaryCard === "favorites"
+                  ? inventoryList.filter(item => item.isFavorite)
+                  : inventoryList;
+            return items.length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">{items.map(item => (
+              <button type="button" key={item.id} onClick={() => openInventoryItem(item)} className="flex items-center justify-between gap-3 rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 text-left hover:border-[#4A9BFF]">
+                <span className="min-w-0"><span className="block truncate text-xs font-extrabold text-slate-800">{item.photo} {item.name}</span><span className="block text-[10px] text-slate-500">{item.category} · {item.location}</span></span>
+                <span className="shrink-0 text-xs font-black text-[#342D7E]">{item.quantity} {item.unit}</span>
+              </button>
+            ))}</div> : <p className="text-xs font-semibold text-slate-500">No connected inventory records yet.</p>;
+          })()}
+
+          {activeSummaryCard === "value" && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {INVENTORY_CATEGORIES.map(category => {
+                const items = inventoryList.filter(item => item.category === category.name);
+                const value = items.reduce((total, item) => total + item.quantity * item.unitCost, 0);
+                if (!items.length) return null;
+                return <button type="button" key={category.name} onClick={() => showInventorySelection("all", category.name)} className="flex items-center justify-between rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 hover:border-[#4A9BFF]"><span className="text-xs font-bold text-slate-700">{category.icon} {category.name} ({items.length})</span><span className="text-xs font-black text-emerald-700">${value.toLocaleString()}</span></button>;
+              })}
+              {!inventoryList.length && <p className="text-xs font-semibold text-slate-500">No inventory value has been recorded yet.</p>}
+            </div>
+          )}
+
+          {(activeSummaryCard === "used" || activeSummaryCard === "usage") && (
+            usedTodayItems.length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">{usedTodayItems.map(({ item, entry, value }, index) => (
+              <button type="button" key={`${item.id}-${index}`} onClick={() => openInventoryItem(item)} className="flex items-center justify-between rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 text-left hover:border-[#4A9BFF]"><span><span className="block text-xs font-extrabold text-slate-800">{item.name}</span><span className="block text-[10px] text-slate-500">{entry.amount} {item.unit} · {entry.jobName}</span></span><span className="text-xs font-black text-purple-700">${value.toFixed(2)}</span></button>
+            ))}</div> : <p className="text-xs font-semibold text-slate-500">No inventory usage has been recorded today.</p>
+          )}
+
+          {activeSummaryCard === "deliveries" && (
+            <div className="space-y-2">
+              {pendingDeliveries.length ? pendingDeliveries.map(delivery => <button type="button" key={delivery.id} onClick={() => onNavigateToScreen ? onNavigateToScreen("scheduling") : onOpenPlaceholder("Scheduling", "📅")} className="flex w-full items-center justify-between rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 text-left hover:border-[#4A9BFF]"><span><span className="block text-xs font-extrabold text-slate-800">{delivery.customer}</span><span className="block text-[10px] text-slate-500">{delivery.date} · {delivery.location}</span></span><span className="text-[10px] font-black uppercase text-orange-700">{delivery.status}</span></button>) : <p className="text-xs font-semibold text-slate-500">No pending inventory deliveries are on the schedule.</p>}
+              <button type="button" onClick={() => onNavigateToScreen ? onNavigateToScreen("scheduling") : onOpenPlaceholder("Scheduling", "📅")} className="text-xs font-extrabold text-[#4A9BFF] hover:underline">Open Scheduling <ArrowRight className="inline w-3 h-3" /></button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SEARCH AND FILTERS */}
       <div className="flex flex-col md:flex-row gap-4 items-center">
