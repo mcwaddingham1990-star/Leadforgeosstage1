@@ -55,10 +55,31 @@ export function useFirestoreCollection<T extends WithId>(
       collectionItemsRef.current.forEach(item => merged.set(item.id, item));
       _setItems([...merged.values()]);
     };
+    // A live onSnapshot listener that hits a permission-denied/unavailable
+    // error terminates for good rather than retrying (Firestore JS SDK
+    // behavior, not a bug in this app) — and this effect only re-runs when
+    // collectionName/businessId change. businessId is identical for an
+    // owner and every employee under them, so switching from an employee's
+    // session back to the owner's does NOT tear down and recreate this
+    // subscription. A rules-evaluation hiccup during that switch (e.g. the
+    // brief window right after a brand-new employee account exists in Auth
+    // but its user_profiles doc hasn't propagated yet) can kill the one
+    // shared listener, and every session downstream — including the
+    // owner's next login — is then stuck on whatever it last saw, which is
+    // often nothing. Recover with a direct one-shot server read instead of
+    // going permanently stale.
+    const recover = () => {
+      fetchCollectionFromServer(collectionName, businessId)
+        .then((docs) => {
+          collectionItemsRef.current = docs as T[];
+          publish();
+        })
+        .catch((error) => console.error(`Couldn't recover collection "${collectionName}" after a listener error:`, error));
+    };
     const unsubscribe = subscribeToCollection(collectionName, businessId, (docs) => {
       collectionItemsRef.current = docs as T[];
       publish();
-    }, collectionName === "time_clock_logs" ? () => publish() : undefined);
+    }, collectionName === "time_clock_logs" ? () => { publish(); recover(); } : recover);
     const unsubscribeCompatibility = collectionName === "time_clock_logs"
       ? onSnapshot(doc(db, "business_profiles", businessId), snapshot => {
           const stored = snapshot.data()?.timeClockLogs || {};
@@ -76,11 +97,8 @@ export function useFirestoreCollection<T extends WithId>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, businessId]);
 
-  // A live onSnapshot listener that hits a permission-denied/unavailable
-  // error terminates for good rather than retrying — this gives the UI a
-  // way to recover with a genuine server read instead of a listener that's
-  // already dead, without triggering the two-way sync-to-Firestore writes
-  // that the returned setItems performs.
+  // Same recovery fetch as above, exposed for manual "Refresh" actions in
+  // the UI that want a guaranteed fresh read without waiting on a listener.
   const refresh = async () => {
     if (!businessId) return;
     collectionItemsRef.current = (await fetchCollectionFromServer(collectionName, businessId)) as T[];
