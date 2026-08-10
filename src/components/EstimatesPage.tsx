@@ -45,7 +45,7 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, recentRoster, customers } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, recentRoster, customers, setDocuments } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -98,6 +98,33 @@ export const EstimatesPage: React.FC = () => {
       setEstimates(prev => [newEst, ...prev]);
     } else {
       setLocalEstimates(prev => [newEst, ...prev]);
+    }
+    // The Documents page's "Estimates" folder/count reads from the separate
+    // documents collection, not from estimates directly — nothing else
+    // creates that record, so every estimate needs a matching entry here or
+    // it's invisible on Documents despite existing.
+    if (setDocuments) {
+      setDocuments(prev => [{
+        id: "doc_" + newEst.id,
+        name: `${newEst.number} - ${newEst.customerName}.pdf`,
+        customer: newEst.customerName,
+        employee: newEst.salesRep,
+        vendor: "None",
+        job: "None",
+        type: "Estimates",
+        folder: "Estimates & Quotes",
+        uploadedBy: newEst.salesRep,
+        date: newEst.createdDate,
+        size: "0 KB",
+        status: newEst.status === "Accepted" ? "Signed" : "Draft",
+        isFavorite: false,
+        isArchived: false,
+        notes: formNotes.trim(),
+        tags: ["Estimate"],
+        estimateId: newEst.id,
+        invoiceId: "None",
+        lastModified: newEst.createdDate
+      }, ...prev]);
     }
     if (logOperationalEvent) {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
