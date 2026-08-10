@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   ShoppingCart,
   ArrowRight,
   Package,
@@ -71,6 +72,30 @@ const INITIAL_PURCHASES: PurchaseRecord[] = [];
 
 export const INITIAL_INVENTORY: InventoryItem[] = [];
 
+const INVENTORY_CATEGORIES = [
+  { name: "Materials", icon: "🧱" },
+  { name: "Tools", icon: "🔧" },
+  { name: "Equipment", icon: "⚙️" },
+  { name: "Electrical", icon: "⚡" },
+  { name: "Plumbing", icon: "💧" },
+  { name: "Concrete", icon: "🪨" },
+  { name: "Lumber", icon: "🪵" },
+  { name: "Drywall", icon: "⬜" },
+  { name: "Fasteners", icon: "🔩" },
+  { name: "Paint", icon: "🎨" },
+  { name: "Roofing", icon: "🏠" },
+  { name: "HVAC", icon: "🔥" },
+  { name: "Landscaping", icon: "🌱" },
+  { name: "Safety", icon: "🛡️" },
+  { name: "Office Supplies", icon: "📎" },
+  { name: "Cleaning", icon: "🧹" },
+  { name: "Vehicles", icon: "🚚" },
+  { name: "Fuel", icon: "⛽" }
+] as const;
+
+const DEFAULT_CATEGORY_SHORTCUTS = ["Materials", "Tools", "Equipment", "Office Supplies", "Fuel"];
+const CATEGORY_SHORTCUTS_STORAGE_KEY = "owners-inventory-category-shortcuts";
+
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
 
@@ -101,6 +126,23 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [activeFilterDrawer, setActiveFilterDrawer] = useState(false);
   const [filterWarehouse, setFilterWarehouse] = useState("all");
   const [filterVendor, setFilterVendor] = useState("all");
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [addedCategoryShortcuts, setAddedCategoryShortcuts] = useState<string[]>(() => {
+    try {
+      const saved = window.localStorage.getItem(CATEGORY_SHORTCUTS_STORAGE_KEY);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed)
+        ? parsed.filter((name): name is string =>
+            typeof name === "string" &&
+            !DEFAULT_CATEGORY_SHORTCUTS.includes(name) &&
+            INVENTORY_CATEGORIES.some(category => category.name === name)
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Popup Modals
   const [isAddPopupOpen, setIsAddPopupOpen] = useState(false);
@@ -184,27 +226,24 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     };
   }, [inventoryList]);
 
-  // Quick categories list with custom icons
-  const CATEGORIES = [
-    { name: "Materials", icon: "🧱" },
-    { name: "Tools", icon: "🔧" },
-    { name: "Equipment", icon: "⚙️" },
-    { name: "Electrical", icon: "⚡" },
-    { name: "Plumbing", icon: "💧" },
-    { name: "Concrete", icon: "🪨" },
-    { name: "Lumber", icon: "🪵" },
-    { name: "Drywall", icon: "⬜" },
-    { name: "Fasteners", icon: "🔩" },
-    { name: "Paint", icon: "🎨" },
-    { name: "Roofing", icon: "🏠" },
-    { name: "HVAC", icon: "🔥" },
-    { name: "Landscaping", icon: "🌱" },
-    { name: "Safety", icon: "🛡️" },
-    { name: "Office Supplies", icon: "📎" },
-    { name: "Cleaning", icon: "🧹" },
-    { name: "Vehicles", icon: "🚚" },
-    { name: "Fuel", icon: "⛽" }
-  ];
+  const visibleCategoryShortcuts = INVENTORY_CATEGORIES.filter(category =>
+    DEFAULT_CATEGORY_SHORTCUTS.includes(category.name) || addedCategoryShortcuts.includes(category.name)
+  );
+  const availableCategoryShortcuts = INVENTORY_CATEGORIES.filter(category =>
+    !DEFAULT_CATEGORY_SHORTCUTS.includes(category.name) && !addedCategoryShortcuts.includes(category.name)
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem(CATEGORY_SHORTCUTS_STORAGE_KEY, JSON.stringify(addedCategoryShortcuts));
+  }, [addedCategoryShortcuts]);
+
+  const addCategoryShortcut = (categoryName: string) => {
+    setAddedCategoryShortcuts(current =>
+      current.includes(categoryName) ? current : [...current, categoryName]
+    );
+    setSelectedCategory(categoryName);
+    setIsCategoryMenuOpen(false);
+  };
 
   // Filter & Search Logic
   const filteredInventory = useMemo(() => {
@@ -1221,8 +1260,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           {/* VISUAL CATEGORY GRID */}
           <div className="space-y-2">
             <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fast Category Navigators</h4>
-            <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-9 gap-2">
-              {CATEGORIES.map(cat => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-start">
+              {visibleCategoryShortcuts.map(cat => (
                 <button
                   key={cat.name}
                   onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
@@ -1236,6 +1275,41 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <span className="text-[9.5px] font-extrabold tracking-tight truncate w-full">{cat.name}</span>
                 </button>
               ))}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryMenuOpen(open => !open)}
+                  aria-expanded={isCategoryMenuOpen}
+                  className="w-full p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 bg-[#E3F3FF] border-dashed border-[#4A9BFF] text-[#342D7E] hover:bg-[#D5EAFF]"
+                >
+                  <span className="flex items-center text-xl select-none">
+                    <Plus className="w-5 h-5" />
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isCategoryMenuOpen ? "rotate-180" : ""}`} />
+                  </span>
+                  <span className="text-[9.5px] font-extrabold tracking-tight w-full">Add Item to Inventory</span>
+                </button>
+
+                {isCategoryMenuOpen && (
+                  <div className="absolute bottom-full left-0 z-30 mb-2 w-56 max-h-72 overflow-y-auto rounded-2xl border border-[#A9CDEE] bg-[#F5FAFF] p-2 shadow-xl">
+                    <p className="px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      Choose a category
+                    </p>
+                    {availableCategoryShortcuts.length > 0 ? availableCategoryShortcuts.map(category => (
+                      <button
+                        key={category.name}
+                        type="button"
+                        onClick={() => addCategoryShortcut(category.name)}
+                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-[#D5EAFF]"
+                      >
+                        <span className="text-base">{category.icon}</span>
+                        <span>{category.name}</span>
+                      </button>
+                    )) : (
+                      <p className="px-2.5 py-3 text-xs font-semibold text-slate-500">All categories have been added.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1281,7 +1355,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none cursor-pointer"
                   >
-                    {CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                    {INVENTORY_CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
                     <option value="Custom">Custom / Special</option>
                   </select>
                 </div>
