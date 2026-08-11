@@ -427,37 +427,49 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       usageHistory: isEditMode && selectedItem ? selectedItem.usageHistory : []
     };
 
+    const previousInventoryValue = isEditMode && selectedItem
+      ? selectedItem.quantity * selectedItem.unitCost
+      : 0;
+    const newInventoryValue = newItem.quantity * newItem.unitCost;
+    const inventoryValueIncrease = Math.round(
+      Math.max(0, newInventoryValue - previousInventoryValue) * 100
+    ) / 100;
+
+    const logInventoryExpense = (amount: number) => {
+      const now = new Date();
+      const inventoryExpense: Transaction = {
+        id: `txn_inventory_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type: "expense",
+        source: "manual",
+        amount,
+        description: formName.trim(),
+        category: "Materials",
+        date: now.toISOString().slice(0, 10),
+        createdAt: now.toISOString(),
+        ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
+      };
+      const journalEntry = postTransactionEntry(inventoryExpense);
+      setTransactions(prev => [...prev, inventoryExpense]);
+      setJournalEntries(prev => [...prev, journalEntry]);
+    };
+
     if (isEditMode) {
       setInventoryList(prev => prev.map(item => item.id === newItem.id ? newItem : item));
-      triggerToast(`Updated inventory records for ${formName}`);
+      if (inventoryValueIncrease > 0) {
+        logInventoryExpense(inventoryValueIncrease);
+        triggerToast(`Updated ${formName} and added $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to Revenue expenses.`);
+      } else {
+        triggerToast(`Updated inventory records for ${formName}`);
+      }
     } else {
       setInventoryList(prev => [...prev, newItem]);
-      const shouldLogMaterialExpense = formCategory === "Materials" && window.confirm(
+      const shouldLogInventoryExpense = inventoryValueIncrease > 0 && window.confirm(
         "Add to logged expenses and deduct from company overhead?"
       );
 
-      if (shouldLogMaterialExpense) {
-        const materialCost = Math.round(formQuantity * formUnitCost * 100) / 100;
-        if (materialCost > 0) {
-          const now = new Date();
-          const materialExpense: Transaction = {
-            id: `txn_material_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            type: "expense",
-            source: "manual",
-            amount: materialCost,
-            description: formVendor.trim() || formName.trim(),
-            category: "Materials",
-            date: now.toISOString().slice(0, 10),
-            createdAt: now.toISOString(),
-            ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
-          };
-          const journalEntry = postTransactionEntry(materialExpense);
-          setTransactions(prev => [...prev, materialExpense]);
-          setJournalEntries(prev => [...prev, journalEntry]);
-          triggerToast(`Added ${formName} and logged $${materialCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`);
-        } else {
-          triggerToast(`Added ${formName}, but no expense was logged because quantity × unit cost is $0.00.`);
-        }
+      if (shouldLogInventoryExpense) {
+        logInventoryExpense(inventoryValueIncrease);
+        triggerToast(`Added ${formName} and logged $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`);
       } else {
         triggerToast(`Added ${formName} to inventory!`);
       }
