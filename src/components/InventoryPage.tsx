@@ -108,6 +108,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setSchedulingEvents: setEvents,
     inventoryList: propsInventoryList,
     setInventoryList: propsSetInventoryList,
+    transactions,
     setTransactions,
     setJournalEntries
   } = useDomainData();
@@ -434,6 +435,20 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     const inventoryValueIncrease = Math.round(
       Math.max(0, newInventoryValue - previousInventoryValue) * 100
     ) / 100;
+    const normalizedName = formName.trim().toLowerCase();
+    const normalizedVendor = formVendor.trim().toLowerCase();
+    const hasExistingInventoryExpense = isEditMode && selectedItem && transactions.some(transaction => {
+      if (transaction.type !== "expense") return false;
+      if (transaction.inventoryItemId === selectedItem.id) return true;
+      const description = transaction.description.trim().toLowerCase();
+      const matchesLegacyDescription = description === normalizedName || (!!normalizedVendor && description === normalizedVendor);
+      return matchesLegacyDescription && Math.abs(transaction.amount - previousInventoryValue) < 0.01;
+    });
+    // Records edited before inventory expenses were linked need one catch-up entry.
+    // Once linked, later edits post only the increase instead of duplicating the full value.
+    const expenseToLog = isEditMode && !hasExistingInventoryExpense
+      ? Math.round(Math.max(0, newInventoryValue) * 100) / 100
+      : inventoryValueIncrease;
 
     const logInventoryExpense = (amount: number) => {
       const now = new Date();
@@ -446,6 +461,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         category: "Materials",
         date: now.toISOString().slice(0, 10),
         createdAt: now.toISOString(),
+        inventoryItemId: newItem.id,
         ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
       };
       const journalEntry = postTransactionEntry(inventoryExpense);
@@ -455,9 +471,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
     if (isEditMode) {
       setInventoryList(prev => prev.map(item => item.id === newItem.id ? newItem : item));
-      if (inventoryValueIncrease > 0) {
-        logInventoryExpense(inventoryValueIncrease);
-        triggerToast(`Updated ${formName} and added $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to Revenue expenses.`);
+      if (expenseToLog > 0) {
+        logInventoryExpense(expenseToLog);
+        triggerToast(`Updated ${formName} and added $${expenseToLog.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to Revenue expenses.`);
       } else {
         triggerToast(`Updated inventory records for ${formName}`);
       }
