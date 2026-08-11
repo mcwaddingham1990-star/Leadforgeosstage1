@@ -459,7 +459,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           triggerToast(`Added ${formName}, but no expense was logged because quantity × unit cost is $0.00.`);
         }
       } else {
-        triggerToast(`Added ${formName} to ledger catalog!`);
+        triggerToast(`Added ${formName} to inventory!`);
       }
     }
 
@@ -528,7 +528,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const handleConfirmDelete = () => {
     if (!deletingItem) return;
     setInventoryList(prev => prev.filter(item => item.id !== deletingItem.id));
-    triggerToast(`Purged ${deletingItem.name} from catalog!`);
+    triggerToast(`Removed ${deletingItem.name} from inventory!`);
     setIsDetailsPopupOpen(false);
     setDeletingItem(null);
   };
@@ -649,7 +649,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       setIsDetailsPopupOpen(true);
       triggerToast(`Barcode recognized! Loaded ${found.name}`);
     } else {
-      if (window.confirm(`Product SKU/Code "${scanInputCode}" not found in local catalog. Create new catalog entry?`)) {
+      if (window.confirm(`Product SKU/Code "${scanInputCode}" was not found in inventory. Add it as a new inventory item?`)) {
         setIsScannerModalOpen(false);
         resetForm();
         setFormSku(scanInputCode);
@@ -945,7 +945,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           <span className="p-1.5 bg-[#C7E3FB] rounded-lg inline-block mb-1.5 text-[#342D7E]">
             <Layers className="w-4 h-4" />
           </span>
-          <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Total Catalog</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase font-mono tracking-tight">Total Inventory</p>
           <p className="text-lg font-mono font-black text-slate-800 mt-0.5">{stats.totalItems}</p>
         </button>
 
@@ -1033,7 +1033,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
               <h3 className="text-xs font-black uppercase tracking-wider text-[#342D7E]">
-                {{ catalog: "Catalog Items", value: "Ledger Value by Category", low: "Low Stock Items", out: "Out of Stock Items", favorites: "Favorite Items", used: "Items Used Today", deliveries: "Pending Inventory Deliveries", usage: "Today's Usage Value" }[activeSummaryCard]}
+                {{ catalog: "Inventory Items", value: "Inventory Value by Category", low: "Low Stock Items", out: "Out of Stock Items", favorites: "Favorite Items", used: "Items Used Today", deliveries: "Pending Inventory Deliveries", usage: "Today's Usage Value" }[activeSummaryCard]}
               </h3>
               <p className="text-[10px] font-semibold text-slate-500">Live information from inventory and scheduling. Select a row to open the connected record.</p>
             </div>
@@ -1433,7 +1433,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
             
             <div className="flex justify-between items-center border-b border-[#A9CDEE]/50 pb-3">
               <h3 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
-                <Plus className="w-5 h-5 text-[#4A9BFF]" /> {isEditMode ? "Modify Catalog Item" : "Create Custom Item Node"}
+                <Plus className="w-5 h-5 text-[#4A9BFF]" /> {isEditMode ? "Edit Inventory Item" : "Add Inventory Item"}
               </h3>
               <button 
                 onClick={() => { setIsAddPopupOpen(false); resetForm(); }}
@@ -1661,7 +1661,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     type="submit"
                     className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white rounded-xl text-xs font-black shadow-sm"
                   >
-                    {isEditMode ? "Save Catalog Record" : "Add Catalog Record"}
+                    {isEditMode ? "Save Inventory Item" : "Add Inventory Item"}
                   </button>
                 </div>
               </div>
@@ -1891,7 +1891,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       onClick={() => handleEditClick(selectedItem)}
                       className="p-2.5 bg-white hover:bg-slate-50 border border-[#A9CDEE]/40 rounded-xl text-center font-bold text-slate-600 text-xs"
                     >
-                      Edit Catalog
+                      Edit Inventory Item
                     </button>
                     <button
                       onClick={() => handleDeleteItem(selectedItem.id)}
@@ -2125,7 +2125,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     {matchedExistingItem ? (
                       <>This matches an existing item — <strong className="text-slate-800">{matchedExistingItem.name}</strong> ({matchedExistingItem.quantity} on hand). Confirming will add stock to it.</>
                     ) : (
-                      <>No existing catalog item matched this barcode/SKU. Review the fields below — anything the scan couldn't read is shown as "Not detected".</>
+                      <>No existing inventory item matched this barcode/SKU. Review the fields below — anything the scan couldn't read is shown as "Not detected".</>
                     )}
                   </div>
                 </div>
@@ -2196,7 +2196,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                 <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
                   <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <strong className="text-amber-800 font-black uppercase text-[10.5px] block">No catalog match found</strong>
+                    <strong className="text-amber-800 font-black uppercase text-[10.5px] block">No inventory match found</strong>
                     <p className="text-[11px] font-sans font-medium text-slate-600">
                       "{aiSuggestions.name || "This item"}" doesn't match any existing item's SKU or barcode. Choose what to do:
                     </p>
@@ -2214,7 +2214,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                         className="w-4 h-4 text-blue-500"
                       />
                       <div>
-                        <strong className="text-slate-800 text-[11px] block">Create Brand New Catalog Item</strong>
+                        <strong className="text-slate-800 text-[11px] block">Add New Inventory Item</strong>
                         <span className="text-[9.5px] text-slate-400 font-medium">Add "{aiSuggestions.name || "this item"}" as a new inventory entry with the scanned details.</span>
                       </div>
                     </label>
@@ -2289,7 +2289,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
             <div className="space-y-4 text-xs font-semibold text-slate-700">
               <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-[10.5px]">
-                Type in an existing SKU or code below to simulate a laser scan trigger, or enter a new SKU to test catalog onboarding.
+                Type an existing SKU or code below to simulate a laser scan, or enter a new SKU to test adding an inventory item.
               </div>
 
               <div className="space-y-1">
@@ -2445,7 +2445,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           <div className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-3xl w-full max-w-md shadow-2xl p-6 text-left space-y-4">
             <div className="flex justify-between items-center border-b border-[#A9CDEE]/40 pb-2">
               <h3 className="text-xs font-sans font-extrabold text-rose-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Trash2 className="w-5 h-5 text-rose-500" /> Remove Catalog Item
+                <Trash2 className="w-5 h-5 text-rose-500" /> Remove Inventory Item
               </h3>
               <button 
                 onClick={() => setDeletingItem(null)}
@@ -2457,7 +2457,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
             
             <div className="text-xs font-semibold text-slate-700 space-y-2">
               <p className="text-sm text-slate-800">
-                Are you sure you want to permanently delete <span className="font-extrabold text-rose-600">{deletingItem.name}</span> from the inventory catalog?
+                Are you sure you want to permanently delete <span className="font-extrabold text-rose-600">{deletingItem.name}</span> from inventory?
               </p>
               <p className="text-[11px] text-slate-500">
                 SKU: {deletingItem.sku} | Location: {deletingItem.location}
