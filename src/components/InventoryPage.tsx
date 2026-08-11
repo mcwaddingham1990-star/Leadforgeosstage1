@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -80,6 +80,7 @@ const INVENTORY_CATEGORIES = [
   { name: "Plumbing", icon: "💧" },
   { name: "Concrete", icon: "🪨" },
   { name: "Lumber", icon: "🪵" },
+  { name: "Tile", icon: "◼️" },
   { name: "Drywall", icon: "⬜" },
   { name: "Fasteners", icon: "🔩" },
   { name: "Paint", icon: "🎨" },
@@ -93,6 +94,28 @@ const INVENTORY_CATEGORIES = [
   { name: "Fuel", icon: "⛽" }
 ] as const;
 
+const MATERIAL_CATEGORIES = [
+  "Materials",
+  "Lumber",
+  "Concrete",
+  "Tile",
+  "Fasteners",
+  "Electrical",
+  "Plumbing",
+  "Drywall",
+  "Paint",
+  "Roofing",
+  "HVAC",
+  "Landscaping",
+  "Safety",
+  "Cleaning"
+] as const;
+
+const MATERIAL_CATEGORY_SET = new Set<string>(MATERIAL_CATEGORIES);
+const INVENTORY_NAVIGATION_CATEGORIES = INVENTORY_CATEGORIES.filter(category =>
+  !MATERIAL_CATEGORY_SET.has(category.name) || category.name === "Materials"
+);
+
 const DEFAULT_CATEGORY_SHORTCUTS = ["Materials", "Tools", "Equipment", "Office Supplies", "Fuel"];
 const CATEGORY_SHORTCUTS_STORAGE_KEY = "owners-inventory-category-shortcuts";
 
@@ -100,21 +123,7 @@ const CATEGORY_SHORTCUTS_STORAGE_KEY = "owners-inventory-category-shortcuts";
 // literal "Materials" category triggered the expense prompt, so lumber,
 // concrete, electrical supplies, etc. could be added without ever reducing
 // company cash.
-const MATERIAL_EXPENSE_CATEGORIES = new Set([
-  "Materials",
-  "Electrical",
-  "Plumbing",
-  "Concrete",
-  "Lumber",
-  "Drywall",
-  "Fasteners",
-  "Paint",
-  "Roofing",
-  "HVAC",
-  "Landscaping",
-  "Safety",
-  "Cleaning"
-]);
+const MATERIAL_EXPENSE_CATEGORIES = MATERIAL_CATEGORY_SET;
 
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
@@ -152,6 +161,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [filterVendor, setFilterVendor] = useState("all");
   const [activeSummaryCard, setActiveSummaryCard] = useState<string | null>(null);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const inventoryListRef = useRef<HTMLDivElement>(null);
   const [addedCategoryShortcuts, setAddedCategoryShortcuts] = useState<string[]>(() => {
     try {
       const saved = window.localStorage.getItem(CATEGORY_SHORTCUTS_STORAGE_KEY);
@@ -268,6 +278,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setCurrentView("list");
     setActiveTabFilter(filter);
     setSelectedCategory(category);
+    window.requestAnimationFrame(() => {
+      inventoryListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const openInventoryItem = (item: InventoryItem) => {
@@ -275,10 +288,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setIsDetailsPopupOpen(true);
   };
 
-  const visibleCategoryShortcuts = INVENTORY_CATEGORIES.filter(category =>
+  const visibleCategoryShortcuts = INVENTORY_NAVIGATION_CATEGORIES.filter(category =>
     DEFAULT_CATEGORY_SHORTCUTS.includes(category.name) || addedCategoryShortcuts.includes(category.name)
   );
-  const availableCategoryShortcuts = INVENTORY_CATEGORIES.filter(category =>
+  const availableCategoryShortcuts = INVENTORY_NAVIGATION_CATEGORIES.filter(category =>
     !DEFAULT_CATEGORY_SHORTCUTS.includes(category.name) && !addedCategoryShortcuts.includes(category.name)
   );
 
@@ -320,7 +333,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       if (activeTabFilter === "favorites" && !item.isFavorite) return false;
 
       // Category Icon click matching
-      if (selectedCategory && item.category !== selectedCategory) return false;
+      if (selectedCategory === "Materials" && !MATERIAL_CATEGORY_SET.has(item.category)) return false;
+      if (selectedCategory && selectedCategory !== "Materials" && item.category !== selectedCategory) return false;
 
       // Drawer detailed filters
       if (filterWarehouse !== "all" && !item.location.toLowerCase().includes(filterWarehouse.toLowerCase())) return false;
@@ -1128,8 +1142,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
           {activeSummaryCard === "value" && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {INVENTORY_CATEGORIES.map(category => {
-                const items = inventoryList.filter(item => item.category === category.name);
+              {INVENTORY_NAVIGATION_CATEGORIES.map(category => {
+                const items = inventoryList.filter(item => category.name === "Materials"
+                  ? MATERIAL_CATEGORY_SET.has(item.category)
+                  : item.category === category.name
+                );
                 const value = items.reduce((total, item) => total + item.quantity * item.unitCost, 0);
                 if (!items.length) return null;
                 return <button type="button" key={category.name} onClick={() => showInventorySelection("all", category.name)} className="flex items-center justify-between rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 hover:border-[#4A9BFF]"><span className="text-xs font-bold text-slate-700">{category.icon} {category.name} ({items.length})</span><span className="text-xs font-black text-emerald-700">${value.toLocaleString()}</span></button>;
@@ -1331,7 +1348,19 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         </div>
       ) : (
         /* MAIN INVENTORY LIST AND DETAILS */
-        <div className="space-y-4">
+        <div ref={inventoryListRef} className="space-y-4 scroll-mt-4">
+
+          {selectedCategory && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-blue-300 bg-blue-50 px-4 py-3">
+              <p className="text-xs font-extrabold text-blue-900">
+                Viewing: {selectedCategory === "Materials" ? "All Materials (including Fasteners)" : selectedCategory}
+                <span className="ml-2 font-semibold text-blue-700">({filteredInventory.length} items)</span>
+              </p>
+              <button type="button" onClick={() => showInventorySelection("all", null)} className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-[10px] font-black text-blue-700 shadow-sm hover:bg-blue-100">
+                View All Inventory
+              </button>
+            </div>
+          )}
           
           <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-3xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
@@ -1444,7 +1473,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
               {visibleCategoryShortcuts.map(cat => (
                 <button
                   key={cat.name}
-                  onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
+                  onClick={() => showInventorySelection("all", selectedCategory === cat.name ? null : cat.name)}
                   className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
                     selectedCategory === cat.name
                       ? "bg-blue-100 border-blue-500 text-blue-900 ring-2 ring-blue-100"
@@ -1529,17 +1558,33 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Category Class</label>
+                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Inventory Category</label>
+                  <select
+                    value={MATERIAL_CATEGORY_SET.has(formCategory) ? "Materials" : formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none cursor-pointer"
+                  >
+                    {INVENTORY_NAVIGATION_CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                    <option value="Custom">Custom / Special</option>
+                  </select>
+                </div>
+              </div>
+
+              {MATERIAL_CATEGORY_SET.has(formCategory) && (
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Material Type *</label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none cursor-pointer"
                   >
-                    {INVENTORY_CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
-                    <option value="Custom">Custom / Special</option>
+                    {MATERIAL_CATEGORIES.map(category => (
+                      <option key={category} value={category}>{category === "Lumber" ? "Wood / Lumber" : category}</option>
+                    ))}
                   </select>
+                  <p className="text-[10px] font-medium text-slate-500">Fasteners, wood, concrete, tile, and the other choices here are all grouped under Materials.</p>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
