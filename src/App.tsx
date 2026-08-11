@@ -530,16 +530,12 @@ function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number 
 }
 
 const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
-  <span
+  <img
+    src="/branding/owners-sidebar-icon-1000043699.png"
+    alt=""
     aria-hidden="true"
-    className={`inline-block overflow-hidden ${className}`}
-  >
-    <img
-      src="/branding/owners-sidebar-icon-1000043678.jpg"
-      alt=""
-      className="block h-full w-full scale-[1.04] object-cover"
-    />
-  </span>
+    className={`object-contain ${className}`}
+  />
 );
 
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
