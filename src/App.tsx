@@ -2567,6 +2567,7 @@ Access to full financial telemetry is restricted.`;
     } catch (err) {
       console.error("Error saving transaction:", err);
       triggerNotification("Couldn't save that — check your connection and try again.");
+      throw err;
     }
   };
 
@@ -6068,6 +6069,7 @@ Access to full financial telemetry is restricted.`;
 
                         {logTransactionType && (
                           <LogTransactionModal
+                            key={logTransactionType}
                             type={logTransactionType}
                             createdBy={loggedInUser?.email}
                             onSave={handleSaveTransaction}

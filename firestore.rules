@@ -93,6 +93,18 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
+    // Financial records created by the Revenue page. A logged transaction
+    // and its balanced journal entry are written together in one batch, so
+    // both collections must authorize the same business member.
+    match /transactions/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /journal_entries/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+
     // Time punches are permanent company records. active_shifts is the
     // transactional lock that makes an unmatched clock-in company-wide and
     // prevents a second clock-out, even from another device.

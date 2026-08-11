@@ -5,7 +5,7 @@ import { Transaction } from "../types/domain";
 interface LogTransactionModalProps {
   type: "income" | "expense";
   createdBy?: string;
-  onSave: (t: Omit<Transaction, "id">) => void;
+  onSave: (t: Omit<Transaction, "id">) => Promise<void>;
   onClose: () => void;
 }
 
@@ -29,6 +29,8 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const [mode, setMode] = useState<Mode>("choose");
   const [source, setSource] = useState<"manual" | "ai_scan">("manual");
   const [scanError, setScanError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [amount, setAmount] = useState("");
@@ -93,19 +95,28 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const parsedAmount = parseFloat(amount);
-    if (!parsedAmount || parsedAmount <= 0 || !description.trim()) return;
-    onSave({
-      type,
-      source,
-      amount: parsedAmount,
-      description: description.trim(),
-      category: category || undefined,
-      date,
-      createdAt: new Date().toISOString(),
-      createdBy
-    });
+    if (!parsedAmount || parsedAmount <= 0 || !description.trim() || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({
+        type,
+        source,
+        amount: parsedAmount,
+        description: description.trim(),
+        category: category || undefined,
+        date,
+        createdAt: new Date().toISOString(),
+        createdBy
+      });
+    } catch (err) {
+      console.error(`Error saving ${type}:`, err);
+      setSaveError(`Couldn't save this ${label.toLowerCase()}. Please try again.`);
+      setIsSaving(false);
+    }
   };
 
   const canSave = !!parseFloat(amount) && parseFloat(amount) > 0 && description.trim() !== "";
@@ -155,11 +166,17 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
         )}
 
         {mode === "form" && (
-          <div className="py-3 space-y-3 text-xs">
+          <form id="log-transaction-form" onSubmit={handleSave} className="py-3 space-y-3 text-xs">
             {scanError && (
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-[10.5px] font-sans font-medium text-amber-700">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>{scanError}</span>
+              </div>
+            )}
+            {saveError && (
+              <div role="alert" className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-[10.5px] font-sans font-medium text-rose-700">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{saveError}</span>
               </div>
             )}
             <div className="space-y-1">
@@ -206,7 +223,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
                 />
               </div>
             </div>
-          </div>
+          </form>
         )}
 
         <div className="flex gap-2.5 pt-2 border-t border-slate-100">
@@ -219,12 +236,12 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
           </button>
           {mode === "form" && (
             <button
-              type="button"
-              disabled={!canSave}
-              onClick={handleSave}
+              type="submit"
+              form="log-transaction-form"
+              disabled={!canSave || isSaving}
               className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Save {label}
+              {isSaving ? "Saving..." : `Save ${label}`}
             </button>
           )}
         </div>
