@@ -5272,7 +5272,7 @@ Access to full financial telemetry is restricted.`;
                                         <Line
                                           type="monotone"
                                           dataKey="Revenue"
-                                          stroke="#22C55E"
+                                          stroke="#4A86F7"
                                           strokeWidth={1.5}
                                           dot={{ r: 1 }}
                                           activeDot={{ r: 3 }}
@@ -5290,7 +5290,7 @@ Access to full financial telemetry is restricted.`;
                                         <Line
                                           type="monotone"
                                           dataKey="Profit"
-                                          stroke="#4A86F7"
+                                          stroke="#22C55E"
                                           strokeWidth={1.5}
                                           dot={{ r: 1 }}
                                           activeDot={{ r: 3 }}
@@ -6139,7 +6139,7 @@ Access to full financial telemetry is restricted.`;
                               <Line
                                 type="monotone"
                                 dataKey="Revenue"
-                                stroke="#22C55E"
+                                stroke="#4A86F7"
                                 strokeWidth={3}
                                 dot={{ r: 4, strokeWidth: 1 }}
                                 activeDot={{ r: 6 }}
@@ -6157,7 +6157,7 @@ Access to full financial telemetry is restricted.`;
                               <Line
                                 type="monotone"
                                 dataKey="Profit"
-                                stroke="#4A86F7"
+                                stroke="#22C55E"
                                 strokeWidth={2}
                                 dot={{ r: 3, strokeWidth: 1 }}
                                 activeDot={{ r: 5 }}
