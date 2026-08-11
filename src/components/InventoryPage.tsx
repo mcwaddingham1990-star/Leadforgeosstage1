@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { hasPermission } from "../types/permissions";
-import { postTransactionEntry } from "../lib/accountingEngine";
 import {
   Search,
   Plus,
@@ -65,7 +64,7 @@ export interface ScannedReceipt {
 }
 
 export type { InventoryItem, PurchaseRecord } from "../types/domain";
-import type { InventoryItem, PurchaseRecord, Transaction } from "../types/domain";
+import type { InventoryItem, PurchaseRecord } from "../types/domain";
 
 export interface InventoryPageProps {}
 
@@ -97,6 +96,26 @@ const INVENTORY_CATEGORIES = [
 const DEFAULT_CATEGORY_SHORTCUTS = ["Materials", "Tools", "Equipment", "Office Supplies", "Fuel"];
 const CATEGORY_SHORTCUTS_STORAGE_KEY = "owners-inventory-category-shortcuts";
 
+// These catalog categories are consumable job materials. Previously only the
+// literal "Materials" category triggered the expense prompt, so lumber,
+// concrete, electrical supplies, etc. could be added without ever reducing
+// company cash.
+const MATERIAL_EXPENSE_CATEGORIES = new Set([
+  "Materials",
+  "Electrical",
+  "Plumbing",
+  "Concrete",
+  "Lumber",
+  "Drywall",
+  "Fasteners",
+  "Paint",
+  "Roofing",
+  "HVAC",
+  "Landscaping",
+  "Safety",
+  "Cleaning"
+]);
+
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
 
@@ -110,7 +129,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setInventoryList: propsSetInventoryList,
     transactions,
     setTransactions,
-    setJournalEntries
+    setJournalEntries,
+    saveTransaction
   } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -200,6 +220,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [formPhoto, setFormPhoto] = useState("📦");
   const [formIsFavorite, setFormIsFavorite] = useState(false);
   const [formCustomFields, setFormCustomFields] = useState<Array<{ key: string; value: string }>>([]);
+  const [isSavingItem, setIsSavingItem] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
@@ -391,8 +412,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   };
 
   // Add Item Submit
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingItem) return;
     if (isEditMode ? !canEdit : !canCreateInventory) {
       triggerToast("Access Denied: you don't have permission to do that.");
       return;
@@ -469,6 +491,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       setJournalEntries(prev => [...prev, journalEntry]);
     };
 
+    setIsSavingItem(true);
+    try {
     if (isEditMode) {
       setInventoryList(prev => prev.map(item => item.id === newItem.id ? newItem : item));
       if (expenseToLog > 0) {
@@ -478,21 +502,39 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         triggerToast(`Updated inventory records for ${formName}`);
       }
     } else {
-      setInventoryList(prev => [...prev, newItem]);
-      const shouldLogInventoryExpense = inventoryValueIncrease > 0 && window.confirm(
+      const shouldLogInventoryExpense = MATERIAL_EXPENSE_CATEGORIES.has(formCategory) && inventoryValueIncrease > 0 && window.confirm(
         "Add to logged expenses and deduct from company overhead?"
       );
 
       if (shouldLogInventoryExpense) {
-        logInventoryExpense(inventoryValueIncrease);
+        const now = new Date();
+        await saveTransaction({
+          type: "expense",
+          source: "manual",
+          amount: inventoryValueIncrease,
+          description: formName.trim(),
+          category: "Materials",
+          date: now.toISOString().slice(0, 10),
+          createdAt: now.toISOString(),
+          inventoryItemId: newItem.id,
+          ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
+        });
+        setInventoryList(prev => [...prev, newItem]);
         triggerToast(`Added ${formName} and logged $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`);
       } else {
+        setInventoryList(prev => [...prev, newItem]);
         triggerToast(`Added ${formName} to inventory!`);
       }
     }
 
-    setIsAddPopupOpen(false);
-    resetForm();
+      setIsAddPopupOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to add inventory material and expense:", error);
+      triggerToast(`Couldn't add ${formName}. The expense was not saved, so company overhead was not changed. Please try again.`);
+    } finally {
+      setIsSavingItem(false);
+    }
   };
 
   const resetForm = () => {
@@ -1687,9 +1729,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white rounded-xl text-xs font-black shadow-sm"
+                    disabled={isSavingItem}
+                    className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] disabled:cursor-not-allowed disabled:opacity-60 text-white rounded-xl text-xs font-black shadow-sm"
                   >
-                    {isEditMode ? "Save Inventory Item" : "Add Inventory Item"}
+                    {isSavingItem ? "Saving…" : isEditMode ? "Save Inventory Item" : "Add Inventory Item"}
                   </button>
                 </div>
               </div>

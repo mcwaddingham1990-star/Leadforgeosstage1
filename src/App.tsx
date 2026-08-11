@@ -2870,6 +2870,7 @@ Access to full financial telemetry is restricted.`;
     refreshTimeClockLogs,
     transactions,
     setTransactions,
+    saveTransaction: handleSaveTransaction,
     accounts,
     setAccounts,
     journalEntries,

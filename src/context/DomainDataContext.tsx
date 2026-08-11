@@ -47,6 +47,8 @@ export interface DomainDataContextValue {
   refreshTimeClockLogs: () => Promise<void>;
   transactions: Transaction[];
   setTransactions: Dispatch<SetStateAction<Transaction[]>>;
+  /** Atomically persists a transaction and its balanced journal entry. */
+  saveTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   accounts: Account[];
   setAccounts: Dispatch<SetStateAction<Account[]>>;
   journalEntries: JournalEntry[];
