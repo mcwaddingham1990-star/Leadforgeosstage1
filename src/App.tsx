@@ -362,6 +362,7 @@ function getRevenueChartData(
   priorTotal: number;
   currentExpenseTotal: number;
   currentPayrollTotal: number;
+  priorExpenseTotal: number;
 } {
   const now = new Date();
   const expenseTx = transactions.filter((t) => t.type === "expense");
@@ -401,17 +402,21 @@ function getRevenueChartData(
     periodStart: Date,
     periodEnd: Date,
     priorTotal: number
-  ) => ({
-    series,
-    currentTotal: filter === "Day"
-      ? series.reduce((s, d) => s + d.Revenue, 0)
-      : (series[series.length - 1]?.Revenue || 0),
-    priorTotal,
-    currentExpenseTotal: filter === "Day"
-      ? series.reduce((s, d) => s + d.Expenses, 0)
-      : (series[series.length - 1]?.Expenses || 0),
-    currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd)
-  });
+  ) => {
+    const periodDuration = Math.max(0, periodEnd.getTime() - periodStart.getTime());
+    return {
+      series,
+      currentTotal: filter === "Day"
+        ? series.reduce((s, d) => s + d.Revenue, 0)
+        : (series[series.length - 1]?.Revenue || 0),
+      priorTotal,
+      currentExpenseTotal: filter === "Day"
+        ? series.reduce((s, d) => s + d.Expenses, 0)
+        : (series[series.length - 1]?.Expenses || 0),
+      currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd),
+      priorExpenseTotal: sumInRange(expenseTx, new Date(periodStart.getTime() - periodDuration), periodStart)
+    };
+  };
 
   // Daily view intentionally shows each day's activity. Every wider view is
   // cumulative so a later expense lowers the running profit by only that
@@ -1228,11 +1233,25 @@ export default function App() {
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
   const [payrollSearch, setPayrollSearch] = useState("");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
+  const [balanceView, setBalanceView] = useState("Total");
   const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(() => {
     const saved = sessionStorage.getItem("ownerslocal_pending_financial_scan");
     return saved === "income" || saved === "expense" ? saved : null;
   });
   const [isRunningPayroll, setIsRunningPayroll] = useState(false);
+
+  // Total Balance is the first-use default. After the user picks another
+  // view, remember it per business through refreshes and logout/login.
+  useEffect(() => {
+    if (!businessId) return;
+    const saved = localStorage.getItem(`ownerslocal_balance_view:${businessId}`);
+    setBalanceView(["Day", "Pay Period", "Quarter", "Annual", "Total"].includes(saved || "") ? saved! : "Total");
+  }, [businessId]);
+
+  const changeBalanceView = (view: string) => {
+    setBalanceView(view);
+    if (businessId) localStorage.setItem(`ownerslocal_balance_view:${businessId}`, view);
+  };
 
   // Global AI Widget States
   const [globalAiSetting, setGlobalAiSetting] = useState<"OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO">("ASSIST");
@@ -5962,24 +5981,45 @@ Access to full financial telemetry is restricted.`;
                         </div>
 
                         {/* Summary Display on Graph card */}
-                        <div className="flex flex-wrap items-baseline gap-4">
-                          <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
-                            {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                          </span>
-                          {(() => {
-                            const { currentTotal, priorTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
-                            const hasPrior = priorTotal > 0;
-                            const pct = hasPrior ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
-                            const isUp = pct === null ? currentTotal > 0 : pct >= 0;
-                            return (
+                        {(() => {
+                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions);
+                          const balance = currentTotal - currentExpenseTotal;
+                          const priorBalance = priorTotal - priorExpenseTotal;
+                          const hasPrior = priorBalance !== 0;
+                          const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
+                          const isUp = pct === null ? balance > 0 : pct >= 0;
+                          const balanceLabel = balanceView === "Total" ? "Total Balance" : `${balanceView} Balance`;
+                          return (
+                            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                              <div>
+                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393] mb-1">{balanceLabel}</p>
+                                <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
+                                  {`${balance < 0 ? "-" : ""}$${Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </span>
+                              </div>
+                              <select
+                                aria-label="Balance view"
+                                value={balanceView}
+                                onChange={(e) => {
+                                  changeBalanceView(e.target.value);
+                                  triggerNotification(`Balance view updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                }}
+                                className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
+                              >
+                                <option value="Day">View by Day</option>
+                                <option value="Pay Period">View by Pay Period</option>
+                                <option value="Quarter">View by Quarter</option>
+                                <option value="Annual">View Annual</option>
+                                <option value="Total">View Total Balance</option>
+                              </select>
                               <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
                                 {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
-                                {pct === null ? (currentTotal > 0 ? "New" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                                {pct === null ? (balance !== 0 ? "Current" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
                               </span>
-                            );
-                          })()}
-                          <span className="text-xs text-[#5E7393] font-sans font-medium">vs prior period</span>
-                        </div>
+                              <span className="text-xs text-[#5E7393] font-sans font-medium">income minus expenses</span>
+                            </div>
+                          );
+                        })()}
 
                         {/* Log real income/expenses, run real payroll */}
                         <div className="flex flex-wrap gap-2">
