@@ -1616,58 +1616,6 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                 />
               </div>
 
-              {/* CUSTOM DYNAMIC FIELDS AREA */}
-              <div className="p-3.5 bg-[#F5FAFF] rounded-2xl border border-[#A9CDEE]/60 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9.5px] uppercase font-bold text-[#342D7E] tracking-wider">Dynamic Attributes & Custom Fields</span>
-                  <span className="text-[9px] text-slate-400 font-medium">Add specifications (e.g., Color, Gauge, Weight)</span>
-                </div>
-                
-                {formCustomFields.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {formCustomFields.map((field, index) => (
-                      <span 
-                        key={index} 
-                        className="px-2.5 py-1 bg-blue-50 border border-[#A9CDEE]/80 rounded-lg text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5 shadow-xs"
-                      >
-                        <span className="text-[#342D7E]">{field.key}:</span> {field.value}
-                        <button
-                          type="button"
-                          onClick={() => setFormCustomFields(prev => prev.filter((_, i) => i !== index))}
-                          className="text-slate-400 hover:text-slate-600 font-black cursor-pointer"
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <input
-                    value={newKey}
-                    onChange={(e) => setNewKey(e.target.value)}
-                    type="text"
-                    placeholder="Field Name"
-                    className="flex-1 p-2 bg-white border border-[#A9CDEE] rounded-lg"
-                  />
-                  <input
-                    value={newValue}
-                    onChange={(e) => setNewValue(e.target.value)}
-                    type="text"
-                    placeholder="Field Value"
-                    className="flex-1 p-2 bg-white border border-[#A9CDEE] rounded-lg"
-                  />
-                  <button
-                    type="button"
-                    onClick={addCustomField}
-                    className="px-3 bg-[#E3F3FF] text-[#342D7E] border border-[#A9CDEE] hover:bg-[#C7E3FB] rounded-lg text-xs font-bold"
-                  >
-                    + Add Field
-                  </button>
-                </div>
-              </div>
-
               <div className="flex items-center justify-between border-t border-[#A9CDEE]/50 pt-4">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
