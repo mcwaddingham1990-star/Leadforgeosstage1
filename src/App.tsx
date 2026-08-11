@@ -531,10 +531,10 @@ function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number 
 
 const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
   <img
-    src="/branding/owners-sidebar-icon.jpg"
+    src="/branding/owners-app-icon.png"
     alt=""
     aria-hidden="true"
-    className={`object-cover rounded-[24%] scale-[1.18] ${className}`}
+    className={`object-contain ${className}`}
   />
 );
 
