@@ -239,6 +239,7 @@ export interface Transaction {
   date: string; // YYYY-MM-DD
   createdAt: string; // ISO timestamp
   createdBy?: string; // real logged-in user's email
+  inventoryItemId?: string; // links inventory purchases/adjustments to their expense entry
 }
 
 export interface SchedulingEvent {
