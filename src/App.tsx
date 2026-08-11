@@ -5194,10 +5194,9 @@ Access to full financial telemetry is restricted.`;
                     const totalHours = (clockInDuration / 3600).toFixed(1);
                     const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
 
-                    // Real Revenue only, bucketed by real completed-job data — see
-                    // getRevenueChartData for why Profit/Expenses/Payroll/Taxes
-                    // aren't part of this.
-                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents).series;
+                    // Keep the dashboard widget on the exact same selected period and
+                    // financial series as the Revenue page graph.
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
 
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
@@ -5274,6 +5273,24 @@ Access to full financial telemetry is restricted.`;
                                           dot={{ r: 1 }}
                                           activeDot={{ r: 3 }}
                                           name="Revenue"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Expenses"
+                                          stroke="#F43F5E"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Expenses"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Profit"
+                                          stroke="#4A86F7"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Profit"
                                         />
                                       </LineChart>
                                     </ResponsiveContainer>
