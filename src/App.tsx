@@ -5197,6 +5197,8 @@ Access to full financial telemetry is restricted.`;
                     // Keep the dashboard widget on the exact same selected period and
                     // financial series as the Revenue page graph.
                     const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
+                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                    const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
 
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
@@ -5234,7 +5236,7 @@ Access to full financial telemetry is restricted.`;
                                   <p className="text-lg font-sans font-black text-[#1F3557] tracking-tight leading-none">
                                     {isFinAuthorized ? (
                                       <>
-                                        {`$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                        {`${dashboardNetRevenue < 0 ? "-" : ""}$${Math.abs(dashboardNetRevenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                       </>
                                     ) : (
                                       <span className="text-sm font-sans font-extrabold text-red-600 bg-red-100 px-2 py-0.5 rounded-md border border-red-200">
