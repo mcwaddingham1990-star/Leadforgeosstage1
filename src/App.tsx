@@ -403,77 +403,100 @@ function getRevenueChartData(
     priorTotal: number
   ) => ({
     series,
-    currentTotal: series.reduce((s, d) => s + d.Revenue, 0),
+    currentTotal: filter === "Day"
+      ? series.reduce((s, d) => s + d.Revenue, 0)
+      : (series[series.length - 1]?.Revenue || 0),
     priorTotal,
-    currentExpenseTotal: series.reduce((s, d) => s + d.Expenses, 0),
+    currentExpenseTotal: filter === "Day"
+      ? series.reduce((s, d) => s + d.Expenses, 0)
+      : (series[series.length - 1]?.Expenses || 0),
     currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd)
   });
 
-  if (filter === "Week") {
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  // Daily view intentionally shows each day's activity. Every wider view is
+  // cumulative so a later expense lowers the running profit by only that
+  // expense instead of making the graph look as though earlier income vanished.
+  const cumulative = (rows: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>) => {
+    let revenue = 0;
+    let expenses = 0;
+    return rows.map((row) => {
+      revenue += row.Revenue;
+      expenses += row.Expenses;
+      return { ...row, Revenue: revenue, Expenses: expenses, Profit: revenue - expenses };
+    });
+  };
+
+  if (filter === "Day") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const series = buildDays(7, (d) => d.toLocaleDateString(undefined, { weekday: "short" }));
+    const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
     const priorTotal = sumInRange(
       revenueSource,
-      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
-      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
     );
     return withTotals(series, periodStart, periodEnd, priorTotal);
   }
 
+  if (filter === "Pay Period") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const dailyRows = buildDays(14, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
+    const priorTotal = sumInRange(
+      revenueSource,
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 27),
+      periodStart
+    );
+    return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
+  }
+
   if (filter === "Quarter") {
     const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
-    for (let i = 2; i >= 0; i--) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    for (let month = quarterStartMonth; month <= now.getMonth(); month++) {
+      const monthStart = new Date(now.getFullYear(), month, 1);
+      const monthEnd = new Date(now.getFullYear(), month + 1, 1);
       months.push(buildRow(monthStart.toLocaleDateString(undefined, { month: "short" }), monthStart, monthEnd));
     }
-    const periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const periodStart = new Date(now.getFullYear(), quarterStartMonth, 1);
+    const periodEnd = new Date(now.getFullYear(), quarterStartMonth + 3, 1);
     const priorTotal = sumInRange(
       revenueSource,
-      new Date(now.getFullYear(), now.getMonth() - 5, 1),
-      new Date(now.getFullYear(), now.getMonth() - 2, 1)
+      new Date(now.getFullYear(), quarterStartMonth - 3, 1),
+      periodStart
     );
-    return withTotals(months, periodStart, periodEnd, priorTotal);
+    return withTotals(cumulative(months), periodStart, periodEnd, priorTotal);
   }
 
-  if (filter === "Year") {
-    const quarters: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
-    const currentQuarter = Math.floor(now.getMonth() / 3);
-    let periodStart = now;
-    let periodEnd = now;
-    for (let i = 3; i >= 0; i--) {
-      const qIndex = currentQuarter - i;
-      const qYear = now.getFullYear() + Math.floor(qIndex / 4);
-      const qNum = ((qIndex % 4) + 4) % 4;
-      const qStart = new Date(qYear, qNum * 3, 1);
-      const qEnd = new Date(qYear, qNum * 3 + 3, 1);
-      if (i === 3) periodStart = qStart;
-      if (i === 0) periodEnd = qEnd;
-      quarters.push(buildRow(`Q${qNum + 1} ${qYear}`, qStart, qEnd));
+  if (filter === "Annual") {
+    const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    for (let month = 0; month <= now.getMonth(); month++) {
+      const monthStart = new Date(now.getFullYear(), month, 1);
+      const monthEnd = new Date(now.getFullYear(), month + 1, 1);
+      months.push(buildRow(monthStart.toLocaleDateString(undefined, { month: "short" }), monthStart, monthEnd));
     }
-    const priorQIndex = currentQuarter - 4;
-    const priorYear = now.getFullYear() + Math.floor(priorQIndex / 4);
-    const priorQNum = ((priorQIndex % 4) + 4) % 4;
+    const periodStart = new Date(now.getFullYear(), 0, 1);
+    const periodEnd = new Date(now.getFullYear() + 1, 0, 1);
     const priorTotal = sumInRange(
       revenueSource,
-      new Date(priorYear, priorQNum * 3, 1),
-      new Date(priorYear, priorQNum * 3 + 3, 1)
+      new Date(now.getFullYear() - 1, 0, 1),
+      periodStart
     );
-    return withTotals(quarters, periodStart, periodEnd, priorTotal);
+    return withTotals(cumulative(months), periodStart, periodEnd, priorTotal);
   }
 
-  // "Pay Period"/"Custom"/anything else: real trailing 30 days by day.
-  const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
-  const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
-  const priorTotal = sumInRange(
-    revenueSource,
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
-  );
-  return withTotals(series, periodStart, periodEnd, priorTotal);
+  // Total: group the complete ledger by year, then show lifetime running totals.
+  const allDates = [...revenueSource, ...expenseTx]
+    .map((item) => new Date(item.date))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  const firstYear = allDates.length ? Math.min(...allDates.map((date) => date.getFullYear())) : now.getFullYear();
+  const years: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+  for (let year = firstYear; year <= now.getFullYear(); year++) {
+    years.push(buildRow(String(year), new Date(year, 0, 1), new Date(year + 1, 0, 1)));
+  }
+  const periodStart = new Date(firstYear, 0, 1);
+  const periodEnd = new Date(now.getFullYear() + 1, 0, 1);
+  return withTotals(cumulative(years), periodStart, periodEnd, 0);
 }
 
 /**
@@ -5898,10 +5921,11 @@ Access to full financial telemetry is restricted.`;
                               Period: <strong className="text-[#315C9F]">
                                 {(() => {
                                   const now = new Date();
-                                  if (revenuePageFilter === "Week") return "Last 7 days";
-                                  if (revenuePageFilter === "Quarter") return "Last 3 months";
-                                  if (revenuePageFilter === "Year") return "Last 4 quarters";
-                                  return `Last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                  if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                  if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
+                                  if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
+                                  if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
+                                  return "Running totals — complete financial history";
                                 })()}
                               </strong>
                             </p>
@@ -5909,14 +5933,20 @@ Access to full financial telemetry is restricted.`;
 
                           {/* Filter Button Group */}
                           <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
-                            {["Pay Period", "Week", "Month", "Quarter", "Year", "Custom"].map((period) => {
-                              const isActive = revenuePageFilter === period;
+                            {[
+                              { value: "Day", label: "View by Day" },
+                              { value: "Pay Period", label: "View by Pay Period" },
+                              { value: "Quarter", label: "View by Quarter" },
+                              { value: "Annual", label: "View Annual" },
+                              { value: "Total", label: "View Total" }
+                            ].map(({ value, label }) => {
+                              const isActive = revenuePageFilter === value;
                               return (
                                 <button
-                                  key={period}
+                                  key={value}
                                   onClick={() => {
-                                    setRevenuePageFilter(period);
-                                    triggerNotification(`Adjusted graph filter to: ${period}`);
+                                    setRevenuePageFilter(value);
+                                    triggerNotification(`Adjusted graph filter to: ${label}`);
                                   }}
                                   className={`px-3 py-1.5 text-[10.5px] rounded-lg transition-all duration-200 cursor-pointer font-bold ${
                                     isActive
@@ -5924,7 +5954,7 @@ Access to full financial telemetry is restricted.`;
                                       : "text-[#5E7393] hover:text-[#1F3557]"
                                   }`}
                                 >
-                                  {period}
+                                  {label}
                                 </button>
                               );
                             })}
