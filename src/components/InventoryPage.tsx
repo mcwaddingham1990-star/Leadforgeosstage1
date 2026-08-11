@@ -1547,6 +1547,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={formQuantity}
                     onChange={(e) => setFormQuantity(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     min="0"
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none font-mono text-right"
@@ -1558,6 +1559,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={formMinQty}
                     onChange={(e) => setFormMinQty(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     min="0"
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none font-mono text-right"
@@ -1569,6 +1571,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={formMaxQty}
                     onChange={(e) => setFormMaxQty(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     min="0"
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl focus:outline-none font-mono text-right"
@@ -1580,6 +1583,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={formUnitCost}
                     onChange={(e) => setFormUnitCost(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     step="0.01"
                     min="0"
@@ -1592,6 +1596,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={formSellingPrice}
                     onChange={(e) => setFormSellingPrice(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     step="0.01"
                     min="0"
@@ -2028,6 +2033,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   <input
                     value={quickActionQty}
                     onChange={(e) => setQuickActionQty(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
                     type="number"
                     min="1"
                     className="w-full p-2.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl font-mono text-right"
