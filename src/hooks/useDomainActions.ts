@@ -11,7 +11,7 @@ import { Customer, Estimate, SchedulingEvent } from "../types/domain";
  * point.
  */
 export function useDomainActions() {
-  const { leads, setLeads, customers, setCustomers, estimates, setEstimates, setSchedulingEvents } = useDomainData();
+  const { leads, setLeads, customers, setCustomers, estimates, setEstimates, schedulingEvents, setSchedulingEvents } = useDomainData();
   const { logOperationalEvent } = useNavTelemetry();
 
   const convertLeadToCustomer = (leadId: string) => {
@@ -60,9 +60,22 @@ export function useDomainActions() {
     logOperationalEvent("Estimate Created", `Estimate ${newEstimate.number} generated from lead ${lead.name}`, "🧾");
   };
 
-  const approveEstimateToJob = (estimateId: string) => {
+  const approveEstimateToJob = (estimateId: string, schedule?: {
+    date: string;
+    startTime: string;
+    endTime: string;
+    assignedEmployee?: string;
+    assignedCrew?: string;
+    priority?: SchedulingEvent["priority"];
+    notes?: string;
+  }) => {
     const estimate = estimates.find(e => e.id === estimateId);
-    if (!estimate) return;
+    if (!estimate) return null;
+
+    // Conversion is intentionally idempotent. A double tap or a reopened
+    // accepted estimate must never create a duplicate job.
+    const existingJob = schedulingEvents.find(event => event.sourceEstimateId === estimateId);
+    if (existingJob) return existingJob;
 
     // Cross-reference the real customer record for real contact info —
     // an estimate itself only stores a customer name/company, not
@@ -75,9 +88,9 @@ export function useDomainActions() {
     const newJob: SchedulingEvent = {
       id: "job_" + Math.random().toString(36).substring(2, 9),
       eventType: "Job",
-      date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      startTime: "09:00 AM",
-      endTime: "12:00 PM",
+      date: schedule?.date || new Date().toISOString().slice(0, 10),
+      startTime: schedule?.startTime || "09:00",
+      endTime: schedule?.endTime || "12:00",
       customer: estimate.customerName,
       customerPhone: matchedCustomer?.phone || "",
       customerEmail: matchedCustomer?.email || "",
@@ -86,17 +99,32 @@ export function useDomainActions() {
       // auto-created job — leaving it unassigned for a real dispatcher
       // to pick is honest; a hardcoded name never matching a real
       // employee is not.
-      assignedEmployee: "",
+      assignedEmployee: schedule?.assignedEmployee || "",
+      assignedCrew: schedule?.assignedCrew || "",
       location: matchedCustomer?.address || estimate.address || "",
-      priority: "Medium",
-      notes: "Auto-generated from Approved Estimate " + estimate.number,
-      status: "Scheduled",
-      sourceEstimateId: estimate.id
+      priority: schedule?.priority || "Medium",
+      notes: ["Created from accepted estimate " + estimate.number, schedule?.notes].filter(Boolean).join(" — "),
+      status: schedule?.assignedEmployee ? "Assigned" : "Scheduled",
+      sourceEstimateId: estimate.id,
+      title: `${estimate.company || estimate.customerName} project`,
+      description: `Approved scope from estimate ${estimate.number}`,
+      budget: estimate.amount,
+      progress: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      activity: [{
+        id: "activity_" + Math.random().toString(36).substring(2, 9),
+        timestamp: new Date().toISOString(),
+        action: "Job created from accepted estimate",
+        by: "Owners Event Engine",
+        detail: estimate.number
+      }]
     };
 
     setSchedulingEvents(prev => [newJob, ...prev]);
     setEstimates(prev => prev.map(e => (e.id === estimateId ? { ...e, status: "Accepted" } : e)));
-    logOperationalEvent("Estimate Approved", `${estimate.number} converted to Scheduled Job — needs employee assignment`, "✅");
+    logOperationalEvent("Estimate Accepted", `${estimate.number} confirmed and converted to ${newJob.status} Job`, "✅");
+    return newJob;
   };
 
   return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob };
