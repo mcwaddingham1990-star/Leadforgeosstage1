@@ -443,6 +443,18 @@ function getRevenueChartData(
     return withTotals(series, periodStart, periodEnd, priorTotal);
   }
 
+  if (filter === "Week") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const dailyRows = buildDays(7, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
+    const priorTotal = sumInRange(
+      revenueSource,
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
+      periodStart
+    );
+    return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
+  }
+
   if (filter === "Pay Period") {
     const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -1266,6 +1278,7 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
+  const [graphDataType, setGraphDataType] = useState<"revenue" | "expenses" | "profit">("revenue");
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -5954,39 +5967,55 @@ Access to full financial telemetry is restricted.`;
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                           <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-                            <span className="select-none text-xl">📈</span> Company Revenue Analytics
+                            <span className="select-none text-xl">📈</span> Company Revenue Tracking
                           </h2>
                           <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
                         </div>
                         <PlaidConnectButton />
                       </div>
 
-                      {/* CONFIGURE RESET INTERVAL BLOCK */}
-                      <div className="bg-[#C7E3FA] p-5 rounded-2xl border border-[#9EC8EF] space-y-4 shadow-sm">
-                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                          <div>
-                            <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Configure Dashboard Graph Reset Interval</h3>
-                            <p className="text-[11px] text-[#5E7393] leading-relaxed font-sans font-medium mt-0.5">
-                              Select the interval at which the home screen revenue graph resets. The graph continues from the last day of the selected period.
-                            </p>
-                          </div>
-                          
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-[10.5px] text-[#5E7393] font-sans font-medium hidden sm:inline">Currently resetting: <strong className="text-[#315C9F]">{revenueResetInterval}</strong></span>
-                            <select
-                              value={revenueResetInterval}
-                              onChange={(e) => {
-                                  setRevenueResetInterval(e.target.value);
-                                  triggerNotification(`Dashboard revenue graph reset interval updated to: ${e.target.value}`);
-                                }}
-                              className="text-xs font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none cursor-pointer"
+                      {/* CHOOSE GRAPH DATA BLOCK */}
+                      <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
+                        <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: "revenue",  label: "Total Revenue" },
+                            { value: "expenses", label: "Total Expenses" },
+                            { value: "profit",   label: "Total Profit" },
+                          ] as const).map(({ value, label }) => (
+                            <button
+                              key={value}
+                              onClick={() => setGraphDataType(value)}
+                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                graphDataType === value
+                                  ? "bg-[#4A86F7] text-white shadow-sm"
+                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                              }`}
                             >
-                              <option value="Pay Period">Pay Period Reset (Default)</option>
-                              <option value="Monthly">Monthly Reset</option>
-                              <option value="Quarterly">Quarterly Reset</option>
-                              <option value="Annually">Annually Reset</option>
-                            </select>
-                          </div>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: "Day",        label: "Day" },
+                            { value: "Week",       label: "Week" },
+                            { value: "Pay Period", label: "Pay Period" },
+                            { value: "Quarter",    label: "Quarter" },
+                            { value: "Annual",     label: "Annual" },
+                          ] as const).map(({ value, label }) => (
+                            <button
+                              key={value}
+                              onClick={() => setRevenuePageFilter(value)}
+                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                revenuePageFilter === value
+                                  ? "bg-[#1F3557] text-white shadow-sm"
+                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
@@ -6001,6 +6030,7 @@ Access to full financial telemetry is restricted.`;
                                 {(() => {
                                   const now = new Date();
                                   if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                  if (revenuePageFilter === "Week") return `Daily activity — last 7 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
                                   if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
                                   if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
                                   if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
@@ -6014,6 +6044,7 @@ Access to full financial telemetry is restricted.`;
                           <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
                             {[
                               { value: "Day", label: "View by Day" },
+                              { value: "Week", label: "View by Week" },
                               { value: "Pay Period", label: "View by Pay Period" },
                               { value: "Quarter", label: "View by Quarter" },
                               { value: "Annual", label: "View Annual" },
