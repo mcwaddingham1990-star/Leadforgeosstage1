@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   AlertTriangle, Briefcase, Calendar, Check, CheckCircle2, ChevronRight,
-  ClipboardCheck, Clock, DollarSign, Edit3, FileText, Filter, MapPin,
+  ChevronDown, ClipboardCheck, Clock, DollarSign, Edit3, FileText, Filter, MapPin,
   MessageSquare, Package, Plus, Search, Trash2, Truck, User, Users, X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -15,7 +15,7 @@ type ViewMode = "board" | "list";
 const STATUSES: JobStatus[] = ["Unassigned", "Assigned", "En Route", "Arrived", "Working", "On Hold", "Completed", "Cancelled"];
 const PRIORITIES: SchedulingEvent["priority"][] = ["Low", "Medium", "High", "Urgent"];
 const EMPTY_FORM = {
-  customerId: "", title: "", jobType: "Service", date: new Date().toISOString().slice(0, 10),
+  customerId: "", customerName: "", customerPhone: "", title: "", jobType: "Service", date: new Date().toISOString().slice(0, 10),
   startTime: "09:00", endTime: "11:00", assignedEmployee: "", assignedCrew: "None",
   assignedVehicle: "None", priority: "Medium" as SchedulingEvent["priority"], status: "Unassigned" as JobStatus,
   location: "", department: "General", description: "", notes: "", purchaseOrder: "", budget: "", laborRate: ""
@@ -85,12 +85,14 @@ export const JobsPage: React.FC = () => {
   const openCreate = () => { setForm(EMPTY_FORM); setModal("create"); };
   const openEdit = (job: SchedulingEvent) => {
     const customer = customers.find(c => c.id === job.customerId || c.contact === job.customer || c.company === job.customer);
+    const sourceEstimate = estimates.find(e => e.id === job.sourceEstimateId);
     setForm({
-      ...EMPTY_FORM, customerId: customer?.id || "", title: job.title || job.customType || "", jobType: job.jobType || "Service",
+      ...EMPTY_FORM, customerId: customer?.id || "", customerName: job.customer || customer?.contact || customer?.company || "",
+      customerPhone: job.customerPhone || customer?.phone || "", title: job.title || job.customType || "", jobType: job.jobType || "Service",
       date: job.date, startTime: job.startTime?.replace(/\s?(AM|PM)$/i, "") || "09:00", endTime: job.endTime?.replace(/\s?(AM|PM)$/i, "") || "11:00",
       assignedEmployee: job.assignedEmployee || "", assignedCrew: job.assignedCrew || "None", assignedVehicle: job.assignedVehicle || "None",
       priority: job.priority, status: normalizedStatus(job), location: job.location || job.customerAddress || "", department: job.department || "General",
-      description: job.description || "", notes: job.notes || "", purchaseOrder: job.purchaseOrder || "", budget: job.budget?.toString() || "", laborRate: job.laborRate?.toString() || ""
+      description: job.description || "", notes: job.notes || "", purchaseOrder: job.purchaseOrder || "", budget: (job.budget ?? sourceEstimate?.amount)?.toString() || "", laborRate: job.laborRate?.toString() || ""
     });
     setSelectedId(job.id); setModal("edit");
   };
@@ -98,15 +100,22 @@ export const JobsPage: React.FC = () => {
   const saveForm = () => {
     if (!canEdit) return triggerNotification("Your role cannot create or edit jobs.");
     const customer = customers.find(c => c.id === form.customerId);
-    if (!customer || !form.title.trim() || !form.date) return triggerNotification("Customer, job title, and date are required.");
+    const customerName = form.customerName.trim();
+    const customerPhone = form.customerPhone.trim();
+    const location = form.location.trim();
+    const budget = Number(form.budget);
+    if (!customerName || !location || !customerPhone || !form.date || !form.budget.trim() || !Number.isFinite(budget) || budget < 0) {
+      return triggerNotification("Name, address, phone number, estimated value, and date are required.");
+    }
+    const jobTitle = form.title.trim() || "Service Job";
     const base: Partial<SchedulingEvent> = {
-      title: form.title.trim(), customType: form.title.trim(), jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
-      customerId: customer.id, customer: customer.contact || customer.company, customerPhone: customer.phone, customerEmail: customer.email,
-      customerAddress: customer.address, location: form.location || customer.address, assignedEmployee: form.assignedEmployee,
+      title: jobTitle, customType: jobTitle, jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
+      customerId: customer?.id, customer: customerName, customerPhone, customerEmail: customer?.email || "",
+      customerAddress: location, location, assignedEmployee: form.assignedEmployee,
       assignedCrew: form.assignedCrew, assignedVehicle: form.assignedVehicle, priority: form.priority,
       status: form.assignedEmployee && form.status === "Unassigned" ? "Assigned" : form.status, department: form.department,
       description: form.description, notes: form.notes, purchaseOrder: form.purchaseOrder,
-      budget: Number(form.budget) || 0, laborRate: Number(form.laborRate) || 0, updatedAt: new Date().toISOString()
+      budget, laborRate: Number(form.laborRate) || 0, updatedAt: new Date().toISOString()
     };
     if (modal === "edit" && selectedId) {
       writeJob(selectedId, base, "Job details edited");
@@ -213,23 +222,34 @@ const JobCard = ({job,onOpen,estimatedAmount}:{key?: React.Key;job:SchedulingEve
   return <button onClick={onOpen} className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><span className="text-xs font-black text-[#1F3557]">{estimatedAmount?`$${estimatedAmount.toLocaleString()}`:"No budget"}</span></div></button>;
 };
 
-const JobForm = ({form,setForm,customers,roster,onClose,onSave,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm"><div className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div><p className="text-[9px] font-black uppercase tracking-widest text-[#315C9F]">Event Engine Job Record</p><h3 className="text-lg font-black text-[#1F3557]">{title}</h3></div><button onClick={onClose}><X className="h-5 w-5"/></button></div><div className="grid gap-4 p-5 sm:grid-cols-2">
-  <Field label="Customer *"><select value={form.customerId} onChange={(e:any)=>{const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,location:c?.address||form.location});}} className="input"><option value="">Select customer</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact} — {c.company}</option>)}</select></Field>
-  <Field label="Job Title *"><input value={form.title} onChange={(e:any)=>setForm({...form,title:e.target.value})} className="input" placeholder="Repair, installation, inspection..."/></Field>
-  <Field label="Job Type"><select value={form.jobType} onChange={(e:any)=>setForm({...form,jobType:e.target.value})} className="input">{["Service","Installation","Repair","Maintenance","Inspection","Project","Warranty","Emergency","Custom"].map(x=><option key={x}>{x}</option>)}</select></Field>
-  <Field label="Department"><input value={form.department} onChange={(e:any)=>setForm({...form,department:e.target.value})} className="input"/></Field>
-  <Field label="Date *"><input type="date" value={form.date} onChange={(e:any)=>setForm({...form,date:e.target.value})} className="input"/></Field>
-  <div className="grid grid-cols-2 gap-2"><Field label="Start"><input type="time" value={form.startTime} onChange={(e:any)=>setForm({...form,startTime:e.target.value})} className="input"/></Field><Field label="End"><input type="time" value={form.endTime} onChange={(e:any)=>setForm({...form,endTime:e.target.value})} className="input"/></Field></div>
-  <Field label="Assigned Technician"><select value={form.assignedEmployee} onChange={(e:any)=>setForm({...form,assignedEmployee:e.target.value})} className="input"><option value="">Unassigned</option>{roster.map((r:any)=><option key={r.id||r.name}>{r.name}</option>)}</select></Field>
-  <Field label="Crew"><input value={form.assignedCrew} onChange={(e:any)=>setForm({...form,assignedCrew:e.target.value})} className="input"/></Field>
-  <Field label="Vehicle"><input value={form.assignedVehicle} onChange={(e:any)=>setForm({...form,assignedVehicle:e.target.value})} className="input"/></Field>
-  <Field label="Status"><select value={form.status} onChange={(e:any)=>setForm({...form,status:e.target.value})} className="input">{STATUSES.map(x=><option key={x}>{x}</option>)}</select></Field>
-  <Field label="Priority"><select value={form.priority} onChange={(e:any)=>setForm({...form,priority:e.target.value})} className="input">{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></Field>
-  <Field label="Site Address"><input value={form.location} onChange={(e:any)=>setForm({...form,location:e.target.value})} className="input" placeholder="Address, city/state, ZIP"/></Field>
-  <Field label="PO / Work Order"><input value={form.purchaseOrder} onChange={(e:any)=>setForm({...form,purchaseOrder:e.target.value})} className="input"/></Field>
-  <div className="grid grid-cols-2 gap-2"><Field label="Budget"><input type="number" value={form.budget} onChange={(e:any)=>setForm({...form,budget:e.target.value})} className="input"/></Field><Field label="Labor Rate"><input type="number" value={form.laborRate} onChange={(e:any)=>setForm({...form,laborRate:e.target.value})} className="input"/></Field></div>
-  <div className="sm:col-span-2"><Field label="Scope / Description"><textarea rows={3} value={form.description} onChange={(e:any)=>setForm({...form,description:e.target.value})} className="input"/></Field></div>
-  <div className="sm:col-span-2"><Field label="Internal Notes"><textarea rows={3} value={form.notes} onChange={(e:any)=>setForm({...form,notes:e.target.value})} className="input"/></Field></div>
- </div><div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-4"><button onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button><button onClick={onSave} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white"><Check className="mr-1 inline h-4 w-4"/>Save Job</button></div></div></div>;
+const JobForm = ({form,setForm,customers,roster,onClose,onSave,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
+  <div className="grid gap-3 p-4 sm:grid-cols-2">
+    <div className="sm:col-span-2"><Field label="Choose existing customer (optional)"><select value={form.customerId} onChange={(e:any)=>{const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}</select></Field></div>
+    <Field label="Name *"><input value={form.customerName} onChange={(e:any)=>setForm({...form,customerName:e.target.value})} className="input" placeholder="Customer name"/></Field>
+    <Field label="Phone number *"><input type="tel" value={form.customerPhone} onChange={(e:any)=>setForm({...form,customerPhone:e.target.value})} className="input" placeholder="(555) 555-0123"/></Field>
+    <div className="sm:col-span-2"><Field label="Address *"><input value={form.location} onChange={(e:any)=>setForm({...form,location:e.target.value})} className="input" placeholder="Address, city/state, ZIP"/></Field></div>
+    <Field label="Estimated value *"><input type="number" min="0" step="0.01" value={form.budget} onChange={(e:any)=>setForm({...form,budget:e.target.value})} className="input" placeholder="0.00"/></Field>
+    <Field label="Date *"><input type="date" value={form.date} onChange={(e:any)=>setForm({...form,date:e.target.value})} className="input"/></Field>
+  </div>
+  <details className="group mx-4 mb-4 rounded-xl border border-[#9EC8EF] bg-white">
+    <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-xs font-black text-[#315C9F]">Other job info <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180"/></summary>
+    <div className="grid gap-3 border-t border-[#D7EAFB] p-3 sm:grid-cols-2">
+      <Field label="Job title"><input value={form.title} onChange={(e:any)=>setForm({...form,title:e.target.value})} className="input" placeholder="Repair, installation, inspection..."/></Field>
+      <Field label="Job type"><select value={form.jobType} onChange={(e:any)=>setForm({...form,jobType:e.target.value})} className="input">{["Service","Installation","Repair","Maintenance","Inspection","Project","Warranty","Emergency","Custom"].map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="Department"><input value={form.department} onChange={(e:any)=>setForm({...form,department:e.target.value})} className="input"/></Field>
+      <div className="grid grid-cols-2 gap-2"><Field label="Start"><input type="time" value={form.startTime} onChange={(e:any)=>setForm({...form,startTime:e.target.value})} className="input"/></Field><Field label="End"><input type="time" value={form.endTime} onChange={(e:any)=>setForm({...form,endTime:e.target.value})} className="input"/></Field></div>
+      <Field label="Assigned technician"><select value={form.assignedEmployee} onChange={(e:any)=>setForm({...form,assignedEmployee:e.target.value})} className="input"><option value="">Unassigned</option>{roster.map((r:any)=><option key={r.id||r.name} value={r.name}>{r.name}</option>)}</select></Field>
+      <Field label="Crew"><input value={form.assignedCrew} onChange={(e:any)=>setForm({...form,assignedCrew:e.target.value})} className="input"/></Field>
+      <Field label="Vehicle"><input value={form.assignedVehicle} onChange={(e:any)=>setForm({...form,assignedVehicle:e.target.value})} className="input"/></Field>
+      <Field label="Status"><select value={form.status} onChange={(e:any)=>setForm({...form,status:e.target.value})} className="input">{STATUSES.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="Priority"><select value={form.priority} onChange={(e:any)=>setForm({...form,priority:e.target.value})} className="input">{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></Field>
+      <Field label="PO / Work order"><input value={form.purchaseOrder} onChange={(e:any)=>setForm({...form,purchaseOrder:e.target.value})} className="input"/></Field>
+      <Field label="Labor rate"><input type="number" min="0" value={form.laborRate} onChange={(e:any)=>setForm({...form,laborRate:e.target.value})} className="input"/></Field>
+      <div className="sm:col-span-2"><Field label="Scope / Description"><textarea rows={2} value={form.description} onChange={(e:any)=>setForm({...form,description:e.target.value})} className="input"/></Field></div>
+      <div className="sm:col-span-2"><Field label="Internal notes"><textarea rows={2} value={form.notes} onChange={(e:any)=>setForm({...form,notes:e.target.value})} className="input"/></Field></div>
+    </div>
+  </details>
+  <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-3"><button type="button" onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button><button type="button" onClick={onSave} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white"><Check className="mr-1 inline h-4 w-4"/>Save Job</button></div>
+</div></div>;
 
 const Field=({label,children}:{label:string;children:React.ReactNode})=><label className="block"><span className="mb-1 block text-[9px] font-black uppercase tracking-wide text-[#5E7393]">{label}</span>{children}</label>;
