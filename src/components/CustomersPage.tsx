@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { parseAddress } from "./StructuredAddressFields";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
@@ -1626,13 +1627,19 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                         {selectedCustomer.email}
                       </span>
                     </div>
-                    <div className="sm:col-span-2 space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
-                      <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Billing / Service Address</span>
-                      <span className="font-semibold flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
-                        {selectedCustomer.address}
-                      </span>
-                    </div>
+                    {(() => {
+                      const ap = parseAddress(selectedCustomer.address || "");
+                      return (
+                        <div className="sm:col-span-2 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30 space-y-2">
+                          <span className="text-[9px] uppercase font-bold text-[#5E7393] flex items-center gap-1.5"><MapPin className="w-3 h-3 text-[#315C9F]"/>Billing / Service Address</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div><span className="text-[9px] uppercase font-bold text-slate-400 block">Street</span><span className="text-xs font-semibold text-[#1F3557]">{ap.street || "—"}</span></div>
+                            <div><span className="text-[9px] uppercase font-bold text-slate-400 block">City, State</span><span className="text-xs font-semibold text-[#1F3557]">{ap.cityState || "—"}</span></div>
+                            <div><span className="text-[9px] uppercase font-bold text-slate-400 block">ZIP</span><span className="text-xs font-semibold text-[#1F3557]">{ap.zip || "—"}</span></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Metrics */}

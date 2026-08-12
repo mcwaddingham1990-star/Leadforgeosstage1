@@ -7,6 +7,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { StructuredAddressFields } from "./StructuredAddressFields";
 import type { SchedulingEvent } from "../types/domain";
 
 type JobStatus = SchedulingEvent["status"];
@@ -254,7 +255,7 @@ const JobForm = ({form,setForm,customers,roster,onClose,onSave,title}:any) => <d
     <div className="sm:col-span-2"><Field label="Select customer"><select value={form.addAsNewCustomer?"__add__":form.customerId} onChange={(e:any)=>{if(e.target.value==="__add__"){setForm({...form,customerId:"",addAsNewCustomer:true,customerName:"",customerPhone:"",location:""});return;}const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,addAsNewCustomer:false,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer...</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}<option value="__add__">＋ Add customer</option></select>{form.addAsNewCustomer&&<p className="mt-1 text-[10px] font-bold text-amber-700">Enter the new customer's details below. Customers will ask you to edit and confirm the record.</p>}</Field></div>
     <Field label="Name *"><input value={form.customerName} onChange={(e:any)=>setForm({...form,customerName:e.target.value})} className="input" placeholder="Customer name"/></Field>
     <Field label="Phone number *"><input type="tel" value={form.customerPhone} onChange={(e:any)=>setForm({...form,customerPhone:e.target.value})} className="input" placeholder="(555) 555-0123"/></Field>
-    <div className="sm:col-span-2"><Field label="Address *"><input value={form.location} onChange={(e:any)=>setForm({...form,location:e.target.value})} className="input" placeholder="Address, city/state, ZIP"/></Field></div>
+    <div className="sm:col-span-2"><StructuredAddressFields value={form.location} onChange={(val:string)=>setForm({...form,location:val})} required label="Job Site Address *" inputClassName="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#315C9F]"/></div>
     <Field label="Estimated value *"><input type="number" min="0" step="0.01" value={form.budget} onChange={(e:any)=>setForm({...form,budget:e.target.value})} className="input" placeholder="0.00"/></Field>
     <Field label="Date *"><input type="date" value={form.date} onChange={(e:any)=>setForm({...form,date:e.target.value})} className="input"/></Field>
   </div>

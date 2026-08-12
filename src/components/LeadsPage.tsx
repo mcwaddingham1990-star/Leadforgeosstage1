@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { parseAddress } from "./StructuredAddressFields";
 import { useDomainActions } from "../hooks/useDomainActions";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -1199,10 +1200,25 @@ export const LeadsPage: React.FC = () => {
                         <p className="text-[10px] uppercase font-bold text-[#5E7393]">Email</p>
                         <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.email}</p>
                       </div>
-                      <div className="col-span-2">
-                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</p>
-                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.address || "No address provided."}</p>
-                      </div>
+                      {(() => {
+                        const addrParts = parseAddress(selectedLead.address || "");
+                        return (
+                          <>
+                            <div className="col-span-2">
+                              <p className="text-[10px] uppercase font-bold text-[#5E7393]">Street Address</p>
+                              <p className="text-[#1F3557] font-bold mt-0.5">{addrParts.street || "No street provided."}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-[#5E7393]">City, State</p>
+                              <p className="text-[#1F3557] font-bold mt-0.5">{addrParts.cityState || "—"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase font-bold text-[#5E7393]">ZIP Code</p>
+                              <p className="text-[#1F3557] font-bold mt-0.5">{addrParts.zip || "—"}</p>
+                            </div>
+                          </>
+                        );
+                      })()}
                       <div>
                         <p className="text-[10px] uppercase font-bold text-[#5E7393]">Source</p>
                         <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.source}</p>
