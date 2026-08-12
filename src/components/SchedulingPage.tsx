@@ -70,11 +70,29 @@ export const SchedulingPage: React.FC = () => {
     schedulingEvents: events,
     setSchedulingEvents: setEvents,
     customers: customersList,
+    setCustomers,
+    setNotifications,
     preSelectedDate,
     preSelectedCustomerId,
     recentRoster
   } = useDomainData();
   const EMPLOYEES = recentRoster.map(r => r.name);
+  const selectableCustomers = useMemo(() => {
+    const byKey = new Map<string, { id: string; contact: string; company: string; phone: string; email: string; address: string }>();
+    customersList.filter(customer => !customer.pendingConfirmation).forEach(customer => byKey.set(customer.id, customer));
+    events.forEach(event => {
+      const name = event.customer?.trim();
+      if (!name) return;
+      const existing = customersList.find(customer => customer.id === event.customerId || customer.contact === name || customer.company === name);
+      if (existing?.pendingConfirmation) return;
+      const key = existing?.id || event.customerId || `event_customer_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      if (!byKey.has(key)) byKey.set(key, {
+        id: key, contact: name, company: "", phone: event.customerPhone || "",
+        email: event.customerEmail || "", address: event.customerAddress || event.location || ""
+      });
+    });
+    return [...byKey.values()].sort((a, b) => (a.contact || a.company).localeCompare(b.contact || b.company));
+  }, [customersList, events]);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -207,7 +225,7 @@ export const SchedulingPage: React.FC = () => {
     setFormEndMin("30");
     setFormEndAmPm("AM");
     setFormCustomerMode("search");
-    setSelectedCustomerId(customersList[0]?.id || "");
+    setSelectedCustomerId(selectableCustomers[0]?.id || "");
     setFormCustomName("");
     setFormCustomPhone("");
     setFormCustomEmail("");
@@ -225,7 +243,7 @@ export const SchedulingPage: React.FC = () => {
   // Select customer callback to pre-fill address
   const handleCustomerSelect = (id: string) => {
     setSelectedCustomerId(id);
-    const match = customersList.find(c => c.id === id);
+    const match = selectableCustomers.find(c => c.id === id);
     if (match) {
       setFormLocation(match.address || "");
     }
@@ -421,8 +439,9 @@ export const SchedulingPage: React.FC = () => {
     let customerEmail = formCustomEmail.trim();
     let customerAddress = [formCustomAddress.trim(), formCustomCityState.trim(), formCustomZip.trim()].filter(Boolean).join(", ");
 
+    let resolvedCustomerId = selectedCustomerId;
     if (formCustomerMode === "search" && selectedCustomerId) {
-      const match = customersList.find(c => c.id === selectedCustomerId);
+      const match = selectableCustomers.find(c => c.id === selectedCustomerId);
       if (match) {
         customerName = match.contact;
         customerPhone = match.phone || "";
@@ -436,9 +455,21 @@ export const SchedulingPage: React.FC = () => {
       return;
     }
 
-    if (!formEmployee) {
-      alert("Please assign an employee. Add team members in Settings first if none are available yet.");
-      return;
+    if (formCustomerMode === "custom") {
+      resolvedCustomerId = `cust_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setCustomers(prev => [{
+        id: resolvedCustomerId, company: customerName, contact: customerName,
+        phone: customerPhone, email: customerEmail, address: customerAddress,
+        openJobs: 0, outstandingBalance: 0, lifetimeValue: 0,
+        status: "Active", type: "Residential", isVIP: false, recentlyAdded: true,
+        requireFollowUp: false, pendingConfirmation: true, createdFrom: "schedule_job"
+      }, ...prev]);
+      setNotifications(prev => [{
+        id: `customer_review_${resolvedCustomerId}`, screenId: "customers",
+        title: "Edit and confirm new customer",
+        message: `${customerName} was added while scheduling a job. Review and confirm the customer record.`,
+        isRead: false, timestamp: new Date().toISOString()
+      }, ...prev]);
     }
 
     const tStart = formatTimeTo24h(formStartHour, formStartMin, formStartAmPm);
@@ -453,6 +484,7 @@ export const SchedulingPage: React.FC = () => {
         date: formDate,
         startTime: tStart,
         endTime: tEnd,
+        customerId: resolvedCustomerId,
         customer: customerName,
         customerPhone,
         customerEmail,
@@ -476,6 +508,7 @@ export const SchedulingPage: React.FC = () => {
         date: formDate,
         startTime: tStart,
         endTime: tEnd,
+        customerId: resolvedCustomerId,
         customer: customerName,
         customerPhone,
         customerEmail,
@@ -1295,10 +1328,10 @@ export const SchedulingPage: React.FC = () => {
             <div className="p-6 bg-[#C7E3FA] border-b border-[#9EC8EF] flex items-center justify-between text-left">
               <div>
                 <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-                  {isEditingEvent ? "Modify Scheduled Event" : "Schedule New Operational Event"}
+                  {isEditingEvent ? "Edit Scheduled Job" : "Schedule New Job"}
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  {isEditingEvent ? "Update details of this shared event instance" : "Add an appointment slot to the core OwnersLOCAL shared ledger"}
+                  {isEditingEvent ? "Update this job's schedule and customer details" : "Add a job to the OwnersLOCAL shared schedule"}
                 </p>
               </div>
               <button
@@ -1448,27 +1481,28 @@ export const SchedulingPage: React.FC = () => {
                       onClick={() => setFormCustomerMode("search")}
                       className={`px-2 py-1 rounded font-bold text-[9px] uppercase ${formCustomerMode === "search" ? "bg-[#315C9F] text-white" : "text-[#1F3557]"}`}
                     >
-                      Search CRM
+                      Select Customer
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormCustomerMode("custom")}
                       className={`px-2 py-1 rounded font-bold text-[9px] uppercase ${formCustomerMode === "custom" ? "bg-[#315C9F] text-white" : "text-[#1F3557]"}`}
                     >
-                      Add Custom
+                      Add Customer
                     </button>
                   </div>
                 </div>
 
                 {formCustomerMode === "search" ? (
                   <div className="space-y-2">
-                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Select CRM Customer</label>
+                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Select Customer</label>
                     <select
                       value={selectedCustomerId}
                       onChange={(e) => handleCustomerSelect(e.target.value)}
                       className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 font-semibold text-slate-700"
                     >
-                      {customersList.map(cust => (
+                      <option value="">Select customer...</option>
+                      {selectableCustomers.map(cust => (
                         <option key={cust.id} value={cust.id}>
                           {cust.contact} {cust.company ? `(${cust.company})` : ""}
                         </option>

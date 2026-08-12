@@ -15,7 +15,7 @@ type ViewMode = "board" | "list";
 const STATUSES: JobStatus[] = ["Unassigned", "Assigned", "En Route", "Arrived", "Working", "On Hold", "Completed", "Cancelled"];
 const PRIORITIES: SchedulingEvent["priority"][] = ["Low", "Medium", "High", "Urgent"];
 const EMPTY_FORM = {
-  customerId: "", customerName: "", customerPhone: "", title: "", jobType: "Service", date: new Date().toISOString().slice(0, 10),
+  customerId: "", addAsNewCustomer: false, customerName: "", customerPhone: "", title: "", jobType: "Service", date: new Date().toISOString().slice(0, 10),
   startTime: "09:00", endTime: "11:00", assignedEmployee: "", assignedCrew: "None",
   assignedVehicle: "None", priority: "Medium" as SchedulingEvent["priority"], status: "Unassigned" as JobStatus,
   location: "", department: "General", description: "", notes: "", purchaseOrder: "", budget: "", laborRate: ""
@@ -35,13 +35,26 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => job.status === "Sc
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, recentRoster, inventoryList, setInventoryList, documents, timeClockLogs, estimates } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, timeClockLogs, estimates } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
   const canEdit = /owner|manager|admin|dispatch|scheduler|supervisor/i.test(activeRole);
   const canDelete = /owner|general manager|admin/i.test(activeRole);
   const jobs = useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
+  const customerOptions = useMemo(() => {
+    const options = new Map<string, any>();
+    customers.filter(customer => !customer.pendingConfirmation).forEach(customer => options.set(customer.id, customer));
+    schedulingEvents.forEach(event => {
+      const name = event.customer?.trim();
+      if (!name) return;
+      const existing = customers.find(customer => customer.id === event.customerId || customer.contact === name || customer.company === name);
+      if (existing?.pendingConfirmation) return;
+      const id = existing?.id || event.customerId || `event_customer_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      if (!options.has(id)) options.set(id, { id, contact: name, company: "", phone: event.customerPhone || "", address: event.customerAddress || event.location || "" });
+    });
+    return [...options.values()].sort((a, b) => (a.contact || a.company).localeCompare(b.contact || b.company));
+  }, [customers, schedulingEvents]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
@@ -99,7 +112,7 @@ export const JobsPage: React.FC = () => {
 
   const saveForm = () => {
     if (!canEdit) return triggerNotification("Your role cannot create or edit jobs.");
-    const customer = customers.find(c => c.id === form.customerId);
+    const customer = customerOptions.find(c => c.id === form.customerId);
     const customerName = form.customerName.trim();
     const customerPhone = form.customerPhone.trim();
     const location = form.location.trim();
@@ -108,9 +121,24 @@ export const JobsPage: React.FC = () => {
       return triggerNotification("Name, address, phone number, estimated value, and date are required.");
     }
     const jobTitle = form.title.trim() || "Service Job";
+    let customerId = customer?.id;
+    if (form.addAsNewCustomer) {
+      customerId = uid("cust");
+      setCustomers(prev => [{
+        id: customerId!, company: customerName, contact: customerName, phone: customerPhone,
+        email: "", address: location, openJobs: 0, outstandingBalance: 0, lifetimeValue: 0,
+        status: "Active", type: "Residential", isVIP: false, recentlyAdded: true,
+        requireFollowUp: false, pendingConfirmation: true, createdFrom: "create_job"
+      }, ...prev]);
+      setNotifications(prev => [{
+        id: `customer_review_${customerId}`, screenId: "customers", title: "Edit and confirm new customer",
+        message: `${customerName} was added while creating a job. Review and confirm the customer record.`,
+        isRead: false, timestamp: new Date().toISOString()
+      }, ...prev]);
+    }
     const base: Partial<SchedulingEvent> = {
       title: jobTitle, customType: jobTitle, jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
-      customerId: customer?.id, customer: customerName, customerPhone, customerEmail: customer?.email || "",
+      customerId, customer: customerName, customerPhone, customerEmail: customer?.email || "",
       customerAddress: location, location, assignedEmployee: form.assignedEmployee,
       assignedCrew: form.assignedCrew, assignedVehicle: form.assignedVehicle, priority: form.priority,
       status: form.assignedEmployee && form.status === "Unassigned" ? "Assigned" : form.status, department: form.department,
@@ -211,7 +239,7 @@ export const JobsPage: React.FC = () => {
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
 
-    {modal && <JobForm form={form} setForm={setForm} customers={customers} roster={recentRoster} onClose={()=>setModal(null)} onSave={saveForm} title={modal==="create"?"Create Job":"Edit Job"}/>} 
+    {modal && <JobForm form={form} setForm={setForm} customers={customerOptions} roster={recentRoster} onClose={()=>setModal(null)} onSave={saveForm} title={modal==="create"?"Create Job":"Edit Job"}/>}
   </div>;
 };
 
@@ -224,7 +252,7 @@ const JobCard = ({job,onOpen,estimatedAmount}:{key?: React.Key;job:SchedulingEve
 
 const JobForm = ({form,setForm,customers,roster,onClose,onSave,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
   <div className="grid gap-3 p-4 sm:grid-cols-2">
-    <div className="sm:col-span-2"><Field label="Choose existing customer (optional)"><select value={form.customerId} onChange={(e:any)=>{const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}</select></Field></div>
+    <div className="sm:col-span-2"><Field label="Select customer"><select value={form.addAsNewCustomer?"__add__":form.customerId} onChange={(e:any)=>{if(e.target.value==="__add__"){setForm({...form,customerId:"",addAsNewCustomer:true,customerName:"",customerPhone:"",location:""});return;}const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,addAsNewCustomer:false,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer...</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}<option value="__add__">＋ Add customer</option></select>{form.addAsNewCustomer&&<p className="mt-1 text-[10px] font-bold text-amber-700">Enter the new customer's details below. Customers will ask you to edit and confirm the record.</p>}</Field></div>
     <Field label="Name *"><input value={form.customerName} onChange={(e:any)=>setForm({...form,customerName:e.target.value})} className="input" placeholder="Customer name"/></Field>
     <Field label="Phone number *"><input type="tel" value={form.customerPhone} onChange={(e:any)=>setForm({...form,customerPhone:e.target.value})} className="input" placeholder="(555) 555-0123"/></Field>
     <div className="sm:col-span-2"><Field label="Address *"><input value={form.location} onChange={(e:any)=>setForm({...form,location:e.target.value})} className="input" placeholder="Address, city/state, ZIP"/></Field></div>

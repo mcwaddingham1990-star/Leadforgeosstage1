@@ -21,6 +21,8 @@ export interface Customer {
   recentlyAdded: boolean;
   upcomingJobDate?: string;
   requireFollowUp?: boolean;
+  pendingConfirmation?: boolean;
+  createdFrom?: "schedule_job" | "create_job";
 }
 
 export interface Lead {
