@@ -22,6 +22,15 @@ service cloud.firestore {
       return request.auth.token.email == businessId || getBusinessEmail() == businessId;
     }
 
+    // Only owners and managers may create or modify eSign / PDF documents.
+    function isManager() {
+      return getUserProfile().role in [
+        "Owner", "General Manager", "Office Manager",
+        "Operations Manager", "HR Manager", "Payroll Manager",
+        "HR", "Payroll", "Admin"
+      ];
+    }
+
     // Profiles collection: users can read/write their own profiles
     match /user_profiles/{uid} {
       allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
@@ -68,7 +77,14 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /documents/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      // eSign / PDF documents (folder == "eSign") can only be written by managers.
+      // All other document types (uploads, receipts, photos, etc.) are open to any business member.
+      allow write: if isAuthenticated() && (
+        request.resource == null
+          ? isBusinessMember(resource.data.businessId)
+          : (isBusinessMember(request.resource.data.businessId) &&
+             (request.resource.data.folder != "eSign" || isManager()))
+      );
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /roster/{docId} {

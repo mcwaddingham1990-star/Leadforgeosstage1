@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { PDFEditor, EditorObject } from "./PDFEditor";
+
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -143,7 +143,7 @@ export const DocumentsPage: React.FC = () => {
   const [isPDFEditorOpen, setIsPDFEditorOpen] = useState(false);
   const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
-  const [pdfEditorInitialObjects, setPdfEditorInitialObjects] = useState<any[]>([]);
+  // pdfEditorInitialObjects removed — SelfieSave iframe manages its own content
 
   // Dynamic directory lists for Create Folder action
   // Custom folders the owner adds on top of the standard FOLDER_TAXONOMY
@@ -234,16 +234,13 @@ export const DocumentsPage: React.FC = () => {
     if (doc) {
       setPdfEditorDocId(doc.id);
       setPdfEditorDocName(doc.name);
-      setPdfEditorInitialObjects((doc as any).metaObjects || []);
     } else {
       const blankId = `doc_blank_${Date.now()}`;
       const blankName = "New Blank Document.pdf";
       setPdfEditorDocId(blankId);
       setPdfEditorDocName(blankName);
-      setPdfEditorInitialObjects([]);
-      // Blank eSign work is saved immediately so closing the editor cannot
-      // lose it. It starts in Awaiting Signature and moves to Sent/Signed as
-      // the signing workflow advances.
+      // Blank eSign record created immediately so it shows up in the cabinet
+      // while the user works inside the SelfieSave popup.
       setDocuments(prev => [...prev, {
         id: blankId,
         name: blankName,
@@ -937,7 +934,7 @@ export const DocumentsPage: React.FC = () => {
               Documents Hub
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              AI-Powered records database, optical character capture, and cross-module connections
+              Upload, find, and open your business documents
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -963,16 +960,6 @@ export const DocumentsPage: React.FC = () => {
               Snapshot AI
             </button>
             <button
-              onClick={() => {
-                setSnapshotStep("camera");
-                setIsSnapshotModalOpen(true);
-              }}
-              className="px-3.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              Scan Document
-            </button>
-            <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
               className={`px-3.5 py-2 border rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer ${
                 showAdvancedFilters
@@ -982,13 +969,6 @@ export const DocumentsPage: React.FC = () => {
             >
               <Filter className="w-3.5 h-3.5" />
               Filters
-            </button>
-            <button
-              disabled
-              className="px-3 py-2 bg-slate-100 border border-slate-200 text-slate-400 font-bold rounded-xl text-xs uppercase tracking-wider cursor-not-allowed opacity-60"
-              title="This feature is coming soon"
-            >
-              Import (Coming Soon)
             </button>
             <button
               onClick={() => {
@@ -1006,104 +986,6 @@ export const DocumentsPage: React.FC = () => {
               title="Refresh Sync"
             >
               <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* MOBILE-FIRST PDF CREATOR & CAPTURE LAUNCHPAD */}
-        <div className="bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white p-5 rounded-3xl border border-[#9EC8EF]/30 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-2 gap-2">
-            <h3 className="text-xs font-display font-black text-[#BDDDF8] uppercase tracking-widest flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-              Native Document & PDF Creator Hub
-            </h3>
-            <span className="text-[9px] bg-sky-500/35 px-2 py-0.5 rounded font-black tracking-wider uppercase text-sky-200">
-              ⚡ OWNER'SLOCAL PRO
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-            {/* 1. Create Blank Document */}
-            <button
-              onClick={() => handleOpenPDFEditor(null)}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <FilePlus className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Blank Canvas</span>
-            </button>
-
-            {/* 2. Create Folder */}
-            <button
-              onClick={handleCreateFolder}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <FolderPlus className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Create Folder</span>
-            </button>
-
-            {/* 3. Standard Folders / Templates */}
-            <button
-              onClick={() => {
-                setSelectedFolderFilter("Standard Templates");
-                triggerNotification("Filtering Standard Templates folder (Unchanged templates)");
-              }}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <BookOpen className="w-5 h-5 text-sky-300 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Standard Docs</span>
-            </button>
-
-            {/* 4. Upload from Phone */}
-            <button
-              onClick={() => setIsPhoneUploadModalOpen(true)}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <Smartphone className="w-5 h-5 text-indigo-300 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">From Phone</span>
-            </button>
-
-            {/* 5. Upload from Google Drive */}
-            <button
-              onClick={() => setIsGoogleDriveModalOpen(true)}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <Cloud className="w-5 h-5 text-cyan-300 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Google Drive</span>
-            </button>
-
-            {/* 6. Upload PDF */}
-            <button
-              onClick={() => {
-                setUploadName("");
-                setUploadFolder("Customers");
-                setUploadType("Contracts");
-                setIsUploadModalOpen(true);
-              }}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <Upload className="w-5 h-5 text-teal-400 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Upload PDF</span>
-            </button>
-
-            {/* 7. Scan Document */}
-            <button
-              onClick={() => {
-                setSnapshotStep("camera");
-                setIsSnapshotModalOpen(true);
-              }}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <Camera className="w-5 h-5 text-pink-400 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">Scan Camera</span>
-            </button>
-
-            {/* 8. PDF from Photos */}
-            <button
-              onClick={() => setIsPhotoToPDFModalOpen(true)}
-              className="flex flex-col items-center justify-between p-3 bg-white/5 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-2xl transition-all text-center cursor-pointer group min-h-[92px]"
-            >
-              <Images className="w-5 h-5 text-amber-300 group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase mt-1.5 tracking-wide leading-tight">from Photos</span>
             </button>
           </div>
         </div>
@@ -1138,14 +1020,6 @@ export const DocumentsPage: React.FC = () => {
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] font-sans font-bold text-[#5E7393]">
-            <span>Search fields:</span>
-            {["Customer", "Employee", "Vendor", "Job", "Invoice #", "Estimate #", "Receipt", "Document Name", "Tags"].map((field) => (
-              <span key={field} className="flex items-center gap-1 px-2 py-0.5 bg-[#C7E3FA] text-[#1F3557] rounded-lg border border-[#9EC8EF]/40 text-[9.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#315C9F]" /> {field}
-              </span>
-            ))}
-          </div>
         </div>
 
         {/* ADVANCED FILTERS PANEL */}
@@ -1531,10 +1405,6 @@ export const DocumentsPage: React.FC = () => {
             })}
           </div>
 
-          <div className="bg-[#EAF5FF] p-3.5 rounded-xl border border-[#9EC8EF] text-[10px] font-sans font-bold text-slate-500 text-left">
-            <p className="uppercase text-[#315C9F]">Favorites System</p>
-            <p className="mt-1 font-medium font-sans">Favorites override defaults. Frequently used templates, customer directories, and contracts can be pinned to appear first.</p>
-          </div>
         </div>
 
         {/* DOCUMENTS TABLE (5 COLS) */}
@@ -1613,13 +1483,15 @@ export const DocumentsPage: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1.5">
+                            {hasManagePermission && (
                             <button
                               onClick={() => handleOpenPDFEditor(doc)}
                               className="p-1 hover:bg-[#BDDDF8]/50 text-[#315C9F] rounded transition-colors"
-                              title="Edit Document"
+                              title="Open in eSign Editor"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
+                            )}
                             <button
                               onClick={() => {
                                 setShareDocItem(doc);
@@ -1680,65 +1552,61 @@ export const DocumentsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* HIGH-FIDELITY PDF EDITOR LAUNCH TRIGGER */}
-              <button
-                onClick={() => handleOpenPDFEditor(activeDoc)}
-                className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-              >
-                <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-                Launch Native PDF Editor
-              </button>
+              {/* ESIGN EDITOR LAUNCH — managers/owners only */}
+              {hasManagePermission ? (
+                <button
+                  onClick={() => handleOpenPDFEditor(activeDoc)}
+                  className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <FileSignature className="w-4 h-4 text-amber-400 animate-pulse" />
+                  Open eSign Editor
+                </button>
+              ) : (
+                <div className="w-full py-3 bg-slate-100 text-slate-400 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed select-none">
+                  <FileSignature className="w-4 h-4" />
+                  eSign — Manager Access Only
+                </div>
+              )}
 
               {/* Information Ledger */}
               <div className="space-y-2 text-xs font-bold text-[#1F3557]">
                 <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Document ID</span>
-                  <span className="font-mono text-slate-500">{activeDoc.id}</span>
+                  <span className="text-[#5E7393] uppercase text-[9px]">Customer</span>
+                  <span className="text-right">{activeDoc.customer !== "None" ? activeDoc.customer : <span className="text-slate-400 font-normal">—</span>}</span>
                 </div>
 
                 <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Customer Name</span>
-                  <span className="text-right">{activeDoc.customer !== "None" ? activeDoc.customer : <span className="text-slate-400 font-normal">Unassigned</span>}</span>
+                  <span className="text-[#5E7393] uppercase text-[9px]">Employee</span>
+                  <span className="text-right">{activeDoc.employee !== "None" ? activeDoc.employee : <span className="text-slate-400 font-normal">—</span>}</span>
                 </div>
 
                 <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Related Employee</span>
-                  <span className="text-right">{activeDoc.employee !== "None" ? activeDoc.employee : <span className="text-slate-400 font-normal">Unassigned</span>}</span>
+                  <span className="text-[#5E7393] uppercase text-[9px]">Vendor</span>
+                  <span className="text-right">{activeDoc.vendor !== "None" ? activeDoc.vendor : <span className="text-slate-400 font-normal">—</span>}</span>
                 </div>
 
                 <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Related Vendor</span>
-                  <span className="text-right">{activeDoc.vendor !== "None" ? activeDoc.vendor : <span className="text-slate-400 font-normal">Unassigned</span>}</span>
+                  <span className="text-[#5E7393] uppercase text-[9px]">Job</span>
+                  <span className="text-right">{activeDoc.job !== "None" ? activeDoc.job : <span className="text-slate-400 font-normal">—</span>}</span>
                 </div>
 
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Related Job</span>
-                  <span className="text-right">{activeDoc.job !== "None" ? activeDoc.job : <span className="text-slate-400 font-normal">Unassigned</span>}</span>
-                </div>
+                {activeDoc.estimateId !== "None" && (
+                  <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
+                    <span className="text-[#5E7393] uppercase text-[9px]">Estimate ID</span>
+                    <span className="font-mono text-right">{activeDoc.estimateId}</span>
+                  </div>
+                )}
+
+                {activeDoc.invoiceId !== "None" && (
+                  <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
+                    <span className="text-[#5E7393] uppercase text-[9px]">Invoice ID</span>
+                    <span className="font-mono text-right">{activeDoc.invoiceId}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Estimate ID</span>
-                  <span className="font-mono text-right">{activeDoc.estimateId !== "None" ? activeDoc.estimateId : "None"}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Invoice ID</span>
-                  <span className="font-mono text-right">{activeDoc.invoiceId !== "None" ? activeDoc.invoiceId : "None"}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Upload Date</span>
-                  <span className="font-mono text-[#5E7393]">{activeDoc.date}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Last Modified</span>
-                  <span className="font-mono text-[#5E7393]">{activeDoc.lastModified}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Uploaded By</span>
-                  <span className="text-[#5E7393]">{activeDoc.uploadedBy}</span>
+                  <span className="text-[#5E7393] uppercase text-[9px]">Uploaded</span>
+                  <span className="font-mono text-[#5E7393]">{activeDoc.date} · {activeDoc.uploadedBy}</span>
                 </div>
 
                 <div className="space-y-1 pt-1">
@@ -1859,18 +1727,18 @@ export const DocumentsPage: React.FC = () => {
 
               {/* QUICK CONNECTIONS CARD */}
               <div className="space-y-1.5 text-left">
-                <span className="text-[#5E7393] uppercase text-[9.5px] font-extrabold block">Quick Connections</span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <span className="text-[#5E7393] uppercase text-[9.5px] font-extrabold block">Attach To</span>
+                <div className="grid grid-cols-3 gap-1.5">
                   <button
                     onClick={() => {
                       setAttachTargetType("Customer");
                       setAttachValue(activeDoc.customer !== "None" ? activeDoc.customer : "");
                       setIsAttachModalOpen(true);
                     }}
-                    className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10.5px] font-bold text-[#1F3557] text-left transition-colors flex items-center gap-2 cursor-pointer"
+                    className="px-2 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10px] font-bold text-[#1F3557] text-center transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <User className="w-3.5 h-3.5" />
-                    Attach To Customer...
+                    <User className="w-3 h-3" />
+                    Customer
                   </button>
                   <button
                     onClick={() => {
@@ -1878,10 +1746,10 @@ export const DocumentsPage: React.FC = () => {
                       setAttachValue(activeDoc.job !== "None" ? activeDoc.job : "");
                       setIsAttachModalOpen(true);
                     }}
-                    className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10.5px] font-bold text-[#1F3557] text-left transition-colors flex items-center gap-2 cursor-pointer"
+                    className="px-2 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10px] font-bold text-[#1F3557] text-center transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Briefcase className="w-3.5 h-3.5" />
-                    Attach To Job...
+                    <Briefcase className="w-3 h-3" />
+                    Job
                   </button>
                   <button
                     onClick={() => {
@@ -1889,35 +1757,11 @@ export const DocumentsPage: React.FC = () => {
                       setAttachValue(activeDoc.employee !== "None" ? activeDoc.employee : "");
                       setIsAttachModalOpen(true);
                     }}
-                    className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10.5px] font-bold text-[#1F3557] text-left transition-colors flex items-center gap-2 cursor-pointer"
+                    className="px-2 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[10px] font-bold text-[#1F3557] text-center transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Users className="w-3.5 h-3.5" />
-                    Attach To Employee...
+                    <Users className="w-3 h-3" />
+                    Employee
                   </button>
-                </div>
-              </div>
-
-              {/* CORPORATE ACTIONS */}
-              <div className="space-y-1.5 pt-2">
-                <span className="text-[#5E7393] uppercase text-[9.5px] font-extrabold block">Digital Actions</span>
-                <div className="grid grid-cols-2 gap-1">
-                  {[
-                    { label: "Generate PDF", icon: "📑", onClick: () => handleOpenPDFEditor(activeDoc) },
-                    { label: "Merge PDFs", icon: "🔗", onClick: () => triggerNotification("Merging multiple PDFs into one isn't built yet.") },
-                    { label: "Email Document", icon: "✉️", onClick: () => triggerNotification("Email sending isn't connected to a real provider yet.") },
-                    { label: "Print Document", icon: "🖨️", onClick: () => window.print() },
-                    { label: "Share Access", icon: "🤝", onClick: () => { setShareDocItem(activeDoc); setIsMainShareModalOpen(true); } },
-                    { label: "Sign Packet", icon: "✍️", onClick: () => handleOpenPDFEditor(activeDoc) }
-                  ].map((act) => (
-                    <button
-                      key={act.label}
-                      onClick={act.onClick}
-                      className="px-2 py-1.5 bg-white/50 hover:bg-[#BDDDF8] border border-[#9EC8EF]/50 rounded-lg text-[10px] font-bold text-[#1F3557] transition-all flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>{act.icon}</span>
-                      <span className="truncate">{act.label}</span>
-                    </button>
-                  ))}
                 </div>
               </div>
             </div>
@@ -1926,66 +1770,6 @@ export const DocumentsPage: React.FC = () => {
               Select a file on the table to inspect details and triggers.
             </div>
           )}
-        </div>
-      </div>
-
-      {/* FRAMEWORK CONNECTIONS MAP (DASHBOARD VISUALIZATION NODES) */}
-      <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm space-y-3">
-        <div>
-          <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
-            Connected Module Sync Grid
-          </h3>
-          <p className="text-[10.5px] text-[#5E7393] font-semibold mt-0.5">
-            Real-time visual node mapping of cross-module database connections
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3.5 pt-2">
-          {[
-            { label: "Dashboard Node", connected: true, desc: "Captures corporate documents totals" },
-            { label: "Revenue Ledger", connected: true, desc: "Matches incoming invoices with Stripe payouts" },
-            { label: "Customer Profiles", connected: true, desc: "Appends estimates/MSA sign-offs instantly" },
-            { label: "Leads Pipelines", connected: true, desc: "Attaches initial proposal queries" },
-            { label: "Estimates & Bids", connected: true, desc: "Auto-generates printable customer contract PDFs" },
-            { label: "Scheduling Calendar", connected: true, desc: "Logs safety briefing slips on dispatcher board" },
-            { label: "Dispatch Board", connected: true, desc: "Auto-connects blueprints to travel routes" },
-            { label: "Travel Routes", connected: true, desc: "Secures truck licensing slips digitally" },
-            { label: "Job Folders", connected: true, desc: "Archives permit papers and signed invoices" },
-            { label: "Time Clock Slips", connected: true, desc: "Verifies payroll timesheets and W4 files" },
-            { label: "Inventory Stock", connected: true, desc: "Indexes packing slips and vendor purchase receipts" },
-            { label: "Messages Chat", connected: false, desc: "Awaiting API socket connection framework" },
-            { label: "Roster Hub", connected: false, desc: "Awaiting HR payroll verification setup" },
-            { label: "AI Assistant Node", connected: false, desc: "Awaiting LLM webhook deployment token" },
-            { label: "Training Hub", connected: false, desc: "Awaiting cert template integration" }
-          ].map((node) => (
-            <div
-              key={node.label}
-              onClick={() => {
-                if (!node.connected) {
-                  onOpenPlaceholder(node.label, "🔗");
-                } else {
-                  triggerNotification(`🔗 ${node.label} database connection verified active`);
-                }
-              }}
-              className="p-3 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF]/80 rounded-xl flex flex-col justify-between h-[105px] transition-all cursor-pointer shadow-sm relative overflow-hidden"
-            >
-              <div>
-                <h4 className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">{node.label}</h4>
-                <p className="text-[9px] text-[#5E7393] font-medium leading-tight mt-1 line-clamp-2">{node.desc}</p>
-              </div>
-
-              <div className="flex items-center justify-between mt-1">
-                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded font-mono border ${
-                  node.connected
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                    : "bg-blue-50 text-blue-500 border-blue-200"
-                }`}>
-                  {node.connected ? "Connected" : "Ready"}
-                </span>
-                <span className="text-xs">{node.connected ? "✓" : "□"}</span>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -2156,23 +1940,9 @@ export const DocumentsPage: React.FC = () => {
                   triggerNotification("⚠️ Please select at least one photo to compile");
                   return;
                 }
-                const compiledObjects: EditorObject[] = selectedPhotos.map((photoUrl, index) => ({
-                  id: `compiled_photo_${Date.now()}_${index}`,
-                  type: "image",
-                  x: 15 + index * 5,
-                  y: 15 + index * 10,
-                  w: 400,
-                  h: 240,
-                  rotation: 0,
-                  isLocked: false,
-                  groupId: null,
-                  zIndex: index + 1,
-                  props: { imageSrc: photoUrl }
-                }));
-
+                // SelfieSave iframe manages its own canvas — just open it with the doc name
                 setPdfEditorDocId(`doc_compile_${Date.now()}`);
                 setPdfEditorDocName(photoToPdfName);
-                setPdfEditorInitialObjects(compiledObjects);
                 setIsPhotoToPDFModalOpen(false);
                 setIsPDFEditorOpen(true);
                 triggerNotification("📸 Photo compiling session complete! Opening compiled documents inside Editor.");
