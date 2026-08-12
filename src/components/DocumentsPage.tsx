@@ -105,6 +105,15 @@ export function inferFolderForDoc(doc: DocumentItem): string {
   return "Company";
 }
 
+
+const STOCK_TEMPLATES = [
+  { id: "tpl-invoice",  name: "Stock Invoice",              icon: "💳", desc: "Standard service invoice template",         color: "from-[#1F3557] to-[#315C9F]",    action: "esign" as const },
+  { id: "tpl-estimate", name: "Stock Estimate",             icon: "📝", desc: "Standard estimate / quote template",        color: "from-emerald-700 to-emerald-500", action: "esign" as const },
+  { id: "tpl-w2",       name: "W-2 Wage Statement",         icon: "📋", desc: "IRS W-2 — employee annual wages",           color: "from-violet-700 to-violet-500",   action: "link"  as const, url: "https://www.irs.gov/pub/irs-pdf/fw2.pdf"            },
+  { id: "tpl-1099nec",  name: "1099-NEC Contractor",        icon: "📋", desc: "IRS 1099-NEC — non-employee compensation",  color: "from-amber-700 to-amber-500",     action: "link"  as const, url: "https://www.irs.gov/pub/irs-pdf/f1099nec.pdf"        },
+  { id: "tpl-i9",       name: "I-9 Employment Eligibility", icon: "🪪", desc: "USCIS I-9 — employment eligibility form",   color: "from-teal-700 to-teal-500",       action: "link"  as const, url: "https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf" },
+] as const;
+
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -144,6 +153,13 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
   // pdfEditorInitialObjects removed — SelfieSave iframe manages its own content
+
+  // Documents hub tab
+  type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
+  const [activeDocTab, setActiveDocTab] = useState<DocTab>('all');
+
+  // Hidden file input ref for Edit PDF
+  const editPdfInputRef = useRef<HTMLInputElement>(null);
 
   // Dynamic directory lists for Create Folder action
   // Custom folders the owner adds on top of the standard FOLDER_TAXONOMY
@@ -580,6 +596,19 @@ export const DocumentsPage: React.FC = () => {
 
     return { total, contracts, estimates, invoices, receipts, photos, empDocs, recentlyAdded };
   }, [documents]);
+
+  // Tab-level secondary filter
+  const tabFilteredDocs = useMemo(() => {
+    if (activeDocTab === "estimates") return filteredDocs.filter((d: any) => d.type === "Estimates");
+    if (activeDocTab === "invoices")  return filteredDocs.filter((d: any) => d.type === "Invoices");
+    if (activeDocTab === "taxes")     return filteredDocs.filter((d: any) =>
+      d.type === "Tax Documents" || (d.tags ?? []).some((t: string) => /tax|w-?2|1099|i-?9/i.test(t))
+    );
+    if (activeDocTab === "signed")    return filteredDocs.filter((d: any) =>
+      d.status === "Signed" || d.type === "Contracts" || d.folder === "eSign"
+    );
+    return filteredDocs;
+  }, [filteredDocs, activeDocTab]);
 
   // Trigger simulated Refresh
   const handleRefresh = () => {
@@ -1191,224 +1220,128 @@ export const DocumentsPage: React.FC = () => {
         })}
       </div>
 
-      {/* CORE LAYOUT: EXPANDABLE FOLDERS SIDEBAR + DOCUMENTS LIST TABLE + DOCUMENT DETAIL PANE */}
+      {/* ACTION BUTTONS */}
+      <div className="flex flex-wrap gap-2 items-center">
+        {hasManagePermission && (
+          <button
+            onClick={() => handleOpenPDFEditor(null)}
+            className="px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+          >
+            <FilePlus className="w-4 h-4" />
+            Create PDF
+          </button>
+        )}
+        <button
+          onClick={() => editPdfInputRef.current?.click()}
+          className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
+        >
+          <Edit3 className="w-4 h-4" />
+          Edit PDF
+        </button>
+        {hasManagePermission && (
+          <button
+            onClick={() => handleOpenPDFEditor(null)}
+            className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <FileSignature className="w-4 h-4 text-[#315C9F]" />
+            eSign
+          </button>
+        )}
+        {/* Hidden file input for Edit PDF */}
+        <input
+          ref={editPdfInputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const docId = `upload_pdf_${Date.now()}`;
+            setDocuments((prev: any[]) => [...prev, {
+              id: docId,
+              name: file.name,
+              customer: "None", employee: loggedInUser?.name || "Staff",
+              vendor: "None", job: "None",
+              type: "Contracts", folder: "eSign",
+              uploadedBy: loggedInUser?.name || "Staff",
+              date: new Date().toISOString().split("T")[0],
+              size: `${(file.size / 1024).toFixed(0)} KB`,
+              status: "Draft",
+              isFavorite: false, isArchived: false,
+              notes: "Uploaded for PDF editing",
+              tags: ["PDF", "Edit", "Draft"],
+              estimateId: "None", invoiceId: "None",
+              lastModified: new Date().toISOString()
+            }]);
+            triggerNotification(`📄 ${file.name} added — click it in the list to open in eSign Editor`);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {/* TAB BAR */}
+      <div className="flex gap-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl p-1 overflow-x-auto shrink-0">
+        {([
+          { id: "all",       label: "All Documents",   icon: "📁" },
+          { id: "estimates", label: "Estimates",        icon: "📝" },
+          { id: "invoices",  label: "Invoices",         icon: "💳" },
+          { id: "templates", label: "Templates",        icon: "🗂️" },
+          { id: "taxes",     label: "Taxes",            icon: "🏛️" },
+          { id: "signed",    label: "Signed Contracts", icon: "✍️" },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveDocTab(tab.id)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all cursor-pointer ${
+              activeDocTab === tab.id
+                ? "bg-[#315C9F] text-white shadow-sm"
+                : "text-[#5E7393] hover:text-[#1F3557] hover:bg-[#C7E3FA]"
+            }`}
+          >
+            <span>{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* DOCUMENTS CONTENT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        
-        {/* FOLDERS SIDEBAR PANEL (3 COLS) */}
-        <div className="lg:col-span-3 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-[#9EC8EF]/40 pb-2">
-            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
-              <FolderOpen className="w-3.5 h-3.5" />
-              Document Folders
-            </h3>
-            <button
-              onClick={handleCreateFolder}
-              className="p-1 hover:bg-[#BDDDF8] text-[#1F3557] rounded-lg"
-              title="Add Custom Folder"
-            >
-              <PlusCircle className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            {/* Folder 1: Favorites */}
-            <button
-              onClick={() => {
-                setSelectedFolderFilter(selectedFolderFilter === "Favorites" ? null : "Favorites");
-                triggerNotification("Filtering Favorites");
-              }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-left transition-colors ${
-                selectedFolderFilter === "Favorites"
-                  ? "bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF]"
-                  : "text-[#5E7393] hover:bg-[#EAF5FF]/30 hover:text-[#1F3557]"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Star className={`w-4 h-4 ${selectedFolderFilter === "Favorites" ? "text-amber-500 fill-amber-500" : ""}`} />
-                Favorites Folder
-              </span>
-              <span className="text-[10px] bg-[#EAF5FF] px-1.5 py-0.5 rounded border border-[#9EC8EF]/30 text-[#1F3557]">
-                {documents.filter(d => d.isFavorite).length}
-              </span>
-            </button>
-
-            {/* Folder 2: Archive */}
-            <button
-              onClick={() => {
-                setSelectedFolderFilter(selectedFolderFilter === "Archived" ? null : "Archived");
-                triggerNotification("Filtering Archives");
-              }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-left transition-colors ${
-                selectedFolderFilter === "Archived"
-                  ? "bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF]"
-                  : "text-[#5E7393] hover:bg-[#EAF5FF]/30 hover:text-[#1F3557]"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Archive className="w-4 h-4" />
-                Archives Archive
-              </span>
-              <span className="text-[10px] bg-[#EAF5FF] px-1.5 py-0.5 rounded border border-[#9EC8EF]/30 text-[#1F3557]">
-                {documents.filter(d => d.isArchived).length}
-              </span>
-            </button>
-
-            <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
-
-            {/* The real, standard filing cabinet -- every account starts with these
-                20 folders already organized, per FOLDER_TAXONOMY. */}
-            {FOLDER_TAXONOMY.map((f) => {
-              const isExpanded = expandedFolders[f.id];
-              const folderCount = documents.filter(d => (d.folder || inferFolderForDoc(d)) === f.id).length;
-              const isActive = selectedFolderFilter === f.id && !selectedTypeFilter;
-
-              let entityNames: string[] = [];
-              if (f.perEntity === "customer") entityNames = customersList.map(c => c.company);
-              else if (f.perEntity === "employee") entityNames = employees.map(e => `${e.firstName} ${e.lastName}`.trim());
-              else if (f.perEntity === "job") entityNames = jobs.filter(j => j !== "All" && j !== "None");
-              else if (f.perEntity === "vendor") entityNames = vendors.filter(v => v !== "All" && v !== "None");
-
-              return (
-                <div key={f.id} className="space-y-1 text-left">
+        {/* DOCUMENTS TABLE (7 COLS) */}
+        {/* DOCUMENTS TABLE (7 COLS) */}
+        <div className="lg:col-span-7 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between overflow-hidden">
+          {activeDocTab === "templates" ? (
+            <div className="flex flex-col gap-4 pb-2">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[#5E7393]">
+                Stock templates — click to open in the eSign editor, or download the official form
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(STOCK_TEMPLATES as readonly any[]).map((tpl: any) => (
                   <button
-                    onClick={() => toggleFolder(f.id)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-xs font-bold ${
-                      isActive ? "bg-[#EAF5FF] text-[#1F3557]" : "hover:bg-[#EAF5FF]/30 text-[#1F3557]"
-                    }`}
+                    key={tpl.id}
+                    onClick={() => {
+                      if (tpl.action === "esign") {
+                        setPdfEditorDocName(tpl.name + ".pdf");
+                        setPdfEditorDocId("tpl_" + tpl.id + "_" + Date.now());
+                        setIsPDFEditorOpen(true);
+                      } else {
+                        window.open(tpl.url, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                    className={`flex items-start gap-3 p-4 rounded-2xl bg-gradient-to-br ${tpl.color} text-white text-left hover:scale-[1.02] active:scale-[0.99] transition-transform cursor-pointer shadow-md`}
                   >
-                    <span
-                      className="flex items-center gap-2 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFolderFilter(isActive ? null : f.id);
-                        setSelectedTypeFilter(null);
-                        triggerNotification(`Showing ${f.id} folder (${folderCount} document${folderCount === 1 ? "" : "s"})`);
-                      }}
-                    >
-                      <span>{f.icon}</span>
-                      {f.id}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-[10px] bg-[#EAF5FF] px-1.5 py-0.5 rounded border border-[#9EC8EF]/30 text-[#1F3557]">
-                        {folderCount}
-                      </span>
-                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="pl-6 space-y-0.5 border-l border-[#9EC8EF] ml-4 mt-0.5">
-                      {f.subfolders.map((sub) => {
-                        const subCount = documents.filter(d =>
-                          (d.folder || inferFolderForDoc(d)) === f.id &&
-                          (f.id === "eSign" && ["Pending", "Sent", "Viewed", "Rejected", "Expired"].includes(sub)
-                            ? d.status === sub
-                            : f.id === "eSign" && sub === "Completed"
-                            ? d.status === "Signed"
-                            : d.type === sub)
-                        ).length;
-                        const isSubActive = selectedFolderFilter === f.id && selectedTypeFilter === sub;
-                        return (
-                          <button
-                            key={sub}
-                            onClick={() => {
-                              setSelectedFolderFilter(f.id);
-                              setSelectedTypeFilter(isSubActive ? null : sub);
-                              triggerNotification(`Showing ${f.id} / ${sub} (${subCount} document${subCount === 1 ? "" : "s"})`);
-                            }}
-                            className={`w-full text-left text-[11px] py-1 px-1.5 rounded font-medium flex items-center justify-between gap-1.5 transition-colors ${
-                              isSubActive ? "bg-[#EAF5FF] text-[#1F3557] font-bold" : "text-[#5E7393] hover:text-[#1F3557]"
-                            }`}
-                          >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <ChevronRight className="w-2.5 h-2.5 shrink-0" />
-                              <span className="truncate">{sub}</span>
-                            </span>
-                            <span className="text-[9.5px] text-[#5E7393] shrink-0">{subCount}</span>
-                          </button>
-                        );
-                      })}
-
-                      {f.perEntity && (
-                        <div className="pt-1.5 mt-1.5 border-t border-[#9EC8EF]/40">
-                          <p className="text-[9px] uppercase tracking-wider text-[#5E7393] font-black px-1.5 pb-1">
-                            By {f.perEntity === "job" ? "Job" : f.perEntity[0].toUpperCase() + f.perEntity.slice(1)}
-                          </p>
-                          {f.perEntity === "fleet" ? (
-                            <p className="text-[10px] text-[#5E7393] font-sans font-medium px-1.5 py-1">
-                              No real vehicles added yet -- this will populate once your Fleet module has vehicles.
-                            </p>
-                          ) : entityNames.length === 0 ? (
-                            <p className="text-[10px] text-[#5E7393] font-sans font-medium px-1.5 py-1">
-                              None yet.
-                            </p>
-                          ) : (
-                            entityNames.map((name) => {
-                              const isEntityActive =
-                                (f.perEntity === "customer" && filterCustomer === name) ||
-                                (f.perEntity === "employee" && filterEmployee === name) ||
-                                (f.perEntity === "job" && filterJob === name) ||
-                                (f.perEntity === "vendor" && filterVendor === name);
-                              return (
-                                <button
-                                  key={name}
-                                  onClick={() => {
-                                    setSelectedFolderFilter(f.id);
-                                    setSelectedTypeFilter(null);
-                                    if (f.perEntity === "customer") setFilterCustomer(isEntityActive ? "All" : name);
-                                    else if (f.perEntity === "employee") setFilterEmployee(isEntityActive ? "All" : name);
-                                    else if (f.perEntity === "job") setFilterJob(isEntityActive ? "All" : name);
-                                    else if (f.perEntity === "vendor") setFilterVendor(isEntityActive ? "All" : name);
-                                    triggerNotification(`Showing ${f.id} for ${name}`);
-                                  }}
-                                  className={`w-full text-left text-[11px] py-1 px-1.5 rounded font-medium flex items-center gap-1.5 transition-colors truncate ${
-                                    isEntityActive ? "bg-[#EAF5FF] text-[#1F3557] font-bold" : "text-[#5E7393] hover:text-[#1F3557]"
-                                  }`}
-                                >
-                                  <ChevronRight className="w-2.5 h-2.5 shrink-0" />
-                                  <span className="truncate">{name}</span>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      )}
+                    <span className="text-2xl shrink-0 mt-0.5">{tpl.icon}</span>
+                    <div>
+                      <p className="text-sm font-black leading-tight">{tpl.name}</p>
+                      <p className="text-[10px] font-medium opacity-80 mt-0.5 leading-snug">{tpl.desc}</p>
+                      <p className="text-[9px] font-black uppercase tracking-wider mt-2 opacity-70">
+                        {tpl.action === "esign" ? "Open in eSign Editor →" : "Download Official PDF →"}
+                      </p>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
-
-            {/* Custom folders the owner has created */}
-            {foldersList.map((fld) => {
-              const isActive = selectedFolderFilter === fld;
-              return (
-                <button
-                  key={fld}
-                  onClick={() => {
-                    setSelectedFolderFilter(isActive ? null : fld);
-                    setSelectedTypeFilter(null);
-                    triggerNotification(`Showing ${fld} Folder`);
-                  }}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-bold text-left transition-colors ${
-                    isActive
-                      ? "bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF]"
-                      : "text-[#5E7393] hover:bg-[#EAF5FF]/30 hover:text-[#1F3557]"
-                  }`}
-                >
-                  <Folder className="w-4 h-4 text-sky-500" />
-                  {fld}
-                </button>
-              );
-            })}
-          </div>
-
-        </div>
-
-        {/* DOCUMENTS TABLE (5 COLS) */}
-        <div className="lg:col-span-5 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between overflow-hidden">
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[500px]">
               <thead>
@@ -1423,14 +1356,14 @@ export const DocumentsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#9EC8EF]/40">
-                {filteredDocs.length === 0 ? (
+                {activeDocTab === "templates" ? null : tabFilteredDocs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
                       No matching files or documents located.
                     </td>
                   </tr>
                 ) : (
-                  filteredDocs.map((doc) => {
+                  tabFilteredDocs.map((doc) => {
                     const isSelected = doc.id === selectedDocId;
                     return (
                       <tr
@@ -1512,9 +1445,10 @@ export const DocumentsPage: React.FC = () => {
             </table>
           </div>
 
+          )}
           <div className="mt-4 pt-3 border-t border-[#9EC8EF]/40 flex justify-between items-center text-[10px] font-sans font-bold text-[#5E7393]">
             <span>
-              Showing {filteredDocs.length} of {documents.length} files
+              Showing {tabFilteredDocs.length} of {documents.length} files
             </span>
             <span className="px-2 py-0.5 bg-[#EAF5FF] border border-[#9EC8EF]/60 rounded-lg text-[#1F3557]">
               Synced Storage Active
@@ -1522,8 +1456,8 @@ export const DocumentsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* DOCUMENT DETAILS PANEL (4 COLS) */}
-        <div className="lg:col-span-4 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-4">
+        {/* DOCUMENT DETAILS PANEL (5 COLS) */}
+        <div className="lg:col-span-5 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-[#9EC8EF]/40 pb-2">
             <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5" />
