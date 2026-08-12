@@ -1773,44 +1773,67 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN FLOATING EDITOR */}
+      {/* SELFIESAVE ESIGN LAUNCHER */}
       {isPDFEditorOpen && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center"
           style={{ background: 'rgba(15, 30, 55, 0.72)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setIsPDFEditorOpen(false)}
         >
           <div
             className="relative flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
-            style={{ width: 'min(98vw, 1200px)', height: 'min(96vh, 900px)' }}
+            style={{ width: 'min(94vw, 480px)' }}
+            onClick={e => e.stopPropagation()}
           >
-            {/* Header bar */}
-            <div className="flex items-center justify-between px-4 py-2.5 bg-[#0D1B2A] shrink-0">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 bg-[#0D1B2A]">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-[#0D1B2A] font-black text-sm select-none">S</div>
+                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#0D1B2A] font-black text-sm select-none">S</div>
                 <div>
-                  <p className="text-white text-xs font-bold leading-tight">SelfieSave eSign <span className="text-[#7FB3E0] font-normal">by Stuffapp</span></p>
-                  {pdfEditorDocName && (
-                    <p className="text-[#7FB3E0] text-[10px] leading-tight truncate max-w-[260px]">{pdfEditorDocName}</p>
-                  )}
+                  <p className="text-white text-sm font-bold leading-tight">SelfieSave eSign</p>
+                  <p className="text-[#7FB3E0] text-[11px] leading-tight">by Stuffapp</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsPDFEditorOpen(false)}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors text-lg font-bold cursor-pointer"
-                title="Close editor"
+                title="Close"
               >
                 ✕
               </button>
             </div>
 
-            {/* SelfieSign iframe */}
-            <iframe
-              src="https://selfiesave-esign.heathermae405.chatgpt.site/"
-              className="flex-1 w-full border-none"
-              title="SelfieSave eSign Editor"
-              allow="camera; microphone; geolocation"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
-            />
+            {/* Body */}
+            <div className="px-6 py-6 flex flex-col gap-4">
+              {pdfEditorDocName && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-[#EEF5FF] rounded-lg border border-[#BDDDF8]">
+                  <FileSignature className="w-4 h-4 text-[#315C9F] shrink-0" />
+                  <span className="text-[#1F3557] text-xs font-semibold truncate">{pdfEditorDocName}</span>
+                </div>
+              )}
+
+              <p className="text-slate-600 text-sm leading-relaxed">
+                The eSign editor opens in a new browser tab so you can sign in and work without any interruptions to the app.
+              </p>
+
+              <a
+                href="https://selfiesave-esign.heathermae405.chatgpt.site/"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsPDFEditorOpen(false)}
+                className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 no-underline"
+              >
+                <FileSignature className="w-4 h-4 text-amber-400" />
+                Open eSign Editor ↗
+              </a>
+
+              <button
+                onClick={() => setIsPDFEditorOpen(false)}
+                className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-medium transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
