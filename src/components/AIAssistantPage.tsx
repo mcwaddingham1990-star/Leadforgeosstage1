@@ -176,10 +176,10 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-              Owner's AI Assistant
+              Your Business Assistant
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold">
-              Ask questions, create reports, and get practical help using your business data
+              Ask it anything, run reports, and get real answers from your own business data
             </p>
           </div>
         </div>
@@ -199,11 +199,11 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
       {/* NAVIGATION TABS BAR */}
       <div className="flex flex-wrap gap-1.5 border-b border-[#9EC8EF]/40 pb-2.5">
         {[
-          { id: "command", label: "Conversation History", icon: <History className="w-4 h-4" /> },
-          { id: "reports", label: "AI Reports & Audits", icon: <FileText className="w-4 h-4" /> },
-          { id: "insights", label: "Business Insights", icon: <BarChart2 className="w-4 h-4" /> },
-          { id: "config", label: "AI Knowledge", icon: <Database className="w-4 h-4" /> },
-          { id: "settings", label: "Global AI Settings", icon: <Settings className="w-4 h-4" /> }
+          { id: "command", label: "Activity Log", icon: <History className="w-4 h-4" /> },
+          { id: "reports", label: "Reports", icon: <FileText className="w-4 h-4" /> },
+          { id: "insights", label: "This Week", icon: <BarChart2 className="w-4 h-4" /> },
+          { id: "config", label: "What It Knows", icon: <Database className="w-4 h-4" /> },
+          { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -231,8 +231,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="flex justify-between items-center border-b border-[#A9CDEE] pb-3">
                 <div>
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">AI Action History</h3>
-                  <p className="text-[10.5px] text-slate-500 mt-0.5">Every real AI-driven action taken across the app, logged as it happens.</p>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">What's Been Done</h3>
+                  <p className="text-[10.5px] text-slate-500 mt-0.5">A running log of everything your assistant has handled across the app.</p>
                 </div>
                 <span className="text-[10px] bg-white text-[#315C9F] border border-[#A9CDEE] px-2.5 py-1 rounded-xl font-mono font-bold">
                   {recentAiActions.length} Logged
@@ -243,7 +243,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 <div className="py-10 text-center space-y-2">
                   <p className="text-3xl">🤖</p>
                   <p className="text-xs font-bold text-slate-500">No AI activity yet</p>
-                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Actions the AI takes across the app — reports compiled, config changes, automated suggestions — will show up here.</p>
+                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Use any AI-powered feature and it'll show up here. You can undo anything from this list.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -271,8 +271,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="flex justify-between items-center border-b border-[#A9CDEE] pb-3">
                 <div>
-                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Operational Audits & Diagnostic Reports</h3>
-                  <p className="text-[10.5px] text-slate-500 mt-0.5">Download AI-compiled corporate health and dispatch analysis logs.</p>
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Business Reports</h3>
+                  <p className="text-[10.5px] text-slate-500 mt-0.5">Get a plain-English summary of where your business stands right now.</p>
                 </div>
                 <button
                   onClick={handleCompileAudit}
@@ -280,7 +280,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                   className="px-3 py-1.5 bg-[#4A9BFF] hover:bg-[#3583E6] disabled:opacity-60 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1 shadow-sm transition-colors"
                 >
                   <RefreshCw className={`w-3 h-3 ${isCompilingReport ? "animate-spin" : ""}`} />
-                  <span>{isCompilingReport ? "Compiling..." : "Compile Audit"}</span>
+                  <span>{isCompilingReport ? "Pulling your data..." : "Run Report"}</span>
                 </button>
               </div>
 
@@ -288,7 +288,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 <div className="py-10 text-center space-y-2">
                   <p className="text-3xl">📋</p>
                   <p className="text-xs font-bold text-slate-500">No reports yet</p>
-                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Click "Compile Audit" to generate a real report from your account's current data. Reports are kept for this session and can be downloaded as text.</p>
+                  <p className="text-[10.5px] text-slate-400 max-w-sm mx-auto">Hit "Run Report" and your assistant will pull together a straight-talk summary of your pipeline, team, and finances using your real data.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -323,8 +323,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           {activeTab === "insights" && (
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="border-b border-[#A9CDEE] pb-3">
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">AI Activity</h3>
-                <p className="text-[10.5px] text-slate-500 mt-0.5">Real-time charts plotting model efficiency and automated dispatch metrics.</p>
+                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">This Week at a Glance</h3>
+                <p className="text-[10.5px] text-slate-500 mt-0.5">See how much your assistant has been doing across the app this week.</p>
               </div>
 
               {/* Chart Grid */}
@@ -365,9 +365,9 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
               {/* KPI metrics row -- real counts derived from the actual AI action ledger */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
-                  { label: "Total AI Actions Logged", value: String(recentAiActions.length), desc: "All-time count of real AI-driven actions recorded across the app." },
-                  { label: "Completed This Week", value: String(chartsData.reduce((s, d) => s + d["Completed"], 0)), desc: "Actions logged and completed in the last 7 days." },
-                  { label: "Undone / Reverted", value: String(recentAiActions.filter((a: any) => a.status === "Undone").length), desc: "Actions the owner marked as undone from the audit log." }
+                  { label: "Total Things Done", value: String(recentAiActions.length), desc: "Everything your assistant has handled since you got started." },
+                  { label: "Done This Week", value: String(chartsData.reduce((s, d) => s + d["Completed"], 0)), desc: "Tasks your assistant wrapped up in the last 7 days." },
+                  { label: "Reversed", value: String(recentAiActions.filter((a: any) => a.status === "Undone").length), desc: "Things you chose to undo — no hard feelings." }
                 ].map((kpi, kIdx) => (
                   <div key={kIdx} className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 flex flex-col justify-between">
                     <div>
@@ -385,17 +385,17 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           {activeTab === "config" && (
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="border-b border-[#A9CDEE] pb-3">
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Model Knowledge Base Configuration</h3>
-                <p className="text-[10.5px] text-slate-500 mt-0.5">Train your AI and sync corporate files to govern local system decisions.</p>
+                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">What Your Assistant Knows</h3>
+                <p className="text-[10.5px] text-slate-500 mt-0.5">Tell it what to reference when answering questions or making suggestions.</p>
               </div>
 
               <div className="space-y-4 text-left">
                 {/* Knowledge Base Selectors */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {[
-                    { id: "pricebook", label: "Corporate Price Book", icon: "💰", details: "Contains standard job line items, service pricing parameters, and vendor labor cost structures." },
-                    { id: "codes", label: "Building Plumbing Codes", icon: "🚰", details: "Regional rules for HVAC safety clearances, drainage slopes, and local code criteria." },
-                    { id: "safety", label: "Employee Safety Manual", icon: "🛡️", details: "Connected guidelines detailing hazard checklists and technician weather alerts." }
+                    { id: "pricebook", label: "Your Price Book", icon: "💰", details: "Your standard job pricing, line items, and labor rates — so it quotes accurately." },
+                    { id: "codes", label: "Building & Trade Codes", icon: "🚰", details: "Local code requirements, safety clearances, and compliance rules for your trade." },
+                    { id: "safety", label: "Safety Guidelines", icon: "🛡️", details: "Your safety checklists and protocols — so it never overlooks the important stuff." }
                   ].map((kb) => (
                     <button
                       key={kb.id}
@@ -418,11 +418,11 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 
                 {/* Creativity levels & sliders */}
                 <div className="bg-white p-5 rounded-2xl border border-[#9EC8EF]/40 space-y-4">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Hyperparameter & System Tuning</h4>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Fine-Tune How It Thinks</h4>
                   
                   <div className="space-y-1">
                     <div className="flex justify-between items-center text-[10.5px] font-bold text-[#5E7393]">
-                      <span>CREATIVITY COEFFICIENT (TEMPERATURE)</span>
+                      <span>HOW CREATIVE SHOULD IT BE?</span>
                       <span className="font-mono text-[#315C9F]">{creativityLevel}%</span>
                     </div>
                     <input
@@ -434,21 +434,21 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#315C9F]"
                     />
                     <p className="text-[9px] text-slate-400 font-sans font-semibold">
-                      Lower values produce strict, precise ledger analysis. Higher values generate creative proposal drafting.
+                      Keep it low for straight numbers and facts. Turn it up when drafting proposals, messages, or anything that benefits from a little personality.
                     </p>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Model Conversation Tone Tone</label>
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">How Should It Talk to You?</label>
                     <select
                       value={aiTone}
                       onChange={(e) => setAiTone(e.target.value)}
                       className="w-full bg-[#EAF5FF] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
                     >
-                      <option value="analytical">Analytical & Objective (System Default)</option>
-                      <option value="supportive">Supportive & Collaborative (Aesthetic-Friendly)</option>
-                      <option value="brutalist">Brutalist & Minimal (Compact Summaries)</option>
-                      <option value="sales">Commercial & Sales-Focused (Proposal Boosting)</option>
+                      <option value="analytical">Straight to the point (default)</option>
+                      <option value="supportive">Friendly and encouraging</option>
+                      <option value="brutalist">Short and blunt — just the facts</option>
+                      <option value="sales">Sales-minded — always closing</option>
                     </select>
                   </div>
 
@@ -458,7 +458,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>Apply Knowledge Sync</span>
+                      <span>Save Changes</span>
                     </button>
                   </div>
                 </div>
@@ -470,25 +470,25 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           {activeTab === "settings" && (
             <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] space-y-4 shadow-sm">
               <div className="border-b border-[#A9CDEE] pb-3">
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Global Assistant Integration Modes</h3>
-                <p className="text-[10.5px] text-slate-500 mt-0.5">Configure system defaults that are inherited by individual workspaces.</p>
+                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">How Much Should It Do?</h3>
+                <p className="text-[10.5px] text-slate-500 mt-0.5">Set a default for how involved your assistant is across the whole app. You can override any section below.</p>
               </div>
 
               <div className="space-y-5 text-left">
                 <div className="bg-white p-4 rounded-2xl border border-[#9EC8EF]/40 space-y-3">
                   <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
-                    <Sliders className="w-4 h-4 text-[#315C9F]" /> Set Default Global Policy
+                    <Sliders className="w-4 h-4 text-[#315C9F]" /> Default Setting
                   </h4>
                   <p className="text-[11px] text-slate-500 leading-normal font-sans font-medium">
-                    This selection represents the baseline AI control framework across all modules. If a specific module configuration is set to 'DEFAULT', it inherits this selection automatically.
+                    This is the fallback for every section that hasn't been set individually.
                   </p>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-2">
                     {[
-                      { id: "OFF", label: "OFF", desc: "Disable AI assistance entirely." },
-                      { id: "ASSIST", label: "ASSIST", desc: "Suggest items inside chat widgets only." },
-                      { id: "ASSIST + APPROVAL", label: "ASSIST + APP.", desc: "Automate actions but await confirmation." },
-                      { id: "AUTO", label: "AUTO", desc: "Execute operations autonomously." }
+                      { id: "OFF", label: "OFF", desc: "No AI involvement." },
+                      { id: "ASSIST", label: "ASSIST", desc: "Shows suggestions — you still decide." },
+                      { id: "ASSIST + APPROVAL", label: "ASSIST + APP.", desc: "Does the work, but asks before saving." },
+                      { id: "AUTO", label: "AUTO", desc: "Handles it on its own without asking." }
                     ].map((mode) => (
                       <button
                         key={mode.id}
@@ -510,24 +510,24 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                 </div>
 
                 <div className="bg-white p-4 rounded-2xl border border-[#9EC8EF]/40 space-y-3">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Module-Specific Overrides Configuration</h4>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Per-Section Settings</h4>
                   <p className="text-[11px] text-slate-500 font-sans font-medium">
-                    Tweak specific operational bounds. Specific overrides customize the global fallback configured above.
+                    Override the default for any section where you want a different level of involvement.
                   </p>
 
                   <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1.5 scrollbar-thin">
                     {[
-                      { key: "dashboard", label: "Dashboard Hub" },
-                      { key: "revenue", label: "Revenue Analytics" },
-                      { key: "customers", label: "CRM Customers" },
-                      { key: "leads", label: "Acquisition Leads" },
-                      { key: "estimates", label: "Estimates & Bids" },
-                      { key: "scheduling", label: "Field Scheduling" },
-                      { key: "dispatch", label: "Dispatch Board" },
-                      { key: "inventory", label: "Inventory Ledger" },
-                      { key: "documents", label: "Documents Vault" },
-                      { key: "messages", label: "Chat & Messages" },
-                      { key: "training", label: "Training Academy" }
+                      { key: "dashboard", label: "Dashboard" },
+                      { key: "revenue", label: "Revenue" },
+                      { key: "customers", label: "Customers" },
+                      { key: "leads", label: "Leads" },
+                      { key: "estimates", label: "Estimates" },
+                      { key: "scheduling", label: "Scheduling" },
+                      { key: "dispatch", label: "Dispatch" },
+                      { key: "inventory", label: "Inventory" },
+                      { key: "documents", label: "Documents" },
+                      { key: "messages", label: "Messages" },
+                      { key: "training", label: "Training" }
                     ].map((mod) => (
                       <div key={mod.key} className="flex items-center justify-between p-2.5 hover:bg-slate-50/50 rounded-xl border border-slate-100 bg-white">
                         <span className="text-xs font-bold text-slate-700 font-sans">{mod.label}</span>
@@ -576,9 +576,9 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             
             <div className="flex items-center justify-between text-xs font-bold font-mono pt-2 border-t border-white/10 mt-2">
               <span className="flex items-center gap-1 text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> LIVE TELEMETRY
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> CONNECTED
               </span>
-              <span className="text-slate-300">v3.5 Flash Protocol</span>
+              <span className="text-slate-300">Powered by Gemini</span>
             </div>
           </div>
 
@@ -586,8 +586,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           <div className="bg-white rounded-3xl p-5 border border-[#9EC8EF]/40 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-xs font-black text-[#1F3557] uppercase tracking-wider">Audit Log: Recent AI Actions</h3>
-                <p className="text-[10px] text-slate-400 font-sans font-medium">Click undo to reverse any model-driven state change.</p>
+                <h3 className="text-xs font-black text-[#1F3557] uppercase tracking-wider">Recent Activity</h3>
+                <p className="text-[10px] text-slate-400 font-sans font-medium">Hit undo on anything you want to walk back.</p>
               </div>
               <span className="text-[9px] bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF]/30 px-2 py-0.5 rounded font-mono font-black">
                 {recentAiActions.filter(a => a.status === "Completed").length} Active
@@ -656,8 +656,8 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
             <CheckSquareIcon className="w-5 h-5" />
           </div>
           <div>
-            <p className="font-bold text-white mb-0.5">Configuration Saved</p>
-            <p className="text-slate-400 font-medium text-xs leading-tight">Neural parameters applied successfully to OwnersLOCAL Core.</p>
+            <p className="font-bold text-white mb-0.5">Settings Saved</p>
+            <p className="text-slate-400 font-medium text-xs leading-tight">Your assistant will use these settings going forward.</p>
           </div>
         </div>
       )}
