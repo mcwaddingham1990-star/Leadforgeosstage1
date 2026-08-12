@@ -1989,19 +1989,46 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* NATIVE PDF EDITOR OVERLAY */}
+      {/* SELFIESAVE ESIGN FLOATING EDITOR */}
       {isPDFEditorOpen && (
-        <PDFEditor
-          documentId={pdfEditorDocId}
-          documentName={pdfEditorDocName}
-          initialObjects={pdfEditorInitialObjects}
-          documentItem={documents.find(d => d.id === pdfEditorDocId) || null}
-          onClose={() => setIsPDFEditorOpen(false)}
-          onSave={handleSavePDFEditor}
-          triggerNotification={triggerNotification}
-          logOperationalEvent={logOperationalEvent}
-          loggedInUser={loggedInUser}
-        />
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: 'rgba(15, 30, 55, 0.72)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            className="relative flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
+            style={{ width: 'min(98vw, 1200px)', height: 'min(96vh, 900px)' }}
+          >
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#0D1B2A] shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-[#0D1B2A] font-black text-sm select-none">S</div>
+                <div>
+                  <p className="text-white text-xs font-bold leading-tight">SelfieSave eSign <span className="text-[#7FB3E0] font-normal">by Stuffapp</span></p>
+                  {pdfEditorDocName && (
+                    <p className="text-[#7FB3E0] text-[10px] leading-tight truncate max-w-[260px]">{pdfEditorDocName}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setIsPDFEditorOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors text-lg font-bold cursor-pointer"
+                title="Close editor"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SelfieSign iframe */}
+            <iframe
+              src="https://selfiesave-esign.heathermae405.chatgpt.site/"
+              className="flex-1 w-full border-none"
+              title="SelfieSave eSign Editor"
+              allow="camera; microphone; geolocation"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
+            />
+          </div>
+        </div>
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
