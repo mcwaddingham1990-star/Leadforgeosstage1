@@ -495,155 +495,73 @@ export const LeadsPage: React.FC = () => {
         {/* FILTERS PANEL */}
         <div className="space-y-4 lg:col-span-1">
           {/* STATUS FILTERS CARD */}
-          <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm">
-            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-[#9EC8EF]/40 pb-2">
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
+            <label htmlFor="lead-status-filter" className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Filter className="w-3.5 h-3.5 text-[#1F3557]" />
               Status Filter
-            </h3>
-            
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => setActiveStatusFilter("All")}
-                className={`px-3 py-2 rounded-xl border font-bold text-xs uppercase tracking-wider text-left transition-all cursor-pointer flex items-center justify-between ${
-                  activeStatusFilter === "All"
-                    ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#1F3557]"
-                    : "bg-transparent border-transparent text-[#5E7393] hover:bg-[#EAF5FF]/40 hover:text-[#1F3557]"
-                }`}
-              >
-                <span>Show All</span>
-                {activeStatusFilter === "All" && <Check className="w-3.5 h-3.5 text-[#1F3557]" />}
-              </button>
-              {(
-                [
-                  "New",
-                  "Contacted",
-                  "Qualified",
-                  "Estimate Sent",
-                  "Follow-Up Needed",
-                  "Won",
-                  "Lost",
-                  "Archived"
-                ] as const
-              ).map((status) => {
-                const isActive = activeStatusFilter === status;
-                return (
-                  <button
-                    key={status}
-                    onClick={() => setActiveStatusFilter(status)}
-                    className={`px-3 py-2 rounded-xl border font-bold text-xs uppercase tracking-wider text-left transition-all cursor-pointer flex items-center justify-between ${
-                      isActive
-                        ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#1F3557]"
-                        : "bg-transparent border-transparent text-[#5E7393] hover:bg-[#EAF5FF]/40 hover:text-[#1F3557]"
-                    }`}
-                  >
-                    <span>{status}</span>
-                    {isActive && <Check className="w-3.5 h-3.5 text-[#1F3557]" />}
-                  </button>
-                );
-              })}
-            </div>
+            </label>
+            <select
+              id="lead-status-filter"
+              value={activeStatusFilter}
+              onChange={(event) => setActiveStatusFilter(event.target.value)}
+              className="w-full px-3 py-2.5 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl text-xs font-bold text-[#1F3557] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#6FAFE7]"
+            >
+              <option value="All">Show All</option>
+              {["New", "Contacted", "Qualified", "Estimate Sent", "Follow-Up Needed", "Won", "Lost", "Archived"].map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
           </div>
 
           {/* LEAD SOURCES FILTERS CARD */}
-          <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm">
-            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-[#9EC8EF]/40 pb-2">
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
+            <label htmlFor="lead-source-filter" className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5 text-[#1F3557]" />
               Lead Sources
-            </h3>
-            
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => setActiveSourceFilter("All")}
-                className={`px-3 py-2 rounded-xl border font-bold text-xs uppercase tracking-wider text-left transition-all cursor-pointer flex items-center justify-between ${
-                  activeSourceFilter === "All"
-                    ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#1F3557]"
-                    : "bg-transparent border-transparent text-[#5E7393] hover:bg-[#EAF5FF]/40 hover:text-[#1F3557]"
-                }`}
-              >
-                <span>All Sources</span>
-                {activeSourceFilter === "All" && <Check className="w-3.5 h-3.5 text-[#1F3557]" />}
-              </button>
-              {(
-                [
-                  "Google Business Profile",
-                  "Website",
-                  "Facebook",
-                  "Instagram",
-                  "Referral",
-                  "Phone Call",
-                  "Walk-In",
-                  "Manual Entry",
-                  "Other"
-                ] as const
-              ).map((src) => {
-                const isActive = activeSourceFilter === src;
-                return (
-                  <button
-                    key={src}
-                    onClick={() => setActiveSourceFilter(src)}
-                    className={`px-3 py-1.5 rounded-xl border font-bold text-[10.5px] uppercase tracking-wider text-left transition-all cursor-pointer flex items-center justify-between ${
-                      isActive
-                        ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#1F3557]"
-                        : "bg-transparent border-transparent text-[#5E7393] hover:bg-[#EAF5FF]/40 hover:text-[#1F3557]"
-                    }`}
-                  >
-                    <span>{src}</span>
-                    {isActive && <Check className="w-3.5 h-3.5 text-[#1F3557]" />}
-                  </button>
-                );
-              })}
-            </div>
+            </label>
+            <select
+              id="lead-source-filter"
+              value={activeSourceFilter}
+              onChange={(event) => setActiveSourceFilter(event.target.value)}
+              className="w-full px-3 py-2.5 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl text-xs font-bold text-[#1F3557] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#6FAFE7]"
+            >
+              <option value="All">All Sources</option>
+              {["Google Business Profile", "Website", "Facebook", "Instagram", "Referral", "Phone Call", "Walk-In", "Manual Entry", "Other"].map((source) => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
           </div>
 
           {/* QUICK ACTIONS CARD */}
-          <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm">
-            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-[#9EC8EF]/40 pb-2">
+          <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
+            <label htmlFor="lead-quick-action" className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-[#1F3557]" />
               Quick Actions
-            </h3>
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => onOpenPlaceholder("Convert Lead to Customer Profile", "👤")}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-[#1F3557]" />
-                Create Customer
-              </button>
-              <button
-                onClick={() => onOpenPlaceholder("Lead Estimate Creation Builder", "📝")}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <FileText className="w-3.5 h-3.5 text-[#1F3557]" />
-                Create Estimate
-              </button>
-              <button
-                onClick={() => {
-                  if (onNavigateToScreen) {
-                    onNavigateToScreen("scheduling");
-                  } else {
-                    onOpenPlaceholder("Lead Dispatch Calendar", "📅");
-                  }
-                }}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <Calendar className="w-3.5 h-3.5 text-[#1F3557]" />
-                Schedule Appointment
-              </button>
-              <button
-                onClick={() => onOpenPlaceholder("Lead SMS & Email Board", "💬")}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-[#1F3557]" />
-                Send Message
-              </button>
-              <button
-                onClick={() => onOpenPlaceholder("Lead Follow-Up Automator", "⏰")}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <Clock className="w-3.5 h-3.5 text-[#1F3557]" />
-                Create Follow-Up
-              </button>
-            </div>
+            </label>
+            <select
+              id="lead-quick-action"
+              defaultValue=""
+              onChange={(event) => {
+                const action = event.target.value;
+                if (action === "customer") onOpenPlaceholder("Convert Lead to Customer Profile", "👤");
+                if (action === "estimate") onOpenPlaceholder("Lead Estimate Creation Builder", "📝");
+                if (action === "schedule") {
+                  if (onNavigateToScreen) onNavigateToScreen("scheduling");
+                  else onOpenPlaceholder("Lead Dispatch Calendar", "📅");
+                }
+                if (action === "message") onOpenPlaceholder("Lead SMS & Email Board", "💬");
+                if (action === "follow-up") onOpenPlaceholder("Lead Follow-Up Automator", "⏰");
+                event.currentTarget.value = "";
+              }}
+              className="w-full px-3 py-2.5 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl text-xs font-bold text-[#1F3557] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#6FAFE7]"
+            >
+              <option value="" disabled>Select an action...</option>
+              <option value="customer">Create Customer</option>
+              <option value="estimate">Create Estimate</option>
+              <option value="schedule">Schedule Appointment</option>
+              <option value="message">Send Message</option>
+              <option value="follow-up">Create Follow-Up</option>
+            </select>
           </div>
         </div>
 
