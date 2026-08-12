@@ -762,6 +762,26 @@ export const EstimatesPage: React.FC = () => {
             </div>
             
             <div className="p-6 overflow-y-auto space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Select Customer</label>
+                <select
+                  value=""
+                  onChange={(event) => {
+                    const customer = customers.find(item => item.id === event.target.value);
+                    if (!customer) return;
+                    setFormCustomerName(customer.contact || customer.company);
+                    setFormCompany(customer.company);
+                  }}
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                >
+                  <option value="">Select customer...</option>
+                  {customers.map(customer => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.contact || customer.company}{customer.contact && customer.company ? ` — ${customer.company}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="button"

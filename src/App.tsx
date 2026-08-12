@@ -938,7 +938,20 @@ export default function App() {
   // collection to empty. (TrainingPage.tsx already used this exact
   // ternary, anticipating businessEmail would be populated here.)
   const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
-  const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId);
+  const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId, {
+    normalize: (customer) => {
+      const legacyName = String((customer as Customer & { name?: string }).name || "").trim();
+      const contact = String(customer.contact || legacyName || customer.company || "Unnamed Customer").trim();
+      return {
+        ...customer,
+        company: String(customer.company || legacyName || contact).trim(),
+        contact,
+        phone: String(customer.phone || ""),
+        email: String(customer.email || ""),
+        address: String(customer.address || "")
+      };
+    }
+  });
   const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
   const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
   const [schedulingEvents, setSchedulingEvents] = useFirestoreCollection<SchedulingEvent>("scheduling_events", businessId);
@@ -954,7 +967,7 @@ export default function App() {
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);
-  const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId);
+  const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId, { tenantField: "businessEmail" });
   const [timeClockLogs, setTimeClockLogs, refreshTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
   const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
   const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
@@ -970,6 +983,31 @@ export default function App() {
   const [mileageLogs, setMileageLogs] = useFirestoreCollection<MileageLog>("mileage_logs", businessId);
   const [budgets, setBudgets] = useFirestoreCollection<Budget>("budgets", businessId);
   const [salesTaxRates, setSalesTaxRates] = useFirestoreCollection<SalesTaxRate>("sales_tax_rates", businessId);
+  const migratedCustomersForBusinessRef = useRef(new Set<string>());
+
+  // Recover customer records saved by earlier builds before Firestore became
+  // the canonical store. The migration runs once per business per session and
+  // preserves record IDs, making it idempotent rather than duplicate seed.
+  useEffect(() => {
+    if (!businessId || loggedInUser?.isEmployee) return;
+    const migrationKey = businessId.toLowerCase();
+    if (migratedCustomersForBusinessRef.current.has(migrationKey)) return;
+    migratedCustomersForBusinessRef.current.add(migrationKey);
+    try {
+      const raw = localStorage.getItem("ownerslocal_customers") || localStorage.getItem("leadforge_customers");
+      const cached = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(cached) && cached.length > 0) {
+        setCustomers(current => {
+          const merged = new Map<string, Customer>();
+          cached.forEach((customer: Customer) => customer?.id && merged.set(customer.id, customer));
+          current.forEach(customer => merged.set(customer.id, customer));
+          return [...merged.values()];
+        });
+      }
+    } catch (error) {
+      console.error("Couldn't migrate cached customers:", error);
+    }
+  }, [businessId, loggedInUser?.isEmployee, setCustomers]);
 
   // Delete only the original prototype's known demo rows if they were
   // persisted by an older build. Real inventory and time entries remain.

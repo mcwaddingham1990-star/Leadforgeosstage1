@@ -39,10 +39,8 @@ service cloud.firestore {
 
     // Employees collection
     match /employees/{email} {
-      allow read, write: if isAuthenticated() && (
-        (resource == null || isBusinessMember(resource.data.businessEmail) || isBusinessMember(email)) &&
-        (request.resource == null || isBusinessMember(request.resource.data.businessEmail) || isBusinessMember(email))
-      );
+      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessEmail);
     }
 
     // The 11 real multi-tenant business collections, matched explicitly

@@ -20,12 +20,11 @@ type WithId = { id?: string };
 export function useFirestoreCollection<T extends WithId>(
   collectionName: string,
   businessId: string | undefined,
-  options?: { normalize?: (item: T) => T }
+  options?: { normalize?: (item: T) => T; tenantField?: string }
 ): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
   const [items, _setItems] = useState<T[]>([]);
   const collectionItemsRef = useRef<T[]>([]);
   const compatibilityItemsRef = useRef<T[]>([]);
-  const legacyTenantItemsRef = useRef<T[]>([]);
 
   const setItems: Dispatch<SetStateAction<T[]>> = (value) => {
     _setItems((prev) => {
@@ -42,24 +41,25 @@ export function useFirestoreCollection<T extends WithId>(
     if (!businessId) {
       collectionItemsRef.current = [];
       compatibilityItemsRef.current = [];
-      legacyTenantItemsRef.current = [];
       _setItems([]);
       return;
     }
     collectionItemsRef.current = [];
     compatibilityItemsRef.current = [];
-    legacyTenantItemsRef.current = [];
     const publish = () => {
       const merged = new Map<string | undefined, T>();
-      legacyTenantItemsRef.current.forEach(item => merged.set(item.id, item));
       compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
       collectionItemsRef.current.forEach(item => merged.set(item.id, item));
       _setItems([...merged.values()]);
     };
-    const unsubscribe = subscribeToCollection(collectionName, businessId, (docs) => {
-      collectionItemsRef.current = docs as T[];
+    const handleDocs = (docs: any[]) => {
+      collectionItemsRef.current = options?.normalize ? (docs as T[]).map(options.normalize) : docs as T[];
       publish();
-    }, collectionName === "time_clock_logs" ? () => publish() : undefined);
+    };
+    const handleError = collectionName === "time_clock_logs" ? () => publish() : undefined;
+    const unsubscribe = options?.tenantField && options.tenantField !== "businessId"
+      ? subscribeToCollectionByField(collectionName, options.tenantField, businessId, handleDocs, handleError)
+      : subscribeToCollection(collectionName, businessId, handleDocs, handleError);
     const unsubscribeCompatibility = collectionName === "time_clock_logs"
       ? onSnapshot(doc(db, "business_profiles", businessId), snapshot => {
           const stored = snapshot.data()?.timeClockLogs || {};
@@ -70,16 +70,9 @@ export function useFirestoreCollection<T extends WithId>(
           publish();
         })
       : undefined;
-    const unsubscribeLegacyTenant = collectionName === "employees"
-      ? subscribeToCollectionByField(collectionName, "businessEmail", businessId, (docs) => {
-          legacyTenantItemsRef.current = docs as T[];
-          publish();
-        }, () => publish())
-      : undefined;
     return () => {
       unsubscribe();
       unsubscribeCompatibility?.();
-      unsubscribeLegacyTenant?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, businessId]);
@@ -91,9 +84,9 @@ export function useFirestoreCollection<T extends WithId>(
   // that the returned setItems performs.
   const refresh = async () => {
     if (!businessId) return;
-    collectionItemsRef.current = (await fetchCollectionFromServer(collectionName, businessId)) as T[];
+    const fresh = (await fetchCollectionFromServer(collectionName, businessId, options?.tenantField)) as T[];
+    collectionItemsRef.current = options?.normalize ? fresh.map(options.normalize) : fresh;
     const merged = new Map<string | undefined, T>();
-    legacyTenantItemsRef.current.forEach(item => merged.set(item.id, item));
     compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
     collectionItemsRef.current.forEach(item => merged.set(item.id, item));
     _setItems([...merged.values()]);

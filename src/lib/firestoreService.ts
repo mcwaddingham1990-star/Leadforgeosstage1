@@ -198,8 +198,8 @@ export function subscribeToCollectionByField(
  * rather than waiting on a listener that's already dead. Used by manual
  * "Refresh" actions in the UI.
  */
-export async function fetchCollectionFromServer(collectionName: string, businessId: string): Promise<any[]> {
-  const q = query(collection(db, collectionName), where("businessId", "==", businessId));
+export async function fetchCollectionFromServer(collectionName: string, businessId: string, tenantField = "businessId"): Promise<any[]> {
+  const q = query(collection(db, collectionName), where(tenantField, "==", businessId));
   const snapshot = await getDocsFromServer(q);
   const items: any[] = [];
   snapshot.forEach((docSnap) => {
