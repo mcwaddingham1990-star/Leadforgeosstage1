@@ -6148,94 +6148,82 @@ Access to full financial telemetry is restricted.`;
                           />
                         )}
 
-                        {/* Recharts Live Multi-line Graph Container */}
-                        <div className="h-[280px] w-full pt-2">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart
-                              data={getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series}
-                              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                              <XAxis
-                                dataKey="time"
-                                stroke="#5E7393"
-                                fontSize={10}
-                                tickLine={false}
-                                axisLine={false}
-                                dy={10}
-                                className="font-mono"
-                              />
-                              <YAxis
-                                stroke="#5E7393"
-                                fontSize={10}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(val) => `$${val.toLocaleString()}`}
-                                className="font-mono"
-                              />
-                              <Tooltip content={
-                                ({ active, payload, label }) => {
-                                  if (active && payload && payload.length) {
-                                    return (
-                                      <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                        <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
-                                        <div className="space-y-1">
-                                          {payload.map((entry: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between gap-6">
-                                              <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                {entry.name}:
-                                              </span>
-                                              <span className="font-mono font-bold text-[#1F3557] text-[11px]">
-                                                ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                              </span>
+                        {/* Recharts Live Multi-line Graph — horizontally scrollable */}
+                        {(() => {
+                          const chartSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
+                          const chartWidth = Math.max(340, chartSeries.length * 78);
+                          return (
+                            <div className="pt-2">
+                              {chartSeries.length > 5 && (
+                                <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
+                              )}
+                              <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <LineChart
+                                  width={chartWidth}
+                                  height={280}
+                                  data={chartSeries}
+                                  margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                  <XAxis
+                                    dataKey="time"
+                                    stroke="#5E7393"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    dy={10}
+                                    className="font-mono"
+                                  />
+                                  <YAxis
+                                    stroke="#5E7393"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
+                                    className="font-mono"
+                                    width={48}
+                                  />
+                                  <Tooltip content={
+                                    ({ active, payload, label }) => {
+                                      if (active && payload && payload.length) {
+                                        return (
+                                          <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
+                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
+                                            <div className="space-y-1">
+                                              {payload.map((entry: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between gap-6">
+                                                  <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
+                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                    {entry.name}:
+                                                  </span>
+                                                  <span className="font-mono font-bold text-[#1F3557] text-[11px]">
+                                                    ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  </span>
+                                                </div>
+                                              ))}
                                             </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                }
-                              } />
-                              <Legend
-                                verticalAlign="top"
-                                height={36}
-                                iconType="circle"
-                                iconSize={8}
-                                className="font-sans font-bold text-[11px]"
-                                wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Revenue"
-                                stroke="#4A86F7"
-                                strokeWidth={3}
-                                dot={{ r: 4, strokeWidth: 1 }}
-                                activeDot={{ r: 6 }}
-                                name="Revenue"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Expenses"
-                                stroke="#F43F5E"
-                                strokeWidth={2}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Expenses"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="Profit"
-                                stroke="#22C55E"
-                                strokeWidth={2}
-                                dot={{ r: 3, strokeWidth: 1 }}
-                                activeDot={{ r: 5 }}
-                                name="Profit"
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    }
+                                  } />
+                                  <Legend
+                                    verticalAlign="top"
+                                    height={36}
+                                    iconType="circle"
+                                    iconSize={8}
+                                    className="font-sans font-bold text-[11px]"
+                                    wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                                  />
+                                  <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />
+                                  <Line type="monotone" dataKey="Expenses" stroke="#F43F5E" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} name="Expenses" />
+                                  <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} name="Profit" />
+                                </LineChart>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
