@@ -43,7 +43,7 @@ import type { Estimate } from "../types/domain";
 export const INITIAL_ESTIMATES: Estimate[] = [];
 
 export const EstimatesPage: React.FC = () => {
-  const { approveEstimateToJob } = useDomainActions();
+  const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
   const { loggedInUser } = useAuth();
   const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, customers } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
@@ -108,6 +108,10 @@ export const EstimatesPage: React.FC = () => {
     } else {
       setLocalEstimates(prev => [newEst, ...prev]);
     }
+    // Auto-create a "Potential" customer in the CRM if this person isn't
+    // already in the system. When the estimate is accepted the status
+    // upgrades to "Active" automatically via approveEstimateToJob.
+    upsertPotentialCustomer(newEst.customerName, newEst.company);
     if (logOperationalEvent) {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
     }

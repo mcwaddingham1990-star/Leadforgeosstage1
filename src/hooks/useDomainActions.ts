@@ -123,9 +123,91 @@ export function useDomainActions() {
 
     setSchedulingEvents(prev => [newJob, ...prev]);
     setEstimates(prev => prev.map(e => (e.id === estimateId ? { ...e, status: "Accepted" } : e)));
+
+    // Upgrade a "Potential" customer to "Active" now that they have a real job.
+    // If no customer record exists yet (estimate was created without a CRM entry),
+    // create the full Active record so the CRM stays in sync.
+    const existingCustomer = customers.find(
+      c => c.contact === estimate.customerName || c.company === estimate.company
+    );
+    if (existingCustomer) {
+      if (existingCustomer.status === "Potential") {
+        setCustomers(prev =>
+          prev.map(c =>
+            c.id === existingCustomer.id
+              ? { ...c, status: "Active", openJobs: (c.openJobs || 0) + 1 }
+              : c
+          )
+        );
+        logOperationalEvent("Customer Activated", `${estimate.customerName} moved from Potential → Active`, "🤝");
+      } else {
+        // Already an Active customer — just bump their open job count.
+        setCustomers(prev =>
+          prev.map(c =>
+            c.id === existingCustomer.id
+              ? { ...c, openJobs: (c.openJobs || 0) + 1 }
+              : c
+          )
+        );
+      }
+    } else {
+      // No CRM record at all — create an Active customer from estimate data.
+      const newCustomer: Customer = {
+        id: "cust_" + Math.random().toString(36).substring(2, 9),
+        company: estimate.company || estimate.customerName + " Inc",
+        contact: estimate.customerName,
+        phone: "",
+        email: "",
+        address: estimate.address || "",
+        openJobs: 1,
+        outstandingBalance: estimate.amount || 0,
+        lifetimeValue: estimate.amount || 0,
+        status: "Active",
+        type: "Residential",
+        isVIP: false,
+        recentlyAdded: true
+      };
+      setCustomers(prev => [newCustomer, ...prev]);
+      logOperationalEvent("Customer Created", `${estimate.customerName} added as Active customer from accepted estimate`, "🤝");
+    }
+
     logOperationalEvent("Estimate Accepted", `${estimate.number} confirmed and converted to ${newJob.status} Job`, "✅");
     return newJob;
   };
 
-  return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob };
+  /**
+   * Called whenever a new estimate is created for someone who isn't already a
+   * customer. Creates a "Potential" customer record so the name shows up in
+   * the CRM immediately. If a matching customer already exists (by name or
+   * company) nothing is written — the existing record wins.
+   */
+  const upsertPotentialCustomer = (customerName: string, company?: string) => {
+    const trimmedName = customerName.trim();
+    if (!trimmedName) return;
+    const alreadyExists = customers.some(
+      c => c.contact === trimmedName || c.company === (company?.trim() || trimmedName + " Inc")
+    );
+    if (alreadyExists) return;
+
+    const newCustomer: Customer = {
+      id: "cust_" + Math.random().toString(36).substring(2, 9),
+      company: company?.trim() || trimmedName + " Inc",
+      contact: trimmedName,
+      phone: "",
+      email: "",
+      address: "",
+      openJobs: 0,
+      outstandingBalance: 0,
+      lifetimeValue: 0,
+      status: "Potential",
+      type: "Residential",
+      isVIP: false,
+      recentlyAdded: true
+    };
+
+    setCustomers(prev => [newCustomer, ...prev]);
+    logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮");
+  };
+
+  return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob, upsertPotentialCustomer };
 }
