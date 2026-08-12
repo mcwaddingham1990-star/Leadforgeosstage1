@@ -122,6 +122,8 @@ interface PDFEditorProps {
   initialObjects?: EditorObject[];
   documentItem?: any;
   loggedInUser?: any;
+  pdfSourceUrl?: string | null;
+  startBlank?: boolean;
 }
 
 export const PDFEditor: React.FC<PDFEditorProps> = ({
@@ -133,7 +135,9 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
   logOperationalEvent,
   initialObjects = [],
   documentItem = null,
-  loggedInUser = null
+  loggedInUser = null,
+  pdfSourceUrl = null,
+  startBlank = false
 }) => {
   // Mode of operation: "normal" (scroll & zoom) vs "edit" (adding, editing, manipulation)
   const [editorMode, setEditorMode] = useState<"normal" | "edit">("edit");
@@ -258,6 +262,9 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
     if (initialObjects && initialObjects.length > 0) {
       setObjects(initialObjects);
       saveToHistory(initialObjects);
+    } else if (startBlank || pdfSourceUrl) {
+      setObjects([]);
+      saveToHistory([]);
     } else {
       // Seed a blank standard contract template with generic, editable
       // placeholder fields. No specific client, no pre-applied approval
@@ -406,7 +413,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
       setObjects(seeded);
       saveToHistory(seeded);
     }
-  }, [initialObjects]);
+  }, [initialObjects, startBlank, pdfSourceUrl]);
 
   // Undo/Redo logic
   const saveToHistory = (newObjects: EditorObject[]) => {
@@ -1597,8 +1604,10 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         
         // Draw standard white page background reference
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        if (!pdfSourceUrl) {
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
 
         // Render drawings saved inside objects list
         objects.forEach(obj => {
@@ -1636,7 +1645,7 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
         }
       }
     }
-  }, [objects, currentDrawingStroke, isDrawingModeActive, activeColor]);
+  }, [objects, currentDrawingStroke, isDrawingModeActive, activeColor, pdfSourceUrl]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex flex-col z-50 overflow-hidden font-sans select-none animate-fade-in text-[#1F3557]">
@@ -2028,6 +2037,13 @@ export const PDFEditor: React.FC<PDFEditorProps> = ({
             }
           }}
         >
+          {pdfSourceUrl && (
+            <iframe
+              src={`${pdfSourceUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+              title={`PDF source: ${documentName}`}
+              className="absolute inset-0 w-full h-full border-0 pointer-events-none bg-white z-0"
+            />
+          )}
           {/* HIGH-FIDELITY STANDARD BACKGROUND DETAILS */}
           <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[radial-gradient(#1f3557_1px,transparent_1px)] [background-size:16px_16px]" />
 

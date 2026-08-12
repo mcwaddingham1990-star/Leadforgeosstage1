@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { PDFEditor } from "./PDFEditor";
 
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -152,14 +153,23 @@ export const DocumentsPage: React.FC = () => {
   const [isPDFEditorOpen, setIsPDFEditorOpen] = useState(false);
   const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
-  // pdfEditorInitialObjects removed — SelfieSave iframe manages its own content
+  const [pdfEditorSourceUrl, setPdfEditorSourceUrl] = useState<string | null>(null);
+  const [pdfEditorStartsBlank, setPdfEditorStartsBlank] = useState(false);
 
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
   const [activeDocTab, setActiveDocTab] = useState<DocTab>('all');
 
-  // Hidden file input ref for Edit PDF
+  const openPdfInputRef = useRef<HTMLInputElement>(null);
   const editPdfInputRef = useRef<HTMLInputElement>(null);
+
+  const closePDFEditor = () => {
+    setIsPDFEditorOpen(false);
+    setPdfEditorSourceUrl(current => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
 
   // Dynamic directory lists for Create Folder action
   // Custom folders the owner adds on top of the standard FOLDER_TAXONOMY
@@ -247,6 +257,8 @@ export const DocumentsPage: React.FC = () => {
 
   // Handler to open PDF Editor
   const handleOpenPDFEditor = (doc: DocumentItem | null) => {
+    setPdfEditorStartsBlank(!doc);
+    setPdfEditorSourceUrl(null);
     if (doc) {
       setPdfEditorDocId(doc.id);
       setPdfEditorDocName(doc.name);
@@ -281,6 +293,31 @@ export const DocumentsPage: React.FC = () => {
     }
     setIsPDFEditorOpen(true);
     triggerNotification(doc ? `Opening PDF Editor for ${doc.name}` : "Opening clean blank PDF Canvas");
+  };
+
+  const handlePickedPDF = (file: File, action: "open" | "edit") => {
+    const docId = `upload_pdf_${Date.now()}`;
+    const sourceUrl = URL.createObjectURL(file);
+    const newDocument: DocumentItem = {
+      id: docId, name: file.name, customer: "None",
+      employee: loggedInUser?.name || "Staff", vendor: "None", job: "None",
+      type: "Contracts", folder: "eSign",
+      uploadedBy: loggedInUser?.name || "Staff",
+      date: new Date().toISOString().split("T")[0],
+      size: `${(file.size / 1024).toFixed(0)} KB`, status: "Draft",
+      isFavorite: false, isArchived: false,
+      notes: `${action === "open" ? "Opened" : "Uploaded"} in SelfieSave eSign`,
+      tags: ["PDF", action === "open" ? "Open" : "Edit", "Draft"],
+      estimateId: "None", invoiceId: "None", lastModified: new Date().toISOString()
+    };
+    setDocuments(prev => [...prev, newDocument]);
+    setPdfEditorDocId(docId);
+    setPdfEditorDocName(file.name);
+    setPdfEditorSourceUrl(sourceUrl);
+    setPdfEditorStartsBlank(false);
+    setSelectedDocId(docId);
+    setIsPDFEditorOpen(true);
+    triggerNotification(`📄 Opening ${file.name} in SelfieSave eSign`);
   };
 
   // Handler to save PDF Editor modifications
@@ -349,7 +386,7 @@ export const DocumentsPage: React.FC = () => {
       }
     });
 
-    setIsPDFEditorOpen(false);
+    closePDFEditor();
     triggerNotification(`💾 Saved changes to: ${updatedName}`);
     if (logOperationalEvent) {
       logOperationalEvent("PDF Editor Save", `Updated elements inside ${updatedName}`, "💾");
@@ -1228,9 +1265,16 @@ export const DocumentsPage: React.FC = () => {
             className="px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-sm"
           >
             <FilePlus className="w-4 h-4" />
-            Create PDF
+            Create New Document
           </button>
         )}
+        <button
+          onClick={() => openPdfInputRef.current?.click()}
+          className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
+        >
+          <FolderOpen className="w-4 h-4" />
+          Open PDF
+        </button>
         <button
           onClick={() => editPdfInputRef.current?.click()}
           className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
@@ -1238,16 +1282,17 @@ export const DocumentsPage: React.FC = () => {
           <Edit3 className="w-4 h-4" />
           Edit PDF
         </button>
-        {hasManagePermission && (
-          <button
-            onClick={() => handleOpenPDFEditor(null)}
-            className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <FileSignature className="w-4 h-4 text-[#315C9F]" />
-            eSign
-          </button>
-        )}
-        {/* Hidden file input for Edit PDF */}
+        <input
+          ref={openPdfInputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handlePickedPDF(file, "open");
+            e.target.value = "";
+          }}
+        />
         <input
           ref={editPdfInputRef}
           type="file"
@@ -1255,25 +1300,7 @@ export const DocumentsPage: React.FC = () => {
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (!file) return;
-            const docId = `upload_pdf_${Date.now()}`;
-            setDocuments((prev: any[]) => [...prev, {
-              id: docId,
-              name: file.name,
-              customer: "None", employee: loggedInUser?.name || "Staff",
-              vendor: "None", job: "None",
-              type: "Contracts", folder: "eSign",
-              uploadedBy: loggedInUser?.name || "Staff",
-              date: new Date().toISOString().split("T")[0],
-              size: `${(file.size / 1024).toFixed(0)} KB`,
-              status: "Draft",
-              isFavorite: false, isArchived: false,
-              notes: "Uploaded for PDF editing",
-              tags: ["PDF", "Edit", "Draft"],
-              estimateId: "None", invoiceId: "None",
-              lastModified: new Date().toISOString()
-            }]);
-            triggerNotification(`📄 ${file.name} added — click it in the list to open in eSign Editor`);
+            if (file) handlePickedPDF(file, "edit");
             e.target.value = "";
           }}
         />
@@ -1707,69 +1734,21 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN LAUNCHER */}
+      {/* SELFIESAVE ESIGN — native Owners Local editor */}
       {isPDFEditorOpen && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center"
-          style={{ background: 'rgba(15, 30, 55, 0.72)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setIsPDFEditorOpen(false)}
-        >
-          <div
-            className="relative flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
-            style={{ width: 'min(94vw, 480px)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 bg-[#0D1B2A]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[#0D1B2A] font-black text-sm select-none">S</div>
-                <div>
-                  <p className="text-white text-sm font-bold leading-tight">SelfieSave eSign</p>
-                  <p className="text-[#7FB3E0] text-[11px] leading-tight">by Stuffapp</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsPDFEditorOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors text-lg font-bold cursor-pointer"
-                title="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-6 flex flex-col gap-4">
-              {pdfEditorDocName && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-[#EEF5FF] rounded-lg border border-[#BDDDF8]">
-                  <FileSignature className="w-4 h-4 text-[#315C9F] shrink-0" />
-                  <span className="text-[#1F3557] text-xs font-semibold truncate">{pdfEditorDocName}</span>
-                </div>
-              )}
-
-              <p className="text-slate-600 text-sm leading-relaxed">
-                The eSign editor opens in a new browser tab so you can sign in and work without any interruptions to the app.
-              </p>
-
-              <a
-                href="https://selfiesave-esign.heathermae405.chatgpt.site/"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setIsPDFEditorOpen(false)}
-                className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 no-underline"
-              >
-                <FileSignature className="w-4 h-4 text-amber-400" />
-                Open eSign Editor ↗
-              </a>
-
-              <button
-                onClick={() => setIsPDFEditorOpen(false)}
-                className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-medium transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <PDFEditor
+          documentId={pdfEditorDocId}
+          documentName={pdfEditorDocName}
+          onClose={closePDFEditor}
+          onSave={handleSavePDFEditor}
+          triggerNotification={triggerNotification}
+          logOperationalEvent={logOperationalEvent}
+          initialObjects={(documents.find(doc => doc.id === pdfEditorDocId) as any)?.metaObjects || []}
+          documentItem={documents.find(doc => doc.id === pdfEditorDocId) || null}
+          loggedInUser={loggedInUser}
+          pdfSourceUrl={pdfEditorSourceUrl}
+          startBlank={pdfEditorStartsBlank}
+        />
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
