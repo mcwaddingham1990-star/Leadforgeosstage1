@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
-import { syncArrayToFirestore, subscribeToCollection, fetchCollectionFromServer } from "../lib/firestoreService";
+import { syncArrayToFirestore, subscribeToCollection, subscribeToCollectionByField, fetchCollectionFromServer } from "../lib/firestoreService";
 import { emitCollectionEvent } from "../lib/eventBus";
 import { db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -25,6 +25,7 @@ export function useFirestoreCollection<T extends WithId>(
   const [items, _setItems] = useState<T[]>([]);
   const collectionItemsRef = useRef<T[]>([]);
   const compatibilityItemsRef = useRef<T[]>([]);
+  const legacyTenantItemsRef = useRef<T[]>([]);
 
   const setItems: Dispatch<SetStateAction<T[]>> = (value) => {
     _setItems((prev) => {
@@ -39,11 +40,18 @@ export function useFirestoreCollection<T extends WithId>(
 
   useEffect(() => {
     if (!businessId) {
+      collectionItemsRef.current = [];
+      compatibilityItemsRef.current = [];
+      legacyTenantItemsRef.current = [];
       _setItems([]);
       return;
     }
+    collectionItemsRef.current = [];
+    compatibilityItemsRef.current = [];
+    legacyTenantItemsRef.current = [];
     const publish = () => {
       const merged = new Map<string | undefined, T>();
+      legacyTenantItemsRef.current.forEach(item => merged.set(item.id, item));
       compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
       collectionItemsRef.current.forEach(item => merged.set(item.id, item));
       _setItems([...merged.values()]);
@@ -62,9 +70,16 @@ export function useFirestoreCollection<T extends WithId>(
           publish();
         })
       : undefined;
+    const unsubscribeLegacyTenant = collectionName === "employees"
+      ? subscribeToCollectionByField(collectionName, "businessEmail", businessId, (docs) => {
+          legacyTenantItemsRef.current = docs as T[];
+          publish();
+        }, () => publish())
+      : undefined;
     return () => {
       unsubscribe();
       unsubscribeCompatibility?.();
+      unsubscribeLegacyTenant?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, businessId]);
@@ -78,6 +93,7 @@ export function useFirestoreCollection<T extends WithId>(
     if (!businessId) return;
     collectionItemsRef.current = (await fetchCollectionFromServer(collectionName, businessId)) as T[];
     const merged = new Map<string | undefined, T>();
+    legacyTenantItemsRef.current.forEach(item => merged.set(item.id, item));
     compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
     collectionItemsRef.current.forEach(item => merged.set(item.id, item));
     _setItems([...merged.values()]);

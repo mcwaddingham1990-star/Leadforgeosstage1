@@ -79,12 +79,11 @@ export const SchedulingPage: React.FC = () => {
   const EMPLOYEES = recentRoster.map(r => r.name);
   const selectableCustomers = useMemo(() => {
     const byKey = new Map<string, { id: string; contact: string; company: string; phone: string; email: string; address: string }>();
-    customersList.filter(customer => !customer.pendingConfirmation).forEach(customer => byKey.set(customer.id, customer));
+    customersList.forEach(customer => byKey.set(customer.id, customer));
     events.forEach(event => {
       const name = event.customer?.trim();
       if (!name) return;
       const existing = customersList.find(customer => customer.id === event.customerId || customer.contact === name || customer.company === name);
-      if (existing?.pendingConfirmation) return;
       const key = existing?.id || event.customerId || `event_customer_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
       if (!byKey.has(key)) byKey.set(key, {
         id: key, contact: name, company: "", phone: event.customerPhone || "",

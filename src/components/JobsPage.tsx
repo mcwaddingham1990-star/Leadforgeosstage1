@@ -44,12 +44,11 @@ export const JobsPage: React.FC = () => {
   const jobs = useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
   const customerOptions = useMemo(() => {
     const options = new Map<string, any>();
-    customers.filter(customer => !customer.pendingConfirmation).forEach(customer => options.set(customer.id, customer));
+    customers.forEach(customer => options.set(customer.id, customer));
     schedulingEvents.forEach(event => {
       const name = event.customer?.trim();
       if (!name) return;
       const existing = customers.find(customer => customer.id === event.customerId || customer.contact === name || customer.company === name);
-      if (existing?.pendingConfirmation) return;
       const id = existing?.id || event.customerId || `event_customer_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
       if (!options.has(id)) options.set(id, { id, contact: name, company: "", phone: event.customerPhone || "", address: event.customerAddress || event.location || "" });
     });

@@ -160,6 +160,36 @@ export function subscribeToCollection(
 }
 
 /**
+ * Subscribes to a collection using an explicit tenant field. Employee records
+ * historically used `businessEmail` before the rest of the app standardized
+ * on `businessId`; keeping this read path prevents valid employees from
+ * disappearing while newer writes continue adding `businessId`.
+ */
+export function subscribeToCollectionByField(
+  collectionName: string,
+  tenantField: string,
+  businessId: string,
+  onUpdate: (data: any[]) => void,
+  onError?: (error: unknown) => void
+) {
+  const q = query(collection(db, collectionName), where(tenantField, "==", businessId));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: any[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const { businessId: _, updatedAt: __, ...uiData } = data;
+        items.push({ id: docSnap.id, ...uiData });
+      });
+      onUpdate(items);
+    },
+    (error) => onError?.(error)
+  );
+}
+
+/**
  * One-off, bypass-the-local-cache read of a collection, filtered by
  * businessId. The realtime onSnapshot listener in subscribeToCollection
  * normally keeps state current, but a Firestore JS SDK listener that hits a
