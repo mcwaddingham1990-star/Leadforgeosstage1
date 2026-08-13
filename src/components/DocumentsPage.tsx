@@ -1,6 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { PDFEditor } from "./PDFEditor";
-
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -155,6 +153,8 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
   const [pdfEditorSourceUrl, setPdfEditorSourceUrl] = useState<string | null>(null);
   const [pdfEditorStartsBlank, setPdfEditorStartsBlank] = useState(false);
+  const [pdfEditorFile, setPdfEditorFile] = useState<File | null>(null);
+  const selfieSaveFrameRef = useRef<HTMLIFrameElement>(null);
 
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
@@ -165,6 +165,7 @@ export const DocumentsPage: React.FC = () => {
 
   const closePDFEditor = () => {
     setIsPDFEditorOpen(false);
+    setPdfEditorFile(null);
     setPdfEditorSourceUrl(current => {
       if (current) URL.revokeObjectURL(current);
       return null;
@@ -259,6 +260,7 @@ export const DocumentsPage: React.FC = () => {
   const handleOpenPDFEditor = (doc: DocumentItem | null) => {
     setPdfEditorStartsBlank(!doc);
     setPdfEditorSourceUrl(null);
+    setPdfEditorFile(null);
     if (doc) {
       setPdfEditorDocId(doc.id);
       setPdfEditorDocName(doc.name);
@@ -314,6 +316,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocId(docId);
     setPdfEditorDocName(file.name);
     setPdfEditorSourceUrl(sourceUrl);
+    setPdfEditorFile(file);
     setPdfEditorStartsBlank(false);
     setSelectedDocId(docId);
     setIsPDFEditorOpen(true);
@@ -1734,21 +1737,64 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN — native Owners Local editor */}
+      {/* SELFIESAVE ESIGN — the real app, kept inside Owners Local */}
       {isPDFEditorOpen && (
-        <PDFEditor
-          documentId={pdfEditorDocId}
-          documentName={pdfEditorDocName}
-          onClose={closePDFEditor}
-          onSave={handleSavePDFEditor}
-          triggerNotification={triggerNotification}
-          logOperationalEvent={logOperationalEvent}
-          initialObjects={(documents.find(doc => doc.id === pdfEditorDocId) as any)?.metaObjects || []}
-          documentItem={documents.find(doc => doc.id === pdfEditorDocId) || null}
-          loggedInUser={loggedInUser}
-          pdfSourceUrl={pdfEditorSourceUrl}
-          startBlank={pdfEditorStartsBlank}
-        />
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="SelfieSave eSign PDF editor"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closePDFEditor();
+          }}
+        >
+          <div className="flex h-[96dvh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-[#9EC8EF] bg-white shadow-2xl">
+            <div className="flex min-h-14 items-center justify-between gap-3 bg-[#0D1B2A] px-4 py-2 text-white">
+              <div className="min-w-0">
+                <p className="text-sm font-black">SelfieSave eSign</p>
+                <p className="truncate text-[11px] text-[#9EC8EF]">
+                  {pdfEditorFile ? `Opening ${pdfEditorFile.name}` : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePDFEditor}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-black hover:bg-white/20"
+                aria-label="Close SelfieSave eSign"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              ref={selfieSaveFrameRef}
+              title="SelfieSave eSign"
+              src="https://selfiesave-esign.heathermae405.chatgpt.site/"
+              className="min-h-0 w-full flex-1 border-0 bg-white"
+              allow="camera; microphone; geolocation; clipboard-read; clipboard-write"
+              onLoad={async () => {
+                if (!pdfEditorFile) return;
+                try {
+                  const buffer = await pdfEditorFile.arrayBuffer();
+                  selfieSaveFrameRef.current?.contentWindow?.postMessage(
+                    {
+                      type: "OWNERSLOCAL_OPEN_PDF",
+                      file: {
+                        name: pdfEditorFile.name,
+                        mimeType: pdfEditorFile.type || "application/pdf",
+                        lastModified: pdfEditorFile.lastModified,
+                        buffer,
+                      },
+                    },
+                    "https://selfiesave-esign.heathermae405.chatgpt.site",
+                    [buffer],
+                  );
+                } catch {
+                  triggerNotification(`SelfieSave opened. Use Load PDF to choose ${pdfEditorFile.name}.`);
+                }
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
