@@ -105,6 +105,13 @@ export function inferFolderForDoc(doc: DocumentItem): string {
 }
 
 
+// SelfieSave requires its own "Sign in with ChatGPT" session and camera
+// access -- both break inside a cross-origin <iframe> (third-party cookies
+// get blocked and OAuth login pages refuse to render when framed). It has
+// to be opened as a real top-level window, not embedded.
+const SELFIESAVE_ORIGIN = "https://selfiesave-esign.heathermae405.chatgpt.site";
+const SELFIESAVE_URL = `${SELFIESAVE_ORIGIN}/`;
+
 const STOCK_TEMPLATES = [
   { id: "tpl-invoice",  name: "Stock Invoice",              icon: "💳", desc: "Standard service invoice template",         color: "from-[#1F3557] to-[#315C9F]",    action: "esign" as const },
   { id: "tpl-estimate", name: "Stock Estimate",             icon: "📝", desc: "Standard estimate / quote template",        color: "from-emerald-700 to-emerald-500", action: "esign" as const },
@@ -154,7 +161,8 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorSourceUrl, setPdfEditorSourceUrl] = useState<string | null>(null);
   const [pdfEditorStartsBlank, setPdfEditorStartsBlank] = useState(false);
   const [pdfEditorFile, setPdfEditorFile] = useState<File | null>(null);
-  const selfieSaveFrameRef = useRef<HTMLIFrameElement>(null);
+  const selfieSaveWindowRef = useRef<Window | null>(null);
+  const selfieSavePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
@@ -163,13 +171,90 @@ export const DocumentsPage: React.FC = () => {
   const openPdfInputRef = useRef<HTMLInputElement>(null);
   const editPdfInputRef = useRef<HTMLInputElement>(null);
 
+  const stopWatchingSelfieSaveWindow = () => {
+    if (selfieSavePollTimerRef.current) {
+      clearInterval(selfieSavePollTimerRef.current);
+      selfieSavePollTimerRef.current = null;
+    }
+  };
+
   const closePDFEditor = () => {
+    stopWatchingSelfieSaveWindow();
+    selfieSaveWindowRef.current?.close();
+    selfieSaveWindowRef.current = null;
     setIsPDFEditorOpen(false);
     setPdfEditorFile(null);
     setPdfEditorSourceUrl(current => {
       if (current) URL.revokeObjectURL(current);
       return null;
     });
+  };
+
+  // Stop the closed-window poll if this component unmounts mid-session.
+  useEffect(() => () => stopWatchingSelfieSaveWindow(), []);
+
+  const sendFileToSelfieSave = async (win: Window, file: File) => {
+    try {
+      const buffer = await file.arrayBuffer();
+      win.postMessage(
+        {
+          type: "OWNERSLOCAL_OPEN_PDF",
+          file: {
+            name: file.name,
+            mimeType: file.type || "application/pdf",
+            lastModified: file.lastModified,
+            buffer,
+          },
+        },
+        SELFIESAVE_ORIGIN,
+        [buffer],
+      );
+    } catch {
+      triggerNotification(`SelfieSave opened. Use Load PDF inside SelfieSave to choose ${file.name}.`);
+    }
+  };
+
+  // Opens (or refocuses) the real SelfieSave window. A genuine top-level
+  // window -- not an iframe -- is required so its own ChatGPT sign-in and
+  // camera/selfie capture behave like a normal site instead of breaking
+  // under third-party iframe restrictions.
+  const openSelfieSaveSession = (file: File | null) => {
+    const existing = selfieSaveWindowRef.current;
+    if (existing && !existing.closed) {
+      existing.focus();
+      if (file) sendFileToSelfieSave(existing, file);
+      return;
+    }
+
+    const features = "width=1200,height=880,menubar=no,toolbar=no,location=no,status=no";
+    const win = window.open(SELFIESAVE_URL, "selfiesave_esign", features);
+
+    if (!win) {
+      triggerNotification("⚠️ Your browser blocked the SelfieSave popup. Please allow popups for this site and try again.");
+      setIsPDFEditorOpen(false);
+      return;
+    }
+
+    selfieSaveWindowRef.current = win;
+    stopWatchingSelfieSaveWindow();
+    selfieSavePollTimerRef.current = setInterval(() => {
+      if (win.closed) {
+        stopWatchingSelfieSaveWindow();
+        selfieSaveWindowRef.current = null;
+        setIsPDFEditorOpen(false);
+      }
+    }, 1000);
+
+    // window.open() gives us no "loaded" event to hook (cross-origin), so
+    // send the file shortly after opening -- mirrors the delay the old
+    // iframe's onLoad handler gave the app to finish mounting.
+    if (file) {
+      setTimeout(() => {
+        if (selfieSaveWindowRef.current && !selfieSaveWindowRef.current.closed) {
+          sendFileToSelfieSave(selfieSaveWindowRef.current, file);
+        }
+      }, 1500);
+    }
   };
 
   // Dynamic directory lists for Create Folder action
@@ -294,6 +379,7 @@ export const DocumentsPage: React.FC = () => {
       }]);
     }
     setIsPDFEditorOpen(true);
+    openSelfieSaveSession(null);
     triggerNotification(doc ? `Opening PDF Editor for ${doc.name}` : "Opening clean blank PDF Canvas");
   };
 
@@ -320,6 +406,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorStartsBlank(false);
     setSelectedDocId(docId);
     setIsPDFEditorOpen(true);
+    openSelfieSaveSession(file);
     triggerNotification(`📄 Opening ${file.name} in SelfieSave eSign`);
   };
 
@@ -1352,7 +1439,10 @@ export const DocumentsPage: React.FC = () => {
                       if (tpl.action === "esign") {
                         setPdfEditorDocName(tpl.name + ".pdf");
                         setPdfEditorDocId("tpl_" + tpl.id + "_" + Date.now());
+                        setPdfEditorFile(null);
+                        setPdfEditorStartsBlank(true);
                         setIsPDFEditorOpen(true);
+                        openSelfieSaveSession(null);
                       } else {
                         window.open(tpl.url, "_blank", "noopener,noreferrer");
                       }
@@ -1737,63 +1827,47 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN — the real app, kept inside Owners Local */}
+      {/* SELFIESAVE ESIGN — opened as its own real window. Embedding it in an
+          <iframe> broke every load: SelfieSave requires its own "Sign in with
+          ChatGPT" session and camera access, and both third-party cookies and
+          OAuth login pages are blocked inside a cross-origin iframe. A real
+          top-level window lets sign-in, camera capture, and file loading all
+          work the same way they do visiting the site directly. */}
       {isPDFEditorOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="SelfieSave eSign PDF editor"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closePDFEditor();
-          }}
+          className="fixed bottom-6 left-6 z-[9999] w-[320px] rounded-2xl border border-[#9EC8EF] bg-[#0D1B2A] text-white shadow-2xl animate-fade-in"
+          role="status"
+          aria-label="SelfieSave eSign session"
         >
-          <div className="flex h-[96dvh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-[#9EC8EF] bg-white shadow-2xl">
-            <div className="flex min-h-14 items-center justify-between gap-3 bg-[#0D1B2A] px-4 py-2 text-white">
-              <div className="min-w-0">
-                <p className="text-sm font-black">SelfieSave eSign</p>
-                <p className="truncate text-[11px] text-[#9EC8EF]">
-                  {pdfEditorFile ? `Opening ${pdfEditorFile.name}` : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closePDFEditor}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-black hover:bg-white/20"
-                aria-label="Close SelfieSave eSign"
-              >
-                ✕
-              </button>
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-black">SelfieSave eSign</p>
+              <p className="truncate text-[11px] text-[#9EC8EF]">
+                {pdfEditorFile ? pdfEditorFile.name : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
+              </p>
             </div>
-            <iframe
-              ref={selfieSaveFrameRef}
-              title="SelfieSave eSign"
-              src="https://selfiesave-esign.heathermae405.chatgpt.site/"
-              className="min-h-0 w-full flex-1 border-0 bg-white"
-              allow="camera; microphone; geolocation; clipboard-read; clipboard-write"
-              onLoad={async () => {
-                if (!pdfEditorFile) return;
-                try {
-                  const buffer = await pdfEditorFile.arrayBuffer();
-                  selfieSaveFrameRef.current?.contentWindow?.postMessage(
-                    {
-                      type: "OWNERSLOCAL_OPEN_PDF",
-                      file: {
-                        name: pdfEditorFile.name,
-                        mimeType: pdfEditorFile.type || "application/pdf",
-                        lastModified: pdfEditorFile.lastModified,
-                        buffer,
-                      },
-                    },
-                    "https://selfiesave-esign.heathermae405.chatgpt.site",
-                    [buffer],
-                  );
-                } catch {
-                  triggerNotification(`SelfieSave opened. Use Load PDF to choose ${pdfEditorFile.name}.`);
-                }
-              }}
-            />
+            <button
+              type="button"
+              onClick={closePDFEditor}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-base font-black hover:bg-white/20"
+              aria-label="End SelfieSave eSign session"
+            >
+              ✕
+            </button>
           </div>
+          <div className="flex items-center gap-2 px-4 pb-4">
+            <button
+              type="button"
+              onClick={() => openSelfieSaveSession(pdfEditorFile)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#315C9F] px-3 py-2 text-xs font-black uppercase tracking-wider hover:bg-[#1F3557]"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Bring to Front
+            </button>
+          </div>
+          <p className="px-4 pb-4 text-[10px] leading-relaxed text-[#9EC8EF]">
+            SelfieSave opened in its own window so sign-in and camera capture work correctly. If your document didn't load, click "Bring to Front" to resend it.
+          </p>
         </div>
       )}
 
@@ -1922,11 +1996,14 @@ export const DocumentsPage: React.FC = () => {
                   triggerNotification("⚠️ Please select at least one photo to compile");
                   return;
                 }
-                // SelfieSave iframe manages its own canvas — just open it with the doc name
+                // SelfieSave manages its own canvas — just open it with the doc name
                 setPdfEditorDocId(`doc_compile_${Date.now()}`);
                 setPdfEditorDocName(photoToPdfName);
+                setPdfEditorFile(null);
+                setPdfEditorStartsBlank(true);
                 setIsPhotoToPDFModalOpen(false);
                 setIsPDFEditorOpen(true);
+                openSelfieSaveSession(null);
                 triggerNotification("📸 Photo compiling session complete! Opening compiled documents inside Editor.");
               }}
               className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
