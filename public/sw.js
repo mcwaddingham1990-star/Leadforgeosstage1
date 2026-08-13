@@ -55,3 +55,49 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// --- Firebase Cloud Messaging (background push) ---
+// Same public Firebase web config already bundled into the app's own client
+// JS (see firebase-applet-config.json / src/firebase.ts) — not a secret;
+// Firestore security rules protect data, not hiding this config. Wrapped so
+// an unsupported browser/context can never break the offline shell caching
+// above.
+try {
+  importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js");
+
+  firebase.initializeApp({
+    apiKey: "AIzaSyCrtpCjin92MUH1IJrIiHgLutDUIQoB7DI",
+    authDomain: "gen-lang-client-0834040446.firebaseapp.com",
+    projectId: "gen-lang-client-0834040446",
+    storageBucket: "gen-lang-client-0834040446.firebasestorage.app",
+    messagingSenderId: "1077711892994",
+    appId: "1:1077711892994:web:6220911716c3e0985cad1b",
+  });
+
+  const messaging = firebase.messaging();
+  messaging.onBackgroundMessage((payload) => {
+    const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || "Owners Local";
+    const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || "";
+    self.registration.showNotification(title, {
+      body,
+      icon: "/branding/icon-192.png",
+      data: payload.data || {},
+    });
+  });
+} catch {
+  // Push not supported in this context (or Firebase Messaging unavailable) —
+  // the offline app-shell caching above still works either way.
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow("/");
+    })
+  );
+});

@@ -192,8 +192,14 @@ export interface EmployeeRecord {
   granularPermissions?: import("./permissions").GranularPermissions;
   permissions?: string[];
   businessEmail: string;
-  /** When enabled, an owner/manager must authenticate before this employee can clock in or out. */
+  /** When enabled, this employee's clock in/out events are marked pending
+   * until a manager reviews and approves them remotely -- never by an
+   * owner/manager entering their own credentials on this employee's device. */
   requireTimeClockVerification?: boolean;
+  /** Email of the specific owner/manager who should be notified to review
+   * this employee's clock in/out events. When unset, every Owner/Manager-role
+   * staff member for the business is notified and any one of them may act. */
+  assignedManagerEmail?: string;
   createdAt: string;
 }
 
@@ -218,9 +224,42 @@ export interface TimeClockLog {
   route?: string;
   vehicle?: string;
   approved?: boolean;
+  /** Remote manager-approval workflow (see EmployeeRecord.requireTimeClockVerification).
+   * "pending" means a manager must approve/reject this specific punch from
+   * their own device before it's considered reviewed; absent means no
+   * remote approval was required for this entry. */
+  approvalStatus?: "pending" | "approved" | "rejected";
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
   enteredManually?: boolean;
   verifiedBy?: string;
   verifierRole?: string;
+}
+
+/**
+ * A single notification addressed to one specific user (recipientEmail),
+ * shown in the sidebar Alert Center (App.tsx) and, when actionable is set,
+ * carrying enough context (relatedLogId, etc.) to act on it directly from
+ * the notification itself -- e.g. approving/rejecting a clock in/out without
+ * navigating away. Firestore security rules restrict reads to the recipient.
+ */
+export interface AppNotification {
+  id: string;
+  businessId: string;
+  recipientEmail: string;
+  type: "time_clock_approval" | "general";
+  title: string;
+  description: string;
+  time: string;
+  isRead: boolean;
+  screenId?: string;
+  relatedLogId?: string;
+  actionable?: boolean;
+  actionedAt?: string;
+  createdAt: string;
 }
 
 /**

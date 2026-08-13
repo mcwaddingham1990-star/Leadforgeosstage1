@@ -8,6 +8,7 @@ import { MODULE_CATALOG } from "./RolePermissionEditorModal";
 import { defaultGranularFromModuleList, GranularPermissions, getPermissionFlags, PermissionAction } from "../types/permissions";
 import { Search, UserPlus, Edit3, X, Copy, Shield, Phone, Mail, MapPin } from "lucide-react";
 import type { EmployeeRecord } from "../types/domain";
+import { isManagerRole } from "../lib/notificationsService";
 
 function genInviteCode(role: string): string {
   const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -366,8 +367,23 @@ export const RosterPage: React.FC = () => {
             <input type="number" value={editingEmployee.hourlyRate} onChange={e => setEditingEmployee({ ...editingEmployee, hourlyRate: parseFloat(e.target.value) || 0 })} placeholder="Hourly rate" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3">
               <input type="checkbox" checked={!!editingEmployee.requireTimeClockVerification} onChange={e => setEditingEmployee({ ...editingEmployee, requireTimeClockVerification: e.target.checked })} className="mt-0.5" />
-              <span><strong className="block text-[#1F3557]">Require clock verification</strong><span className="text-[9px] text-slate-500">An owner or manager must verify this employee's clock-in and clock-out.</span></span>
+              <span><strong className="block text-[#1F3557]">Require manager approval</strong><span className="text-[9px] text-slate-500">Every clock-in/out is marked pending until a manager reviews and approves it remotely, from their own device -- never by anyone entering credentials on this employee's device.</span></span>
             </label>
+            {editingEmployee.requireTimeClockVerification && (
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#5E7393] pl-1">
+                Assigned manager (optional)
+                <select
+                  value={editingEmployee.assignedManagerEmail || ""}
+                  onChange={e => setEditingEmployee({ ...editingEmployee, assignedManagerEmail: e.target.value || undefined })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-[#1F3557]"
+                >
+                  <option value="">Every owner/manager (default)</option>
+                  {employees.filter(e => isManagerRole(e.role) && e.email !== editingEmployee.email).map(mgr => (
+                    <option key={mgr.email} value={mgr.email}>{mgr.firstName} {mgr.lastName} ({mgr.role})</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex gap-2 pt-2">
               <button onClick={() => setEditingEmployee(null)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancel</button>
               <button onClick={handleSaveEdit} className="flex-1 py-2 bg-[#315C9F] text-white rounded-xl font-bold">Save</button>

@@ -5,6 +5,8 @@ import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, Granu
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
 import { postTransactionEntry } from "./lib/accountingEngine";
+import { resolveTimeClockApproval } from "./lib/notificationsService";
+import { registerForPushNotifications } from "./lib/pushNotifications";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
@@ -1134,6 +1136,15 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [isLoggedIn]);
+
+  // Register this device for real push notifications (e.g. "clock in/out
+  // needs your approval") once signed in. A clean no-op until
+  // FIREBASE_VAPID_KEY is configured -- the real-time in-app Alert Center
+  // above already works fully without it.
+  useEffect(() => {
+    if (!isLoggedIn || !loggedInUser?.email || !businessId) return;
+    void registerForPushNotifications({ email: loggedInUser.email, businessId });
+  }, [isLoggedIn, loggedInUser?.email, businessId]);
 
   const getVisibleScreens = () => {
     if (!loggedInUser) return [];
@@ -5075,6 +5086,35 @@ Access to full financial telemetry is restricted.`;
                               <span className="text-[8px] text-[#5E7393] font-mono">{notif.time}</span>
                             </div>
                             <p className="text-[10px] mt-0.5 leading-normal truncate">{notif.description}</p>
+                            {notif.type === "time_clock_approval" && notif.actionable && !notif.actionedAt && (
+                              <div className="flex items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => resolveTimeClockApproval({
+                                    logId: notif.relatedLogId, decision: "approved",
+                                    timeClockLogs, setTimeClockLogs, setNotifications,
+                                    businessId, actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
+                                    logOperationalEvent, notify: triggerNotification
+                                  })}
+                                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const reason = prompt("Reason for rejecting this punch (optional):") || "";
+                                    resolveTimeClockApproval({
+                                      logId: notif.relatedLogId, decision: "rejected", rejectionReason: reason,
+                                      timeClockLogs, setTimeClockLogs, setNotifications,
+                                      businessId, actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
+                                      logOperationalEvent, notify: triggerNotification
+                                    });
+                                  }}
+                                  className="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

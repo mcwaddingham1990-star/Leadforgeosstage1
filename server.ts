@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
+import { sendPushToRecipients } from './server/pushNotifications';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +60,27 @@ app.post('/api/plaid/exchange-public-token', async (req, res) => {
     res.json(await exchangePlaidPublicToken(req.body?.publicToken, req.body?.institutionName));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to connect bank account' });
+  }
+});
+
+app.post('/api/notifications/send-push', async (req, res) => {
+  try {
+    const { recipientEmails, title, body, data } = req.body || {};
+    if (!Array.isArray(recipientEmails) || !recipientEmails.length || !title || !body) {
+      res.status(400).json({ error: 'recipientEmails (non-empty array), title, and body are required' });
+      return;
+    }
+    const result = await sendPushToRecipients({ recipientEmails, title, body, data });
+    if (!result.configured) {
+      // Expected/normal until FIREBASE_SERVICE_ACCOUNT_JSON is configured --
+      // the in-app notification (Firestore `notifications` collection,
+      // already real-time) already delivered regardless of this response.
+      res.status(503).json({ error: 'Push notifications are not configured yet', sent: 0 });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to send push notification' });
   }
 });
 

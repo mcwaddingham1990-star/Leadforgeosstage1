@@ -1,11 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { deleteApp, initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc, getFirestore } from "firebase/firestore";
-import { firebaseConfig } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { resolveApproverEmails, buildTimeClockApprovalNotifications, sendPushBestEffort, resolveTimeClockApproval } from "../lib/notificationsService";
 import {
   Clock,
   User,
@@ -54,6 +51,8 @@ export interface TimeLog {
   route?: string;
   vehicle?: string;
   approved?: boolean;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
 }
 
 export interface EmployeeClockState {
@@ -103,7 +102,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     timeClockLogs,
     setTimeClockLogs,
     refreshTimeClockLogs,
-    refreshEmployees
+    refreshEmployees,
+    setNotifications
   } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -130,12 +130,6 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [showClockInModal, setShowClockInModal] = useState(false);
   const [showManualTimeModal, setShowManualTimeModal] = useState(false);
   const [showEditTimeModal, setShowEditTimeModal] = useState(false);
-  const [verificationAction, setVerificationAction] = useState<"clock-in" | "clock-out" | null>(null);
-  const [verifierEmail, setVerifierEmail] = useState("");
-  const [verifierPassword, setVerifierPassword] = useState("");
-  const [verificationError, setVerificationError] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verifiedBy, setVerifiedBy] = useState<{ email: string; role: string } | null>(null);
   const [punchPending, setPunchPending] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -285,7 +279,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             jobTitle: l.jobTitle,
             route: l.route,
             vehicle: l.vehicle,
-            approved: l.approved
+            approved: l.approved,
+            approvalStatus: l.approvalStatus,
+            rejectionReason: l.rejectionReason
           }))
       };
     };
@@ -414,7 +410,32 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const latestCurrentUserLog = currentUserLogs[currentUserLogs.length - 1];
   const logsShowActiveShift = !!latestCurrentUserLog && latestCurrentUserLog.type !== "Clock Out";
 
-  const performClockIn = async (jobId: string, route: string, vehicle: string, verifier = verifiedBy) => {
+  // Notifies the employee's assigned manager (or every Owner/Manager-role
+  // staff member when none is assigned) that a punch needs review -- purely
+  // remote: the manager acts from their own device/session (see the Approve/
+  // Reject actions on pending entries below, and App.tsx's Alert Center),
+  // never by anyone entering credentials on the employee's own device.
+  const notifyApproversOfPendingPunch = (log: TimeClockLog) => {
+    const recipientEmails = resolveApproverEmails(currentEmployeeRecord, employeeRecords, loggedInUser?.businessEmail);
+    if (!recipientEmails.length || !businessId) return;
+    const notifs = buildTimeClockApprovalNotifications({
+      businessId,
+      employeeName: log.employeeName,
+      logId: log.id,
+      punchType: log.type,
+      time: log.time,
+      recipientEmails
+    });
+    setNotifications(prev => [...prev, ...notifs]);
+    void sendPushBestEffort(
+      recipientEmails,
+      "Clock Verification Needed",
+      `${log.employeeName} needs approval for ${log.type} at ${log.time}.`,
+      { type: "time_clock_approval", logId: log.id }
+    );
+  };
+
+  const performClockIn = async (jobId: string, route: string, vehicle: string) => {
     if (punchPending) return;
     if (!loggedInUser?.email || !businessId) {
       triggerLocalNotification("Your session isn't ready yet — please reload and try again.");
@@ -444,8 +465,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       jobTitle: selectedJob?.eventType ? `${selectedJob.eventType} - ${selectedJob.customer}` : undefined,
       route: route || undefined,
       vehicle: vehicle || undefined,
-      verifiedBy: verifier?.email,
-      verifierRole: verifier?.role
+      approvalStatus: requiresVerification ? "pending" : undefined
       };
       await clockInTransaction(businessId, log);
       setIsClockedIn(true);
@@ -457,10 +477,13 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         logOperationalEvent("Clocked In", `${userName} punched in to shift. Assigned: ${route}, vehicle ${vehicle}.`, "⏱️");
       }
 
-    // Trigger notification
-      triggerLocalNotification(`Punched in successfully at ${timeStr}`);
+      if (requiresVerification) {
+        notifyApproversOfPendingPunch(log);
+        triggerLocalNotification(`Punched in at ${timeStr} — your manager has been notified for approval.`);
+      } else {
+        triggerLocalNotification(`Punched in successfully at ${timeStr}`);
+      }
       setShowClockInModal(false);
-      setVerifiedBy(null);
     } catch (error) {
       triggerLocalNotification(error instanceof Error ? error.message : "Clock-in could not be saved.");
     } finally {
@@ -469,16 +492,11 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   const handleClockIn = async (jobId: string, route: string, vehicle: string) => {
-    if (requiresVerification && !verifiedBy) {
-      setVerificationAction("clock-in");
-      setVerificationError("");
-      return;
-    }
     await performClockIn(jobId, route, vehicle);
   };
 
   // Action: Clock Out
-  const performClockOut = async (verifier = verifiedBy) => {
+  const performClockOut = async () => {
     if (punchPending) return;
     if (!loggedInUser?.email || !businessId) {
       triggerLocalNotification("Your session isn't ready yet — please reload and try again.");
@@ -503,8 +521,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       time: timeStr,
       timestamp: iso,
       gps,
-      verifiedBy: verifier?.email,
-      verifierRole: verifier?.role
+      approvalStatus: requiresVerification ? "pending" : undefined
       };
       await clockOutTransaction(businessId, log, logsShowActiveShift);
 
@@ -515,8 +532,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       if (logOperationalEvent) {
         logOperationalEvent("Clocked Out", `${userName} punched out of shift safely. Completed operational telemetry.`, "🚪");
       }
-      triggerLocalNotification(`Punched out successfully at ${timeStr}`);
-      setVerifiedBy(null);
+      if (requiresVerification) {
+        notifyApproversOfPendingPunch(log);
+        triggerLocalNotification(`Punched out at ${timeStr} — your manager has been notified for approval.`);
+      } else {
+        triggerLocalNotification(`Punched out successfully at ${timeStr}`);
+      }
     } catch (error) {
       triggerLocalNotification(error instanceof Error ? error.message : "Clock-out could not be saved.");
     } finally {
@@ -525,48 +546,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   };
 
   const handleClockOut = async () => {
-    if (requiresVerification && !verifiedBy) {
-      setVerificationAction("clock-out");
-      setVerificationError("");
-      return;
-    }
     await performClockOut();
-  };
-
-  const verifyManagerAndContinue = async () => {
-    if (!verifierEmail.trim() || !verifierPassword) {
-      setVerificationError("Enter the owner or manager email and password.");
-      return;
-    }
-    setIsVerifying(true);
-    setVerificationError("");
-    const secondaryApp = initializeApp(firebaseConfig, `clock-verifier-${Date.now()}`);
-    const secondaryAuth = getAuth(secondaryApp);
-    try {
-      const credential = await signInWithEmailAndPassword(secondaryAuth, verifierEmail.trim(), verifierPassword);
-      const verifierDb = getFirestore(secondaryApp, firebaseConfig.firestoreDatabaseId || "(default)");
-      const profileSnap = await getDoc(doc(verifierDb, "user_profiles", credential.user.uid));
-      const profile = profileSnap.data();
-      const role = String(profile?.role || "");
-      const verifierBusiness = profile?.isEmployee ? profile?.businessEmail : credential.user.email;
-      const isManager = role === "Owner" || role.toLowerCase().includes("manager");
-      if (!profileSnap.exists() || !isManager || verifierBusiness !== loggedInUser?.businessEmail) {
-        throw new Error("This account is not an owner or manager for this business.");
-      }
-      const verifier = { email: credential.user.email || verifierEmail.trim(), role };
-      setVerifiedBy(verifier);
-      const action = verificationAction;
-      setVerificationAction(null);
-      setVerifierPassword("");
-      if (action === "clock-in") await performClockIn(clockInJobId, clockInRoute, clockInVehicle, verifier);
-      if (action === "clock-out") await performClockOut(verifier);
-    } catch (error) {
-      setVerificationError(error instanceof Error ? error.message : "Verification failed.");
-    } finally {
-      await signOut(secondaryAuth).catch(() => undefined);
-      await deleteApp(secondaryApp).catch(() => undefined);
-      setIsVerifying(false);
-    }
   };
 
   // Action: Start Break
@@ -657,6 +637,29 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       logOperationalEvent("Time Card Approved", `Time logs for ${targetEmp.name} have been fully approved for current pay period.`, "✅");
     }
     triggerLocalNotification(`Timecard approved for ${targetEmp?.name}`);
+  };
+
+  // Action: Approve/Reject one specific pending punch. This is the remote-approval
+  // step -- performed entirely from the manager's own already-authenticated
+  // session, never by anyone entering credentials on the employee's device.
+  // Shared with App.tsx's sidebar Alert Center via notificationsService so a
+  // manager can act from there too without duplicating this logic.
+  const handleApprovePendingLog = (logId: string) => resolveTimeClockApproval({
+    logId, decision: "approved",
+    timeClockLogs, setTimeClockLogs, setNotifications,
+    businessId: loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email,
+    actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
+    logOperationalEvent, notify: triggerLocalNotification
+  });
+  const handleRejectPendingLog = (logId: string) => {
+    const reason = prompt("Reason for rejecting this punch (optional):") || "";
+    resolveTimeClockApproval({
+      logId, decision: "rejected", rejectionReason: reason,
+      timeClockLogs, setTimeClockLogs, setNotifications,
+      businessId: loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email,
+      actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
+      logOperationalEvent, notify: triggerLocalNotification
+    });
   };
 
   // Action: Edit Time History Entry
@@ -1184,11 +1187,37 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                         <p className="text-[9.5px] text-slate-400 font-semibold font-mono flex items-center gap-0.5">
                           <MapPin className="w-2.5 h-2.5" /> {log.gps}
                         </p>
+                        {log.approvalStatus === "pending" && (
+                          <span className="inline-block px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[8px] font-mono font-bold uppercase mt-0.5">
+                            Awaiting Manager Approval
+                          </span>
+                        )}
+                        {log.approvalStatus === "rejected" && (
+                          <span className="inline-block px-1.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-200 rounded text-[8px] font-mono font-bold uppercase mt-0.5" title={log.rejectionReason || undefined}>
+                            Rejected
+                          </span>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-mono font-bold text-slate-600">{log.time}</p>
                         <p className="text-[9px] text-slate-400 font-semibold">{log.date}</p>
-                        
+
+                        {canEditAllRecords && log.approvalStatus === "pending" && (
+                          <div className="flex items-center gap-2 justify-end mt-1">
+                            <button
+                              onClick={() => handleApprovePendingLog(log.id)}
+                              className="text-[9.5px] font-black text-emerald-600 hover:underline uppercase"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectPendingLog(log.id)}
+                              className="text-[9.5px] font-black text-rose-600 hover:underline uppercase"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
                         {canEditAllRecords && (
                           <button
                             onClick={() => {
@@ -1420,28 +1449,6 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         </div>
       )}
 
-      {/* ADD MANUAL TIME MODAL */}
-      {verificationAction && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[10000] p-4">
-          <div className="bg-white max-w-sm w-full rounded-3xl p-6 border border-[#A9CDEE] shadow-2xl space-y-4 text-left">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-sm font-black uppercase text-[#342D7E] tracking-wider">Owner / Manager Verification</h4>
-                <p className="text-[10px] text-slate-500 mt-1">An owner or manager for this business must authenticate before this employee can {verificationAction === "clock-in" ? "clock in" : "clock out"}.</p>
-              </div>
-              <button onClick={() => { setVerificationAction(null); setVerifierPassword(""); setVerificationError(""); }} className="text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="space-y-2">
-              <input type="email" value={verifierEmail} onChange={e => setVerifierEmail(e.target.value)} placeholder="Owner or manager email" autoComplete="username" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs" />
-              <input type="password" value={verifierPassword} onChange={e => setVerifierPassword(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void verifyManagerAndContinue(); }} placeholder="Password" autoComplete="current-password" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs" />
-              {verificationError && <p className="text-[10px] text-rose-600 font-bold">{verificationError}</p>}
-            </div>
-            <button disabled={isVerifying} onClick={verifyManagerAndContinue} className="w-full py-2.5 bg-[#315C9F] text-white rounded-xl text-xs font-extrabold uppercase disabled:opacity-50">
-              {isVerifying ? "Verifying…" : `Verify & ${verificationAction === "clock-in" ? "Clock In" : "Clock Out"}`}
-            </button>
-          </div>
-        </div>
-      )}
 
       {showManualTimeModal && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[9999] animate-fade-in p-4">

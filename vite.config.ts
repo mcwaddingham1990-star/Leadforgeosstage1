@@ -5,6 +5,7 @@ import {defineConfig, Plugin, Connect} from 'vite';
 import {handleAiAsk, handleScanReceipt, handleScanFinancialDocument} from './server/aiHandler';
 import {getClientIp} from './server/clientInfo';
 import {createPlaidLinkToken, exchangePlaidPublicToken} from './server/plaidHandler';
+import {sendPushToRecipients} from './server/pushNotifications';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 // Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
@@ -50,6 +51,34 @@ function aiApiDevMiddleware(): Plugin {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ip: getClientIp(req) }));
       });
+      server.middlewares.use('/api/notifications/send-push', async (req: IncomingMessage, res: ServerResponse) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+        res.setHeader('Content-Type', 'application/json');
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const { recipientEmails, title, body, data } = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+          if (!Array.isArray(recipientEmails) || !recipientEmails.length || !title || !body) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'recipientEmails (non-empty array), title, and body are required' }));
+            return;
+          }
+          const result = await sendPushToRecipients({ recipientEmails, title, body, data });
+          if (!result.configured) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'Push notifications are not configured yet', sent: 0 }));
+            return;
+          }
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to send push notification' }));
+        }
+      });
     },
   };
 }
@@ -67,7 +96,12 @@ export default defineConfig(() => {
       // a different project than the one the API key belongs to will fail
       // to render Advanced Markers. Configurable per-deployment instead of
       // hardcoded so each real business's own key/Map ID pair actually match.
-      'process.env.GOOGLE_MAPS_MAP_ID': JSON.stringify(process.env.GOOGLE_MAPS_MAP_ID || '')
+      'process.env.GOOGLE_MAPS_MAP_ID': JSON.stringify(process.env.GOOGLE_MAPS_MAP_ID || ''),
+      // Public by design (it authorizes this app's origin to request a push
+      // subscription, nothing more) — pairs with the private
+      // FIREBASE_SERVICE_ACCOUNT_JSON server-side secret that actually sends
+      // pushes. See src/lib/pushNotifications.ts.
+      'process.env.FIREBASE_VAPID_KEY': JSON.stringify(process.env.FIREBASE_VAPID_KEY || '')
     },
     resolve: {
       alias: {
