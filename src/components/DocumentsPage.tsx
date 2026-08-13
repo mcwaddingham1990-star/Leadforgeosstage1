@@ -1555,6 +1555,18 @@ export const DocumentsPage: React.FC = () => {
                             >
                               <Share2 className="w-3.5 h-3.5" />
                             </button>
+                            {hasManagePermission && (
+                            <button
+                              onClick={() => {
+                                setSelectedDocId(doc.id);
+                                setIsDeleteModalOpen(true);
+                              }}
+                              className="p-1 hover:bg-rose-100 text-rose-600 rounded transition-colors"
+                              title="Delete Document"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1827,49 +1839,10 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN — opened as its own real window. Embedding it in an
-          <iframe> broke every load: SelfieSave requires its own "Sign in with
-          ChatGPT" session and camera access, and both third-party cookies and
-          OAuth login pages are blocked inside a cross-origin iframe. A real
-          top-level window lets sign-in, camera capture, and file loading all
-          work the same way they do visiting the site directly. */}
-      {isPDFEditorOpen && (
-        <div
-          className="fixed bottom-6 left-6 z-[9999] w-[320px] rounded-2xl border border-[#9EC8EF] bg-[#0D1B2A] text-white shadow-2xl animate-fade-in"
-          role="status"
-          aria-label="SelfieSave eSign session"
-        >
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-black">SelfieSave eSign</p>
-              <p className="truncate text-[11px] text-[#9EC8EF]">
-                {pdfEditorFile ? pdfEditorFile.name : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={closePDFEditor}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-base font-black hover:bg-white/20"
-              aria-label="End SelfieSave eSign session"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="flex items-center gap-2 px-4 pb-4">
-            <button
-              type="button"
-              onClick={() => openSelfieSaveSession(pdfEditorFile)}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#315C9F] px-3 py-2 text-xs font-black uppercase tracking-wider hover:bg-[#1F3557]"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Bring to Front
-            </button>
-          </div>
-          <p className="px-4 pb-4 text-[10px] leading-relaxed text-[#9EC8EF]">
-            SelfieSave opened in its own window so sign-in and camera capture work correctly. If your document didn't load, click "Bring to Front" to resend it.
-          </p>
-        </div>
-      )}
+      {/* SelfieSave itself opens no in-page UI: the buttons above call
+          openSelfieSaveSession() directly, which launches/focuses the real
+          SelfieSave window and hands off the file. See the note on
+          SELFIESAVE_ORIGIN above for why this can't be a same-page iframe. */}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
       {isGoogleDriveModalOpen && (
