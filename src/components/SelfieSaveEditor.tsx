@@ -71,7 +71,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const [toast,setToast]=useState("");
   const [pdfPages,setPdfPages]=useState<ImportedPdfPage[]>([]);
   const [loadingPdf,setLoadingPdf]=useState(false);
-  const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number}|null>(null);
+  const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number;boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number}|null>(null);
   const pdfInputRef=useRef<HTMLInputElement>(null);
   const textInputRef=useRef<HTMLInputElement>(null);
   const videoRef=useRef<HTMLVideoElement>(null);
@@ -99,8 +99,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       const item=pdfPages[page-1]?.text[index];
       const value=selection.toString().trim();
       if(!item||!value)return;
+      const paper=target.closest<HTMLElement>(".paper");
+      if(!paper||!paper.offsetWidth||!paper.offsetHeight){setPdfSelection(null);return}
       const rect=range.getBoundingClientRect();
-      setPdfSelection({page,item,value,left:Math.max(10,Math.min(window.innerWidth-150,rect.left)),top:Math.max(76,rect.top-46)});
+      // The PDF text run behind `target` can span far more than what's
+      // actually highlighted (a whole sentence as one run is common) --
+      // size the edit box to the real selection rect, not the whole run,
+      // so replacing a couple of words doesn't blank out the rest of the line.
+      const paperRect=paper.getBoundingClientRect();
+      const boxLeft=(rect.left-paperRect.left)/paperRect.width*100;
+      const boxTop=(rect.top-paperRect.top)/paperRect.height*100;
+      const boxWidth=rect.width/paperRect.width*100;
+      const boxHeight=rect.height/paperRect.height*100;
+      setPdfSelection({page,item,value,left:Math.max(10,Math.min(window.innerWidth-150,rect.left)),top:Math.max(76,rect.top-46),boxLeft,boxTop,boxWidth,boxHeight});
     };
     document.addEventListener("selectionchange",updatePdfSelection);
     return()=>document.removeEventListener("selectionchange",updatePdfSelection);
@@ -260,15 +271,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     }catch(error){console.error(error);setPdfPages([]);setPageCount(1);notify("That PDF could not be opened. Try downloading it to your device first.")}
     finally{setLoadingPdf(false);if(pdfInputRef.current)pdfInputRef.current.value=""}
   }
-  const editImportedPdfText=(page:number,item:ImportedPdfText,value:string)=>{
+  // box is the actual highlighted selection's own bounding rect (as % of the
+  // page), not the full PDF text run's rect -- a run can span a whole
+  // sentence, so sizing to the run instead of the selection would blank out
+  // neighboring words the user never touched.
+  const editImportedPdfText=(page:number,item:ImportedPdfText,value:string,box:{boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number})=>{
     if(contentLocked)return;
     const paper=window.document.querySelectorAll<HTMLElement>(".document-pages .paper")[page-1];
     if(!paper)return;
     const id=newId();
-    const x=paper.offsetWidth*item.left/100;
-    const y=paper.offsetHeight*item.top/100;
-    const w=Math.max(12,paper.offsetWidth*item.width/100+4);
-    const h=Math.max(12,paper.offsetHeight*item.height/100+4);
+    const x=paper.offsetWidth*box.boxLeft/100;
+    const y=paper.offsetHeight*box.boxTop/100;
+    const w=Math.max(12,paper.offsetWidth*box.boxWidth/100+4);
+    const h=Math.max(12,paper.offsetHeight*box.boxHeight/100+4);
     const fontSize=Math.max(1,Math.min(30,item.fontSize));
     setObjects(current=>[...current,{id,kind:"text",page,x,y,w,h,value,scale:1,source:"pdf",fontSize,fontFamily:item.fontFamily,backgroundColor:item.backgroundColor||"rgb(255 255 255)"}]);
     setSelected(`object:${id}`);
@@ -425,7 +440,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
           {objects.filter(o=>(o.page||1)===page).map(o=>{const key=`object:${o.id}`;const scaleX=o.w/(o.kind==="text"?96:280),scaleY=o.h/(o.kind==="text"?40:160),contentScale=o.kind==="text"?1:Math.max(.55,Math.min(3,Math.max(scaleX,scaleY)));return <div key={o.id} data-object-id={o.id} className={`canvas-object ${o.kind==="text"?"text-object":""} ${o.source==="pdf"?"pdf-edit-object":""} ${selected===key?"selected":""}`} style={{left:o.x,top:o.y,width:o.w,height:o.h,fontSize:o.fontSize,fontFamily:o.fontFamily,backgroundColor:o.source==="pdf"?o.backgroundColor:undefined,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} onDoubleClick={e=>e.stopPropagation()}>{selected===key&&itemControls(key)}{o.kind==="image"&&/^https?:/.test(o.value)?<img src={o.value} alt="Document object"/>:o.kind==="video"&&/^https?:/.test(o.value)?<video src={o.value} controls/>:o.kind==="link"&&/^https?:/.test(o.value)?<a href={o.value} target="_blank" rel="noreferrer">{o.value}</a>:<div className="editable-object-content" contentEditable={!contentLocked} suppressContentEditableWarning onInput={e=>o.kind==="text"&&editTextObject(o.id,e.currentTarget,(e.nativeEvent as InputEvent).inputType||"insertText")} onBlur={e=>o.kind==="text"&&commitTextObject(o.id,e.currentTarget)}>{o.value}</div>}</div>})}
           <div className="paper-body">{clauses.map((c,i)=>{const key=`clause:${i}`,pos=placements[key]||{page:1,x:90,y:180+i*90,w:560,h:70};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(3,Math.max((pos.w||560)/560,(pos.h||70)/70)));return <label key={key} className={`canvas-object movable-clause ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||70,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)}>{selected===key&&itemControls(key)}<b>{i+1}.</b><textarea autoFocus={i===clauses.length-1} placeholder={`Contract Conditions Clause ${i+1}`} value={c} disabled={contentLocked} onChange={e=>setClauses(v=>v.map((x,j)=>j===i?e.target.value:x))}/></label>})}{fields.map(f=>{const key=`field:${f.id}`,pos=placements[key]||{page:1,x:90,y:320,w:560,h:110};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(2,Math.max((pos.w||560)/560,(pos.h||110)/110)));const partyFields=fields.filter(x=>x.party===f.party),isLastPartyField=partyFields.at(-1)?.id===f.id,partyReady=partyFields.every(x=>x.signed),partyCommitted=partyFields.every(x=>x.committed);return <div className={`canvas-object movable-field sign-field ${f.signed?"is-signed":""} ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||110,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} key={f.id}>{selected===key&&itemControls(key)}<div className="sign-label"><span>{f.kind} · Party {f.party} · Line {f.line}</span><span>{f.committed?"✓ Committed & locked":f.signed?"Ready to commit":"Required"}</span></div>{f.signed?<><div className="evidence"><div><strong className="script">{f.name}</strong>{!f.committed&&<button onClick={()=>beginSign(f.id)}>Change before commit</button>}</div>{f.image&&<img src={f.image} alt={`Verification selfie for ${f.name}`}/>}<div>{features.timestamps&&<><small>Device: {f.stamp}</small><small>{f.centralStamp}</small></>}{features.displayLocation&&<small>{f.coords}</small>}</div></div>{isLastPartyField&&!partyCommitted&&<button className="commit-signer field-commit" disabled={!partyReady} onClick={()=>commitParty(f.party)}>Save signed document — Signer {f.party}</button>}</>:<button className="sign-button" onClick={()=>beginSign(f.id)}><Icon>◉</Icon> Complete {f.kind}{features.selfies?" & capture selfie":""}</button>}</div>})}</div>{!pdfPage&&<footer className="paper-footer"><input placeholder="Optional footer" value={footer} disabled={contentLocked} onChange={e=>setFooter(e.target.value)}/><b>Page {page}</b></footer>}
         </article>})}</div></section></section>
-    {pdfSelection&&<button type="button" className="pdf-selection-edit" style={{left:pdfSelection.left,top:pdfSelection.top}} onPointerDown={e=>e.preventDefault()} onClick={()=>editImportedPdfText(pdfSelection.page,pdfSelection.item,pdfSelection.value)}>Edit selected text</button>}
+    {pdfSelection&&<button type="button" className="pdf-selection-edit" style={{left:pdfSelection.left,top:pdfSelection.top}} onPointerDown={e=>e.preventDefault()} onClick={()=>editImportedPdfText(pdfSelection.page,pdfSelection.item,pdfSelection.value,pdfSelection)}>Edit selected text</button>}
     {menu&&<div className="object-menu-backdrop" onPointerDown={()=>setMenu(null)}><div className="floating" role="dialog" aria-modal="true" aria-label="Add object" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>addObject("text")}>T Custom text field</button><button onClick={addClause}>§ Contract clause</button><button onClick={()=>addField("signature")}>⌁ Signature line</button><button onClick={()=>addField("initials")}>Ab Initials line</button><button onClick={()=>addObject("image")}>▧ Image</button><button onClick={()=>addObject("link")}>↗ Link</button><button onClick={()=>addObject("video")}>▶ Video</button></div></div>}
     <footer className="actionbar"><div><strong>{fields.filter(f=>f.committed).length} of {fields.length} fields committed</strong><span><i style={{width:`${fields.length?fields.filter(f=>f.committed).length/fields.length*100:0}%`}}/></span><small>{contentLocked&&!complete?"Agreement text locked; remaining signers may complete only their assigned fields.":complete?"All parties committed. Ready for final lock.":"Each signer must complete and commit every assigned field."}</small></div><button className="save-draft" disabled={contentLocked} onClick={()=>{persist("Draft");notify("Draft saved to Documents Hub")}}>Save unsigned draft</button><button className="finalize" disabled={!complete||finalLocked} onClick={finalize}>🔒 Save final signed copy</button></footer>
     {setup&&<div className="modal-backdrop"><div className="modal setup-modal"><p className="eyebrow">DOCUMENT REQUIREMENTS</p><h2>Choose the evidence for this document</h2><p>Select any combination. Signers will see and consent to the requirements before signing.</p>{Object.entries({signatures:"Signature fields",initials:"Initials fields",selfies:"Selfie with signing actions",photoId:"Photo ID before signing",location:"Capture device coordinates",displayLocation:"Display coordinates on document",timestamps:"Device time + Central Time",draftingDate:"Verified drafting date"}).map(([k,label])=><label className="check option" key={k}><input type="checkbox" checked={features[k as keyof Features]} onChange={()=>updateFeature(k as keyof Features)}/>{label}</label>)}<button className="capture" onClick={()=>setSetup(false)}>Start with a blank document</button></div></div>}
