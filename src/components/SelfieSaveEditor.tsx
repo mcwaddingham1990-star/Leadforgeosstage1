@@ -71,6 +71,13 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const [toast,setToast]=useState("");
   const [pdfPages,setPdfPages]=useState<ImportedPdfPage[]>([]);
   const [loadingPdf,setLoadingPdf]=useState(false);
+  // Drag/resize math already reads the page's post-transform size via
+  // getBoundingClientRect() vs its offsetWidth to derive a scale factor, so
+  // placing/moving/resizing items keeps working correctly at any zoom level.
+  const [zoom,setZoom]=useState(1);
+  const zoomIn=()=>setZoom(z=>Math.min(2.5,Math.round((z+0.1)*100)/100));
+  const zoomOut=()=>setZoom(z=>Math.max(0.4,Math.round((z-0.1)*100)/100));
+  const zoomReset=()=>setZoom(1);
   const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number;boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number}|null>(null);
   const pdfInputRef=useRef<HTMLInputElement>(null);
   const textInputRef=useRef<HTMLInputElement>(null);
@@ -182,16 +189,18 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     notify(`${kind==="signature"?"Signature":"Initials"} line added for Signer ${party}`);
   };
   const addObject=(kind:CanvasObject["kind"])=>{if(contentLocked)return;const base=kind==="text"?"Type here":kind==="image"?"Paste image URL":kind==="link"?"Paste link URL":"Paste video URL";setObjects(v=>[...v,{id:newId(),kind,page:targetPage(),x:menu?.x||90,y:menu?.y||180,w:kind==="text"?96:280,h:kind==="text"?40:160,value:base,scale:1}]);setMenu(null)};
-  const editTextObject=(id:number,element:HTMLElement,inputType:string)=>{
+  // Sizes the box to exactly fit whatever's currently typed -- shrinking as
+  // well as growing, not just growing -- so a same-background PDF-edit box
+  // never sits wider/taller than the text actually inside it and blanks out
+  // neighboring content it has no reason to cover.
+  const editTextObject=(id:number,element:HTMLElement,_inputType:string)=>{
     const object=objects.find(o=>o.id===id);if(!object)return;
     const value=element.textContent||"";
-    const prior=textDraftRef.current.get(id)?.value??object.value;
-    if(!inputType.startsWith("insert")&&value.length<=prior.length){textDraftRef.current.set(id,{value,w:textDraftRef.current.get(id)?.w??object.w,h:textDraftRef.current.get(id)?.h??object.h});return}
     const page=element.closest<HTMLElement>(".paper");
     const wrapper=element.closest<HTMLElement>(".canvas-object");
     const maxWidth=Math.max(96,(page?.offsetWidth||820)-object.x-16);
-    const previousWidth=wrapper?.offsetWidth||object.w;
-    const previousHeight=wrapper?.offsetHeight||object.h;
+    const minWidth=object.source==="pdf"?24:96;
+    const minHeight=object.source==="pdf"?16:40;
     const old={width:element.style.width,maxWidth:element.style.maxWidth,whiteSpace:element.style.whiteSpace,overflowWrap:element.style.overflowWrap,height:element.style.height};
     element.style.width="max-content";
     element.style.maxWidth="none";
@@ -199,12 +208,12 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     element.style.overflowWrap="normal";
     element.style.height="auto";
     const naturalWidth=Math.ceil(element.scrollWidth)+18;
-    const w=Math.min(maxWidth,Math.max(previousWidth,naturalWidth));
+    const w=Math.min(maxWidth,Math.max(minWidth,naturalWidth));
     element.style.width=`${Math.max(1,w-16)}px`;
     element.style.whiteSpace="pre-wrap";
     element.style.overflowWrap="break-word";
     const measuredHeight=Math.ceil(element.scrollHeight)+16;
-    const h=Math.max(previousHeight,measuredHeight);
+    const h=Math.max(minHeight,measuredHeight);
     Object.assign(element.style,old);
     if(wrapper){wrapper.style.width=`${w}px`;wrapper.style.height=`${h}px`}
     textDraftRef.current.set(id,{value,w,h});
@@ -249,7 +258,11 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
             width:itemWidth/viewport.width*100,
             height:fontHeight/viewport.height*100,
             fontSize:sourceFontSize,
-            fontFamily:(textContent.styles as Record<string,{fontFamily?:string}>)[item.fontName||""]?.fontFamily
+            // Embedded PDF fonts rarely resolve to a real installed font by
+            // name -- always fall back to a real font stack so edited text
+            // renders (and measures for auto-sizing) using an actual font
+            // instead of silently inheriting the page's default.
+            fontFamily:(textContent.styles as Record<string,{fontFamily?:string}>)[item.fontName||""]?.fontFamily||"Arial, Helvetica, sans-serif"
           }];
         });
         const canvas=window.document.createElement("canvas");
@@ -333,7 +346,18 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     finally{if(textInputRef.current)textInputRef.current.value=""}
   }
   const growPages=(e:React.UIEvent<HTMLElement>)=>{const el=e.currentTarget,goingDown=el.scrollTop>lastScrollTopRef.current;lastScrollTopRef.current=el.scrollTop;if(goingDown&&el.scrollHeight-el.scrollTop-el.clientHeight<180)setPageCount(v=>v+1)};
-  const openObjectMenu=(e:React.MouseEvent<HTMLElement>,page:number)=>{if(contentLocked)return;const r=e.currentTarget.getBoundingClientRect();setMenu({page,x:Math.max(24,Math.min(e.clientX-r.left,r.width-304)),y:Math.max(90,Math.min(e.clientY-r.top,r.height-190))})};
+  // menu.x/y become the new object's placement coordinates (in the page's
+  // unscaled layout space), so the click position has to be divided back out
+  // of the current zoom factor -- getBoundingClientRect() reports the
+  // post-transform (visually zoomed) box, offsetWidth/Height the real one.
+  const openObjectMenu=(e:React.MouseEvent<HTMLElement>,page:number)=>{
+    if(contentLocked)return;
+    const el=e.currentTarget;
+    const r=el.getBoundingClientRect();
+    const s=el.offsetWidth?r.width/el.offsetWidth:1;
+    const w=el.offsetWidth||r.width,h=el.offsetHeight||r.height;
+    setMenu({page,x:Math.max(24,Math.min((e.clientX-r.left)/s,w-304)),y:Math.max(90,Math.min((e.clientY-r.top)/s,h-190))});
+  };
 
   const makeRoomForSignedField=(id:number,hasSelfie:boolean)=>{
     const key=`field:${id}`;
@@ -434,8 +458,8 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     {toast&&<div className="toast">✓ {toast}</div>}
     <header className="topbar"><a className="brand" href="#" onClick={e=>e.preventDefault()}><span className="brand-mark">S</span><span>SelfieSave<small>ESIGN TOOL</small></span></a><nav aria-label="Document tools"><button onClick={resetDocument}><Icon>＋</Icon><span>New</span></button><button disabled={contentLocked||loadingPdf} onClick={openPdfPicker}><Icon>⇧</Icon><span>{loadingPdf?"Opening…":"Load PDF"}</span></button><input ref={pdfInputRef} className="pdf-file-input" type="file" accept="*/*" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/><button disabled={contentLocked} onClick={()=>textInputRef.current?.click()}><Icon>▤</Icon><span>Load text</span></button><input ref={textInputRef} className="pdf-file-input" type="file" accept="text/plain,text/markdown,text/csv,.txt,.text,.md,.csv" onChange={e=>{const file=e.target.files?.[0];if(file)void loadText(file)}}/><button disabled={contentLocked}><Icon>✎</Icon><span>Edit</span></button></nav><div className="header-actions"><span className="account-email">{displayName}</span><button type="button" className="sign-out" onClick={onClose}>Close</button><span className={`status ${finalLocked?"locked":""}`}>{finalLocked?"🔒 Final":contentLocked?"🔏 Signed version":"● Draft"}</span></div></header>
     <section className="workspace"><aside className="sidebar"><div className="side-head"><h2>Document setup</h2></div><label>File name<input value={filename} disabled={contentLocked} onChange={e=>setFilename(e.target.value)}/></label><p className="fixed-name">Final file: <strong>{filename||"Untitled"}.pdf</strong></p><hr/><h3>Insert anywhere</h3><button className="insert" onClick={()=>addObject("text")} disabled={contentLocked}><Icon>T</Icon><span><strong>Free text box</strong><small>Type directly on page</small></span><b>＋</b></button><button className="insert" onClick={addClause} disabled={contentLocked}><Icon>§</Icon><span><strong>Contract clause</strong><small>Numbered text field</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("signature")} disabled={contentLocked}><Icon>⌁</Icon><span><strong>Signature line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("initials")} disabled={contentLocked}><Icon>Ab</Icon><span><strong>Initials line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>setSetup(true)} disabled={contentLocked}><Icon>⚙</Icon><span><strong>Evidence options</strong><small>Choose document requirements</small></span><b>›</b></button>{contentLocked&&<div className="security"><Icon>🔒</Icon><p><strong>Signed copy protected</strong><br/>Editing is disabled because a signer committed. Make a new unsigned version for any changes.</p></div>}</aside>
-      <section ref={editorRef} className="editor-wrap" onScroll={growPages}><div className="editor-tools"><span>{contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
-        <div className="document-pages">{Array.from({length:pageCount},(_,pageIndex)=>{const page=pageIndex+1,pdfPage=pdfPages[pageIndex];return <article ref={page===1?paperRef:undefined} key={page} className={`paper ${pdfPage?"imported-pdf-page":""} ${finalLocked?"paper-locked":""}`} style={pdfPage?{aspectRatio:`${pdfPage.width} / ${pdfPage.height}`}:{}} onPointerDown={e=>{if(!(e.target as HTMLElement).closest(".canvas-object"))setSelected(null)}} onDoubleClick={e=>openObjectMenu(e,page)}>
+      <section ref={editorRef} className="editor-wrap" onScroll={growPages}><div className="editor-tools"><span>{contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><button type="button" onClick={zoomOut} disabled={zoom<=0.4} aria-label="Zoom out">−</button><button type="button" onClick={zoomReset} aria-label="Reset zoom">{Math.round(zoom*100)}%</button><button type="button" onClick={zoomIn} disabled={zoom>=2.5} aria-label="Zoom in">＋</button><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
+        <div className="document-pages" style={{transform:`scale(${zoom})`,transformOrigin:"top center"}}>{Array.from({length:pageCount},(_,pageIndex)=>{const page=pageIndex+1,pdfPage=pdfPages[pageIndex];return <article ref={page===1?paperRef:undefined} key={page} className={`paper ${pdfPage?"imported-pdf-page":""} ${finalLocked?"paper-locked":""}`} style={pdfPage?{aspectRatio:`${pdfPage.width} / ${pdfPage.height}`}:{}} onPointerDown={e=>{if(!(e.target as HTMLElement).closest(".canvas-object"))setSelected(null)}} onDoubleClick={e=>openObjectMenu(e,page)}>
           {pdfPage?<><img className="pdf-page-background" src={pdfPage.image} alt={`Imported PDF page ${page}`}/>{!contentLocked&&<div className="pdf-text-layer" aria-label={`Select text on PDF page ${page}`}>{pdfPage.text.map((item,index)=><span key={`${index}-${item.left}-${item.top}`} data-page={page} data-index={index} className="pdf-text-content" style={{left:`${item.left}%`,top:`${item.top}%`,width:`${Math.max(item.width,.8)}%`,height:`${Math.max(item.height,1)}%`,fontSize:`${item.height}cqh`,fontFamily:item.fontFamily}}>{item.value}</span>)}</div>}</>:<div className="paper-header"><input placeholder="Optional header" value={header} disabled={contentLocked} onChange={e=>setHeader(e.target.value)}/><span>{features.draftingDate?`Date document was drafted: ${draftDate}`:""}</span></div>}<div className="blank-page-hint">{page===1&&!pdfPage&&!contentLocked&&!clauses.length&&!objects.length&&<>Tap <b>Free text box</b>, or double-tap anywhere on this white page to add something.</>}</div>
           {objects.filter(o=>(o.page||1)===page).map(o=>{const key=`object:${o.id}`;const scaleX=o.w/(o.kind==="text"?96:280),scaleY=o.h/(o.kind==="text"?40:160),contentScale=o.kind==="text"?1:Math.max(.55,Math.min(3,Math.max(scaleX,scaleY)));return <div key={o.id} data-object-id={o.id} className={`canvas-object ${o.kind==="text"?"text-object":""} ${o.source==="pdf"?"pdf-edit-object":""} ${selected===key?"selected":""}`} style={{left:o.x,top:o.y,width:o.w,height:o.h,fontSize:o.fontSize,fontFamily:o.fontFamily,backgroundColor:o.source==="pdf"?o.backgroundColor:undefined,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} onDoubleClick={e=>e.stopPropagation()}>{selected===key&&itemControls(key)}{o.kind==="image"&&/^https?:/.test(o.value)?<img src={o.value} alt="Document object"/>:o.kind==="video"&&/^https?:/.test(o.value)?<video src={o.value} controls/>:o.kind==="link"&&/^https?:/.test(o.value)?<a href={o.value} target="_blank" rel="noreferrer">{o.value}</a>:<div className="editable-object-content" contentEditable={!contentLocked} suppressContentEditableWarning onInput={e=>o.kind==="text"&&editTextObject(o.id,e.currentTarget,(e.nativeEvent as InputEvent).inputType||"insertText")} onBlur={e=>o.kind==="text"&&commitTextObject(o.id,e.currentTarget)}>{o.value}</div>}</div>})}
           <div className="paper-body">{clauses.map((c,i)=>{const key=`clause:${i}`,pos=placements[key]||{page:1,x:90,y:180+i*90,w:560,h:70};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(3,Math.max((pos.w||560)/560,(pos.h||70)/70)));return <label key={key} className={`canvas-object movable-clause ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||70,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)}>{selected===key&&itemControls(key)}<b>{i+1}.</b><textarea autoFocus={i===clauses.length-1} placeholder={`Contract Conditions Clause ${i+1}`} value={c} disabled={contentLocked} onChange={e=>setClauses(v=>v.map((x,j)=>j===i?e.target.value:x))}/></label>})}{fields.map(f=>{const key=`field:${f.id}`,pos=placements[key]||{page:1,x:90,y:320,w:560,h:110};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(2,Math.max((pos.w||560)/560,(pos.h||110)/110)));const partyFields=fields.filter(x=>x.party===f.party),isLastPartyField=partyFields.at(-1)?.id===f.id,partyReady=partyFields.every(x=>x.signed),partyCommitted=partyFields.every(x=>x.committed);return <div className={`canvas-object movable-field sign-field ${f.signed?"is-signed":""} ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||110,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} key={f.id}>{selected===key&&itemControls(key)}<div className="sign-label"><span>{f.kind} · Party {f.party} · Line {f.line}</span><span>{f.committed?"✓ Committed & locked":f.signed?"Ready to commit":"Required"}</span></div>{f.signed?<><div className="evidence"><div><strong className="script">{f.name}</strong>{!f.committed&&<button onClick={()=>beginSign(f.id)}>Change before commit</button>}</div>{f.image&&<img src={f.image} alt={`Verification selfie for ${f.name}`}/>}<div>{features.timestamps&&<><small>Device: {f.stamp}</small><small>{f.centralStamp}</small></>}{features.displayLocation&&<small>{f.coords}</small>}</div></div>{isLastPartyField&&!partyCommitted&&<button className="commit-signer field-commit" disabled={!partyReady} onClick={()=>commitParty(f.party)}>Save signed document — Signer {f.party}</button>}</>:<button className="sign-button" onClick={()=>beginSign(f.id)}><Icon>◉</Icon> Complete {f.kind}{features.selfies?" & capture selfie":""}</button>}</div>})}</div>{!pdfPage&&<footer className="paper-footer"><input placeholder="Optional footer" value={footer} disabled={contentLocked} onChange={e=>setFooter(e.target.value)}/><b>Page {page}</b></footer>}
