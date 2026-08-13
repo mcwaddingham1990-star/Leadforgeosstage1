@@ -163,6 +163,12 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorFile, setPdfEditorFile] = useState<File | null>(null);
   const selfieSaveWindowRef = useRef<Window | null>(null);
   const selfieSavePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Set once /api/selfiesave/embed-ticket succeeds -- i.e. SELFIESAVE_EMBED_SECRET
+  // is configured on both this server and SelfieSave's. Until then this stays
+  // null and openSelfieSaveSession falls back to the popup window below.
+  const [selfieSaveEmbedUrl, setSelfieSaveEmbedUrl] = useState<string | null>(null);
+  const selfieSaveEmbedFrameRef = useRef<HTMLIFrameElement>(null);
+  const selfieSaveEmbedFileRef = useRef<File | null>(null);
 
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
@@ -182,6 +188,8 @@ export const DocumentsPage: React.FC = () => {
     stopWatchingSelfieSaveWindow();
     selfieSaveWindowRef.current?.close();
     selfieSaveWindowRef.current = null;
+    selfieSaveEmbedFileRef.current = null;
+    setSelfieSaveEmbedUrl(null);
     setIsPDFEditorOpen(false);
     setPdfEditorFile(null);
     setPdfEditorSourceUrl(current => {
@@ -214,11 +222,36 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
-  // Opens (or refocuses) the real SelfieSave window. A genuine top-level
-  // window -- not an iframe -- is required so its own ChatGPT sign-in and
-  // camera/selfie capture behave like a normal site instead of breaking
-  // under third-party iframe restrictions.
-  const openSelfieSaveSession = (file: File | null) => {
+  // Tries the native in-app embed first (needs SelfieSave to honor the
+  // signed embed_token -- see server/selfieSaveEmbed.ts). Falls back to a
+  // real popup window, which always works, if SelfieSave isn't wired up for
+  // embedding yet (no ticket configured, request fails, etc).
+  const openSelfieSaveSession = async (file: File | null) => {
+    selfieSaveEmbedFileRef.current = file;
+    try {
+      const res = await fetch("/api/selfiesave/embed-ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loggedInUser?.email, name: loggedInUser?.name }),
+      });
+      if (res.ok) {
+        const { token } = await res.json();
+        if (token) {
+          setSelfieSaveEmbedUrl(`${SELFIESAVE_URL}?embed_token=${encodeURIComponent(token)}`);
+          return;
+        }
+      }
+    } catch {
+      // fall through to popup
+    }
+    openSelfieSavePopup(file);
+  };
+
+  // Opens (or refocuses) a real SelfieSave window. Used whenever the native
+  // embed above isn't available -- SelfieSave's own ChatGPT sign-in and
+  // camera/selfie capture need a genuine top-level browsing context to work
+  // at all, so this is the reliable fallback, not a degraded one.
+  const openSelfieSavePopup = (file: File | null) => {
     const existing = selfieSaveWindowRef.current;
     if (existing && !existing.closed) {
       existing.focus();
@@ -1839,10 +1872,53 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SelfieSave itself opens no in-page UI: the buttons above call
-          openSelfieSaveSession() directly, which launches/focuses the real
-          SelfieSave window and hands off the file. See the note on
-          SELFIESAVE_ORIGIN above for why this can't be a same-page iframe. */}
+      {/* SELFIESAVE ESIGN — native in-app floating window. Only renders once
+          SelfieSave honors the signed embed_token (server/selfieSaveEmbed.ts)
+          and skips its own sign-in gate for the request; until then
+          openSelfieSaveSession() never sets selfieSaveEmbedUrl and instead
+          opens the popup-window fallback below with no in-page UI at all. */}
+      {selfieSaveEmbedUrl && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="SelfieSave eSign PDF editor"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closePDFEditor();
+          }}
+        >
+          <div className="flex h-[96dvh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-[#9EC8EF] bg-white shadow-2xl">
+            <div className="flex min-h-14 items-center justify-between gap-3 bg-[#0D1B2A] px-4 py-2 text-white">
+              <div className="min-w-0">
+                <p className="text-sm font-black">SelfieSave eSign</p>
+                <p className="truncate text-[11px] text-[#9EC8EF]">
+                  {pdfEditorFile ? `Opening ${pdfEditorFile.name}` : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePDFEditor}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-black hover:bg-white/20"
+                aria-label="Close SelfieSave eSign"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              ref={selfieSaveEmbedFrameRef}
+              title="SelfieSave eSign"
+              src={selfieSaveEmbedUrl}
+              className="min-h-0 w-full flex-1 border-0 bg-white"
+              allow="camera; microphone; geolocation; clipboard-read; clipboard-write"
+              onLoad={() => {
+                const file = selfieSaveEmbedFileRef.current;
+                const win = selfieSaveEmbedFrameRef.current?.contentWindow;
+                if (file && win) sendFileToSelfieSave(win, file);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
       {isGoogleDriveModalOpen && (

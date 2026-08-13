@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
+import { mintSelfieSaveEmbedTicket } from './server/selfieSaveEmbed';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +60,18 @@ app.post('/api/plaid/exchange-public-token', async (req, res) => {
     res.json(await exchangePlaidPublicToken(req.body?.publicToken, req.body?.institutionName));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to connect bank account' });
+  }
+});
+
+app.post('/api/selfiesave/embed-ticket', (req, res) => {
+  try {
+    const ticket = mintSelfieSaveEmbedTicket({ email: req.body?.email, name: req.body?.name });
+    res.json(ticket);
+  } catch (err) {
+    // Expected/normal until SELFIESAVE_EMBED_SECRET is configured on both
+    // sides -- the client falls back to the popup-window flow on any
+    // non-2xx response here, so this isn't logged as a hard error.
+    res.status(503).json({ error: err instanceof Error ? err.message : 'SelfieSave embed is not configured' });
   }
 });
 
