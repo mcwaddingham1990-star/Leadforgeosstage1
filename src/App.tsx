@@ -5,8 +5,8 @@ import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, Granu
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
 import { postTransactionEntry } from "./lib/accountingEngine";
-import { resolveTimeClockApproval } from "./lib/notificationsService";
 import { registerForPushNotifications } from "./lib/pushNotifications";
+import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
@@ -919,6 +919,7 @@ export default function App() {
 
   // Notification system states
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+  const [reviewingClockNotifLogId, setReviewingClockNotifLogId] = useState<string | null>(null);
 
   useEffect(() => {
     sessionStorage.setItem("ownerslocal_active_screen", activeScreen.id);
@@ -5087,31 +5088,12 @@ Access to full financial telemetry is restricted.`;
                             </div>
                             <p className="text-[10px] mt-0.5 leading-normal truncate">{notif.description}</p>
                             {notif.type === "time_clock_approval" && notif.actionable && !notif.actionedAt && (
-                              <div className="flex items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
                                 <button
-                                  onClick={() => resolveTimeClockApproval({
-                                    logId: notif.relatedLogId, decision: "approved",
-                                    timeClockLogs, setTimeClockLogs, setNotifications,
-                                    businessId, actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
-                                    logOperationalEvent, notify: triggerNotification
-                                  })}
-                                  className="px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
+                                  onClick={() => setReviewingClockNotifLogId(notif.relatedLogId)}
+                                  className="px-2 py-1 bg-[#315C9F] hover:bg-[#1F3557] text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
                                 >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    const reason = prompt("Reason for rejecting this punch (optional):") || "";
-                                    resolveTimeClockApproval({
-                                      logId: notif.relatedLogId, decision: "rejected", rejectionReason: reason,
-                                      timeClockLogs, setTimeClockLogs, setNotifications,
-                                      businessId, actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
-                                      logOperationalEvent, notify: triggerNotification
-                                    });
-                                  }}
-                                  className="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
-                                >
-                                  Reject
+                                  Review & Approve
                                 </button>
                               </div>
                             )}
@@ -5130,7 +5112,7 @@ Access to full financial telemetry is restricted.`;
                       >
                         Mark all read
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           setNotifications([]);
                           triggerNotification("Cleared all alert logs");
@@ -5142,6 +5124,25 @@ Access to full financial telemetry is restricted.`;
                     </div>
                   </div>
                 )}
+
+                {reviewingClockNotifLogId && (() => {
+                  const reviewingLog = timeClockLogs.find(l => l.id === reviewingClockNotifLogId);
+                  if (!reviewingLog) return null;
+                  return (
+                    <TimeClockApprovalModal
+                      log={reviewingLog}
+                      timeClockLogs={timeClockLogs}
+                      setTimeClockLogs={setTimeClockLogs}
+                      setNotifications={setNotifications}
+                      businessId={businessId}
+                      actingUserEmail={loggedInUser?.email}
+                      actingUserName={loggedInUser?.name}
+                      logOperationalEvent={logOperationalEvent}
+                      notify={triggerNotification}
+                      onClose={() => setReviewingClockNotifLogId(null)}
+                    />
+                  );
+                })()}
 
                 <div className={`flex ${isSidebarCollapsed ? "flex-col items-center gap-2.5" : "items-center gap-2 justify-between"} overflow-hidden`}>
                   <div className={`flex ${isSidebarCollapsed ? "flex-col items-center" : "items-center gap-2"} min-w-0`}>

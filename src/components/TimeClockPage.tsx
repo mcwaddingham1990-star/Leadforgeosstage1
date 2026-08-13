@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
-import { resolveApproverEmails, buildTimeClockApprovalNotifications, sendPushBestEffort, resolveTimeClockApproval } from "../lib/notificationsService";
+import { resolveApproverEmails, buildTimeClockApprovalNotifications, sendPushBestEffort } from "../lib/notificationsService";
+import { TimeClockApprovalModal } from "./TimeClockApprovalModal";
 import {
   Clock,
   User,
@@ -639,28 +640,14 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     triggerLocalNotification(`Timecard approved for ${targetEmp?.name}`);
   };
 
-  // Action: Approve/Reject one specific pending punch. This is the remote-approval
-  // step -- performed entirely from the manager's own already-authenticated
+  // Review/Approve/Reject one specific pending punch -- the remote-approval
+  // step, performed entirely from the manager's own already-authenticated
   // session, never by anyone entering credentials on the employee's device.
-  // Shared with App.tsx's sidebar Alert Center via notificationsService so a
-  // manager can act from there too without duplicating this logic.
-  const handleApprovePendingLog = (logId: string) => resolveTimeClockApproval({
-    logId, decision: "approved",
-    timeClockLogs, setTimeClockLogs, setNotifications,
-    businessId: loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email,
-    actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
-    logOperationalEvent, notify: triggerLocalNotification
-  });
-  const handleRejectPendingLog = (logId: string) => {
-    const reason = prompt("Reason for rejecting this punch (optional):") || "";
-    resolveTimeClockApproval({
-      logId, decision: "rejected", rejectionReason: reason,
-      timeClockLogs, setTimeClockLogs, setNotifications,
-      businessId: loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email,
-      actingUserEmail: loggedInUser?.email, actingUserName: loggedInUser?.name,
-      logOperationalEvent, notify: triggerLocalNotification
-    });
-  };
+  // The actual approve/reject logic lives in notificationsService.ts and
+  // renders through TimeClockApprovalModal, shared with App.tsx's sidebar
+  // Alert Center so a manager can act from either place identically.
+  const [reviewingLogId, setReviewingLogId] = useState<string | null>(null);
+  const reviewingLog = reviewingLogId ? timeClockLogs.find(l => l.id === reviewingLogId) || null : null;
 
   // Action: Edit Time History Entry
   const handleEditTimeEntry = () => {
@@ -1203,20 +1190,12 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                         <p className="text-[9px] text-slate-400 font-semibold">{log.date}</p>
 
                         {canEditAllRecords && log.approvalStatus === "pending" && (
-                          <div className="flex items-center gap-2 justify-end mt-1">
-                            <button
-                              onClick={() => handleApprovePendingLog(log.id)}
-                              className="text-[9.5px] font-black text-emerald-600 hover:underline uppercase"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleRejectPendingLog(log.id)}
-                              className="text-[9.5px] font-black text-rose-600 hover:underline uppercase"
-                            >
-                              Reject
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setReviewingLogId(log.id)}
+                            className="text-[9.5px] font-black text-[#315C9F] hover:underline uppercase mt-1 inline-block"
+                          >
+                            Review & Approve
+                          </button>
                         )}
                         {canEditAllRecords && (
                           <button
@@ -1640,6 +1619,21 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {reviewingLog && (
+        <TimeClockApprovalModal
+          log={reviewingLog}
+          timeClockLogs={timeClockLogs}
+          setTimeClockLogs={setTimeClockLogs}
+          setNotifications={setNotifications}
+          businessId={loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email}
+          actingUserEmail={loggedInUser?.email}
+          actingUserName={loggedInUser?.name}
+          logOperationalEvent={logOperationalEvent}
+          notify={triggerLocalNotification}
+          onClose={() => setReviewingLogId(null)}
+        />
       )}
 
       {/* FRAMEWORK CONNECTIONS (As required by the guideline exactly) */}
