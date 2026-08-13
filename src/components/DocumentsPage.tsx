@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import SelfieSaveEditor from "./SelfieSaveEditor";
 import {
   Search,
   Plus,
@@ -105,13 +106,6 @@ export function inferFolderForDoc(doc: DocumentItem): string {
 }
 
 
-// SelfieSave requires its own "Sign in with ChatGPT" session and camera
-// access -- both break inside a cross-origin <iframe> (third-party cookies
-// get blocked and OAuth login pages refuse to render when framed). It has
-// to be opened as a real top-level window, not embedded.
-const SELFIESAVE_ORIGIN = "https://selfiesave-esign.heathermae405.chatgpt.site";
-const SELFIESAVE_URL = `${SELFIESAVE_ORIGIN}/`;
-
 const STOCK_TEMPLATES = [
   { id: "tpl-invoice",  name: "Stock Invoice",              icon: "💳", desc: "Standard service invoice template",         color: "from-[#1F3557] to-[#315C9F]",    action: "esign" as const },
   { id: "tpl-estimate", name: "Stock Estimate",             icon: "📝", desc: "Standard estimate / quote template",        color: "from-emerald-700 to-emerald-500", action: "esign" as const },
@@ -154,140 +148,21 @@ export const DocumentsPage: React.FC = () => {
     return documents.find((d) => d.id === selectedDocId) || documents[0] || null;
   }, [documents, selectedDocId]);
 
-  // Native PDF Editor States
+  // Native PDF / eSign editor state. Nothing is saved to the Documents Hub
+  // just from opening the editor -- a real document row only gets created
+  // when the user actually saves (SelfieSaveEditor's onSave -> below),
+  // so opening/closing without saving never leaves junk drafts behind.
   const [isPDFEditorOpen, setIsPDFEditorOpen] = useState(false);
   const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
-  const [pdfEditorSourceUrl, setPdfEditorSourceUrl] = useState<string | null>(null);
-  const [pdfEditorStartsBlank, setPdfEditorStartsBlank] = useState(false);
-  const [pdfEditorFile, setPdfEditorFile] = useState<File | null>(null);
-  const selfieSaveWindowRef = useRef<Window | null>(null);
-  const selfieSavePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Set once /api/selfiesave/embed-ticket succeeds -- i.e. SELFIESAVE_EMBED_SECRET
-  // is configured on both this server and SelfieSave's. Until then this stays
-  // null and openSelfieSaveSession falls back to the popup window below.
-  const [selfieSaveEmbedUrl, setSelfieSaveEmbedUrl] = useState<string | null>(null);
-  const selfieSaveEmbedFrameRef = useRef<HTMLIFrameElement>(null);
-  const selfieSaveEmbedFileRef = useRef<File | null>(null);
+  const [pdfEditorAutoOpenPicker, setPdfEditorAutoOpenPicker] = useState(false);
 
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
   const [activeDocTab, setActiveDocTab] = useState<DocTab>('all');
 
-  const openPdfInputRef = useRef<HTMLInputElement>(null);
-  const editPdfInputRef = useRef<HTMLInputElement>(null);
-
-  const stopWatchingSelfieSaveWindow = () => {
-    if (selfieSavePollTimerRef.current) {
-      clearInterval(selfieSavePollTimerRef.current);
-      selfieSavePollTimerRef.current = null;
-    }
-  };
-
   const closePDFEditor = () => {
-    stopWatchingSelfieSaveWindow();
-    selfieSaveWindowRef.current?.close();
-    selfieSaveWindowRef.current = null;
-    selfieSaveEmbedFileRef.current = null;
-    setSelfieSaveEmbedUrl(null);
     setIsPDFEditorOpen(false);
-    setPdfEditorFile(null);
-    setPdfEditorSourceUrl(current => {
-      if (current) URL.revokeObjectURL(current);
-      return null;
-    });
-  };
-
-  // Stop the closed-window poll if this component unmounts mid-session.
-  useEffect(() => () => stopWatchingSelfieSaveWindow(), []);
-
-  const sendFileToSelfieSave = async (win: Window, file: File) => {
-    try {
-      const buffer = await file.arrayBuffer();
-      win.postMessage(
-        {
-          type: "OWNERSLOCAL_OPEN_PDF",
-          file: {
-            name: file.name,
-            mimeType: file.type || "application/pdf",
-            lastModified: file.lastModified,
-            buffer,
-          },
-        },
-        SELFIESAVE_ORIGIN,
-        [buffer],
-      );
-    } catch {
-      triggerNotification(`SelfieSave opened. Use Load PDF inside SelfieSave to choose ${file.name}.`);
-    }
-  };
-
-  // Tries the native in-app embed first (needs SelfieSave to honor the
-  // signed embed_token -- see server/selfieSaveEmbed.ts). Falls back to a
-  // real popup window, which always works, if SelfieSave isn't wired up for
-  // embedding yet (no ticket configured, request fails, etc).
-  const openSelfieSaveSession = async (file: File | null) => {
-    selfieSaveEmbedFileRef.current = file;
-    try {
-      const res = await fetch("/api/selfiesave/embed-ticket", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loggedInUser?.email, name: loggedInUser?.name }),
-      });
-      if (res.ok) {
-        const { token } = await res.json();
-        if (token) {
-          setSelfieSaveEmbedUrl(`${SELFIESAVE_URL}?embed_token=${encodeURIComponent(token)}`);
-          return;
-        }
-      }
-    } catch {
-      // fall through to popup
-    }
-    openSelfieSavePopup(file);
-  };
-
-  // Opens (or refocuses) a real SelfieSave window. Used whenever the native
-  // embed above isn't available -- SelfieSave's own ChatGPT sign-in and
-  // camera/selfie capture need a genuine top-level browsing context to work
-  // at all, so this is the reliable fallback, not a degraded one.
-  const openSelfieSavePopup = (file: File | null) => {
-    const existing = selfieSaveWindowRef.current;
-    if (existing && !existing.closed) {
-      existing.focus();
-      if (file) sendFileToSelfieSave(existing, file);
-      return;
-    }
-
-    const features = "width=1200,height=880,menubar=no,toolbar=no,location=no,status=no";
-    const win = window.open(SELFIESAVE_URL, "selfiesave_esign", features);
-
-    if (!win) {
-      triggerNotification("⚠️ Your browser blocked the SelfieSave popup. Please allow popups for this site and try again.");
-      setIsPDFEditorOpen(false);
-      return;
-    }
-
-    selfieSaveWindowRef.current = win;
-    stopWatchingSelfieSaveWindow();
-    selfieSavePollTimerRef.current = setInterval(() => {
-      if (win.closed) {
-        stopWatchingSelfieSaveWindow();
-        selfieSaveWindowRef.current = null;
-        setIsPDFEditorOpen(false);
-      }
-    }, 1000);
-
-    // window.open() gives us no "loaded" event to hook (cross-origin), so
-    // send the file shortly after opening -- mirrors the delay the old
-    // iframe's onLoad handler gave the app to finish mounting.
-    if (file) {
-      setTimeout(() => {
-        if (selfieSaveWindowRef.current && !selfieSaveWindowRef.current.closed) {
-          sendFileToSelfieSave(selfieSaveWindowRef.current, file);
-        }
-      }, 1500);
-    }
   };
 
   // Dynamic directory lists for Create Folder action
@@ -374,73 +249,18 @@ export const DocumentsPage: React.FC = () => {
     }
   }, [documents, setDocuments]);
 
-  // Handler to open PDF Editor
-  const handleOpenPDFEditor = (doc: DocumentItem | null) => {
-    setPdfEditorStartsBlank(!doc);
-    setPdfEditorSourceUrl(null);
-    setPdfEditorFile(null);
+  // Handler to open the native SelfieSave eSign editor. When autoOpenPdfPicker
+  // is set (the Documents Hub "Open PDF" / "Edit PDF" buttons), the editor
+  // immediately triggers its own native file picker on mount -- no extra
+  // click, no intermediate screen.
+  const handleOpenPDFEditor = (doc: DocumentItem | null, autoOpenPdfPicker: boolean = false) => {
+    setPdfEditorDocId(doc?.id || null);
+    setPdfEditorDocName(doc?.name || "");
+    setPdfEditorAutoOpenPicker(autoOpenPdfPicker);
+    setIsPDFEditorOpen(true);
     if (doc) {
-      setPdfEditorDocId(doc.id);
-      setPdfEditorDocName(doc.name);
-    } else {
-      const blankId = `doc_blank_${Date.now()}`;
-      const blankName = "New Blank Document.pdf";
-      setPdfEditorDocId(blankId);
-      setPdfEditorDocName(blankName);
-      // Blank eSign record created immediately so it shows up in the cabinet
-      // while the user works inside the SelfieSave popup.
-      setDocuments(prev => [...prev, {
-        id: blankId,
-        name: blankName,
-        customer: "None",
-        employee: loggedInUser?.name || "Staff Administrator",
-        vendor: "None",
-        job: "None",
-        type: "Contracts",
-        folder: "eSign",
-        uploadedBy: loggedInUser?.name || "Staff Administrator",
-        date: new Date().toISOString().split("T")[0],
-        size: "0 KB",
-        status: "Awaiting Signature",
-        isFavorite: false,
-        isArchived: false,
-        notes: "Autosaved blank eSign document.",
-        tags: ["eSign", "Awaiting Signature", "Blank Document"],
-        estimateId: "None",
-        invoiceId: "None",
-        lastModified: new Date().toISOString()
-      }]);
+      triggerNotification(`Opening ${doc.name} in SelfieSave eSign`);
     }
-    setIsPDFEditorOpen(true);
-    openSelfieSaveSession(null);
-    triggerNotification(doc ? `Opening PDF Editor for ${doc.name}` : "Opening clean blank PDF Canvas");
-  };
-
-  const handlePickedPDF = (file: File, action: "open" | "edit") => {
-    const docId = `upload_pdf_${Date.now()}`;
-    const sourceUrl = URL.createObjectURL(file);
-    const newDocument: DocumentItem = {
-      id: docId, name: file.name, customer: "None",
-      employee: loggedInUser?.name || "Staff", vendor: "None", job: "None",
-      type: "Contracts", folder: "eSign",
-      uploadedBy: loggedInUser?.name || "Staff",
-      date: new Date().toISOString().split("T")[0],
-      size: `${(file.size / 1024).toFixed(0)} KB`, status: "Draft",
-      isFavorite: false, isArchived: false,
-      notes: `${action === "open" ? "Opened" : "Uploaded"} in SelfieSave eSign`,
-      tags: ["PDF", action === "open" ? "Open" : "Edit", "Draft"],
-      estimateId: "None", invoiceId: "None", lastModified: new Date().toISOString()
-    };
-    setDocuments(prev => [...prev, newDocument]);
-    setPdfEditorDocId(docId);
-    setPdfEditorDocName(file.name);
-    setPdfEditorSourceUrl(sourceUrl);
-    setPdfEditorFile(file);
-    setPdfEditorStartsBlank(false);
-    setSelectedDocId(docId);
-    setIsPDFEditorOpen(true);
-    openSelfieSaveSession(file);
-    triggerNotification(`📄 Opening ${file.name} in SelfieSave eSign`);
   };
 
   // Handler to save PDF Editor modifications
@@ -1392,41 +1212,19 @@ export const DocumentsPage: React.FC = () => {
           </button>
         )}
         <button
-          onClick={() => openPdfInputRef.current?.click()}
+          onClick={() => handleOpenPDFEditor(null, true)}
           className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
         >
           <FolderOpen className="w-4 h-4" />
           Open PDF
         </button>
         <button
-          onClick={() => editPdfInputRef.current?.click()}
+          onClick={() => handleOpenPDFEditor(null, true)}
           className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
         >
           <Edit3 className="w-4 h-4" />
           Edit PDF
         </button>
-        <input
-          ref={openPdfInputRef}
-          type="file"
-          accept=".pdf,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handlePickedPDF(file, "open");
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={editPdfInputRef}
-          type="file"
-          accept=".pdf,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handlePickedPDF(file, "edit");
-            e.target.value = "";
-          }}
-        />
       </div>
 
       {/* TAB BAR */}
@@ -1470,12 +1268,10 @@ export const DocumentsPage: React.FC = () => {
                     key={tpl.id}
                     onClick={() => {
                       if (tpl.action === "esign") {
+                        setPdfEditorDocId(null);
                         setPdfEditorDocName(tpl.name + ".pdf");
-                        setPdfEditorDocId("tpl_" + tpl.id + "_" + Date.now());
-                        setPdfEditorFile(null);
-                        setPdfEditorStartsBlank(true);
+                        setPdfEditorAutoOpenPicker(false);
                         setIsPDFEditorOpen(true);
-                        openSelfieSaveSession(null);
                       } else {
                         window.open(tpl.url, "_blank", "noopener,noreferrer");
                       }
@@ -1872,52 +1668,19 @@ export const DocumentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* SELFIESAVE ESIGN — native in-app floating window. Only renders once
-          SelfieSave honors the signed embed_token (server/selfieSaveEmbed.ts)
-          and skips its own sign-in gate for the request; until then
-          openSelfieSaveSession() never sets selfieSaveEmbedUrl and instead
-          opens the popup-window fallback below with no in-page UI at all. */}
-      {selfieSaveEmbedUrl && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="SelfieSave eSign PDF editor"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closePDFEditor();
-          }}
-        >
-          <div className="flex h-[96dvh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-[#9EC8EF] bg-white shadow-2xl">
-            <div className="flex min-h-14 items-center justify-between gap-3 bg-[#0D1B2A] px-4 py-2 text-white">
-              <div className="min-w-0">
-                <p className="text-sm font-black">SelfieSave eSign</p>
-                <p className="truncate text-[11px] text-[#9EC8EF]">
-                  {pdfEditorFile ? `Opening ${pdfEditorFile.name}` : pdfEditorStartsBlank ? "New document" : pdfEditorDocName || "Document editor"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closePDFEditor}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-lg font-black hover:bg-white/20"
-                aria-label="Close SelfieSave eSign"
-              >
-                ✕
-              </button>
-            </div>
-            <iframe
-              ref={selfieSaveEmbedFrameRef}
-              title="SelfieSave eSign"
-              src={selfieSaveEmbedUrl}
-              className="min-h-0 w-full flex-1 border-0 bg-white"
-              allow="camera; microphone; geolocation; clipboard-read; clipboard-write"
-              onLoad={() => {
-                const file = selfieSaveEmbedFileRef.current;
-                const win = selfieSaveEmbedFrameRef.current?.contentWindow;
-                if (file && win) sendFileToSelfieSave(win, file);
-              }}
-            />
-          </div>
-        </div>
+      {/* SELFIESAVE ESIGN — the real editor, native in this app. No iframe,
+          no external site, no popup window: SelfieSaveEditor is a genuine
+          React component living in src/components/SelfieSaveEditor.tsx. */}
+      {isPDFEditorOpen && (
+        <SelfieSaveEditor
+          accountEmail={loggedInUser?.email || "owner@ownerslocal.app"}
+          accountName={loggedInUser?.name}
+          documentId={pdfEditorDocId}
+          initialFilename={pdfEditorDocName ? pdfEditorDocName.replace(/\.pdf$/i, "") : undefined}
+          autoOpenPdfPicker={pdfEditorAutoOpenPicker}
+          onClose={closePDFEditor}
+          onSave={handleSavePDFEditor}
+        />
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
@@ -2046,13 +1809,11 @@ export const DocumentsPage: React.FC = () => {
                   return;
                 }
                 // SelfieSave manages its own canvas — just open it with the doc name
-                setPdfEditorDocId(`doc_compile_${Date.now()}`);
+                setPdfEditorDocId(null);
                 setPdfEditorDocName(photoToPdfName);
-                setPdfEditorFile(null);
-                setPdfEditorStartsBlank(true);
+                setPdfEditorAutoOpenPicker(false);
                 setIsPhotoToPDFModalOpen(false);
                 setIsPDFEditorOpen(true);
-                openSelfieSaveSession(null);
                 triggerNotification("📸 Photo compiling session complete! Opening compiled documents inside Editor.");
               }}
               className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow"
