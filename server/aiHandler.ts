@@ -27,6 +27,33 @@ function getClient(): GoogleGenAI {
   return client;
 }
 
+const DEFAULT_GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+
+function isUnavailableModelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /404|not found|not supported|unavailable/i.test(message);
+}
+
+async function generateContentWithFallback(ai: GoogleGenAI, request: any): Promise<any> {
+  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  const models = [...new Set([configuredModel, ...DEFAULT_GEMINI_MODELS].filter(Boolean))] as string[];
+  let lastError: unknown;
+
+  for (const model of models) {
+    try {
+      return await ai.models.generateContent({ ...request, model });
+    } catch (error) {
+      lastError = error;
+      if (!isUnavailableModelError(error)) throw error;
+      console.warn(`Gemini model ${model} is unavailable; trying the next supported model.`);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("No configured Gemini model is available for this API key.");
+}
+
 function buildSystemInstruction(req: AiAskRequest): string {
   const redaction = req.isOwnerOrAdmin
     ? "The requester is an Owner/Admin — you may reference real dollar amounts and financial figures from the business summary below."
@@ -54,8 +81,7 @@ export async function handleAiAsk(req: AiAskRequest): Promise<AiAskResponse> {
     ...(req.query ? [{ role: "user" as const, parts: [{ text: req.query }] }] : [])
   ];
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContentWithFallback(ai, {
     contents: contents.length > 0 ? contents : [{ role: "user", parts: [{ text: "Give me an overview of this screen." }] }],
     config: { systemInstruction }
   });
@@ -114,8 +140,7 @@ const RECEIPT_SCHEMA = {
 export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanReceiptResponse> {
   const ai = getClient();
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContentWithFallback(ai, {
     contents: [
       {
         role: "user",
@@ -199,8 +224,7 @@ const FINANCIAL_DOCUMENT_SCHEMA = {
 export async function handleScanFinancialDocument(req: ScanFinancialDocumentRequest): Promise<ScanFinancialDocumentResponse> {
   const ai = getClient();
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContentWithFallback(ai, {
     contents: [
       {
         role: "user",
