@@ -52,7 +52,8 @@ export const EstimatesPage: React.FC = () => {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
     navigateToScreen: onNavigateToScreen,
-    logOperationalEvent
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
@@ -62,6 +63,7 @@ export const EstimatesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isConversionOpen, setIsConversionOpen] = useState(false);
+  const [isConversionPickerOpen, setIsConversionPickerOpen] = useState(false);
   const [conversionComplete, setConversionComplete] = useState(false);
   const [jobDate, setJobDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [jobStartTime, setJobStartTime] = useState("09:00");
@@ -180,6 +182,16 @@ export const EstimatesPage: React.FC = () => {
   const selectedEstimateJob = selectedEstimate
     ? schedulingEvents.find(event => event.sourceEstimateId === selectedEstimate.id)
     : undefined;
+  const convertibleEstimates = estimates.filter(est =>
+    est.status === "Accepted" && !schedulingEvents.some(event => event.sourceEstimateId === est.id)
+  );
+
+  const chooseEstimateForConversion = (estimate: Estimate) => {
+    openViewModal(estimate);
+    setConversionComplete(false);
+    setIsConversionPickerOpen(false);
+    setIsConversionOpen(true);
+  };
 
   // Filtered estimates list
   const filteredEstimates = useMemo(() => {
@@ -592,7 +604,16 @@ export const EstimatesPage: React.FC = () => {
               <button
                 key={btn.label}
                 onClick={() => {
-                  if (btn.label === "Schedule Appointment") {
+                  if (btn.label === "Convert to Job") {
+                    if (convertibleEstimates.length === 0) {
+                      triggerNotification("No accepted estimates are waiting to be converted.");
+                      setActiveStatusFilter("Accepted");
+                    } else if (convertibleEstimates.length === 1) {
+                      chooseEstimateForConversion(convertibleEstimates[0]);
+                    } else {
+                      setIsConversionPickerOpen(true);
+                    }
+                  } else if (btn.label === "Schedule Appointment") {
                     if (onNavigateToScreen) {
                       onNavigateToScreen("scheduling");
                     } else {
@@ -1160,6 +1181,25 @@ export const EstimatesPage: React.FC = () => {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {isConversionPickerOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-[#1F3557]/75 p-3 backdrop-blur-sm">
+          <div className="max-h-[85vh] w-full max-w-xl overflow-hidden rounded-3xl border-2 border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl">
+            <div className="flex items-start justify-between border-b border-[#9EC8EF] bg-white px-5 py-4">
+              <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#4A86F7]">Convert to job</p><h3 className="mt-1 text-lg font-black text-[#1F3557]">Choose an accepted estimate</h3></div>
+              <button aria-label="Close estimate chooser" onClick={() => setIsConversionPickerOpen(false)} className="rounded-lg p-2 text-[#5E7393] hover:bg-[#EAF5FF]"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="max-h-[65vh] space-y-2 overflow-y-auto p-4">
+              {convertibleEstimates.map(estimate => (
+                <button key={estimate.id} onClick={() => chooseEstimateForConversion(estimate)} className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left hover:bg-[#EAF5FF]">
+                  <span><span className="block text-sm font-black text-[#1F3557]">{estimate.customerName}</span><span className="text-[10px] font-bold text-[#5E7393]">{estimate.number} · {estimate.company}</span></span>
+                  <span className="shrink-0 text-sm font-black text-emerald-600">${estimate.amount.toLocaleString()}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
