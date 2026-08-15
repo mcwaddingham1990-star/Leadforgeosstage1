@@ -63,6 +63,7 @@ export interface DetailedNotification {
   relatedJob?: string;
   notes?: string;
   createdBy?: string;
+  recipientEmail?: string;
   history?: string[];
 }
 
@@ -86,7 +87,9 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     setDocuments,
     recentAiActions,
     setRecentAiActions,
-    recentRoster
+    recentRoster,
+    notifications,
+    setNotifications
   } = useDomainData();
   const {
     takeSnapshot: onTakeSnapshot,
@@ -96,7 +99,8 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     triggerNotification
   } = useNavTelemetry();
   // 1. Core database of notifications (starts empty for every new account)
-  const [notifList, setNotifList] = useState<DetailedNotification[]>([]);
+  const notifList = notifications as DetailedNotification[];
+  const setNotifList = setNotifications as React.Dispatch<React.SetStateAction<DetailedNotification[]>>;
 
   // 2. Navigation & UI States
   const [searchQuery, setSearchQuery] = useState("");
@@ -389,6 +393,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
       relatedCustomer: customCustomer || undefined,
       notes: "Manually created by Owner.",
       createdBy: "Owner",
+      recipientEmail: loggedInUser?.email,
       history: [`${nowStamp}: Manually created by Owner.`]
     };
 
