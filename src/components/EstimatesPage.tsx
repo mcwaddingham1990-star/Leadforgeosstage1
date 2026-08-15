@@ -619,6 +619,8 @@ export const EstimatesPage: React.FC = () => {
                     } else {
                       onOpenPlaceholder("scheduling", "📅");
                     }
+                  } else if (btn.label === "Message Customer") {
+                    onNavigateToScreen?.("messages");
                   } else {
                     onOpenPlaceholder(`${btn.label} Action`, btn.icon);
                   }
