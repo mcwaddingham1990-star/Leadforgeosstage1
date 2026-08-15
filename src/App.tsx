@@ -248,9 +248,6 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   field_supervisor: {
     name: "Field Supervisor",
     description: "Dashboard, Jobs, Scheduling, Dispatch, Routes, Inventory, Documents, Messages, Training",
-Warning: truncated output (original token count: 53644)
-Total output lines: 250
-
     permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training"]
   },
   technician: {
