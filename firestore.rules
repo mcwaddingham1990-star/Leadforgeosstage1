@@ -91,6 +91,14 @@ service cloud.firestore {
       allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
+    match /courses/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /training_profiles/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
     match /bulletins/{docId} {
       allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
