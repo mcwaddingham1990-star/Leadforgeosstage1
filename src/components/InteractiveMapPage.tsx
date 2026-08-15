@@ -94,6 +94,8 @@ interface ServiceTerritory {
   completionRate: number;
 }
 
+const TERRITORY_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#06b6d4"];
+
 export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   businessAddresses
 }) => {
@@ -379,6 +381,27 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
   // Service territories start empty. Only owner-created, real territories belong here.
   const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([]);
+
+  const territoryStorageKey = useMemo(
+    () => `ownerslocal_service_territories:${loggedInUser?.email || "signed-out"}`,
+    [loggedInUser?.email]
+  );
+  const [isCreatingTerritory, setIsCreatingTerritory] = useState(false);
+  const [newTerritoryName, setNewTerritoryName] = useState("");
+  const [newTerritoryRadius, setNewTerritoryRadius] = useState(8);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(territoryStorageKey);
+      setServiceTerritories(saved ? JSON.parse(saved) : []);
+    } catch {
+      setServiceTerritories([]);
+    }
+  }, [territoryStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(territoryStorageKey, JSON.stringify(serviceTerritories));
+  }, [serviceTerritories, territoryStorageKey]);
 
   const [editingTerritoryId, setEditingTerritoryId] = useState<string | null>(null);
   const [editingTerritoryName, setEditingTerritoryName] = useState("");
@@ -1245,6 +1268,44 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setEditingTerritoryId(null);
   };
 
+  const createTerritory = () => {
+    const name = newTerritoryName.trim();
+    if (!name) return;
+    const radiusMiles = Math.max(1, Math.min(75, newTerritoryRadius));
+    const latRadius = radiusMiles / 69;
+    const lngRadius = radiusMiles / (69 * Math.cos((center.lat * Math.PI) / 180));
+    const points = Array.from({ length: 24 }, (_, index) => {
+      const angle = (index / 24) * Math.PI * 2;
+      return {
+        lat: center.lat + Math.sin(angle) * latRadius,
+        lng: center.lng + Math.cos(angle) * lngRadius
+      };
+    });
+    const territory: ServiceTerritory = {
+      id: `territory_${Date.now()}`,
+      name,
+      color: TERRITORY_COLORS[serviceTerritories.length % TERRITORY_COLORS.length],
+      points,
+      revenue: 0,
+      customersCount: 0,
+      leadsCount: 0,
+      jobsCount: 0,
+      techniciansCount: 0,
+      completionRate: 0
+    };
+    setServiceTerritories(prev => [...prev, territory]);
+    setNewTerritoryName("");
+    setNewTerritoryRadius(8);
+    setIsCreatingTerritory(false);
+    logOperationalEvent?.("Territory Created", `${name} created around the current map center (${radiusMiles} mile radius).`, "🗺️");
+  };
+
+  const deleteTerritory = (id: string) => {
+    const territory = serviceTerritories.find(item => item.id === id);
+    setServiceTerritories(prev => prev.filter(item => item.id !== id));
+    if (territory) logOperationalEvent?.("Territory Deleted", `${territory.name} removed from the service map.`, "🗺️");
+  };
+
   // Sidebar Counts
   const counts = useMemo(() => {
     return {
@@ -1408,6 +1469,42 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               Territories &amp; Sectors
             </h3>
 
+            <button
+              type="button"
+              onClick={() => setIsCreatingTerritory(value => !value)}
+              className="w-full rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-blue-500"
+            >
+              <Plus className="mr-1 inline h-3 w-3" /> Create Territory
+            </button>
+
+            {isCreatingTerritory && (
+              <div className="space-y-2 rounded-2xl border border-blue-400/30 bg-slate-800/60 p-3">
+                <input
+                  value={newTerritoryName}
+                  onChange={event => setNewTerritoryName(event.target.value)}
+                  onKeyDown={event => event.key === "Enter" && createTerritory()}
+                  placeholder="Territory name"
+                  className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-blue-400"
+                  autoFocus
+                />
+                <label className="block text-[10px] font-bold text-slate-400">
+                  Radius: {newTerritoryRadius} miles
+                  <input
+                    type="range"
+                    min="1"
+                    max="75"
+                    value={newTerritoryRadius}
+                    onChange={event => setNewTerritoryRadius(Number(event.target.value))}
+                    className="mt-1 w-full accent-blue-500"
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setIsCreatingTerritory(false)} className="flex-1 rounded-lg bg-slate-700 py-1.5 text-[10px] font-bold text-slate-200">Cancel</button>
+                  <button type="button" onClick={createTerritory} disabled={!newTerritoryName.trim()} className="flex-1 rounded-lg bg-emerald-600 py-1.5 text-[10px] font-bold text-white disabled:opacity-40">Save</button>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3.5">
               {serviceTerritories.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 px-4 py-5 text-center">
@@ -1441,12 +1538,22 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                         <Check className="w-3 h-3" />
                       </button>
                     ) : (
-                      <button
-                        onClick={() => startEditingTerritory(t)}
-                        className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white cursor-pointer"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => startEditingTerritory(t)}
+                          aria-label={`Rename ${t.name}`}
+                          className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => deleteTerritory(t.id)}
+                          aria-label={`Delete ${t.name}`}
+                          className="p-1 hover:bg-rose-950 rounded text-slate-400 hover:text-rose-400 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
