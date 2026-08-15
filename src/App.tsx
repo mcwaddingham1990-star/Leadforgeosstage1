@@ -1628,6 +1628,36 @@ export default function App() {
 
   function logOperationalEvent(type: string, desc: string, icon: string = "🤖") {
     triggerNotification(`${icon} ${type}: ${desc}`);
+    const recipientEmail = loggedInUser?.email;
+    if (recipientEmail) {
+      const normalizedType = type.toLowerCase();
+      const category = normalizedType.includes("estimate") ? "estimates"
+        : normalizedType.includes("job") ? "jobs"
+        : normalizedType.includes("customer") ? "customer"
+        : normalizedType.includes("lead") ? "leads"
+        : normalizedType.includes("inventory") ? "inventory"
+        : normalizedType.includes("invoice") || normalizedType.includes("payment") || normalizedType.includes("financial") ? "revenue"
+        : normalizedType.includes("message") ? "messages"
+        : normalizedType.includes("schedule") ? "scheduling"
+        : normalizedType.includes("document") || normalizedType.includes("snapshot") ? "documents"
+        : "system";
+      const now = new Date();
+      setNotifications(prev => [{
+        id: `notif_event_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`,
+        category,
+        title: type,
+        description: desc,
+        time: now.toISOString().slice(0, 16).replace("T", " "),
+        isRead: false,
+        isArchived: false,
+        isPinned: false,
+        priority: "Normal",
+        assignedUser: loggedInUser?.name || loggedInUser?.role || "Owner",
+        recipientEmail,
+        createdBy: loggedInUser?.name || recipientEmail,
+        history: [`${now.toISOString()}: ${type} completed.`]
+      }, ...prev]);
+    }
     const newAct = {
       id: "act_sec_" + Math.random().toString(36).substring(2, 9),
       date: new Date().toISOString().slice(0, 10),
