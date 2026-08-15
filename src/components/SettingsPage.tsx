@@ -245,6 +245,25 @@ export default function SettingsPage({
   const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions, employees, setEmployees } = useDomainData();
   const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
 
+  // Completed employee records are the primary roster source. Include active
+  // invite/legacy roster entries as a compatibility fallback, but deduplicate
+  // by person name so the monitor matches Users & Roles instead of reporting
+  // zero whenever the legacy roster collection is empty.
+  const activeRosterHeadcount = useMemo(() => {
+    const activePeople = new Set<string>();
+    employees.forEach(employee => {
+      const name = `${employee.firstName} ${employee.lastName}`.trim().toLowerCase();
+      if (name) activePeople.add(name);
+    });
+    recentRoster.forEach(entry => {
+      const status = String(entry.status || "active").toLowerCase();
+      if (["inactive", "deactivated", "revoked", "deleted"].includes(status)) return;
+      const name = String(entry.name || "").trim().toLowerCase();
+      if (name) activePeople.add(name);
+    });
+    return activePeople.size;
+  }, [employees, recentRoster]);
+
   // Local settings state combining parent states and auxiliary defaults
   const [localConfig, setLocalConfig] = useState(INITIAL_DEFAULTS);
   const [savedConfig, setSavedConfig] = useState(INITIAL_DEFAULTS);
@@ -2288,7 +2307,7 @@ export default function SettingsPage({
               </div>
               <div className="flex justify-between border-b border-[#A9CDEE]/20 pb-1">
                 <span>Roster Headcount:</span>
-                <strong className="text-[#315C9F]">{recentRoster.length} Active</strong>
+                <strong className="text-[#315C9F]">{activeRosterHeadcount} Active</strong>
               </div>
               <div className="flex justify-between pb-1">
                 <span>Graph Interval:</span>
