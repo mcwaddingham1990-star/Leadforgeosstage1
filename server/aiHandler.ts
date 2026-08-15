@@ -60,7 +60,9 @@ export async function handleAiAsk(req: AiAskRequest): Promise<AiAskResponse> {
     config: { systemInstruction }
   });
 
-  return { text: response.text ?? "" };
+  const text = response.text?.trim();
+  if (!text) throw new Error("Gemini returned an empty response. Please retry the request.");
+  return { text };
 }
 
 export interface ScanReceiptRequest {
