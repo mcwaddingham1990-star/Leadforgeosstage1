@@ -15,7 +15,7 @@ export interface Customer {
   openJobs: number;
   outstandingBalance: number;
   lifetimeValue: number;
-  status: "Active" | "Inactive" | "Past Due";
+  status: "Potential" | "Active" | "Inactive" | "Past Due";
   type: "Residential" | "Commercial";
   isVIP: boolean;
   recentlyAdded: boolean;
