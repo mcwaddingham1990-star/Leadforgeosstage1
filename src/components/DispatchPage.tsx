@@ -234,8 +234,8 @@ export const DispatchPage: React.FC = () => {
 
       return {
         ...evt,
-        assignedVehicle: evt.assignedVehicle || "Truck 1 (Ford F-150)", // preset default for simulation
-        estimatedDuration: evt.estimatedDuration || "2.5 Hours",
+        assignedVehicle: evt.assignedVehicle || "None",
+        estimatedDuration: evt.estimatedDuration || "",
         department: evt.department || (evt.notes?.toLowerCase().includes("hvac") ? "HVAC" : evt.notes?.toLowerCase().includes("water") ? "Plumbing" : "General"),
         status
       };
@@ -366,7 +366,11 @@ export const DispatchPage: React.FC = () => {
     setTempEmployee(evt.assignedEmployee === "None" ? "" : evt.assignedEmployee);
     setTempCrew(evt.assignedCrew || "");
     setTempVehicle(evt.assignedVehicle || "");
-    setTempStatus(evt.status);
+    setTempStatus(
+      (evt.status === "Unassigned" || evt.status === "Scheduled") && type !== "all"
+        ? "Assigned"
+        : evt.status
+    );
     setAssignType(type);
     setShowAssignModal(true);
   };
@@ -983,7 +987,7 @@ export const DispatchPage: React.FC = () => {
 
             {/* Simulated Live Route Stats Bar */}
             <div className="mt-2 bg-[#EAF5FF] p-2 rounded-xl border border-[#9EC8EF]/60 text-[10px] font-semibold text-[#1F3557] flex items-center justify-between">
-              <span className="flex items-center gap-1"><Map className="w-3.5 h-3.5 text-[#315C9F]" /> <strong>Active Grid:</strong> Seattle Area Central</span>
+              <span className="flex items-center gap-1"><Map className="w-3.5 h-3.5 text-[#315C9F]" /> <strong>Active Grid:</strong> Dallas–Fort Worth Operations</span>
               <button
                 onClick={() => handleNavigateToScreen("routes", "Navigating to system routing grid.")}
                 className="text-[9px] font-black text-[#315C9F] uppercase tracking-wider hover:underline flex items-center gap-0.5"
@@ -1275,12 +1279,28 @@ export const DispatchPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  const hasResourceAssignment = Boolean(
+                    (assignType === "technician" && tempEmployee) ||
+                    (assignType === "crew" && tempCrew && tempCrew !== "None") ||
+                    (assignType === "vehicle" && tempVehicle && tempVehicle !== "None") ||
+                    (assignType === "all" && (tempEmployee || (tempCrew && tempCrew !== "None") || (tempVehicle && tempVehicle !== "None")))
+                  );
+                  const nextStatus = hasResourceAssignment && (tempStatus === "Unassigned" || tempStatus === "Scheduled")
+                    ? "Assigned"
+                    : tempStatus;
                   handleUpdateDispatch(selectedEvent.id, {
                     assignedEmployee: tempEmployee || "None",
                     assignedCrew: tempCrew || "None",
                     assignedVehicle: tempVehicle || "None",
-                    status: tempStatus
+                    status: nextStatus
                   });
+                  setSelectedEvent(prev => prev ? {
+                    ...prev,
+                    assignedEmployee: tempEmployee || "None",
+                    assignedCrew: tempCrew || "None",
+                    assignedVehicle: tempVehicle || "None",
+                    status: nextStatus
+                  } : null);
                   setShowAssignModal(false);
                 }}
                 className="px-4 py-1.5 bg-[#315C9F] text-white rounded-xl text-xs font-black shadow hover:opacity-95 transition-all flex items-center gap-1 cursor-pointer"
