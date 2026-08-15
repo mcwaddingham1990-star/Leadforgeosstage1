@@ -1774,8 +1774,8 @@ function RecurringTab({ recurringTransactions, setRecurringTransactions, setInvo
           </button>
         )}
       </div>
-      <p className="text-[10px] text-[#5E7393] bg-white/60 border border-dashed border-[#9EC8EF] rounded-xl p-2.5">
-        No server-side scheduler exists in this client app yet, so recurring items don't fire themselves — click "Run Now" when one is due. A real backend cron job is the natural next step to automate this.
+      <p className="text-[10px] text-emerald-700 bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5">
+        Automatic processing is active. Due recurring invoices and bills are generated server-side; “Run Now” remains available for an immediate manual run.
       </p>
       <div className="space-y-2">
         {recurringTransactions.length === 0 && <p className="text-xs text-[#5E7393] text-center py-6">No recurring items yet.</p>}
@@ -1965,10 +1965,12 @@ function AIInsightsTab({ totalRevenue, totalExpenses, netIncome, cashBalance, ar
           query: q
         })
       });
-      const data = await res.json();
-      setAnswer(data.text || "No response.");
-    } catch {
-      setAnswer("Couldn't reach the AI right now — check your connection and try again.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Financial AI request failed (${res.status}).`);
+      if (!data.text || !String(data.text).trim()) throw new Error("Financial AI returned an empty answer. Please try again.");
+      setAnswer(String(data.text).trim());
+    } catch (error) {
+      setAnswer(error instanceof Error ? error.message : "Couldn't reach the AI right now — check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
