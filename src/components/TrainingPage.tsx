@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
@@ -104,6 +104,7 @@ export const TrainingPage: React.FC = () => {
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const {
     employees,
+    recentRoster,
     documents,
     setDocuments,
     schedulingEvents: events,
@@ -121,15 +122,33 @@ export const TrainingPage: React.FC = () => {
 
   const [courses, _setCourses] = useState<Course[]>([]);
   const [profiles, _setProfiles] = useState<EmployeeTrainingProfile[]>([]);
+  const courseCacheKey = businessId ? `ownerslocal_courses:${businessId.toLowerCase()}` : "";
+  const profileCacheKey = businessId ? `ownerslocal_training_profiles:${businessId.toLowerCase()}` : "";
+
+  const rosterCandidates = useMemo(() => {
+    const byName = new Map<string, { id: string; name: string; role: string }>();
+    employees.forEach(employee => {
+      const name = `${employee.firstName} ${employee.lastName}`.trim();
+      if (name) byName.set(name.toLowerCase(), { id: employee.email || employee.id, name, role: employee.role });
+    });
+    recentRoster.forEach(entry => {
+      const name = String(entry.name || "").trim();
+      if (name && !byName.has(name.toLowerCase())) {
+        byName.set(name.toLowerCase(), { id: entry.id || entry.code || name, name, role: entry.role || "Employee" });
+      }
+    });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, recentRoster]);
 
   // Real-time synchronization helper for courses
   const syncCoursesToFirestore = async (oldArray: Course[], newArray: Course[], bid: string) => {
+    const scopedId = (id: string) => `${bid.toLowerCase().replace(/[^a-z0-9]/g, "_")}__${id}`;
     const oldMap = new Map(oldArray.map(item => [item.id, item]));
     for (const item of newArray) {
       const oldItem = oldMap.get(item.id);
       if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
         try {
-          await setDoc(doc(db, "courses", item.id), {
+          await setDoc(doc(db, "courses", scopedId(item.id)), {
             ...item,
             businessId: bid,
             updatedAt: new Date().toISOString()
@@ -143,7 +162,7 @@ export const TrainingPage: React.FC = () => {
     for (const item of oldArray) {
       if (!newSet.has(item.id)) {
         try {
-          await deleteDoc(doc(db, "courses", item.id));
+          await deleteDoc(doc(db, "courses", scopedId(item.id)));
         } catch (err) {
           console.error("Error deleting course:", err);
         }
@@ -156,6 +175,7 @@ export const TrainingPage: React.FC = () => {
       const nextList = typeof value === "function" ? (value as Function)(prev) : value;
       if (businessId) {
         syncCoursesToFirestore(prev, nextList, businessId);
+        localStorage.setItem(courseCacheKey, JSON.stringify(nextList));
       }
       return nextList;
     });
@@ -164,13 +184,14 @@ export const TrainingPage: React.FC = () => {
   // Real-time synchronization helper for training profiles
   const syncProfilesToFirestore = async (oldArray: EmployeeTrainingProfile[], newArray: EmployeeTrainingProfile[], bid: string) => {
     const getProfileId = (p: EmployeeTrainingProfile) => p.employeeName.replace(/\s+/g, "_").toLowerCase();
+    const scopedId = (id: string) => `${bid.toLowerCase().replace(/[^a-z0-9]/g, "_")}__${id}`;
     const oldMap = new Map(oldArray.map(item => [getProfileId(item), item]));
     for (const item of newArray) {
       const itemKey = getProfileId(item);
       const oldItem = oldMap.get(itemKey);
       if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
         try {
-          await setDoc(doc(db, "training_profiles", itemKey), {
+          await setDoc(doc(db, "training_profiles", scopedId(itemKey)), {
             ...item,
             businessId: bid,
             updatedAt: new Date().toISOString()
@@ -185,7 +206,7 @@ export const TrainingPage: React.FC = () => {
       const itemKey = getProfileId(item);
       if (!newSet.has(itemKey)) {
         try {
-          await deleteDoc(doc(db, "training_profiles", itemKey));
+          await deleteDoc(doc(db, "training_profiles", scopedId(itemKey)));
         } catch (err) {
           console.error("Error deleting training profile:", err);
         }
@@ -198,6 +219,7 @@ export const TrainingPage: React.FC = () => {
       const nextList = typeof value === "function" ? (value as Function)(prev) : value;
       if (businessId) {
         syncProfilesToFirestore(prev, nextList, businessId);
+        localStorage.setItem(profileCacheKey, JSON.stringify(nextList));
       }
       return nextList;
     });
@@ -207,6 +229,17 @@ export const TrainingPage: React.FC = () => {
   useEffect(() => {
     if (!businessId) return;
 
+    const cachedCourses = (() => {
+      try { return JSON.parse(localStorage.getItem(courseCacheKey) || "[]") as Course[]; }
+      catch { return [] as Course[]; }
+    })();
+    const cachedProfiles = (() => {
+      try { return JSON.parse(localStorage.getItem(profileCacheKey) || "[]") as EmployeeTrainingProfile[]; }
+      catch { return [] as EmployeeTrainingProfile[]; }
+    })();
+    _setCourses(cachedCourses);
+    _setProfiles(cachedProfiles);
+
     // 1. Subscribe to courses (starts empty for every new account)
     const qCourses = query(collection(db, "courses"), where("businessId", "==", businessId));
     const unsubCourses = onSnapshot(qCourses, (snapshot) => {
@@ -215,8 +248,12 @@ export const TrainingPage: React.FC = () => {
         const { businessId: _, updatedAt: __, ...courseData } = docSnap.data();
         items.push(courseData as Course);
       });
-      _setCourses(items);
-    });
+      const merged = new Map(cachedCourses.map(item => [item.id, item]));
+      items.forEach(item => merged.set(item.id, item));
+      const next = [...merged.values()];
+      _setCourses(next);
+      localStorage.setItem(courseCacheKey, JSON.stringify(next));
+    }, (error) => console.error("Unable to load course library:", error));
 
     // 2. Subscribe to profiles (starts empty for every new account)
     const qProfiles = query(collection(db, "training_profiles"), where("businessId", "==", businessId));
@@ -226,14 +263,18 @@ export const TrainingPage: React.FC = () => {
         const { businessId: _, updatedAt: __, ...profileData } = docSnap.data();
         items.push(profileData as EmployeeTrainingProfile);
       });
-      _setProfiles(items);
-    });
+      const byEmployee = new Map(cachedProfiles.map(item => [item.employeeName.toLowerCase(), item]));
+      items.forEach(item => byEmployee.set(item.employeeName.toLowerCase(), item));
+      const next = [...byEmployee.values()];
+      _setProfiles(next);
+      localStorage.setItem(profileCacheKey, JSON.stringify(next));
+    }, (error) => console.error("Unable to load training assignments:", error));
 
     return () => {
       unsubCourses();
       unsubProfiles();
     };
-  }, [businessId]);
+  }, [businessId, courseCacheKey, profileCacheKey]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchBy, setSearchBy] = useState<"all" | "employee" | "course" | "certification" | "department" | "role" | "status">("all");
@@ -285,8 +326,8 @@ export const TrainingPage: React.FC = () => {
   // and can be empty even while real employees already exist.
   useEffect(() => {
     // Add default training profiles for any real employee who doesn't have one.
-    employees.forEach(employee => {
-      const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+    rosterCandidates.forEach(employee => {
+      const employeeName = employee.name;
       if (!employeeName) return;
       const exists = profiles.some(p => p.employeeName.toLowerCase() === employeeName.toLowerCase());
       if (!exists) {
@@ -326,7 +367,7 @@ export const TrainingPage: React.FC = () => {
         }
       }
     });
-  }, [employees, profiles]);
+  }, [rosterCandidates, profiles]);
 
   // Is Admin/Manager Role?
   const hasAdminRights = ["Owner", "General Manager", "Office Manager", "HR Manager", "Safety Manager", "Training Manager"].includes(activeRole);
@@ -1849,11 +1890,9 @@ export const TrainingPage: React.FC = () => {
                   className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-2 py-2.5 focus:outline-none cursor-pointer"
                 >
                   <option value="">-- Choose Employee --</option>
-                  {employees.map(employee => {
-                    const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
-                    if (!employeeName) return null;
-                    return <option key={employee.email} value={employeeName}>{employeeName} ({employee.role})</option>;
-                  })}
+                  {rosterCandidates.map(employee => (
+                    <option key={employee.id} value={employee.name}>{employee.name} ({employee.role})</option>
+                  ))}
                 </select>
               </div>
 
