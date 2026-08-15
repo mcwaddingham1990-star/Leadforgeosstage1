@@ -138,6 +138,7 @@ export const AccountingPage: React.FC = () => {
     salesTaxRates,
     setSalesTaxRates,
     transactions,
+    setTransactions,
     revenueEvents,
     customers,
     estimates,
@@ -293,6 +294,8 @@ export const AccountingPage: React.FC = () => {
           invoices={invoices}
           setInvoices={setInvoices}
           setJournalEntries={setJournalEntries}
+          transactions={transactions}
+          setTransactions={setTransactions}
           customers={customers}
           salesTaxRates={salesTaxRates}
           canEdit={canEdit}
@@ -562,6 +565,8 @@ function InvoicesTab({
   invoices,
   setInvoices,
   setJournalEntries,
+  transactions,
+  setTransactions,
   customers,
   salesTaxRates,
   canEdit,
@@ -620,8 +625,60 @@ function InvoicesTab({
     const newAmountPaid = payingInvoice.amountPaid + amount;
     const total = invoiceTotal(payingInvoice);
     const newStatus: Invoice["status"] = newAmountPaid >= total - 0.01 ? "paid" : "partial";
+    const paymentKey = `${payingInvoice.id}:paid:${newAmountPaid.toFixed(2)}`;
+
+    // A customer payment is one economic event even if it was first entered
+    // through Revenue as a check/deposit and later applied to an invoice.
+    // Prefer an exact, unlinked receipt match and reclassify its journal entry
+    // from Cash/Revenue to Cash/AR. The invoice already recognized revenue,
+    // so this preserves the cash receipt without counting revenue twice.
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const customerKey = normalize(payingInvoice.customer);
+    const exactUnlinkedReceipts = transactions.filter(t =>
+      t.type === "income" &&
+      !t.invoiceId &&
+      Math.abs(t.amount - amount) < 0.01
+    );
+    const matchedReceipt = exactUnlinkedReceipts.find(t => {
+      const payerKey = normalize(t.description);
+      return !!payerKey && (payerKey.includes(customerKey) || customerKey.includes(payerKey));
+    }) || (exactUnlinkedReceipts.length === 1 ? exactUnlinkedReceipts[0] : undefined);
+
     setInvoices((prev: Invoice[]) => prev.map(i => (i.id === payingInvoice.id ? { ...i, amountPaid: newAmountPaid, status: newStatus } : i)));
-    setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoicePaymentEntry(payingInvoice, amount, loggedInUser?.email)]);
+    if (matchedReceipt) {
+      setTransactions(prev => prev.map(t => t.id === matchedReceipt.id
+        ? { ...t, source: "invoice_payment", invoiceId: payingInvoice.id, description: `Invoice ${payingInvoice.invoiceNumber} — ${payingInvoice.customer}` }
+        : t));
+      setJournalEntries((prev: JournalEntry[]) => prev.map(entry => entry.sourceId === matchedReceipt.id && entry.source === "income"
+        ? {
+            ...entry,
+            source: "invoice_payment",
+            sourceId: paymentKey,
+            memo: `Payment received: Invoice ${payingInvoice.invoiceNumber} - ${payingInvoice.customer}`,
+            lines: [
+              { accountId: "acct_cash", debit: amount, credit: 0 },
+              { accountId: "acct_ar", debit: 0, credit: amount }
+            ]
+          }
+        : entry));
+    } else {
+      const paymentTransaction = {
+        id: `txn_invoice_payment_${payingInvoice.id}_${Math.round(newAmountPaid * 100)}`,
+        type: "income" as const,
+        source: "invoice_payment" as const,
+        amount,
+        description: `Invoice ${payingInvoice.invoiceNumber} — ${payingInvoice.customer}`,
+        category: "Job Payment",
+        date: todayStr(),
+        createdAt: new Date().toISOString(),
+        createdBy: loggedInUser?.email,
+        invoiceId: payingInvoice.id
+      };
+      setTransactions(prev => prev.some(t => t.id === paymentTransaction.id) ? prev : [...prev, paymentTransaction]);
+      setJournalEntries((prev: JournalEntry[]) => prev.some(entry => entry.sourceId === paymentKey)
+        ? prev
+        : [...prev, { ...postInvoicePaymentEntry(payingInvoice, amount, loggedInUser?.email), sourceId: paymentKey }]);
+    }
     if (logOperationalEvent) logOperationalEvent("Invoice Payment", `${fmt(amount)} received on ${payingInvoice.invoiceNumber}`, "💰");
     triggerNotification(`Payment of ${fmt(amount)} recorded on ${payingInvoice.invoiceNumber}.`);
     setPayingInvoice(null);
