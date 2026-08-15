@@ -273,7 +273,7 @@ export interface AppNotification {
 export interface Transaction {
   id: string;
   type: "income" | "expense";
-  source: "manual" | "ai_scan" | "payroll";
+  source: "manual" | "ai_scan" | "payroll" | "invoice_payment";
   amount: number;
   description: string; // vendor/payer name, or a payroll period label
   category?: string;
@@ -281,6 +281,8 @@ export interface Transaction {
   createdAt: string; // ISO timestamp
   createdBy?: string; // real logged-in user's email
   inventoryItemId?: string; // links inventory purchases/adjustments to their expense entry
+  /** Links a cash receipt to the invoice it paid so Revenue and Accounting share one economic event. */
+  invoiceId?: string;
 }
 
 export interface SchedulingEvent {
