@@ -153,13 +153,25 @@ export const AccountingPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<AccountingTab>("dashboard");
 
-  // ---- Derived, real numbers -- every figure below is computed from real
-  // journal entries / invoices / bills, never a separately-tracked total. ----
+  // Inventory is a live subledger: its current asset value is the same
+  // quantity × unit-cost valuation shown by Inventory. Journal-only balance
+  // calculation left this account at $0 even while stock was on hand.
+  const inventoryAssetValue = useMemo(
+    () => inventoryList.reduce((total, item) => {
+      const quantity = Number(item.quantity) || 0;
+      const unitCost = Number(item.unitCost) || 0;
+      return total + quantity * unitCost;
+    }, 0),
+    [inventoryList]
+  );
+
+  // ---- Derived, real numbers from journals plus connected subledgers. ----
   const accountBalances = useMemo(() => {
     const map: Record<string, number> = {};
     for (const acct of accounts) map[acct.id] = computeAccountBalance(acct, journalEntries);
+    map["acct_inventory"] = inventoryAssetValue;
     return map;
-  }, [accounts, journalEntries]);
+  }, [accounts, journalEntries, inventoryAssetValue]);
 
   const cashBalance = accountBalances["acct_cash"] || 0;
   const arBalance = accountBalances["acct_ar"] || 0;
