@@ -135,20 +135,11 @@ export function useDomainActions() {
         setCustomers(prev =>
           prev.map(c =>
             c.id === existingCustomer.id
-              ? { ...c, status: "Active", openJobs: (c.openJobs || 0) + 1 }
+              ? { ...c, status: "Active" }
               : c
           )
         );
         logOperationalEvent("Customer Activated", `${estimate.customerName} moved from Potential → Active`, "🤝");
-      } else {
-        // Already an Active customer — just bump their open job count.
-        setCustomers(prev =>
-          prev.map(c =>
-            c.id === existingCustomer.id
-              ? { ...c, openJobs: (c.openJobs || 0) + 1 }
-              : c
-          )
-        );
       }
     } else {
       // No CRM record at all — create an Active customer from estimate data.
