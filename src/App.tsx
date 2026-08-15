@@ -13,6 +13,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
@@ -2244,6 +2245,14 @@ Access to full financial telemetry is restricted.`;
         updatedAt: new Date().toISOString()
       });
 
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(user);
+        verificationEmailSent = true;
+      } catch (verificationError) {
+        console.error("Could not send owner verification email:", verificationError);
+      }
+
       // Update relevant states for consistency
       setEmail(cleanEmail);
       setPassword(cleanPass);
@@ -2263,7 +2272,9 @@ Access to full financial telemetry is restricted.`;
       // Directly show Step 1 of Onboarding!
       setCurrentView("placeholder_password");
       setShowSignUpInstructions(false);
-      triggerNotification(`Welcome, Owner of ${cleanUser}! Please complete onboarding.`);
+      triggerNotification(verificationEmailSent
+        ? `Verification email sent to ${cleanEmail}. Check your inbox or spam folder.`
+        : "Account created, but the verification email could not be sent. Try again from Account Settings.");
     } catch (err: any) {
       console.error("Error signing up:", err);
       let errMsg = err.message || "Unknown error";
@@ -2887,6 +2898,14 @@ Access to full financial telemetry is restricted.`;
         await setDoc(doc(db, "employee_invites", empInviteCode), { status: "completed", usedBy: cleanEmail }, { merge: true });
       }
 
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(user);
+        verificationEmailSent = true;
+      } catch (verificationError) {
+        console.error("Could not send employee verification email:", verificationError);
+      }
+
       // 5. Update UI local state
       setLoggedInUser({
         email: cleanEmail,
@@ -2903,7 +2922,9 @@ Access to full financial telemetry is restricted.`;
       // Redirect to Employee Training (Coming Soon)
       const trainingScreen = OS_SCREENS.find(s => s.id === "training") || OS_SCREENS[0];
       setActiveScreen(trainingScreen);
-      triggerNotification("Employee profile registered! Welcome to Employee Training.");
+      triggerNotification(verificationEmailSent
+        ? `Employee registered. Verification email sent to ${cleanEmail}.`
+        : "Employee registered, but the verification email could not be sent.");
     } catch (err: any) {
       console.error("Employee onboarding database save failed:", err);
       const errMsg = err instanceof Error ? err.message : String(err);
