@@ -6,6 +6,7 @@ import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskReque
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 import { sendPushToRecipients } from './server/pushNotifications';
+import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -84,6 +85,21 @@ app.post('/api/notifications/send-push', async (req, res) => {
   }
 });
 
+app.post('/api/jobs/process-recurring', async (req, res) => {
+  const expected = process.env.RECURRING_CRON_SECRET;
+  const supplied = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!expected || supplied !== expected) {
+    res.status(expected ? 401 : 503).json({ error: expected ? 'Unauthorized' : 'Recurring cron is not configured' });
+    return;
+  }
+  try {
+    const result = await processDueRecurringTransactions();
+    res.status(result.configured ? 200 : 503).json(result.configured ? result : { ...result, error: 'Firebase Admin is not configured' });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Recurring processing failed' });
+  }
+});
+
 const distDir = path.join(__dirname, 'dist');
 app.use(express.static(distDir));
 app.get('*', (_req, res) => {
@@ -93,4 +109,5 @@ app.get('*', (_req, res) => {
 const port = Number(process.env.PORT) || 8080;
 app.listen(port, () => {
   console.log(`OwnersLOCAL server listening on port ${port}`);
+  startRecurringScheduler();
 });
