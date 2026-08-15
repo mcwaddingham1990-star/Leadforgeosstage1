@@ -107,7 +107,7 @@ export interface Conversation {
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, estimates, invoices } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, estimates, invoices, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -245,6 +245,18 @@ export const MessagesPage: React.FC = () => {
   const [newConvType, setNewConvType] = useState<any>("Customer Chat");
   const [newConvRecipient, setNewConvRecipient] = useState("");
   const [newConvPriority, setNewConvPriority] = useState<"High" | "Normal" | "Low">("Normal");
+
+  useEffect(() => {
+    if (!preSelectedCustomerId) return;
+    const customer = customersList.find(c => c.id === preSelectedCustomerId);
+    if (customer) {
+      setNewConvRecipient(`customer:${customer.id}`);
+      setNewConvTitle(`Chat with ${customer.contact || customer.company}`);
+      setNewConvType("Customer Chat");
+      setIsNewMsgModalOpen(true);
+    }
+    setPreSelectedCustomerId(undefined);
+  }, [preSelectedCustomerId, customersList, setPreSelectedCustomerId]);
   
   // Roster or staff for group setup, from the real team roster
   const mockStaff = recentRoster.map(r => ({ name: r.name, role: r.role }));
@@ -632,11 +644,22 @@ export const MessagesPage: React.FC = () => {
       return;
     }
 
+    const selectedCustomer = !isGroup && newConvRecipient.startsWith("customer:")
+      ? customersList.find(c => c.id === newConvRecipient.slice("customer:".length))
+      : undefined;
+    const recipientName = selectedCustomer
+      ? selectedCustomer.contact || selectedCustomer.company
+      : newConvRecipient.replace(/^staff:/, "").trim();
+    if (!isGroup && !recipientName) {
+      triggerRealTimeNotification("Please select a customer or team member.");
+      return;
+    }
+
     const newC: Conversation = {
       id: "conv_" + Date.now(),
       title: newConvTitle,
-      type: isGroup ? "Team Chat" : "Direct Message",
-      participants: isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())] : [currentUserName, newConvRecipient.trim()],
+      type: isGroup ? "Team Chat" : selectedCustomer ? "Customer Chat" : "Direct Message",
+      participants: isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())] : [currentUserName, recipientName],
       unreadCount: 0,
       lastMessage: "Conversation created.",
       lastMessageTime: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -644,13 +667,15 @@ export const MessagesPage: React.FC = () => {
       isRead: true,
       isArchived: false,
       priority: newConvPriority,
+      customerId: selectedCustomer?.id,
+      customerName: selectedCustomer ? selectedCustomer.contact || selectedCustomer.company : undefined,
       createdDate: new Date().toISOString().substring(0, 10),
       messages: [
         {
           id: "m_init_" + Date.now(),
           sender: "System Event Node",
           senderRole: "System Notification",
-          content: `Security channel established. Participants: ${isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())].join(', ') : currentUserName + ", " + newConvRecipient}`,
+          content: `Conversation started. Participants: ${isGroup ? [currentUserName, ...newConvRecipient.split(",").map(x => x.trim())].join(', ') : currentUserName + ", " + recipientName}`,
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
         }
       ]
@@ -672,7 +697,18 @@ export const MessagesPage: React.FC = () => {
           <MessageSquare className="mx-auto h-8 w-8 text-[#315C9F]" />
           <h2 className="mt-3 text-base font-extrabold text-[#342D7E]">No conversations yet</h2>
           <p className="mt-1 text-xs text-slate-500">Your customer and team conversations will appear here after you start one.</p>
+          <button onClick={() => setIsNewMsgModalOpen(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#4A9BFF] px-4 py-2.5 text-xs font-black uppercase text-white hover:bg-[#3583E6]"><Send className="h-4 w-4" /> New message</button>
         </div>
+        {isNewMsgModalOpen && (
+          <div onClick={() => setIsNewMsgModalOpen(false)} className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 p-3 backdrop-blur-xs">
+            <div onClick={e => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-3xl border border-[#9EC8EF] bg-white p-6 text-left shadow-2xl">
+              <div className="flex items-center justify-between border-b pb-2"><h4 className="text-xs font-extrabold uppercase tracking-wider text-[#342D7E]">Start a conversation</h4><button onClick={() => setIsNewMsgModalOpen(false)} className="p-1 font-bold text-slate-400">✕</button></div>
+              <label className="block text-[9px] font-bold uppercase text-slate-500">Customer or team member<select value={newConvRecipient} onChange={e => { const value=e.target.value; setNewConvRecipient(value); const customer=value.startsWith("customer:")?customersList.find(c=>c.id===value.slice(9)):undefined; const name=customer?(customer.contact||customer.company):value.replace(/^staff:/,""); setNewConvTitle(name?`Chat with ${name}`:""); }} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">Select recipient…</option><optgroup label="Customers">{customersList.map(c=><option key={c.id} value={`customer:${c.id}`}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}</optgroup><optgroup label="Team">{mockStaff.filter(s=>s.name!==currentUserName).map(s=><option key={s.name} value={`staff:${s.name}`}>{s.name} — {s.role}</option>)}</optgroup></select></label>
+              <label className="block text-[9px] font-bold uppercase text-slate-500">Conversation title<input value={newConvTitle} onChange={e=>setNewConvTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-slate-50 px-3 py-2.5 text-xs" /></label>
+              <button disabled={!newConvRecipient || !newConvTitle.trim()} onClick={() => handleCreateConversation(false)} className="w-full rounded-xl bg-[#4A9BFF] py-2.5 text-xs font-bold uppercase text-white disabled:bg-slate-300">Start conversation</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1545,15 +1581,17 @@ export const MessagesPage: React.FC = () => {
                 <select
                   value={newConvRecipient}
                   onChange={(e) => {
-                    setNewConvRecipient(e.target.value);
-                    if (!newConvTitle) setNewConvTitle(`Chat with ${e.target.value}`);
+                    const value = e.target.value;
+                    setNewConvRecipient(value);
+                    const customer = value.startsWith("customer:") ? customersList.find(c => c.id === value.slice("customer:".length)) : undefined;
+                    const name = customer ? customer.contact || customer.company : value.replace(/^staff:/, "");
+                    setNewConvTitle(name ? `Chat with ${name}` : "");
                   }}
                   className="w-full text-xs bg-white text-[#1F3557] border border-[#A9CDEE] rounded-xl px-2.5 py-2.5 cursor-pointer focus:outline-none"
                 >
-                  <option className="bg-white text-[#1F3557]" value="">Select Recipient Staff...</option>
-                  {mockStaff.filter(s => s.name !== currentUserName).map(s => (
-                    <option className="bg-white text-[#1F3557]" key={s.name} value={s.name}>{s.name} - {s.role}</option>
-                  ))}
+                  <option className="bg-white text-[#1F3557]" value="">Select customer or team member...</option>
+                  <optgroup label="Customers">{customersList.map(c => <option key={c.id} value={`customer:${c.id}`}>{c.contact || c.company}{c.contact && c.company ? ` — ${c.company}` : ""}</option>)}</optgroup>
+                  <optgroup label="Team">{mockStaff.filter(s => s.name !== currentUserName).map(s => <option key={s.name} value={`staff:${s.name}`}>{s.name} — {s.role}</option>)}</optgroup>
                 </select>
               </div>
 
