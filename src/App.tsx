@@ -1244,7 +1244,7 @@ export default function App() {
   const [businessNames, setBusinessNames] = useState<string[]>([""]);
   const [businessPhones, setBusinessPhones] = useState<string[]>([""]);
   const [businessAddresses, setBusinessAddresses] = useState<string[]>([""]);
-  const [businessLogos, setBusinessLogos] = useState<string[]>(["/branding/owners-logo.png"]);
+  const [businessLogos, setBusinessLogos] = useState<string[]>([""]);
   const [companyLocations, setCompanyLocations] = useState<string[]>([""]);
 
   // Billing methods state
@@ -2115,7 +2115,7 @@ Access to full financial telemetry is restricted.`;
             if (bizData.ownerNames) setOwnerNames(bizData.ownerNames);
             if (bizData.businessPhones) setBusinessPhones(bizData.businessPhones);
             if (bizData.businessAddresses) setBusinessAddresses(bizData.businessAddresses);
-            if (bizData.businessLogos) setBusinessLogos(bizData.businessLogos);
+            if (bizData.businessLogos) setBusinessLogos(bizData.businessLogos.map((logo: string) => logo === "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60" ? "" : logo));
             if (bizData.companyLocations) setCompanyLocations(bizData.companyLocations);
             if (bizData.billingMethods) setBillingMethods(bizData.billingMethods);
             if (bizData.selectedBillingMethodId) setSelectedBillingMethodId(bizData.selectedBillingMethodId);
@@ -2237,7 +2237,7 @@ Access to full financial telemetry is restricted.`;
         ownerNames: [cleanOwner],
         businessPhones: [""],
         businessAddresses: [""],
-        businessLogos: ["https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60"],
+        businessLogos: [""],
         companyLocations: [""],
         billingMethods: [],
         selectedBillingMethodId: "",
@@ -2496,7 +2496,7 @@ Access to full financial telemetry is restricted.`;
           if (data.businessNames) setBusinessNames(data.businessNames);
           if (data.businessPhones) setBusinessPhones(data.businessPhones);
           if (data.businessAddresses) setBusinessAddresses(data.businessAddresses);
-          if (data.businessLogos) setBusinessLogos(data.businessLogos);
+          if (data.businessLogos) setBusinessLogos(data.businessLogos.map((logo: string) => logo === "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60" ? "" : logo));
           if (data.companyLocations) setCompanyLocations(data.companyLocations);
           if (data.billingMethods) setBillingMethods(data.billingMethods);
           if (data.selectedBillingMethodId) setSelectedBillingMethodId(data.selectedBillingMethodId);
