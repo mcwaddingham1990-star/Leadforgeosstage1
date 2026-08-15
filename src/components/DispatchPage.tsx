@@ -108,8 +108,11 @@ function deterministicGridPosition(key: string, minX: number, spreadX: number, m
 export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList, recentRoster } = useDomainData();
-  const AVAILABLE_TECHNICIANS = recentRoster.map(r => r.name);
+  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList, employees } = useDomainData();
+  const AVAILABLE_TECHNICIANS = useMemo(() => employees
+    .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
+    .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
+    .sort((a, b) => a.localeCompare(b)), [employees]);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,

@@ -74,9 +74,12 @@ export const SchedulingPage: React.FC = () => {
     setNotifications,
     preSelectedDate,
     preSelectedCustomerId,
-    recentRoster
+    employees
   } = useDomainData();
-  const EMPLOYEES = recentRoster.map(r => r.name);
+  const EMPLOYEES = useMemo(() => employees
+    .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
+    .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
+    .sort((a, b) => a.localeCompare(b)), [employees]);
   const selectableCustomers = useMemo(() => {
     const byKey = new Map<string, { id: string; contact: string; company: string; phone: string; email: string; address: string }>();
     customersList.forEach(customer => byKey.set(customer.id, customer));

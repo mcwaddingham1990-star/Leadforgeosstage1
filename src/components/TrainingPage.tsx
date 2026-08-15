@@ -103,8 +103,7 @@ export const TrainingPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const {
-    recentRoster,
-    setRecentRoster,
+    employees,
     documents,
     setDocuments,
     schedulingEvents: events,
@@ -281,32 +280,36 @@ export const TrainingPage: React.FC = () => {
   const [newCourseQuizOptions, setNewCourseQuizOptions] = useState("Option A, Option B, Option C, Option D");
   const [newCourseQuizAns, setNewCourseQuizAns] = useState("Option A");
 
-  // Sync with Roster changes automatically
+  // Sync with the same real employee collection used by the Roster page.
+  // The legacy `roster` collection only contains invite/onboarding records
+  // and can be empty even while real employees already exist.
   useEffect(() => {
-    // Add default training profiles for any new roster addition that doesn't have one
-    recentRoster.forEach(ros => {
-      const exists = profiles.some(p => p.employeeName.toLowerCase() === ros.name.toLowerCase());
+    // Add default training profiles for any real employee who doesn't have one.
+    employees.forEach(employee => {
+      const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+      if (!employeeName) return;
+      const exists = profiles.some(p => p.employeeName.toLowerCase() === employeeName.toLowerCase());
       if (!exists) {
         // Build auto onboarding training profile
         const dept: EmployeeTrainingProfile["department"] = 
-          ros.role === "Office Manager" ? "Office" :
-          ros.role === "Dispatcher" ? "Dispatch" : "Field";
+          employee.role === "Office Manager" ? "Office" :
+          employee.role === "Dispatcher" ? "Dispatch" : "Field";
         
         // Auto assign based on onboarding rules
         const autoAssigned: string[] = [];
-        if (ros.role === "Driver") {
+        if (employee.role === "Driver") {
           autoAssigned.push("course_cdl", "course_osha");
-        } else if (ros.role === "Technician") {
+        } else if (employee.role === "Technician") {
           autoAssigned.push("course_osha", "course_epa", "course_electric");
-        } else if (ros.role === "Office Manager" || ros.role === "Salesperson") {
+        } else if (employee.role === "Office Manager" || employee.role === "Salesperson") {
           autoAssigned.push("course_billing", "course_osha");
         } else {
           autoAssigned.push("course_osha");
         }
 
         const newProfile: EmployeeTrainingProfile = {
-          employeeName: ros.name,
-          role: ros.role,
+          employeeName,
+          role: employee.role,
           department: dept,
           assignedCourseIds: autoAssigned,
           completedCourseIds: [],
@@ -319,11 +322,11 @@ export const TrainingPage: React.FC = () => {
 
         setProfiles(prev => [...prev, newProfile]);
         if (logOperationalEvent) {
-          logOperationalEvent("Training Core", `Auto-assigned onboarding curriculum to new employee ${ros.name} (${ros.role})`, "🎓");
+          logOperationalEvent("Training Core", `Auto-assigned onboarding curriculum to new employee ${employeeName} (${employee.role})`, "🎓");
         }
       }
     });
-  }, [recentRoster, profiles]);
+  }, [employees, profiles]);
 
   // Is Admin/Manager Role?
   const hasAdminRights = ["Owner", "General Manager", "Office Manager", "HR Manager", "Safety Manager", "Training Manager"].includes(activeRole);
@@ -1846,9 +1849,11 @@ export const TrainingPage: React.FC = () => {
                   className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-2 py-2.5 focus:outline-none cursor-pointer"
                 >
                   <option value="">-- Choose Employee --</option>
-                  {profiles.map(p => (
-                    <option key={p.employeeName} value={p.employeeName}>{p.employeeName} ({p.role})</option>
-                  ))}
+                  {employees.map(employee => {
+                    const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+                    if (!employeeName) return null;
+                    return <option key={employee.email} value={employeeName}>{employeeName} ({employee.role})</option>;
+                  })}
                 </select>
               </div>
 
