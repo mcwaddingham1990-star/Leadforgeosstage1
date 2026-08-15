@@ -7001,3 +7001,624 @@ Access to full financial telemetry is restricted.`;
             </p>
             <div className="flex gap-3 justify-center pt-2">
               <button
+                onClick={() => setRevenueConfirmAction(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = revenueConfirmAction;
+                  setRevenueConfirmAction(null);
+                  openPlaceholderPage(target.label, target.icon);
+                  logOperationalEvent("Financial Export", `User authorized download of sensitive report: ${target.label}`, "📊");
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 shadow-md shadow-blue-500/15"
+              >
+                Authorize & Load
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI OPTION COMPANION WORKSPACE CHATBOT DRAWER */}
+      {isAIAnalysisOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+          {/* Backdrop Click */}
+          <div className="absolute inset-0" onClick={() => setIsAIAnalysisOpen(false)} />
+
+          {/* Drawer content panel */}
+          <div className="relative w-full max-w-lg h-full bg-[#EAF5FF] border-l border-[#9EC8EF] shadow-2xl flex flex-col justify-between overflow-hidden animate-slide-in-right">
+            
+            {/* Header */}
+            <div className="p-5 bg-[#C7E3FA] border-b border-[#9EC8EF] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-[#EAF5FF] rounded-xl border border-[#9EC8EF]">
+                  <Sparkles className="w-5 h-5 text-[#315C9F] animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
+                    Owner's AI Option
+                  </h3>
+                  <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
+                    AI help for this page • {aiPageName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAIAnalysisOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold text-sm transition-colors flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Message Area */}
+            <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-[#EAF5FF]">
+              {aiMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`flex flex-col max-w-[85%] text-left ${
+                    msg.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"
+                  }`}
+                >
+                  <span className="text-[9px] uppercase tracking-wider font-bold text-[#5E7393] mb-1">
+                    {msg.sender === "user" ? "You" : "Owner's AI"}
+                  </span>
+                  <div
+                    className={`p-3.5 rounded-2xl text-xs leading-relaxed border shadow-sm ${
+                      msg.sender === "user"
+                        ? "bg-[#315C9F] border-[#1F3557] text-white rounded-tr-none"
+                        : "bg-[#C7E3FA] border-[#9EC8EF] text-[#1F3557] rounded-tl-none whitespace-pre-wrap"
+                    }`}
+                  >
+                    {msg.sender === "ai" ? (
+                      <div className="prose prose-sm max-w-none">
+                        {msg.text.split("\n").map((line, lIdx) => {
+                          if (line.startsWith("###")) {
+                            return <h4 key={lIdx} className="font-extrabold text-sm text-[#1F3557] mt-2 mb-1 uppercase">{line.replace("###", "").trim()}</h4>;
+                          }
+                          if (line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.")) {
+                            return <p key={lIdx} className="ml-1.5 mt-1 text-[#1F3557] font-medium">{line}</p>;
+                          }
+                          if (line.startsWith("-")) {
+                            return <li key={lIdx} className="ml-3 mt-0.5 text-slate-700">{line.replace("-", "").trim()}</li>;
+                          }
+                          return <p key={lIdx} className="mt-1">{line}</p>;
+                        })}
+                      </div>
+                    ) : (
+                      msg.text
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {aiIsLoading && (
+                <div className="flex items-center gap-2 mr-auto text-xs text-[#5E7393] font-semibold bg-[#C7E3FA] border border-[#9EC8EF] px-3.5 py-2.5 rounded-2xl rounded-tl-none animate-pulse">
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span>AI Agent is analyzing workspace ledger...</span>
+                </div>
+              )}
+
+              {pendingAiAction && pendingAiAction.type === "drawer" && (
+                <div className="bg-[#FFF5F5] border-2 border-red-200 rounded-2xl p-4 shadow-sm space-y-3 animate-fade-in text-left">
+                  <div className="flex items-start gap-2.5">
+                    <span className="p-1.5 bg-red-100 rounded-lg text-red-600 font-bold text-sm">🔒</span>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pl-8 pt-1">
+                    <button
+                      onClick={() => {
+                        const queryToRun = pendingAiAction.query;
+                        setPendingAiAction(null);
+                        executeConfirmedAIMessage(queryToRun);
+                      }}
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10.5px] font-extrabold rounded-lg shadow-sm transition-all uppercase cursor-pointer tracking-wider"
+                    >
+                      Confirm & Reveal
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPendingAiAction(null);
+                      }}
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[10.5px] font-bold rounded-lg transition-all uppercase cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Suggestions list */}
+            <div className="px-5 py-2 bg-[#C7E3FA]/40 border-t border-[#9EC8EF]/40 flex flex-wrap gap-1.5 justify-start">
+              {[
+                "Who is our top performer?",
+                "How can we grow conversions?",
+                "Analyze outstanding unpaid invoices"
+              ].map((sug, sIdx) => (
+                <button
+                  key={sIdx}
+                  disabled={!!pendingAiAction}
+                  onClick={() => {
+                    setAiInputMessage(sug);
+                  }}
+                  className={`px-2.5 py-1 text-[10px] font-sans font-bold text-[#315C9F] hover:text-white hover:bg-[#315C9F] bg-white border border-[#9EC8EF] rounded-lg transition-all cursor-pointer shadow-sm shrink-0 ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+
+            {/* Input Bar */}
+            <div className="p-4 bg-[#C7E3FA] border-t border-[#9EC8EF] flex items-center gap-2">
+              <input
+                type="text"
+                value={aiInputMessage}
+                disabled={!!pendingAiAction}
+                onChange={(e) => setAiInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !pendingAiAction) handleSendAIMessage();
+                }}
+                placeholder={pendingAiAction ? "Confirmation pending... make a selection above" : `Ask about ${aiPageName} metrics or suggestions...`}
+                className={`flex-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-4 py-3 text-xs text-[#1F3557] placeholder-[#5E7393]/70 focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
+              />
+              <button
+                onClick={handleSendAIMessage}
+                disabled={!!pendingAiAction}
+                className={`px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl transition-all uppercase tracking-wider cursor-pointer shadow-sm ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it */}
+      <div
+        id="floating-ai-widget"
+        className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
+        style={aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
+      >
+
+        {/* Toggle Trigger Pill (drag by pressing and moving) */}
+        {!isFloatingAiOpen && isLoggedIn && (
+          <button
+            onClick={() => { if (!aiDragState.current.dragging) setIsFloatingAiOpen(true); }}
+            onPointerDown={(e) => startAiWidgetDrag(e, 180, 52)}
+            className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-grab active:cursor-grabbing group font-sans font-black text-xs uppercase tracking-wider"
+            title="Drag to move, click to open"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span>Owner's AI</span>
+            <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
+          </button>
+        )}
+
+        {/* Slide-Up Panel Overlay */}
+        {isFloatingAiOpen && (
+          <div className="w-96 h-[550px] bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl flex flex-col overflow-hidden animate-slide-up select-text">
+
+            {/* Drawer Header (drag handle) */}
+            <div
+              onPointerDown={(e) => startAiWidgetDrag(e, 384, 550)}
+              className="bg-[#1F3557] text-white px-4 py-3 flex items-center justify-between border-b border-white/10 shrink-0 cursor-grab active:cursor-grabbing"
+              title="Drag to move"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#315C9F] to-[#4A86F7] text-white flex items-center justify-center text-lg font-bold">
+                  🤖
+                </div>
+                <div className="text-left">
+                  <h3 className="text-xs font-black uppercase tracking-wider">OwnersLOCAL AI</h3>
+                  <p className="text-[9.5px] text-slate-300 font-mono">Module: {activeScreen.label}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {/* Collapse button */}
+                <button
+                  onClick={() => setIsFloatingAiOpen(false)}
+                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-xs font-bold cursor-pointer"
+                  title="Collapse Panel"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* TAB BAR NAVIGATION */}
+            <div className="flex bg-[#EAF5FF] border-b border-[#9EC8EF]/30 p-1 shrink-0">
+              {[
+                { id: "ask", label: "Ask AI", icon: "💬" },
+                { id: "actions", label: "Actions", icon: "⚡" },
+                { id: "settings", label: "Settings", icon: "⚙️" },
+                { id: "recent", label: "Ledger", icon: "📋" }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFloatingAiTab(tab.id as any)}
+                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wide rounded-lg border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    floatingAiTab === tab.id
+                      ? "bg-[#315C9F] text-white border-[#315C9F] shadow-sm"
+                      : "bg-transparent text-[#5E7393] border-transparent hover:bg-white/50"
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Current page context (real — reflects the actual active screen) */}
+            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex items-center justify-between text-left text-[9.5px] text-[#855D00] font-sans font-bold uppercase tracking-wider">
+              <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Viewing: {activeScreen.label}</span>
+            </div>
+
+            {/* PANEL BODY CONTENT AREA */}
+            <div className="flex-1 overflow-y-auto p-4 bg-[#F8FBFF]">
+              
+              {/* ASK AI CHAT TAB */}
+              {floatingAiTab === "ask" && (
+                <div className="h-full flex flex-col justify-between gap-3 text-left">
+                  <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 select-text">
+                    {floatingAiMessages.map((m, idx) => (
+                      <div key={idx} className={`flex flex-col max-w-[85%] ${m.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}>
+                        <span className="text-[8.5px] font-bold text-slate-400 uppercase mb-0.5 tracking-wider">
+                          {m.sender === "user" ? "You" : "Owner's AI"}
+                        </span>
+                        <div className={`p-3 rounded-2xl text-[11px] leading-relaxed border shadow-xs ${
+                          m.sender === "user"
+                            ? "bg-[#315C9F] text-white border-[#315C9F]"
+                            : "bg-white text-slate-700 border-[#9EC8EF]/40"
+                        }`}>
+                          {m.sender === "ai" ? (
+                            <div className="prose prose-sm max-w-none text-left">
+                              {/* Simple Markdown Render helpers */}
+                              {m.text.split("\n\n").map((para, pIdx) => {
+                                if (para.startsWith("###")) {
+                                  return <h4 key={pIdx} className="text-xs font-black uppercase text-[#1F3557] mb-1.5 mt-2">{para.replace("###", "").trim()}</h4>;
+                                }
+                                if (para.startsWith("*") || para.startsWith("-")) {
+                                  return (
+                                    <ul key={pIdx} className="list-disc pl-4 space-y-1 my-1.5 text-[10.5px]">
+                                      {para.split("\n").map((li, lIdx) => (
+                                        <li key={lIdx}>{li.replace(/^[*\-\s]+/, "").trim()}</li>
+                                      ))}
+                                    </ul>
+                                  );
+                                }
+                                return <p key={pIdx} className="mb-1.5 font-medium leading-relaxed">{para}</p>;
+                              })}
+                            </div>
+                          ) : (
+                            <p className="font-semibold leading-relaxed">{m.text}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {floatingAiLoading && (
+                      <div className="flex items-center gap-1.5 p-2 text-[10px] text-[#5E7393] font-bold font-mono">
+                        <span className="animate-bounce">●</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>●</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.4s' }}>●</span>
+                        <span className="text-[9px]">Model is processing viewport...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {pendingAiAction && pendingAiAction.type === "floating" && (
+                    <div className="bg-[#FFF5F5] border border-red-200 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-red-100 rounded text-red-600 font-bold text-xs">🔒</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
+                          <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={() => {
+                            const queryToRun = pendingAiAction.query;
+                            const cTxt = pendingAiAction.customText;
+                            setPendingAiAction(null);
+                            executeConfirmedFloatingAiMessage(queryToRun, cTxt);
+                          }}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPendingAiAction(null);
+                          }}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grounded data-action confirmation: shows the exact real record(s) affected and
+                      requires explicit approval before anything is written. */}
+                  {pendingDataAction && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-amber-100 rounded text-amber-700 font-bold text-xs">⚠️</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Confirm Action</h4>
+                          {pendingDataAction.type === "reorder" ? (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Flag <strong>{pendingDataAction.item.name}</strong> for reorder — currently <strong>{pendingDataAction.item.quantity}</strong> on hand (minimum {pendingDataAction.item.minQuantity}). Suggested reorder quantity: <strong>{pendingDataAction.suggestedQty} units</strong>{pendingDataAction.item.vendor ? ` from ${pendingDataAction.item.vendor}` : " (no vendor on file)"}.
+                            </p>
+                          ) : (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Move <strong>{pendingDataAction.event.customer}</strong>'s job from <strong>{pendingDataAction.event.date}</strong> to <strong>{pendingDataAction.newDate}</strong>.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={confirmPendingDataAction}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setPendingDataAction(null)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Smart suggestion chips based on active module */}
+                  <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
+                    <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
+                    {activeScreen.id === "inventory" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Order more.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Order more
+                      </button>
+                    )}
+                    {activeScreen.id === "scheduling" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Move to tomorrow
+                      </button>
+                    )}
+                    {activeScreen.id === "revenue" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Why did profit drop?")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Analyze drop
+                      </button>
+                    )}
+                    <span className="text-[9px] text-slate-400 font-medium">Ask simple or complex queries using input below.</span>
+                  </div>
+
+                  {/* Input form */}
+                  <div className="flex gap-1.5 pt-2 border-t border-slate-100 shrink-0">
+                    <input
+                      type="text"
+                      value={floatingAiInput}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      onChange={(e) => setFloatingAiInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
+                      }}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask Owner's AI about ${activeScreen.label}...`}
+                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
+                    />
+                    <button
+                      onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage()}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction || pendingDataAction ? "opacity-55 cursor-not-allowed" : ""}`}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODULE-SPECIFIC AI ACTIONS TAB */}
+              {floatingAiTab === "actions" && (
+                <div className="space-y-3.5 text-left">
+                  <div className="bg-[#FFF9EA] p-3 rounded-2xl border border-amber-200 text-[10px] leading-relaxed text-amber-800 font-sans font-bold uppercase tracking-wider flex items-start gap-1.5">
+                    <span className="text-sm shrink-0">⚡</span>
+                    <span>Ready-to-Run operations for {activeScreen.label}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {/* Map of page actions */}
+                    {(
+                      activeScreen.id === "dashboard" ? ["Analyze Business", "Daily Summary", "Weekly Summary", "Monthly Summary"] :
+                      activeScreen.id === "revenue" ? ["Analyze Profit", "Forecast Revenue", "Analyze Expenses", "Payroll Summary"] :
+                      activeScreen.id === "customers" ? ["Customer Insights", "Follow-up Suggestions", "Customer Timeline"] :
+                      activeScreen.id === "leads" ? ["Prioritize Leads", "Draft Follow-up", "Predict Closing Probability"] :
+                      activeScreen.id === "estimates" ? ["Improve Estimate", "Suggest Pricing", "Compare Similar Jobs"] :
+                      activeScreen.id === "scheduling" ? ["Optimize Schedule", "Detect Conflicts", "Assign Technician"] :
+                      activeScreen.id === "dispatch" ? ["Assign Crew", "Optimize Dispatch"] :
+                      activeScreen.id === "routes" ? ["Optimize Route", "Reduce Drive Time"] :
+                      activeScreen.id === "jobs" ? ["Review Job", "Suggest Next Step"] :
+                      activeScreen.id === "inventory" ? ["Detect Low Inventory", "Generate Purchase Order", "Scan Receipt", "Analyze Inventory"] :
+                      activeScreen.id === "documents" ? ["Summarize Document", "Organize Files"] :
+                      activeScreen.id === "messages" ? ["Draft Reply", "Rewrite Message", "Summarize Conversation"] :
+                      activeScreen.id === "training" ? ["Assign Courses", "Generate Quiz", "Build Course"] :
+                      activeScreen.id === "settings" ? ["Explain Settings", "Recommend Configuration"] :
+                      activeScreen.id === "integrations" ? ["Diagnose Integration", "Sync Status"] :
+                      activeScreen.id === "roster" ? ["Employee Summary", "Performance Review"] :
+                      ["Post Bulletin Alert", "Summarize Announcements"]
+                    ).map((act, aIdx) => (
+                      <button
+                        key={aIdx}
+                        onClick={() => {
+                          setFloatingAiTab("ask");
+                          handleSendFloatingAiMessage(`Perform standard action: ${act}`);
+                        }}
+                        className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-slate-200 hover:border-[#315C9F] rounded-2xl text-[10.5px] font-black text-[#1F3557] flex items-center justify-between transition-all cursor-pointer uppercase tracking-wider"
+                      >
+                        <span className="truncate">{act}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-[#315C9F]" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MODULE AI SETTINGS TAB */}
+              {floatingAiTab === "settings" && (
+                <div className="space-y-4 text-left">
+                  <div className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 space-y-1.5">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Module Override AI Level</h4>
+                    <p className="text-[9px] text-slate-400 font-sans font-medium">
+                      Control parameters for {activeScreen.label} specifically. Specific overrides customize the global fallback configured below.
+                    </p>
+                    <select
+                      value={moduleAiSettings[activeScreen.id] || "DEFAULT"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setModuleAiSettings(prev => ({ ...prev, [activeScreen.id]: val as any }));
+                        triggerNotification(`⚙️ Override for ${activeScreen.label} set to ${val}`);
+                      }}
+                      className="w-full mt-2 text-[10px] font-bold text-[#1F3557] bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
+                    >
+                      <option value="DEFAULT">INHERIT DEFAULT ({globalAiSetting})</option>
+                      <option value="OFF">OFF</option>
+                      <option value="ASSIST">ASSIST</option>
+                      <option value="ASSIST + APPROVAL">ASSIST + APPROVAL</option>
+                      <option value="AUTO">AUTO (AUTONOMOUS)</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Default Global Policy</h4>
+                    <p className="text-[9px] text-slate-400 font-sans font-medium">
+                      Baseline fallback for all workspaces.
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      {["OFF", "ASSIST", "ASSIST + APPROVAL", "AUTO"].map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setGlobalAiSetting(mode as any);
+                            triggerNotification(`🤖 Global AI baseline updated to ${mode}`);
+                          }}
+                          className={`p-1.5 rounded-lg border text-center text-[9px] font-black uppercase transition-all cursor-pointer ${
+                            globalAiSetting === mode
+                              ? "bg-[#315C9F] text-white border-transparent"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {mode === "ASSIST + APPROVAL" ? "ASSIST + APP" : mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* RECENT AI ACTIONS LEDGER TAB */}
+              {floatingAiTab === "recent" && (
+                <div className="space-y-3.5 text-left">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Audit Log Checklist</h4>
+                    <span className="text-[8.5px] bg-[#EAF5FF] text-[#315C9F] px-2 py-0.5 rounded font-mono font-black">
+                      {recentAiActions.filter(a => a.status === "Completed").length} Active
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                    {recentAiActions.map((act) => (
+                      <div key={act.id} className={`p-3 rounded-2xl border transition-all text-left ${
+                        act.status === "Undone" 
+                          ? "bg-rose-50/50 border-rose-100 text-slate-400" 
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:border-[#315C9F]"
+                      }`}>
+                        <div className="flex justify-between items-center w-full">
+                          <span className="text-[8px] bg-slate-200 px-1.5 py-0.5 rounded font-mono font-bold uppercase">{act.module}</span>
+                          {act.status !== "Undone" && (
+                            <button
+                              onClick={() => {
+                                // NOTE: this only marks the log entry as undone (audit annotation).
+                                // Recent AI actions don't currently carry structured revert data, so
+                                // this deliberately does not attempt to reverse the underlying change —
+                                // doing that with guessed/hardcoded values would silently corrupt data.
+                                setRecentAiActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "Undone" } : a));
+                                triggerNotification(`Marked as undone: ${act.action}. Reverse the change manually on the relevant page if needed.`);
+                              }}
+                              className="px-1.5 py-0.5 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-100 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
+                            >
+                              Undo
+                            </button>
+                          )}
+                        </div>
+                        <h5 className={`text-[10.5px] font-black uppercase mt-1.5 ${act.status === "Undone" ? "line-through text-slate-400" : "text-slate-800"}`}>{act.action}</h5>
+                        <p className="text-[9.5px] leading-relaxed text-slate-500 font-sans font-semibold mt-0.5">{act.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* FLOATING SUCCESS/WARNING NOTIFICATIONS SYSTEM */}
+      {showNotification && (
+        <div className="fixed bottom-6 right-6 bg-slate-900 border border-blue-500/30 shadow-[0_10px_30px_rgba(30,144,255,0.2)] rounded-2xl px-4 py-3.5 flex items-center gap-3 z-50 text-xs md:text-sm animate-fade-in text-slate-100 max-w-sm">
+          <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
+            <CheckCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-bold text-white mb-0.5">System Alert</p>
+            <p className="text-slate-400 font-medium text-xs leading-tight">{showNotification}</p>
+          </div>
+        </div>
+      )}
+
+
+
+
+
+      {/* Universal footer */}
+      <footer className="w-full py-4 text-center border-t border-white/5 bg-slate-950/80 backdrop-blur text-[11px] font-mono tracking-wider text-slate-500 z-10">
+        OWNER'S LOCAL OS • CLOUD RUN PREVIEW SECURED CLIENT ENVIRONMENT • © 2026
+      </footer>
+
+    </div>
+    </NavTelemetryContext.Provider>
+    </DomainDataContext.Provider>
+    </AuthContext.Provider>
+  );
+}
