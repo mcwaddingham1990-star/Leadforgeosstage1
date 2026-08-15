@@ -48,6 +48,7 @@ import {
   Barcode
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
+import { postTransactionEntry } from "../lib/accountingEngine";
 
 export interface ScannedReceipt {
   name: string | null;
@@ -64,7 +65,7 @@ export interface ScannedReceipt {
 }
 
 export type { InventoryItem, PurchaseRecord } from "../types/domain";
-import type { InventoryItem, PurchaseRecord } from "../types/domain";
+import type { InventoryItem, PurchaseRecord, Transaction } from "../types/domain";
 
 export interface InventoryPageProps {}
 
@@ -522,7 +523,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
       if (shouldLogInventoryExpense) {
         const now = new Date();
-        await saveTransaction({
+        const expenseTransaction: Omit<Transaction, "id"> = {
           type: "expense",
           source: "manual",
           amount: inventoryValueIncrease,
@@ -532,9 +533,24 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           createdAt: now.toISOString(),
           inventoryItemId: newItem.id,
           ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
-        });
+        };
+
+        // Inventory state is the primary save for this form and is already
+        // persisted by the shared Firestore-backed setter. Do not hold the
+        // entire modal hostage while the separate accounting batch waits for
+        // the network; Firestore can acknowledge that write later.
         setInventoryList(prev => [...prev, newItem]);
-        triggerToast(`Added ${formName} and logged $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`);
+        setIsAddPopupOpen(false);
+        resetForm();
+        setIsSavingItem(false);
+        triggerToast(`Added ${newItem.name} to inventory. Logging the Materials expense in the background…`);
+        void saveTransaction(expenseTransaction)
+          .then(() => triggerToast(`Logged $${inventoryValueIncrease.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for ${newItem.name} as a Materials expense.`))
+          .catch(error => {
+            console.error("Inventory saved, but its expense could not be logged:", error);
+            triggerToast(`${newItem.name} was saved to inventory, but the expense did not post. You can log it from Revenue when the connection recovers.`);
+          });
+        return;
       } else {
         setInventoryList(prev => [...prev, newItem]);
         triggerToast(`Added ${formName} to inventory!`);
