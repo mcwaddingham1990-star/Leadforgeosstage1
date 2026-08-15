@@ -1182,13 +1182,25 @@ export default function App() {
         perms = defaultRoleMatch ? [...defaultRoleMatch.permissions] : [...(loggedInUser.permissions || ["dashboard"])];
       }
     } else if (loggedInUser.granularPermissions) {
-      // Real logged-in employee — their own stored per-module View
-      // permission is authoritative. This is what the owner actually
-      // configured for this person, not a role-name lookup against a
-      // generic template that may have since changed or never applied.
+      // Real logged-in employee — their own stored per-module permission
+      // is authoritative. A module belongs in the sidebar when any of its
+      // independently configurable capabilities is enabled; otherwise a
+      // role can show Time Clock (or another module) in the permission
+      // matrix while leaving the employee with no way to open it. Older
+      // employee profiles can have the module in the flat permissions list
+      // without a granular entry, so retain that access until the profile is
+      // next saved in the current format.
       perms = OS_SCREENS
         .map(s => s.id)
-        .filter(id => hasPermission(loggedInUser.granularPermissions, id, "view"));
+        .filter(id => {
+          const granularEntry = loggedInUser.granularPermissions?.[id];
+          if (granularEntry === undefined) {
+            return loggedInUser.permissions?.includes(id) ?? false;
+          }
+          return (["view", "edit", "delete"] as const).some(action =>
+            hasPermission(loggedInUser.granularPermissions, id, action)
+          );
+        });
     } else {
       // Legacy account from before granular permissions existed.
       perms = [...(loggedInUser.permissions || ["dashboard"])];
