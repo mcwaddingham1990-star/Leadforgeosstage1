@@ -107,7 +107,7 @@ export interface Conversation {
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, estimates, invoices, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, employees, schedulingEvents, estimates, invoices, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -244,6 +244,8 @@ export const MessagesPage: React.FC = () => {
   const [newConvTitle, setNewConvTitle] = useState("");
   const [newConvType, setNewConvType] = useState<any>("Customer Chat");
   const [newConvRecipient, setNewConvRecipient] = useState("");
+  const [newConvJobId, setNewConvJobId] = useState("");
+  const [newConvEstimateId, setNewConvEstimateId] = useState("");
   const [newConvPriority, setNewConvPriority] = useState<"High" | "Normal" | "Low">("Normal");
 
   useEffect(() => {
@@ -259,7 +261,17 @@ export const MessagesPage: React.FC = () => {
   }, [preSelectedCustomerId, customersList, setPreSelectedCustomerId]);
   
   // Roster or staff for group setup, from the real team roster
-  const mockStaff = recentRoster.map(r => ({ name: r.name, role: r.role }));
+  const mockStaff = useMemo(() => {
+    const byName = new Map<string, { name: string; role: string }>();
+    recentRoster
+      .filter(person => person.status?.toLowerCase() !== "inactive")
+      .forEach(person => byName.set(person.name.trim().toLowerCase(), { name: person.name, role: person.role }));
+    employees.forEach(employee => {
+      const name = `${employee.firstName} ${employee.lastName}`.trim();
+      if (name) byName.set(name.toLowerCase(), { name, role: employee.role });
+    });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [recentRoster, employees]);
 
   // Real active jobs (scheduling events), pulled live from the shared Event Engine.
   const mockJobs = schedulingEvents
@@ -655,6 +667,9 @@ export const MessagesPage: React.FC = () => {
       return;
     }
 
+    const linkedJob = schedulingEvents.find(job => job.id === newConvJobId);
+    const linkedEstimate = estimates.find(estimate => estimate.id === newConvEstimateId);
+
     const newC: Conversation = {
       id: "conv_" + Date.now(),
       title: newConvTitle,
@@ -669,6 +684,9 @@ export const MessagesPage: React.FC = () => {
       priority: newConvPriority,
       customerId: selectedCustomer?.id,
       customerName: selectedCustomer ? selectedCustomer.contact || selectedCustomer.company : undefined,
+      jobId: linkedJob?.id,
+      jobName: linkedJob ? `${linkedJob.eventType} — ${linkedJob.customer}` : undefined,
+      estimateId: linkedEstimate?.id,
       createdDate: new Date().toISOString().substring(0, 10),
       messages: [
         {
@@ -685,6 +703,8 @@ export const MessagesPage: React.FC = () => {
     setSelectedConvId(newC.id);
     setNewConvTitle("");
     setNewConvRecipient("");
+    setNewConvJobId("");
+    setNewConvEstimateId("");
     setIsNewMsgModalOpen(false);
     setIsNewGroupModalOpen(false);
     triggerRealTimeNotification(`Created new channel: ${newC.title}`);
@@ -704,6 +724,8 @@ export const MessagesPage: React.FC = () => {
             <div onClick={e => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-3xl border border-[#9EC8EF] bg-white p-6 text-left shadow-2xl">
               <div className="flex items-center justify-between border-b pb-2"><h4 className="text-xs font-extrabold uppercase tracking-wider text-[#342D7E]">Start a conversation</h4><button onClick={() => setIsNewMsgModalOpen(false)} className="p-1 font-bold text-slate-400">✕</button></div>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Customer or team member<select value={newConvRecipient} onChange={e => { const value=e.target.value; setNewConvRecipient(value); const customer=value.startsWith("customer:")?customersList.find(c=>c.id===value.slice(9)):undefined; const name=customer?(customer.contact||customer.company):value.replace(/^staff:/,""); setNewConvTitle(name?`Chat with ${name}`:""); }} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">Select recipient…</option><optgroup label="Customers">{customersList.map(c=><option key={c.id} value={`customer:${c.id}`}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}</optgroup><optgroup label="Team">{mockStaff.filter(s=>s.name!==currentUserName).map(s=><option key={s.name} value={`staff:${s.name}`}>{s.name} — {s.role}</option>)}</optgroup></select></label>
+              <label className="block text-[9px] font-bold uppercase text-slate-500">Related job (optional)<select value={newConvJobId} onChange={e => setNewConvJobId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">No job link</option>{schedulingEvents.filter(job => job.eventType === "Job").map(job => <option key={job.id} value={job.id}>{job.customer} · {job.jobNumber || job.id}</option>)}</select></label>
+              <label className="block text-[9px] font-bold uppercase text-slate-500">Related estimate (optional)<select value={newConvEstimateId} onChange={e => setNewConvEstimateId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">No estimate link</option>{estimates.map(estimate => <option key={estimate.id} value={estimate.id}>{estimate.customerName} · {estimate.number}</option>)}</select></label>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Conversation title<input value={newConvTitle} onChange={e=>setNewConvTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-slate-50 px-3 py-2.5 text-xs" /></label>
               <button disabled={!newConvRecipient || !newConvTitle.trim()} onClick={() => handleCreateConversation(false)} className="w-full rounded-xl bg-[#4A9BFF] py-2.5 text-xs font-bold uppercase text-white disabled:bg-slate-300">Start conversation</button>
             </div>
@@ -1606,6 +1628,11 @@ export const MessagesPage: React.FC = () => {
                   <option value="High">⚠️ High Priority</option>
                   <option value="Low">Low</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Related job<select value={newConvJobId} onChange={e => setNewConvJobId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-2.5 py-2.5 text-xs text-[#1F3557]"><option value="">No job link</option>{schedulingEvents.filter(job => job.eventType === "Job").map(job => <option key={job.id} value={job.id}>{job.customer} · {job.jobNumber || job.id}</option>)}</select></label>
+                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Related estimate<select value={newConvEstimateId} onChange={e => setNewConvEstimateId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-2.5 py-2.5 text-xs text-[#1F3557]"><option value="">No estimate link</option>{estimates.map(estimate => <option key={estimate.id} value={estimate.id}>{estimate.customerName} · {estimate.number}</option>)}</select></label>
               </div>
             </div>
 

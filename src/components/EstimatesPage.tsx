@@ -45,7 +45,7 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, customers } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -80,6 +80,22 @@ export const EstimatesPage: React.FC = () => {
   const [formStatus, setFormStatus] = useState<Estimate["status"]>("Draft");
   const [formSalesRep, setFormSalesRep] = useState("");
   const [formNotes, setFormNotes] = useState("");
+
+  const assignmentCandidates = useMemo(() => {
+    const byName = new Map<string, { id: string; name: string; role: string }>();
+    recentRoster
+      .filter(person => person.status?.toLowerCase() !== "inactive")
+      .forEach(person => byName.set(person.name.trim().toLowerCase(), {
+        id: person.id || person.code || person.name,
+        name: person.name,
+        role: person.role
+      }));
+    employees.forEach(employee => {
+      const name = `${employee.firstName} ${employee.lastName}`.trim();
+      if (name) byName.set(name.toLowerCase(), { id: employee.id || employee.email, name, role: employee.role });
+    });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [recentRoster, employees]);
 
   const openAddModal = () => {
     setFormCustomerName("");
@@ -1168,7 +1184,7 @@ export const EstimatesPage: React.FC = () => {
                       <label className="sm:col-span-2"><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Job date *</span><input type="date" min={new Date().toISOString().slice(0, 10)} value={jobDate} onChange={e => setJobDate(e.target.value)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]" /></label>
                       <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Start time *</span><input type="time" value={jobStartTime} onChange={e => setJobStartTime(e.target.value)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]" /></label>
                       <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">End time *</span><input type="time" value={jobEndTime} onChange={e => setJobEndTime(e.target.value)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]" /></label>
-                      <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Assign technician</span><select value={jobEmployee} onChange={e => setJobEmployee(e.target.value)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]"><option value="">Leave unassigned</option>{recentRoster.map(person => <option key={person.id || person.name} value={person.name}>{person.name} · {person.role}</option>)}</select></label>
+                      <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Assign technician</span><select value={jobEmployee} onChange={e => setJobEmployee(e.target.value)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]"><option value="">Leave unassigned</option>{assignmentCandidates.map(person => <option key={person.id} value={person.name}>{person.name} · {person.role}</option>)}</select></label>
                       <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Crew</span><input value={jobCrew} onChange={e => setJobCrew(e.target.value)} placeholder="Optional crew name" className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]" /></label>
                       <label><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Priority</span><select value={jobPriority} onChange={e => setJobPriority(e.target.value as typeof jobPriority)} className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-bold text-[#1F3557]">{["Low", "Medium", "High", "Urgent"].map(value => <option key={value}>{value}</option>)}</select></label>
                       <label className="sm:col-span-2"><span className="mb-1 block text-[9px] font-black uppercase text-[#5E7393]">Scheduling notes</span><textarea rows={3} value={jobNotes} onChange={e => setJobNotes(e.target.value)} placeholder="Access details, prep instructions, customer requests…" className="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2.5 text-xs font-semibold text-[#1F3557]" /></label>

@@ -6402,8 +6402,14 @@ Access to full financial telemetry is restricted.`;
                       {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         {(() => {
-                          const { currentExpenseTotal, currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
-                          const netProfit = completedJobsRevenue - currentExpenseTotal;
+                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                          // Accounting's dashboard is all-time. Keep these headline cards
+                          // on that same basis; the chart and comparison cards below remain
+                          // controlled by revenuePageFilter.
+                          const allTimeExpenseTotal = transactions
+                            .filter(transaction => transaction.type === "expense")
+                            .reduce((sum, transaction) => sum + transaction.amount, 0);
+                          const netProfit = completedJobsRevenue - allTimeExpenseTotal;
                           const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                           return [
                           {
@@ -6412,7 +6418,7 @@ Access to full financial telemetry is restricted.`;
                             val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                             change: null,
                             isUp: true,
-                            comp: "Real revenue from completed jobs",
+                            comp: "All-time recognized revenue",
                             icon: DollarSign,
                             color: "text-emerald-500",
                             bgColor: "bg-emerald-500/10"
@@ -6423,7 +6429,7 @@ Access to full financial telemetry is restricted.`;
                             val: fmt(netProfit),
                             change: null,
                             isUp: netProfit >= 0,
-                            comp: "Revenue minus logged expenses",
+                            comp: "All-time revenue minus logged expenses",
                             icon: TrendingUp,
                             color: "text-blue-500",
                             bgColor: "bg-blue-500/10"
@@ -6431,10 +6437,10 @@ Access to full financial telemetry is restricted.`;
                           {
                             label: "Total Expenses",
                             key: "expenses",
-                            val: fmt(currentExpenseTotal),
+                            val: fmt(allTimeExpenseTotal),
                             change: null,
                             isUp: true,
-                            comp: "Real logged income/expense entries",
+                            comp: "All-time logged expenses",
                             icon: TrendingDown,
                             color: "text-rose-500",
                             bgColor: "bg-rose-500/10"

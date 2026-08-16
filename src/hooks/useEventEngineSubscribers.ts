@@ -3,6 +3,7 @@ import { onCollectionEvent, CollectionEvent } from "../lib/eventBus";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { SchedulingEvent, Estimate } from "../types/domain";
+import { postJobCompletionRevenueEntry } from "../lib/accountingEngine";
 
 function generateRevenueEventId(): string {
   return `rev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -15,7 +16,7 @@ function generateRevenueEventId(): string {
  * no other file needs to change.
  */
 export function useEventEngineSubscribers(): void {
-  const { estimates, setCustomers, setRevenueEvents } = useDomainData();
+  const { estimates, setCustomers, setRevenueEvents, setJournalEntries } = useDomainData();
   const { logOperationalEvent, triggerNotification } = useNavTelemetry();
 
   useEffect(() => {
@@ -46,17 +47,18 @@ export function useEventEngineSubscribers(): void {
       if (item.sourceEstimateId) {
         const estimate = estimates.find((e: Estimate) => e.id === item.sourceEstimateId);
         if (estimate) {
-          setRevenueEvents((prev) => [
-            ...prev,
-            {
-              id: generateRevenueEventId(),
-              date: new Date().toISOString(),
-              amount: estimate.amount,
-              customer: item.customer,
-              jobId: item.id,
-              estimateId: estimate.id
-            }
-          ]);
+          const revenueEvent = {
+            id: generateRevenueEventId(),
+            date: new Date().toISOString(),
+            amount: estimate.amount,
+            customer: item.customer,
+            jobId: item.id,
+            estimateId: estimate.id
+          };
+          setRevenueEvents((prev) => [...prev, revenueEvent]);
+          setJournalEntries(prev => prev.some(entry => entry.sourceId === revenueEvent.id)
+            ? prev
+            : [...prev, postJobCompletionRevenueEntry(revenueEvent)]);
           logOperationalEvent("Job Completed", `${item.customer}'s job completed — $${estimate.amount.toLocaleString()} revenue recognized`, "💰");
           triggerNotification(`Job completed for ${item.customer}: $${estimate.amount.toLocaleString()} revenue recognized`);
           return;

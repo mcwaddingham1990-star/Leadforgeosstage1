@@ -60,6 +60,26 @@ export function postTransactionEntry(txn: Transaction): JournalEntry {
   );
 }
 
+/** Revenue recognized when an estimate-backed job is completed before invoicing. */
+export function postJobCompletionRevenueEntry(params: {
+  id: string;
+  date: string;
+  amount: number;
+  customer: string;
+}, createdBy?: string): JournalEntry {
+  return buildEntry(
+    params.date.slice(0, 10),
+    `Job completed - ${params.customer}`,
+    "job_completion",
+    params.id,
+    [
+      { accountId: "acct_ar", debit: params.amount, credit: 0 },
+      { accountId: "acct_service_revenue", debit: 0, credit: params.amount }
+    ],
+    createdBy
+  );
+}
+
 function invoiceTotal(invoice: Invoice): number {
   const subtotal = invoice.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
   return subtotal + subtotal * (invoice.taxRate / 100);

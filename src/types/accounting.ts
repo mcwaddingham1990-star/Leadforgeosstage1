@@ -36,6 +36,7 @@ export type JournalEntrySource =
   | "bill_payment"
   | "expense"
   | "income"
+  | "job_completion"
   | "payroll"
   | "refund"
   | "inventory_purchase"

@@ -170,8 +170,17 @@ export const AccountingPage: React.FC = () => {
     const map: Record<string, number> = {};
     for (const acct of accounts) map[acct.id] = computeAccountBalance(acct, journalEntries);
     map["acct_inventory"] = inventoryAssetValue;
+    // Backfill the accounting view for job-completion revenue written by
+    // older app versions before those events also posted journal entries.
+    // New events carry a matching journal sourceId and are not added twice.
+    const postedSourceIds = new Set(journalEntries.map(entry => entry.sourceId).filter(Boolean));
+    const legacyUnpostedRevenue = revenueEvents
+      .filter(event => !postedSourceIds.has(event.id))
+      .reduce((sum, event) => sum + event.amount, 0);
+    map["acct_ar"] = (map["acct_ar"] || 0) + legacyUnpostedRevenue;
+    map["acct_service_revenue"] = (map["acct_service_revenue"] || 0) + legacyUnpostedRevenue;
     return map;
-  }, [accounts, journalEntries, inventoryAssetValue]);
+  }, [accounts, journalEntries, inventoryAssetValue, revenueEvents]);
 
   const cashBalance = accountBalances["acct_cash"] || 0;
   const arBalance = accountBalances["acct_ar"] || 0;
