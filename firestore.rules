@@ -31,6 +31,23 @@ service cloud.firestore {
       ];
     }
 
+    function canManageProjectCompletion() {
+      return getUserProfile().role in [
+        "Owner", "Manager", "General Manager", "Office Manager",
+        "Operations Manager", "Scheduler", "Dispatch", "Dispatcher"
+      ];
+    }
+
+    function isAssignedToJob(jobId) {
+      let job = get(/databases/$(database)/documents/scheduling_events/$(jobId)).data;
+      let profile = getUserProfile();
+      return job.assignedEmployee == request.auth.token.email
+        || job.assignedEmployee == profile.name
+        || job.assignedEmployee == profile.firstName + " " + profile.lastName
+        || job.assignedEmployee == profile.email
+        || job.assignedCrew == profile.name;
+    }
+
     // Profiles collection: users can read/write their own profiles
     match /user_profiles/{uid} {
       allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
@@ -73,8 +90,27 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /inventory/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, delete: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      // Stock reductions are approval actions. All other inventory edits retain
+      // the existing tenant permission behavior.
+      allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && (request.resource.data.quantity >= resource.data.quantity || canManageProjectCompletion());
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /project_completion_plans/{jobId} {
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && request.resource.data.jobId == jobId && canManageProjectCompletion();
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
+        && canManageProjectCompletion();
+      allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.jobId == resource.data.jobId
+        && (
+          canManageProjectCompletion()
+          || (isAssignedToJob(resource.data.jobId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'activity', 'updatedAt']))
+        );
     }
     match /documents/{docId} {
       // eSign / PDF documents (folder == "eSign") can only be written by managers.

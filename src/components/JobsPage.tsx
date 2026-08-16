@@ -9,6 +9,10 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { StructuredAddressFields } from "./StructuredAddressFields";
 import type { SchedulingEvent } from "../types/domain";
+import type { ProjectCompletionPlan } from "../types/completion";
+import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
+import { hasPermission } from "../types/permissions";
+import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -35,13 +39,16 @@ const displayNumber = (job: SchedulingEvent) => job.jobNumber || `JOB-${job.id.r
 const normalizedStatus = (job: SchedulingEvent): JobStatus => job.status === "Scheduled" ? (job.assignedEmployee ? "Assigned" : "Unassigned") : job.status;
 
 export const JobsPage: React.FC = () => {
-  const { loggedInUser, simulatedRole } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, timeClockLogs, estimates } = useDomainData();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
   const canEdit = /owner|manager|admin|dispatch|scheduler|supervisor/i.test(activeRole);
   const canDelete = /owner|general manager|admin/i.test(activeRole);
+  const managementRole = /^(owner|manager|scheduler|dispatch)$/i.test(activeRole) || /manager/i.test(activeRole);
+  const canManageCompletion = managementRole && (/^owner$/i.test(activeRole) || hasPermission(loggedInUser?.granularPermissions, "jobs", "edit") || !loggedInUser?.granularPermissions);
+  const [completionPlans, setCompletionPlans] = useFirestoreCollection<ProjectCompletionPlan>("project_completion_plans", businessId);
   const jobs = useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
   const customerOptions = useMemo(() => {
     const options = new Map<string, any>();
@@ -66,8 +73,18 @@ export const JobsPage: React.FC = () => {
   const [newTask, setNewTask] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [materialQty, setMaterialQty] = useState(1);
+  const [completionJobId, setCompletionJobId] = useState<string | null>(null);
 
   const selected = jobs.find(j => j.id === selectedId) || null;
+  const completionJob = jobs.find(j => j.id === completionJobId) || null;
+  const isAssignedWorker = (job: SchedulingEvent) => {
+    const identity = [loggedInUser?.name, loggedInUser?.email].filter(Boolean).map(value => String(value).trim().toLowerCase());
+    return identity.includes((job.assignedEmployee || "").trim().toLowerCase()) || identity.includes((job.assignedCrew || "").trim().toLowerCase());
+  };
+  const openCompletion = (job: SchedulingEvent) => {
+    if (!canManageCompletion && !isAssignedWorker(job)) return triggerNotification("Only assigned workers or authorized management can access this completion plan.");
+    setCompletionJobId(job.id);
+  };
   const visibleJobs = useMemo(() => jobs.filter(job => {
     const q = search.toLowerCase();
     const haystack = [displayNumber(job), job.title, job.customer, job.customerPhone, job.location, job.assignedEmployee, job.notes].join(" ").toLowerCase();
@@ -224,12 +241,13 @@ export const JobsPage: React.FC = () => {
     </div>
 
     {visibleJobs.length===0 ? <div className="rounded-3xl border-2 border-dashed border-[#9EC8EF] bg-[#EAF5FF] p-12 text-center"><Briefcase className="mx-auto h-10 w-10 text-[#9EC8EF]"/><p className="mt-3 text-sm font-black text-[#1F3557]">No jobs match these filters</p><p className="text-xs text-[#5E7393]">Create a job or clear the filters.</p></div> : viewMode==="board" ?
-      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} onOpen={()=>setSelectedId(job.id)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
-      <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button></td></tr>)}</tbody></table></div>}
+      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} onOpen={()=>setSelectedId(job.id)} onTracking={()=>openCompletion(job)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
+      <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Completion</button></div></td></tr>)}</tbody></table></div>}
 
     {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
       <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
       <div className="space-y-5 p-5">
+        <button onClick={()=>openCompletion(selected)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Project Completion Tracking</button>
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><div className="flex justify-between"><h4 className="text-xs font-black uppercase text-[#1F3557]"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Work Checklist</h4><b className="text-xs text-[#315C9F]">{selected.progress||0}%</b></div><div className="mt-3 h-2 overflow-hidden rounded bg-blue-100"><div className="h-full bg-emerald-500" style={{width:`${selected.progress||0}%`}}/></div><div className="mt-3 space-y-2">{(selected.checklist||[]).map(t=><label key={t.id} className="flex items-center gap-2 rounded-lg bg-blue-50 p-2 text-xs"><input type="checkbox" checked={t.completed} onChange={()=>toggleTask(t.id)} disabled={!canEdit}/><span className={t.completed?"line-through text-slate-400":"font-semibold text-slate-700"}>{t.label}</span></label>)}{!(selected.checklist||[]).length&&<p className="text-xs text-slate-400">No checklist items yet.</p>}</div>{canEdit&&<div className="mt-3 flex gap-2"><input value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Add work step or inspection item" className="flex-1 rounded-lg border border-[#9EC8EF] px-3 py-2 text-xs"/><button onClick={addTask} className="rounded-lg bg-[#315C9F] px-3 text-white"><Plus className="h-4 w-4"/></button></div>}</section>
@@ -239,15 +257,23 @@ export const JobsPage: React.FC = () => {
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
 
-    {modal && <JobForm form={form} setForm={setForm} customers={customerOptions} roster={recentRoster} onClose={()=>setModal(null)} onSave={saveForm} title={modal==="create"?"Create Job":"Edit Job"}/>}
+    {modal && <JobForm
+      form={form} setForm={setForm} customers={customerOptions} roster={recentRoster}
+      onClose={()=>setModal(null)} onSave={saveForm} title={modal==="create"?"Create Job":"Edit Job"}
+    />}
+    {completionJob && businessId && <ProjectCompletionTracking
+      job={completionJob} plan={completionPlans.find(plan=>plan.jobId===completionJob.id)}
+      businessId={businessId} actor={actor} canManage={canManageCompletion} inventory={inventoryList}
+      setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={()=>setCompletionJobId(null)} notify={triggerNotification}
+    />}
   </div>;
 };
 
 const StatusBadge = ({status}:{status:JobStatus}) => <span className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${statusStyle[status]||statusStyle.Scheduled}`}>{status}</span>;
 
-const JobCard = ({job,onOpen,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;onOpen:()=>void;estimatedAmount:number}) => {
+const JobCard = ({job,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;onOpen:()=>void;onTracking:()=>void;estimatedAmount:number}) => {
   const tasks=job.checklist||[], done=tasks.filter(t=>t.completed).length;
-  return <button onClick={onOpen} className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><span className="text-xs font-black text-[#1F3557]">{estimatedAmount?`$${estimatedAmount.toLocaleString()}`:"No budget"}</span></div></button>;
+  return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><button onClick={onOpen} className="w-full text-left"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></button><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Project Completion Tracking</button></div></div>;
 };
 
 const JobForm = ({form,setForm,customers,roster,onClose,onSave,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
