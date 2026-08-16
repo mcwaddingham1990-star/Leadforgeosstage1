@@ -23,17 +23,44 @@ export function useFirestoreCollection<T extends WithId>(
   options?: { normalize?: (item: T) => T; tenantField?: string }
 ): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
   const [items, _setItems] = useState<T[]>([]);
+  const itemsRef = useRef<T[]>([]);
   const collectionItemsRef = useRef<T[]>([]);
   const compatibilityItemsRef = useRef<T[]>([]);
+  const pendingItemsRef = useRef(new Map<string, T | null>());
+
+  const publish = () => {
+    const merged = new Map<string | undefined, T>();
+    compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
+    collectionItemsRef.current.forEach(item => merged.set(item.id, item));
+    pendingItemsRef.current.forEach((item, id) => {
+      if (item === null) merged.delete(id);
+      else merged.set(id, item);
+    });
+    const next = [...merged.values()];
+    itemsRef.current = next;
+    _setItems(next);
+  };
 
   const setItems: Dispatch<SetStateAction<T[]>> = (value) => {
-    _setItems((prev) => {
-      const nextList = typeof value === "function" ? (value as (prev: T[]) => T[])(prev) : value;
-      const normalizedNext = options?.normalize ? nextList.map(options.normalize) : nextList;
-      const normalizedPrev = options?.normalize ? prev.map(options.normalize) : prev;
-      syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId);
-      emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
-      return normalizedNext;
+    const previous = itemsRef.current;
+    const nextList = typeof value === "function" ? (value as (prev: T[]) => T[])(previous) : value;
+    const normalizedNext = options?.normalize ? nextList.map(options.normalize) : nextList;
+    const normalizedPrev = options?.normalize ? previous.map(options.normalize) : previous;
+    const previousById = new Map(normalizedPrev.filter(item => item.id).map(item => [item.id as string, item]));
+    const nextById = new Map(normalizedNext.filter(item => item.id).map(item => [item.id as string, item]));
+
+    nextById.forEach((item, id) => {
+      if (JSON.stringify(previousById.get(id)) !== JSON.stringify(item)) pendingItemsRef.current.set(id, item);
+    });
+    previousById.forEach((_item, id) => {
+      if (!nextById.has(id)) pendingItemsRef.current.set(id, null);
+    });
+
+    itemsRef.current = normalizedNext;
+    _setItems(normalizedNext);
+    emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
+    void syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId).catch(error => {
+      console.error(`Failed to sync ${collectionName}; keeping the local change visible.`, error);
     });
   };
 
@@ -41,19 +68,25 @@ export function useFirestoreCollection<T extends WithId>(
     if (!businessId) {
       collectionItemsRef.current = [];
       compatibilityItemsRef.current = [];
+      pendingItemsRef.current.clear();
+      itemsRef.current = [];
       _setItems([]);
       return;
     }
     collectionItemsRef.current = [];
     compatibilityItemsRef.current = [];
-    const publish = () => {
-      const merged = new Map<string | undefined, T>();
-      compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
-      collectionItemsRef.current.forEach(item => merged.set(item.id, item));
-      _setItems([...merged.values()]);
-    };
+    pendingItemsRef.current.clear();
+    itemsRef.current = [];
+    _setItems([]);
     const handleDocs = (docs: any[]) => {
       collectionItemsRef.current = options?.normalize ? (docs as T[]).map(options.normalize) : docs as T[];
+      const serverById = new Map(collectionItemsRef.current.filter(item => item.id).map(item => [item.id as string, item]));
+      pendingItemsRef.current.forEach((pending, id) => {
+        const serverItem = serverById.get(id);
+        if ((pending === null && !serverItem) || (pending !== null && JSON.stringify(serverItem) === JSON.stringify(pending))) {
+          pendingItemsRef.current.delete(id);
+        }
+      });
       publish();
     };
     const handleError = collectionName === "time_clock_logs" ? () => publish() : undefined;
@@ -86,10 +119,7 @@ export function useFirestoreCollection<T extends WithId>(
     if (!businessId) return;
     const fresh = (await fetchCollectionFromServer(collectionName, businessId, options?.tenantField)) as T[];
     collectionItemsRef.current = options?.normalize ? fresh.map(options.normalize) : fresh;
-    const merged = new Map<string | undefined, T>();
-    compatibilityItemsRef.current.forEach(item => merged.set(item.id, item));
-    collectionItemsRef.current.forEach(item => merged.set(item.id, item));
-    _setItems([...merged.values()]);
+    publish();
   };
 
   return [items, setItems, refresh];
