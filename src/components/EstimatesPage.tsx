@@ -101,6 +101,7 @@ export const EstimatesPage: React.FC = () => {
       status: formStatus,
       salesRep: formSalesRep.trim() || "Self",
       amount: Number(formAmount) || 0,
+      notes: formNotes.trim(),
       createdDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
     };
@@ -127,7 +128,7 @@ export const EstimatesPage: React.FC = () => {
     setFormAmount(est.amount);
     setFormStatus(est.status);
     setFormSalesRep(est.salesRep);
-    setFormNotes("");
+    setFormNotes(est.notes || "");
     setIsEditMode(false);
   };
 
@@ -139,7 +140,8 @@ export const EstimatesPage: React.FC = () => {
       company: formCompany.trim(),
       amount: Number(formAmount) || 0,
       status: formStatus,
-      salesRep: formSalesRep.trim()
+      salesRep: formSalesRep.trim(),
+      notes: formNotes.trim()
     };
 
     if (setEstimates) {
@@ -1057,7 +1059,7 @@ export const EstimatesPage: React.FC = () => {
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-[#5E7393]">Scope notes / exclusions</p>
                     <p className="text-xs bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl font-medium text-[#1F3557] min-h-[60px]">
-                      {formNotes || "No scope notes compiled for this proposal. Default labor and material warranty applies."}
+                      {selectedEstimate.notes || "No scope notes compiled for this proposal. Default labor and material warranty applies."}
                     </p>
                   </div>
 

@@ -68,6 +68,7 @@ export interface Estimate {
   amount: number;
   createdDate: string;
   expirationDate: string;
+  notes?: string;
   address?: string;
 }
 

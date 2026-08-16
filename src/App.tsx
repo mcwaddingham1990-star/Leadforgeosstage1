@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase";
-import { doc, setDoc, getDoc, writeBatch } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
@@ -1560,7 +1560,17 @@ export default function App() {
                 }
                 
                 // Restore Time Clock state
-                const clockSnap = await getDoc(doc(db, "timeclock_states", user.email || ""));
+                // Bypass an old IndexedDB snapshot on re-login. A cached
+                // clock marker can otherwise win the race against live logs
+                // and stay wrong until a full page refresh.
+                const clockStateRef = doc(db, "timeclock_states", user.email || "");
+                let clockSnap;
+                try {
+                  clockSnap = await getDocFromServer(clockStateRef);
+                } catch (serverReadError) {
+                  console.warn("Fresh clock-state read failed; falling back to the local cache.", serverReadError);
+                  clockSnap = await getDoc(clockStateRef);
+                }
                 if (clockSnap.exists()) {
                   const clockData = clockSnap.data();
                   setIsClockedIn(clockData.isClockedIn ?? false);
@@ -6109,12 +6119,12 @@ Access to full financial telemetry is restricted.`;
                     )
 
                   ) : activeScreen.id === "revenue" ? (
-                    (simulatedRole || loggedInUser?.role || "Owner") === "Technician" ? (
+                    !getVisibleScreens().some(screen => screen.id === "revenue") ? (
                       <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
                         <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
-                        <h2 className="text-xl font-bold text-white">Restricted Access – Owner only</h2>
+                        <h2 className="text-xl font-bold text-white">Restricted Access</h2>
                         <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                          Your account role (Technician) does not have permissions to access the Revenue Page or view financial data.
+                          Your account does not have permission to access the Revenue Page or view financial data.
                         </p>
                         <button
                           onClick={() => setActiveScreen(OS_SCREENS[0])}

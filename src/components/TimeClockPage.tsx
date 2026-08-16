@@ -469,6 +469,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       approvalStatus: requiresVerification ? "pending" : undefined
       };
       await clockInTransaction(businessId, log);
+      // Update every clock-status consumer immediately. The Firestore
+      // listener will reconcile this optimistic entry with the same id.
+      setTimeClockLogs(previous => previous.some(entry => entry.id === log.id) ? previous : [...previous, log]);
       setIsClockedIn(true);
       setClockInTime(timeStr);
       setClockInDuration(0);
