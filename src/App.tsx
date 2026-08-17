@@ -6313,7 +6313,6 @@ Access to full financial telemetry is restricted.`;
 
                         {logTransactionType && (
                           <LogTransactionModal
-                            key={logTransactionType}
                             type={logTransactionType}
                             createdBy={loggedInUser?.email}
                             onSave={handleSaveTransaction}

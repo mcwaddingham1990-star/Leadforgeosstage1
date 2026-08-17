@@ -181,6 +181,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // actually viewed (persisted locally). Never a hardcoded arbitrary city.
   const MAP_POSITION_STORAGE_KEY = "ownersLocalOS_lastMapPosition";
   const [resolvedDefaultCenter, setResolvedDefaultCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentMapCenter, setCurrentMapCenter] = useState(DFW_FALLBACK);
   const cameraSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -227,6 +228,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
   const handleMapCameraChanged = (center?: { lat: number; lng: number }) => {
     if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng)) return;
+    setCurrentMapCenter(center);
     if (cameraSaveTimer.current) clearTimeout(cameraSaveTimer.current);
 
     // Camera events fire continuously while a finger is moving. Writing to
@@ -1273,6 +1275,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     if (!name) return;
     const radiusMiles = Math.max(1, Math.min(75, newTerritoryRadius));
     const latRadius = radiusMiles / 69;
+    const center = currentMapCenter || resolvedDefaultCenter || DFW_FALLBACK;
     const lngRadius = radiusMiles / (69 * Math.cos((center.lat * Math.PI) / 180));
     const points = Array.from({ length: 24 }, (_, index) => {
       const angle = (index / 24) * Math.PI * 2;

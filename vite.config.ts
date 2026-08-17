@@ -110,7 +110,7 @@ export default defineConfig(() => {
     },
     server: {
       port: parseInt(process.env.PORT || '3000'),
-      allowedHosts: true,
+      allowedHosts: true as const,
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
