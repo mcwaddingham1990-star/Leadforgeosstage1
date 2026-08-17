@@ -4,9 +4,9 @@ import type { ProjectCompletionPlan } from "../types/completion";
 
 export async function approveCompletionMaterial(params: {
   businessId: string; plan: ProjectCompletionPlan; goalId: string; materialId: string; actor: string;
-}): Promise<void> {
+}): Promise<ProjectCompletionPlan> {
   const planRef = doc(db, "project_completion_plans", params.plan.id);
-  await runTransaction(db, async transaction => {
+  return runTransaction(db, async transaction => {
     const planSnap = await transaction.get(planRef);
     if (!planSnap.exists()) throw new Error("Completion plan no longer exists.");
     const plan = planSnap.data() as ProjectCompletionPlan;
@@ -25,7 +25,7 @@ export async function approveCompletionMaterial(params: {
     if (!Number.isFinite(material.quantity) || material.quantity <= 0) throw new Error("Quantity must be greater than zero.");
     if (inventory.quantity < material.quantity) throw new Error(`Only ${inventory.quantity} ${inventory.unit || "units"} available.`);
     const now = new Date().toISOString();
-    const goals = plan.goals.map((goal, gi) => gi !== goalIndex ? goal : ({ ...goal, materials: goal.materials.map((entry, mi) => mi !== materialIndex ? entry : ({ ...entry, approvalStatus: "approved", deductedAt: now, deductedBy: params.actor })) }));
+    const goals = plan.goals.map((goal, gi) => gi !== goalIndex ? goal : ({ ...goal, materials: goal.materials.map((entry, mi) => mi !== materialIndex ? entry : ({ ...entry, approvalStatus: "approved" as const, deductedAt: now, deductedBy: params.actor })) }));
     const usage = { date: now, jobName: plan.jobId, goalId: params.goalId, amount: material.quantity, employee: material.submittedBy, approvedBy: params.actor };
     transaction.update(inventoryRef, {
       quantity: inventory.quantity - material.quantity,
@@ -33,6 +33,8 @@ export async function approveCompletionMaterial(params: {
       usageHistory: [...(inventory.usageHistory || []), usage],
       quantityHistory: [...(inventory.quantityHistory || []), { date: now, type: "Project usage", amount: -material.quantity, previous: inventory.quantity, current: inventory.quantity - material.quantity, notes: `Job ${plan.jobId}, goal ${params.goalId}` }]
     });
-    transaction.update(planRef, { goals, updatedAt: now, activity: [...(plan.activity || []), { id: `act_${Date.now()}`, action: "Inventory deducted", detail: `${material.quantity} × ${material.inventoryItemName}`, by: params.actor, at: now }] });
+    const activity = [...(plan.activity || []), { id: `act_${Date.now()}`, action: "Inventory deducted", detail: `${material.quantity} × ${material.inventoryItemName}`, by: params.actor, at: now }];
+    transaction.update(planRef, { goals, updatedAt: now, activity });
+    return { ...plan, goals, updatedAt: now, activity };
   });
 }

@@ -83,7 +83,7 @@ export function useFirestoreCollection<T extends WithId>(
       const serverById = new Map(collectionItemsRef.current.filter(item => item.id).map(item => [item.id as string, item]));
       pendingItemsRef.current.forEach((pending, id) => {
         const serverItem = serverById.get(id);
-        if ((pending === null && !serverItem) || (pending !== null && JSON.stringify(serverItem) === JSON.stringify(pending))) {
+        if ((pending === null && !serverItem) || (pending !== null && samePersistedItem(serverItem, pending))) {
           pendingItemsRef.current.delete(id);
         }
       });
@@ -123,6 +123,21 @@ export function useFirestoreCollection<T extends WithId>(
   };
 
   return [items, setItems, refresh];
+}
+
+// These fields are persistence metadata added on write and deliberately
+// removed by collection subscriptions. Ignoring them lets acknowledged
+// optimistic writes clear instead of masking later Firestore transactions.
+function samePersistedItem<T>(serverItem: T | undefined, pendingItem: T): boolean {
+  if (!serverItem) return false;
+  const withoutMetadata = (item: T) => {
+    const { businessId: _businessId, updatedAt: _updatedAt, ...rest } = item as T & {
+      businessId?: unknown;
+      updatedAt?: unknown;
+    };
+    return rest;
+  };
+  return JSON.stringify(withoutMetadata(serverItem)) === JSON.stringify(withoutMetadata(pendingItem));
 }
 
 function emitDiffEvents<T extends WithId>(collection: string, prev: T[], next: T[]): void {

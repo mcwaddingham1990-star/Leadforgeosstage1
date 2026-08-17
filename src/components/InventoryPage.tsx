@@ -230,6 +230,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   const [formNotes, setFormNotes] = useState("");
   const [formPhoto, setFormPhoto] = useState("📦");
   const [formIsFavorite, setFormIsFavorite] = useState(false);
+  const [formLogExpense, setFormLogExpense] = useState(false);
   const [formCustomFields, setFormCustomFields] = useState<Array<{ key: string; value: string }>>([]);
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [newKey, setNewKey] = useState("");
@@ -517,9 +518,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         triggerToast(`Updated inventory records for ${formName}`);
       }
     } else {
-      const shouldLogInventoryExpense = MATERIAL_EXPENSE_CATEGORIES.has(formCategory) && inventoryValueIncrease > 0 && window.confirm(
-        "Add to logged expenses and deduct from company overhead?"
-      );
+      // Do not hide the inventory save behind a native confirmation dialog.
+      // Mobile/PWA browser chrome can hide that dialog and make the save look
+      // frozen. The accounting choice is explicit in the form instead.
+      const shouldLogInventoryExpense = formLogExpense
+        && MATERIAL_EXPENSE_CATEGORIES.has(formCategory)
+        && inventoryValueIncrease > 0;
 
       if (shouldLogInventoryExpense) {
         const now = new Date();
@@ -585,6 +589,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setFormNotes("");
     setFormPhoto("📦");
     setFormIsFavorite(false);
+    setFormLogExpense(false);
     setFormCustomFields([]);
     setIsEditMode(false);
   };
@@ -1758,6 +1763,18 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     />
                     Save to Favorite Materials
                   </label>
+
+                  {!isEditMode && MATERIAL_EXPENSE_CATEGORIES.has(formCategory) && (
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input
+                        checked={formLogExpense}
+                        onChange={(e) => setFormLogExpense(e.target.checked)}
+                        type="checkbox"
+                        className="w-4 h-4 rounded text-blue-500 border-slate-300"
+                      />
+                      Also log purchase as a Materials expense
+                    </label>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <span className="text-[9.5px] uppercase font-bold text-slate-400">Selector Glyph:</span>
