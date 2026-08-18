@@ -6825,14 +6825,27 @@ Access to full financial telemetry is restricted.`;
                           
                           <div className="grid grid-cols-2 gap-3 flex-1 py-1">
                             {[
-                              { label: "Record Expense", action: "Record Expense Journal", icon: DollarSign },
-                              { label: "Run Payroll", action: "Run Payroll Protocol", icon: Users },
-                              { label: "Create Invoice", action: "Create Service Invoice", icon: FileText },
-                              { label: "Reconcile Bank", action: "Reconcile Bank Accounts", icon: Landmark }
+                              { label: "Record Expense", action: "expense", icon: DollarSign },
+                              { label: "Run Payroll", action: "payroll", icon: Users },
+                              { label: "Create Invoice", action: "invoice", icon: FileText },
+                              { label: "Reconcile Bank", action: "accounting", icon: Landmark }
                             ].map((btn, idx) => (
                               <button
                                 key={idx}
-                                onClick={() => openPlaceholderPage(btn.action, "⚡")}
+                                onClick={() => {
+                                  if (btn.action === "expense") {
+                                    sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                    setLogTransactionType("expense");
+                                    return;
+                                  }
+                                  if (btn.action === "payroll") {
+                                    handleRunPayroll();
+                                    return;
+                                  }
+                                  const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                                  if (accounting) setActiveScreen(accounting);
+                                  triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
+                                }}
                                 className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
                               >
                                 <span className="p-1.5 bg-[#EAF5FF] border border-[#9EC8EF]/30 rounded-lg text-[#315C9F] shadow-sm">
@@ -6846,7 +6859,11 @@ Access to full financial telemetry is restricted.`;
                           </div>
                           
                           <button
-                            onClick={() => setRevenueConfirmAction({ label: "Financial Reports Hub", icon: "📊" })}
+                            onClick={() => {
+                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                              if (accounting) setActiveScreen(accounting);
+                              triggerNotification("Open Reports for current financial statements.");
+                            }}
                             className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
                           >
                             View Financial Reports
