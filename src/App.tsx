@@ -208,8 +208,8 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   },
   office_manager: {
     name: "Office Manager",
-    description: "Dashboard, CRM, Sched, Msg, Docs, etc.",
-    permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "documents", "messages", "training", "settings"]
+    description: "Day-to-day office and field operations",
+    permissions: ["dashboard", "revenue", "accounting", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "roster", "training", "settings"]
   },
   operations_manager: {
     name: "Operations Manager",
@@ -2271,6 +2271,15 @@ Access to full financial telemetry is restricted.`;
     setSignUpInstructionsError("");
     setIsSignUpSubmitting(true);
 
+    // Keep the submitted company identity locally until both Auth and Firestore
+    // finish. Firebase Auth can succeed just before a transient network failure;
+    // this lets the next sign-in repair the otherwise orphaned owner account.
+    localStorage.setItem("ownerslocalPendingOwnerSignup", JSON.stringify({
+      email: cleanEmail,
+      businessName: cleanUser,
+      ownerName: cleanOwner
+    }));
+
     try {
       // 1. Create real authentication user
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
@@ -2304,6 +2313,7 @@ Access to full financial telemetry is restricted.`;
         selectedBillingMethodId: "",
         updatedAt: new Date().toISOString()
       });
+      localStorage.removeItem("ownerslocalPendingOwnerSignup");
 
       let verificationEmailSent = false;
       try {
@@ -2415,14 +2425,35 @@ Access to full financial telemetry is restricted.`;
           triggerNotification(`Signed in as Owner`);
         }
       } else {
-        const fallbackPerms = ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
+        const ownerPerms = DEFAULT_ROLES_DATA.owner.permissions;
+        const pendingRaw = localStorage.getItem("ownerslocalPendingOwnerSignup");
+        let pending: { email?: string; businessName?: string; ownerName?: string } | null = null;
+        try { pending = pendingRaw ? JSON.parse(pendingRaw) : null; } catch { pending = null; }
+        const recoverable = pending?.email?.toLowerCase() === cleanEmail;
+        const ownerName = recoverable ? pending?.ownerName || "Owner" : user.displayName || "Owner";
+
+        if (recoverable) {
+          await setDoc(doc(db, "user_profiles", user.uid), {
+            uid: user.uid, email: cleanEmail, role: "Owner", permissions: ownerPerms,
+            granularPermissions: fullAccessGranular(ownerPerms), name: ownerName,
+            isEmployee: false, businessEmail: cleanEmail, isOnboarded: false,
+            createdAt: new Date().toISOString()
+          });
+          await setDoc(doc(db, "business_profiles", cleanEmail), {
+            businessNames: [pending?.businessName || "Your Business"], ownerNames: [ownerName],
+            businessPhones: [""], businessAddresses: [""], businessLogos: [""],
+            companyLocations: [""], billingMethods: [], selectedBillingMethodId: "",
+            updatedAt: new Date().toISOString()
+          });
+          localStorage.removeItem("ownerslocalPendingOwnerSignup");
+        }
         setLoggedInUser({
           email: user.email || "",
           role: "Owner",
-          permissions: fallbackPerms,
-          granularPermissions: fullAccessGranular(fallbackPerms),
+          permissions: ownerPerms,
+          granularPermissions: fullAccessGranular(ownerPerms),
           isEmployee: false,
-          name: user.displayName || "Owner",
+          name: ownerName,
           goals: ""
         });
         setIsLoggedIn(true);

@@ -36,7 +36,12 @@ const statusStyle: Record<string, string> = {
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const displayNumber = (job: SchedulingEvent) => job.jobNumber || `JOB-${job.id.replace(/\D/g, "").slice(-6) || job.id.slice(-6).toUpperCase()}`;
-const normalizedStatus = (job: SchedulingEvent): JobStatus => job.status === "Scheduled" ? (job.assignedEmployee ? "Assigned" : "Unassigned") : job.status;
+const normalizedStatus = (job: SchedulingEvent): JobStatus => {
+  const raw = String(job.status || "Unassigned").trim();
+  const canonical = STATUSES.find(status => status.toLowerCase() === raw.toLowerCase());
+  if (raw.toLowerCase() === "scheduled") return job.assignedEmployee ? "Assigned" : "Unassigned";
+  return canonical || "Unassigned";
+};
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
@@ -155,7 +160,8 @@ export const JobsPage: React.FC = () => {
     }
     const base: Partial<SchedulingEvent> = {
       title: jobTitle, customType: jobTitle, jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
-      customerId, customer: customerName, customerPhone, customerEmail: customer?.email || "",
+      customerId, customer: customerName, customerPhone,
+      customerEmail: customer?.email || (modal === "edit" ? jobs.find(job => job.id === selectedId)?.customerEmail || "" : ""),
       customerAddress: location, location, assignedEmployee: form.assignedEmployee,
       assignedCrew: form.assignedCrew, assignedVehicle: form.assignedVehicle, priority: form.priority,
       status: form.assignedEmployee && form.status === "Unassigned" ? "Assigned" : form.status, department: form.department,

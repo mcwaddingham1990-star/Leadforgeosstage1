@@ -22,7 +22,7 @@ type InviteMode = "" | "select" | "custom";
 const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
   ["owner", "Owner", MODULE_CATALOG.map(m => m.id)],
   ["general_manager", "General Manager", ["customers","leads","estimates","jobs","scheduling","dispatch","routes","inventory","documents","messages","timeclock","ai_assistant","settings"]],
-  ["office_manager", "Office Manager", ["customers","leads","estimates","invoices","scheduling","documents","pdf_editor","esign","messages","reports","settings"]],
+  ["office_manager", "Office Manager", ["dashboard","revenue","accounting","customers","leads","estimates","invoices","scheduling","dispatch","routes","jobs","timeclock","inventory","documents","pdf_editor","esign","messages","roster","training","reports","settings"]],
   ["operations_manager", "Operations Manager", ["scheduling","dispatch","routes","jobs","inventory","documents","messages"]],
   ["dispatcher", "Dispatcher", ["dispatch","routes","scheduling","jobs","customers"]],
   ["scheduler", "Scheduler", ["scheduling","customers","jobs","messages"]],

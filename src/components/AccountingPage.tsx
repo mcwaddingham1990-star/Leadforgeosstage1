@@ -717,7 +717,10 @@ function InvoicesTab({
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Invoices</h3>
         {canEdit && (
           <button
-            onClick={() => setIsCreating(true)}
+            onClick={() => {
+              setCustomer(customers.length === 1 ? (customers[0].company || customers[0].contact || "") : "");
+              setIsCreating(true);
+            }}
             className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase tracking-wide flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" /> New Invoice
@@ -795,10 +798,13 @@ function InvoicesTab({
             <div className="space-y-3 text-xs">
               <div>
                 <label className="text-[9px] uppercase text-slate-400 font-bold">Customer</label>
-                <input list="customer-options" value={customer} onChange={e => setCustomer(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" placeholder="Customer name" />
-                <datalist id="customer-options">
-                  {customers.map((c: any) => <option key={c.id} value={c.company} />)}
-                </datalist>
+                <select value={customer} onChange={e => setCustomer(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1">
+                  <option value="">Select a customer…</option>
+                  {customers.map((c: any) => {
+                    const name = c.company || c.contact;
+                    return <option key={c.id} value={name}>{name}</option>;
+                  })}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
