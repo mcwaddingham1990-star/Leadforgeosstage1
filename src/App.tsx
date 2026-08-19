@@ -130,6 +130,8 @@ import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
+import darkLoginBackground from "../Src/Assets/Login/Darkloginbg.png";
+import darkLoginCard from "../Src/Assets/Login/Darkmodecard.png";
 
 export type WorkspaceTheme = "light-basic" | "dark-basic";
 
@@ -3374,7 +3376,10 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
-    <div className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}>
+    <div
+      className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : workspaceTheme === 'dark-basic' ? 'login-theme-dark-basic' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
+      style={!isLoggedIn && workspaceTheme === "dark-basic" ? { backgroundImage: `url(${darkLoginBackground})` } : undefined}
+    >
       {!authReady && (
         <div className="fixed inset-0 z-[100] bg-[#edf4fa] flex items-center justify-center">
           <div className="text-[#315C9F] text-xs font-bold uppercase tracking-wider animate-pulse">Restoring secure session…</div>
@@ -3422,7 +3427,7 @@ Access to full financial telemetry is restricted.`;
               id="login-card-container"
               ref={containerRef}
               className="relative w-full sm:max-w-[440px] aspect-[1440/3200] sm:rounded-[44px] rounded-none overflow-hidden sm:shadow-[0_20px_50px_rgba(8,112,184,0.2)] sm:border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
-              style={{ backgroundImage: `url(${CARD_BG_URL})` }}
+              style={{ backgroundImage: `url(${workspaceTheme === "dark-basic" ? darkLoginCard : CARD_BG_URL})` }}
             >
               {/* Inner glassmorphic shading overlay */}
               <div className="absolute inset-0 bg-blue-500/[0.02] pointer-events-none" />
@@ -3433,34 +3438,36 @@ Access to full financial telemetry is restricted.`;
                   {/* LOGO BANNER - Centered to the inset login-card edges.
                       Keep the complete source image at its native 734:302
                       aspect ratio: no crop, distortion, or asset changes. */}
-                  <div
-                    style={{
-                      top: "11.65%",
-                      left: "8%",
-                      width: "84%",
-                      aspectRatio: "734 / 302"
-                    }}
-                    className="absolute pointer-events-none"
-                  >
-                    <img
-                      src="/branding/Logoactual.png"
-                      alt="OwnersLOCAL"
-                      style={{ width: "100%", height: "100%" }}
-                      className="object-contain"
-                      referrerPolicy="no-referrer"
-                    />
-                    <span
+                  {workspaceTheme !== "dark-basic" && (
+                    <div
                       style={{
-                        right: "3.5%",
-                        bottom: "27%",
-                        fontSize: `${Math.max(6, Math.round(7 * scale))}px`,
-                        letterSpacing: "0.08em",
+                        top: "11.65%",
+                        left: "8%",
+                        width: "84%",
+                        aspectRatio: "734 / 302"
                       }}
-                      className="absolute font-sans font-semibold text-[#315C9F]/65"
+                      className="absolute pointer-events-none"
                     >
-                      by Stuffapp
-                    </span>
-                  </div>
+                      <img
+                        src="/branding/Logoactual.png"
+                        alt="OwnersLOCAL"
+                        style={{ width: "100%", height: "100%" }}
+                        className="object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span
+                        style={{
+                          right: "3.5%",
+                          bottom: "27%",
+                          fontSize: `${Math.max(6, Math.round(7 * scale))}px`,
+                          letterSpacing: "0.08em",
+                        }}
+                        className="absolute font-sans font-semibold text-[#315C9F]/65"
+                      >
+                        by Stuffapp
+                      </span>
+                    </div>
+                  )}
 
                   {/* CONTINUE WITH GOOGLE BUTTON */}
                   <div 

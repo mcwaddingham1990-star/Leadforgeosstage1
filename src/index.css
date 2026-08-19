@@ -529,3 +529,65 @@ select option {
   border-color: var(--dark-border-strong) !important;
   color: var(--dark-text) !important;
 }
+
+/* Dark Mode Basic login. Uses the existing dark login assets; the light logo
+   is deliberately omitted in App.tsx until the dedicated dark logo arrives. */
+.login-theme-dark-basic {
+  background-color: #020a13 !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+  color: #f4f7fb !important;
+  color-scheme: dark !important;
+}
+.login-theme-dark-basic > header {
+  background-color: rgba(3, 15, 28, .74) !important;
+  border-color: rgba(57, 115, 170, .42) !important;
+  color: #dbeafe !important;
+}
+.login-theme-dark-basic #login-card-container {
+  border-color: rgba(65, 153, 255, .72) !important;
+  box-shadow: 0 0 20px rgba(34, 139, 255, .42), 0 24px 60px rgba(0, 0, 0, .58) !important;
+}
+.login-theme-dark-basic #login-card-container h1,
+.login-theme-dark-basic #login-card-container h2,
+.login-theme-dark-basic #login-card-container h3,
+.login-theme-dark-basic #login-card-container h4,
+.login-theme-dark-basic #login-card-container label,
+.login-theme-dark-basic #login-card-container [class~="text-slate-900"],
+.login-theme-dark-basic #login-card-container [class~="text-slate-800"],
+.login-theme-dark-basic #login-card-container [class~="text-slate-700"],
+.login-theme-dark-basic #login-card-container [class~="text-[#342D7E]"] {
+  color: #f4f7fb !important;
+}
+.login-theme-dark-basic #login-card-container p,
+.login-theme-dark-basic #login-card-container span,
+.login-theme-dark-basic #login-card-container [class~="text-slate-400"],
+.login-theme-dark-basic #login-card-container [class~="text-slate-500"],
+.login-theme-dark-basic #login-card-container [class~="text-slate-600"] {
+  color: #b6c7da !important;
+}
+.login-theme-dark-basic #login-card-container input,
+.login-theme-dark-basic #login-card-container textarea,
+.login-theme-dark-basic #login-card-container select,
+.login-theme-dark-basic #login-card-container option {
+  background-color: rgba(3, 17, 33, .78) !important;
+  border-color: rgba(65, 119, 168, .62) !important;
+  color: #f4f7fb !important;
+  color-scheme: dark !important;
+}
+.login-theme-dark-basic #login-card-container input::placeholder,
+.login-theme-dark-basic #login-card-container textarea::placeholder {
+  color: #7489a0 !important;
+}
+.login-theme-dark-basic #login-card-container button:not([class~="bg-blue-600"]):not([class~="bg-indigo-600"]) {
+  background-color: rgba(5, 23, 43, .82) !important;
+  border-color: rgba(65, 119, 168, .58) !important;
+  color: #e5effa !important;
+}
+.login-theme-dark-basic #login-card-container button[class~="bg-blue-600"],
+.login-theme-dark-basic #login-card-container button[class~="bg-indigo-600"] {
+  background-color: #145dff !important;
+  border-color: #3c7dff !important;
+  color: #ffffff !important;
+}
