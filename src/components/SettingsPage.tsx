@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
 import { defaultGranularFromModuleList } from "../types/permissions";
-import type { SelectedRole } from "../App";
+import type { SelectedRole, WorkspaceTheme } from "../App";
 
 // Types for SettingsPage
 import { StructuredAddressFields } from "./StructuredAddressFields";
@@ -77,6 +77,8 @@ export interface SettingsPageProps {
   setModuleAiSettings: React.Dispatch<React.SetStateAction<Record<string, "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" | "DEFAULT">>>;
   selectedRoles: SelectedRole[];
   setSelectedRoles: React.Dispatch<React.SetStateAction<SelectedRole[]>>;
+  workspaceTheme: WorkspaceTheme;
+  setWorkspaceTheme: (theme: WorkspaceTheme) => void;
 }
 
 // Initial defaults for fields not in parent state. Generic system-behavior
@@ -214,6 +216,13 @@ const INITIAL_DEFAULTS = {
   }
 };
 
+const THEME_OPTIONS: Array<{ value: string; id: WorkspaceTheme; label: string; description: string }> = [
+  { value: "Corporate Blue (Default)", id: "corporate-light", label: "Corporate Light", description: "Current bright OwnersLOCAL workspace" },
+  { value: "Basic Dark", id: "basic-dark", label: "Basic Dark", description: "Clean charcoal workspace with restrained blue accents" },
+  { value: "Login Glass", id: "login-glass", label: "Login Glass", description: "Deep login-screen background with translucent glass cards" },
+  { value: "Neon Blue", id: "neon-blue", label: "Neon Blue", description: "Midnight navy, electric-blue edges, and cyan glow" }
+];
+
 export default function SettingsPage({
   businessNames,
   setBusinessNames,
@@ -238,7 +247,9 @@ export default function SettingsPage({
   moduleAiSettings,
   setModuleAiSettings,
   selectedRoles,
-  setSelectedRoles
+  setSelectedRoles,
+  workspaceTheme,
+  setWorkspaceTheme
 }: SettingsPageProps) {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -290,6 +301,8 @@ export default function SettingsPage({
           ) as typeof INITIAL_DEFAULTS;
           setLocalConfig(merged);
           setSavedConfig(merged);
+          const matchedTheme = THEME_OPTIONS.find(option => option.value === merged.appearance.theme);
+          setWorkspaceTheme(matchedTheme?.id || "corporate-light");
         }
       } catch (err) {
         console.error("Error loading company settings:", err);
@@ -419,6 +432,12 @@ export default function SettingsPage({
       }
     }));
     setHasUnsavedChanges(true);
+    if (section === "appearance" && key === "theme") {
+      const matchedTheme = THEME_OPTIONS.find(option => option.value === value);
+      const nextTheme = matchedTheme?.id || "corporate-light";
+      setWorkspaceTheme(nextTheme);
+      localStorage.setItem("ownerslocal_workspace_theme", value);
+    }
   };
 
   // Actions
@@ -477,6 +496,7 @@ export default function SettingsPage({
 
   const handleUndo = () => {
     setLocalConfig(JSON.parse(JSON.stringify(savedConfig)));
+    setWorkspaceTheme(THEME_OPTIONS.find(option => option.value === savedConfig.appearance.theme)?.id || "corporate-light");
     setHasUnsavedChanges(false);
     triggerNotification("↩️ Settings reverted to last saved state.");
   };
@@ -489,6 +509,7 @@ export default function SettingsPage({
         [activeCategory]: JSON.parse(JSON.stringify(defaultSec))
       }));
       setHasUnsavedChanges(true);
+      if (activeCategory === "appearance") setWorkspaceTheme("corporate-light");
       triggerNotification(`🔄 Resetted "${activeCategory}" parameters to original defaults.`);
     } else {
       triggerNotification(`Cannot reset built-in parent states.`);
@@ -2032,10 +2053,13 @@ export default function SettingsPage({
                         onChange={(e) => handleConfigChange("appearance", "theme", e.target.value)}
                         className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
                       >
-                        <option value="Corporate Blue (Default)">Corporate Blue (Default)</option>
-                        <option value="Cosmic Slate">Cosmic Slate Dark Theme</option>
-                        <option value="Minimalist Light">Minimalist Ivory Light</option>
+                        {THEME_OPTIONS.map(option => (
+                          <option key={option.id} value={option.value}>{option.label}</option>
+                        ))}
                       </select>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {THEME_OPTIONS.find(option => option.id === workspaceTheme)?.description}
+                      </p>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase font-bold text-slate-500">Interface Brand Accent Color</label>

@@ -131,6 +131,15 @@ import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataC
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 
+export type WorkspaceTheme = "corporate-light" | "basic-dark" | "login-glass" | "neon-blue";
+
+const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
+  if (value === "Basic Dark") return "basic-dark";
+  if (value === "Login Glass") return "login-glass";
+  if (value === "Neon Blue") return "neon-blue";
+  return "corporate-light";
+};
+
 // Exact fingerprints of demo records used by the original prototype. Older
 // accounts may still have these rows in Firestore even though the seed arrays
 // are now empty. Matching record content protects legitimate user data.
@@ -957,6 +966,9 @@ export default function App() {
     /** The owner's business email — the real multi-tenant scoping key for employee sessions (an employee's own `email` is not it). */
     businessEmail?: string;
   } | null>(null);
+  const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>(() =>
+    workspaceThemeFromSetting(localStorage.getItem("ownerslocal_workspace_theme") || undefined)
+  );
 
   // Authentication & Form States
   const [rememberMe, setRememberMe] = useState(() => {
@@ -1069,6 +1081,23 @@ export default function App() {
   // collection to empty. (TrainingPage.tsx already used this exact
   // ternary, anticipating businessEmail would be populated here.)
   const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    getDoc(doc(db, "business_profiles", businessId)).then(snapshot => {
+      if (cancelled) return;
+      const savedTheme = snapshot.data()?.companySettings?.appearance?.theme;
+      const nextTheme = workspaceThemeFromSetting(savedTheme);
+      setWorkspaceTheme(nextTheme);
+      localStorage.setItem("ownerslocal_workspace_theme", savedTheme || "Corporate Blue (Default)");
+    }).catch(error => console.error("Couldn't load workspace theme:", error));
+    return () => { cancelled = true; };
+  }, [businessId]);
+
+  useEffect(() => {
+    document.documentElement.dataset.ownerslocalTheme = workspaceTheme;
+  }, [workspaceTheme]);
   const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId, {
     normalize: (customer) => {
       const legacyName = String((customer as Customer & { name?: string }).name || "").trim();
@@ -5283,7 +5312,7 @@ Access to full financial telemetry is restricted.`;
             style={{
               borderRadius: "24px"
             }}
-            className="w-full h-[calc(100vh-100px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme"
+            className={`w-full h-[calc(100vh-100px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
           >
             
             {/* COLLAPSIBLE LEFT NAV MENU */}
@@ -6331,6 +6360,8 @@ Access to full financial telemetry is restricted.`;
                       setModuleAiSettings={setModuleAiSettings}
                       selectedRoles={selectedRoles}
                       setSelectedRoles={setSelectedRoles}
+                      workspaceTheme={workspaceTheme}
+                      setWorkspaceTheme={setWorkspaceTheme}
                     />
 
                   ) : activeScreen.id === "owner_console" ? (
