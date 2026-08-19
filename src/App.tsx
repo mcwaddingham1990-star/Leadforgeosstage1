@@ -585,10 +585,42 @@ function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number 
   return computeRecentPayrollHours(logs, sinceDaysAgo).hours;
 }
 
+type PayrollSchedule = "weekly_friday" | "biweekly" | "semimonthly" | "monthly" | "custom";
+const US_PAYROLL_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+const dateInputValue = (date: Date) => {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+function scheduledPayrollPeriod(schedule: PayrollSchedule, anchor = new Date()): { start: string; end: string } {
+  const day = new Date(anchor); day.setHours(12, 0, 0, 0);
+  if (schedule === "semimonthly") {
+    const start = new Date(day.getFullYear(), day.getMonth(), day.getDate() <= 15 ? 1 : 16);
+    const end = day.getDate() <= 15 ? new Date(day.getFullYear(), day.getMonth(), 15) : new Date(day.getFullYear(), day.getMonth() + 1, 0);
+    return { start: dateInputValue(start), end: dateInputValue(end) };
+  }
+  if (schedule === "monthly") return { start: dateInputValue(new Date(day.getFullYear(), day.getMonth(), 1)), end: dateInputValue(new Date(day.getFullYear(), day.getMonth() + 1, 0)) };
+  const sunday = new Date(day); sunday.setDate(day.getDate() - day.getDay());
+  if (schedule === "biweekly") {
+    const epoch = new Date(2024, 0, 7, 12);
+    const weeks = Math.floor((sunday.getTime() - epoch.getTime()) / (7 * 86400000));
+    if (Math.abs(weeks % 2) === 1) sunday.setDate(sunday.getDate() - 7);
+    const end = new Date(sunday); end.setDate(end.getDate() + 13);
+    return { start: dateInputValue(sunday), end: dateInputValue(end) };
+  }
+  const end = new Date(sunday); end.setDate(end.getDate() + 6);
+  return { start: dateInputValue(sunday), end: dateInputValue(end) };
+}
+
 /** Splits worked time into Sunday-Saturday workweeks. The FLSA does not
  * allow a biweekly 80-hour average: each seven-day workweek stands alone. */
 function computeRecentPayrollHours(logs: TimeClockLog[], sinceDaysAgo: number): { hours: number; regularHours: number; overtimeHours: number } {
   const since = new Date(Date.now() - sinceDaysAgo * 24 * 60 * 60 * 1000);
+  return computePayrollHoursForRange(logs, dateInputValue(since), dateInputValue(new Date()), 0);
+}
+
+function computePayrollHoursForRange(logs: TimeClockLog[], startDate: string, endDate: string, workweekStartDay: number): { hours: number; regularHours: number; overtimeHours: number } {
+  const since = new Date(`${startDate}T00:00:00`);
+  const through = new Date(`${endDate}T23:59:59.999`);
   const sorted = [...logs]
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const weekHours = new Map<string, number>();
@@ -599,7 +631,7 @@ function computeRecentPayrollHours(logs: TimeClockLog[], sinceDaysAgo: number): 
       const date = new Date(cursor);
       const weekStart = new Date(date);
       weekStart.setHours(0, 0, 0, 0);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() - workweekStartDay + 7) % 7));
       const nextWeek = new Date(weekStart);
       nextWeek.setDate(nextWeek.getDate() + 7);
       const sliceEnd = Math.min(endMs, nextWeek.getTime());
@@ -613,11 +645,11 @@ function computeRecentPayrollHours(logs: TimeClockLog[], sinceDaysAgo: number): 
     if (log.type === "Clock In" || log.type === "Break End") {
       segmentStart = Math.max(ts, since.getTime());
     } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
-      if (ts >= since.getTime()) addSegment(segmentStart, ts);
+      if (ts >= since.getTime() && segmentStart <= through.getTime()) addSegment(segmentStart, Math.min(ts, through.getTime()));
       segmentStart = null;
     }
   }
-  if (segmentStart !== null) addSegment(segmentStart, Date.now());
+  if (segmentStart !== null && segmentStart <= through.getTime()) addSegment(segmentStart, Math.min(Date.now(), through.getTime()));
   let regularHours = 0;
   let overtimeHours = 0;
   weekHours.forEach(hours => {
@@ -1391,6 +1423,13 @@ export default function App() {
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
   const [payrollSearch, setPayrollSearch] = useState("");
+  const [payrollSchedule, setPayrollSchedule] = useState<PayrollSchedule>("biweekly");
+  const initialPayrollPeriod = scheduledPayrollPeriod("biweekly");
+  const [payrollPeriodStart, setPayrollPeriodStart] = useState(initialPayrollPeriod.start);
+  const [payrollPeriodEnd, setPayrollPeriodEnd] = useState(initialPayrollPeriod.end);
+  const [payrollWorkweekStart, setPayrollWorkweekStart] = useState(0);
+  const [payrollPayday, setPayrollPayday] = useState(5);
+  const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
   const [balanceView, setBalanceView] = useState("Total");
   const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(() => {
@@ -1398,6 +1437,43 @@ export default function App() {
     return saved === "income" || saved === "expense" ? saved : null;
   });
   const [isRunningPayroll, setIsRunningPayroll] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) return;
+    const key = `ownerslocal_payroll_settings:${businessId}`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "null");
+      if (saved) {
+        setPayrollSchedule(saved.schedule || "biweekly");
+        setPayrollWorkweekStart(Number.isInteger(saved.workweekStart) ? saved.workweekStart : 0);
+        setPayrollPayday(Number.isInteger(saved.payday) ? saved.payday : 5);
+        setPayrollState(saved.state || "TX");
+        const period = saved.schedule === "custom" && saved.start && saved.end ? { start: saved.start, end: saved.end } : scheduledPayrollPeriod(saved.schedule || "biweekly");
+        setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+      }
+    } catch { /* fall back to safe defaults */ }
+    getDoc(doc(db, "business_profiles", businessId)).then(snapshot => {
+      const saved = snapshot.data()?.payrollSettings;
+      if (!saved) return;
+      setPayrollSchedule(saved.schedule || "biweekly");
+      setPayrollWorkweekStart(Number.isInteger(saved.workweekStart) ? saved.workweekStart : 0);
+      setPayrollPayday(Number.isInteger(saved.payday) ? saved.payday : 5);
+      setPayrollState(saved.state || "TX");
+      const period = saved.schedule === "custom" && saved.start && saved.end ? { start: saved.start, end: saved.end } : scheduledPayrollPeriod(saved.schedule || "biweekly");
+      setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+    }).catch(error => console.error("Couldn't load payroll settings:", error));
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    const payrollSettings = { schedule: payrollSchedule, start: payrollPeriodStart, end: payrollPeriodEnd, workweekStart: payrollWorkweekStart, payday: payrollPayday, state: payrollState, updatedAt: new Date().toISOString() };
+    localStorage.setItem(`ownerslocal_payroll_settings:${businessId}`, JSON.stringify(payrollSettings));
+    const timer = window.setTimeout(() => {
+      setDoc(doc(db, "business_profiles", businessId), { payrollSettings }, { merge: true })
+        .catch(error => console.error("Couldn't save payroll settings:", error));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [businessId, payrollSchedule, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart, payrollPayday, payrollState]);
 
   // Total Balance is the first-use default. After the user picks another
   // view, remember it per business through refreshes and logout/login.
@@ -2824,23 +2900,47 @@ Access to full financial telemetry is restricted.`;
     }
   };
 
-  // Runs payroll for the trailing 14-day pay period: real hours from
+  const selectPayrollSchedule = (schedule: PayrollSchedule) => {
+    setPayrollSchedule(schedule);
+    if (schedule !== "custom") {
+      const period = scheduledPayrollPeriod(schedule);
+      setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+    }
+  };
+  const movePayrollPeriod = (direction: -1 | 1) => {
+    if (payrollSchedule === "custom") return;
+    const anchor = new Date(`${direction < 0 ? payrollPeriodStart : payrollPeriodEnd}T12:00:00`);
+    anchor.setDate(anchor.getDate() + direction);
+    const period = scheduledPayrollPeriod(payrollSchedule, anchor);
+    setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+  };
+  const useCurrentPayrollPeriod = () => {
+    if (payrollSchedule === "custom") return;
+    const period = scheduledPayrollPeriod(payrollSchedule);
+    setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+  };
+
+  // Runs payroll for the employer-selected pay period: real hours from
   // time_clock_logs x each real employee's real hourlyRate. The
   // calculation is fully automatic and real -- there's no real background
   // cron infrastructure in a client-side app, so a manual click is what
   // starts it, same as any payroll software's "Run Payroll" action.
   const handleRunPayroll = async () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. No payroll was created.`);
     setIsRunningPayroll(true);
     try {
-      const newPayrollTransactions: Array<Omit<Transaction, "id">> = [];
+      const newPayrollTransactions: Transaction[] = [];
       let totalPayroll = 0;
       for (const emp of employees) {
-        const { hours, regularHours: regHours, overtimeHours: otHours } = computeRecentPayrollHours(timeClockLogs.filter(l => l.employeeEmail === emp.email), 14);
+        const { hours, regularHours: regHours, overtimeHours: otHours } = computePayrollHoursForRange(timeClockLogs.filter(l => l.employeeEmail === emp.email), payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
         if (hours <= 0 || !emp.hourlyRate) continue;
         const pay = regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5;
         if (pay <= 0) continue;
         totalPayroll += pay;
+        const payrollId = `txn_payroll_${payrollPeriodStart}_${payrollPeriodEnd}_${emp.email}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+        if (transactions.some(tx => tx.id === payrollId)) continue;
         newPayrollTransactions.push({
+          id: payrollId,
           type: "expense",
           source: "payroll",
           amount: Math.round(pay * 100) / 100,
@@ -2853,11 +2953,11 @@ Access to full financial telemetry is restricted.`;
       }
 
       if (newPayrollTransactions.length === 0) {
-        triggerNotification("No real hours logged in the last 14 days — nothing to run payroll on.");
+        triggerNotification("No unpaid hours exist in the selected pay period.");
         return;
       }
 
-      const finalizedPayrollTransactions: Transaction[] = newPayrollTransactions.map((t) => ({ ...t, id: `txn_payroll_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }));
+      const finalizedPayrollTransactions = newPayrollTransactions;
       setTransactions(prev => [...prev, ...finalizedPayrollTransactions]);
       // Real double-entry posting for every payroll transaction -- Debit
       // Payroll Expense, Credit Cash, same as any other logged expense.
@@ -2872,7 +2972,7 @@ Access to full financial telemetry is restricted.`;
   };
 
   const getPayrollExportRows = () => employees.map(emp => {
-    const { regularHours, overtimeHours } = computeRecentPayrollHours(timeClockLogs.filter(log => log.employeeEmail === emp.email), 14);
+    const { regularHours, overtimeHours } = computePayrollHoursForRange(timeClockLogs.filter(log => log.employeeEmail === emp.email), payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
     const rate = Number(emp.hourlyRate) || 0;
     const grossPay = regularHours * rate + overtimeHours * rate * 1.5;
     const employeeName = `${emp.firstName} ${emp.lastName}`.trim();
@@ -2901,16 +3001,11 @@ Access to full financial telemetry is restricted.`;
     };
   });
 
-  const payrollPeriod = () => {
-    const end = new Date();
-    const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
-    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
-  };
-
   const downloadPayrollCsv = () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. CSV export is blocked.`);
     const rows = getPayrollExportRows();
     if (!rows.length) return triggerNotification("No employees are available to export.");
-    const period = payrollPeriod();
+    const period = { start: payrollPeriodStart, end: payrollPeriodEnd };
     const safe = (value: string | number) => {
       const text = String(value);
       const protectedText = /^[=+\-@]/.test(text) ? `'${text}` : text;
@@ -2934,9 +3029,10 @@ Access to full financial telemetry is restricted.`;
   };
 
   const printPayrollSummary = () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. PDF export is blocked.`);
     const rows = getPayrollExportRows();
     if (!rows.length) return triggerNotification("No employees are available to print.");
-    const period = payrollPeriod();
+    const period = { start: payrollPeriodStart, end: payrollPeriodEnd };
     const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
     const money = (value: number) => `$${value.toFixed(2)}`;
     const totals = rows.reduce((sum, row) => ({ hours: sum.hours + row.regularHours, overtime: sum.overtime + row.overtimeHours, gross: sum.gross + row.grossPay, deductions: sum.deductions + row.deductions, net: sum.net + row.netPay }), { hours: 0, overtime: 0, gross: 0, deductions: 0, net: 0 });
@@ -6449,7 +6545,7 @@ Access to full financial telemetry is restricted.`;
                             onClick={handleRunPayroll}
                             className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isRunningPayroll ? "Running Payroll..." : "Run Payroll (last 14 days)"}
+                            {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
                           </button>
                         </div>
 
@@ -6744,8 +6840,47 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
+                        <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
+                            <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
+                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
+                            <select value={payrollSchedule} onChange={e => selectPayrollSchedule(e.target.value as PayrollSchedule)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]">
+                              <option value="weekly_friday">Weekly — payday Friday</option>
+                              <option value="biweekly">Every two weeks</option>
+                              <option value="semimonthly">Semimonthly — 1–15 / 16–end</option>
+                              <option value="monthly">Monthly</option>
+                              <option value="custom">Custom date range</option>
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period start
+                            <input type="date" value={payrollPeriodStart} max={payrollPeriodEnd} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodStart(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period end
+                            <input type="date" value={payrollPeriodEnd} min={payrollPeriodStart} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodEnd(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Workweek starts
+                            <select value={payrollWorkweekStart} onChange={e => setPayrollWorkweekStart(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Payday
+                            <select value={payrollPayday} onChange={e => setPayrollPayday(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <div className="flex flex-wrap gap-2 lg:col-span-6">
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
+                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
+                          </div>
+                        </div>
+
                         {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
-                            same trailing-14-day math as Run Payroll above. recentRoster is a separate
+                            using the selected pay period and workweek rules above. recentRoster is a separate
                             onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
                             to real hours — this table uses the real `employees` collection instead. */}
                         {(() => {
@@ -6753,7 +6888,7 @@ Access to full financial telemetry is restricted.`;
                             .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
                             .map((emp) => {
                               const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
-                              const { hours, overtimeHours: otHours } = computeRecentPayrollHours(myLogs, 14);
+                              const { hours, overtimeHours: otHours } = computePayrollHoursForRange(myLogs, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
                               const regHours = hours - otHours;
                               const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
                               const lastPayroll = transactions
