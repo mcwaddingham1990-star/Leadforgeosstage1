@@ -2846,6 +2846,84 @@ Access to full financial telemetry is restricted.`;
     }
   };
 
+  const getPayrollExportRows = () => employees.map(emp => {
+    const hours = computeRecentHours(timeClockLogs.filter(log => log.employeeEmail === emp.email), 14);
+    const regularHours = Math.min(hours, 80);
+    const overtimeHours = Math.max(0, hours - 80);
+    const rate = Number(emp.hourlyRate) || 0;
+    const grossPay = regularHours * rate + overtimeHours * rate * 1.5;
+    const employeeName = `${emp.firstName} ${emp.lastName}`.trim();
+    const year = new Date().getFullYear();
+    const priorYearPayroll = transactions
+      .filter(tx => tx.source === "payroll" && tx.description === employeeName && new Date(tx.date).getFullYear() === year)
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    const socialSecurityWages = Math.max(0, Math.min(grossPay, 184500 - priorYearPayroll));
+    const socialSecurity = socialSecurityWages * 0.062;
+    const medicare = grossPay * 0.0145;
+    const additionalMedicareWages = Math.max(0, priorYearPayroll + grossPay - 200000) - Math.max(0, priorYearPayroll - 200000);
+    const additionalMedicare = additionalMedicareWages * 0.009;
+    const federalIncomeTax = 0; // Requires the employee's current signed W-4 elections.
+    const texasIncomeTax = 0; // Texas has no individual state income tax.
+    const deductions = socialSecurity + medicare + additionalMedicare + federalIncomeTax + texasIncomeTax;
+    const texasSutaWages = Math.max(0, Math.min(grossPay, 9000 - priorYearPayroll));
+    const employerTexasSuta = texasSutaWages * 0.027; // 2026 new-employer rate; configurable rate comes next.
+    return {
+      name: employeeName, email: emp.email,
+      role: emp.role, regularHours, overtimeHours, rate,
+      grossPay, socialSecurity, medicare, additionalMedicare,
+      federalIncomeTax, texasIncomeTax, deductions, netPay: grossPay - deductions,
+      employerSocialSecurity: socialSecurityWages * 0.062,
+      employerMedicare: grossPay * 0.0145,
+      employerTexasSuta
+    };
+  });
+
+  const payrollPeriod = () => {
+    const end = new Date();
+    const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
+    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  };
+
+  const downloadPayrollCsv = () => {
+    const rows = getPayrollExportRows();
+    if (!rows.length) return triggerNotification("No employees are available to export.");
+    const period = payrollPeriod();
+    const safe = (value: string | number) => {
+      const text = String(value);
+      const protectedText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${protectedText.replace(/"/g, '""')}"`;
+    };
+    const header = ["Pay Period Start","Pay Period End","Employee","Email","Role","Regular Hours","Overtime Hours","Hourly Rate","Gross Pay","Employee Social Security","Employee Medicare","Additional Medicare","Federal Income Tax (W-4 Required)","Texas Income Tax","Total Employee Deductions","Net Pay","Employer Social Security","Employer Medicare","Employer Texas SUTA Estimate","Payment Method","Check/Confirmation Number"];
+    const csv = [header.map(safe).join(","), ...rows.map(row => [
+      period.start, period.end, row.name, row.email, row.role,
+      row.regularHours.toFixed(2), row.overtimeHours.toFixed(2), row.rate.toFixed(2),
+      row.grossPay.toFixed(2), row.socialSecurity.toFixed(2), row.medicare.toFixed(2), row.additionalMedicare.toFixed(2),
+      row.federalIncomeTax.toFixed(2), row.texasIncomeTax.toFixed(2), row.deductions.toFixed(2), row.netPay.toFixed(2),
+      row.employerSocialSecurity.toFixed(2), row.employerMedicare.toFixed(2), row.employerTexasSuta.toFixed(2), "", ""
+    ].map(safe).join(","))].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ownerslocal-payroll-${period.start}-to-${period.end}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerNotification("Payroll CSV downloaded.");
+  };
+
+  const printPayrollSummary = () => {
+    const rows = getPayrollExportRows();
+    if (!rows.length) return triggerNotification("No employees are available to print.");
+    const period = payrollPeriod();
+    const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
+    const money = (value: number) => `$${value.toFixed(2)}`;
+    const totals = rows.reduce((sum, row) => ({ hours: sum.hours + row.regularHours, overtime: sum.overtime + row.overtimeHours, gross: sum.gross + row.grossPay, deductions: sum.deductions + row.deductions, net: sum.net + row.netPay }), { hours: 0, overtime: 0, gross: 0, deductions: 0, net: 0 });
+    const report = window.open("", "_blank", "noopener,noreferrer");
+    if (!report) return triggerNotification("Allow pop-ups to print the payroll summary.");
+    report.document.write(`<!doctype html><html><head><title>Payroll ${period.start} to ${period.end}</title><style>body{font:11px Arial,sans-serif;color:#17233b;padding:24px}h1{margin:0}p{color:#60708a}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #d9e3f1;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5fc}tfoot{font-weight:bold}.note{margin-top:16px;font-size:10px}@media print{button{display:none}}</style></head><body><h1>${escape(businessNames[0] || "OwnersLOCAL")} Texas Payroll Summary</h1><p>Pay period: ${period.start} through ${period.end}</p><table><thead><tr><th>Employee</th><th>Regular</th><th>OT</th><th>Gross</th><th>Social Security</th><th>Medicare</th><th>Add'l Medicare</th><th>Federal W/H</th><th>Texas W/H</th><th>Net Check</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escape(row.name)}<br><small>${escape(row.role)}</small></td><td>${row.regularHours.toFixed(2)}</td><td>${row.overtimeHours.toFixed(2)}</td><td>${money(row.grossPay)}</td><td>${money(row.socialSecurity)}</td><td>${money(row.medicare)}</td><td>${money(row.additionalMedicare)}</td><td>${money(row.federalIncomeTax)}*</td><td>${money(row.texasIncomeTax)}</td><td>${money(row.netPay)}</td></tr>`).join("")}</tbody><tfoot><tr><td>Total</td><td>${totals.hours.toFixed(2)}</td><td>${totals.overtime.toFixed(2)}</td><td>${money(totals.gross)}</td><td colspan="5">Employee deductions: ${money(totals.deductions)}</td><td>${money(totals.net)}</td></tr></tfoot></table><p class="note">* Federal income-tax withholding is $0 until the employee's signed W-4 elections are configured. Texas has no individual state income tax. Employer Social Security, Medicare, and estimated Texas unemployment amounts are included in the CSV. Review all records before issuing payment.</p><button onclick="window.print()">Print / Save as PDF</button><script>window.onload=()=>window.print()<\/script></body></html>`);
+    report.document.close();
+    logOperationalEvent("Payroll Export", `Printed payroll summary for ${period.start} through ${period.end}`, "👥");
+  };
+
   // Launch Local OS: generates invites, saves to db, triggers invites modal
   const handleLaunchOS = async () => {
     if (!email) {
@@ -6614,6 +6692,22 @@ Access to full financial telemetry is restricted.`;
                                 className="w-full pl-9.5 pr-4 py-2 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl focus:outline-none focus:border-[#4A86F7] text-[#1F3557] font-medium placeholder-[#5E7393]/70"
                               />
                             </div>
+
+                            <button
+                              type="button"
+                              onClick={downloadPayrollCsv}
+                              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Download CSV
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={printPayrollSummary}
+                              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#315C9F] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Print / PDF
+                            </button>
                             
                             <button
                               onClick={() => {

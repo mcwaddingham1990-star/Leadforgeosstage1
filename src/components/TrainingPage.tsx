@@ -645,7 +645,7 @@ export const TrainingPage: React.FC = () => {
     acc + p.certifications.filter(c => c.status === "Expired").length, 0
   );
 
-  const averageCompletionPct = Math.round(
+  const averageCompletionPct = profiles.length === 0 ? 0 : Math.round(
     profiles.reduce((acc, p) => {
       const progValues = Object.values(p.courseProgress) as number[];
       if (progValues.length === 0) return acc + 100; // default empty to 100
