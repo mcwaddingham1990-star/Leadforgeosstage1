@@ -131,13 +131,11 @@ import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataC
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 
-export type WorkspaceTheme = "corporate-light" | "basic-dark" | "login-glass" | "neon-blue";
+export type WorkspaceTheme = "light-basic" | "dark-basic";
 
 const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
-  if (value === "Basic Dark") return "basic-dark";
-  if (value === "Login Glass") return "login-glass";
-  if (value === "Neon Blue") return "neon-blue";
-  return "corporate-light";
+  if (value === "Dark Mode Basic" || value === "Basic Dark") return "dark-basic";
+  return "light-basic";
 };
 
 // Exact fingerprints of demo records used by the original prototype. Older
@@ -1090,7 +1088,7 @@ export default function App() {
       const savedTheme = snapshot.data()?.companySettings?.appearance?.theme;
       const nextTheme = workspaceThemeFromSetting(savedTheme);
       setWorkspaceTheme(nextTheme);
-      localStorage.setItem("ownerslocal_workspace_theme", savedTheme || "Corporate Blue (Default)");
+      localStorage.setItem("ownerslocal_workspace_theme", savedTheme || "Light Mode Basic");
     }).catch(error => console.error("Couldn't load workspace theme:", error));
     return () => { cancelled = true; };
   }, [businessId]);

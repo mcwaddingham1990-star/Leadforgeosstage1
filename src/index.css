@@ -332,192 +332,200 @@ select option {
 .input:focus { border-color: #4a86f7; box-shadow: 0 0 0 3px rgba(74,134,247,.12); }
 
 /* ==========================================================================
-   OWNER'S LOCAL WORKSPACE PRESETS
-   The login screen intentionally remains unchanged. These overrides only
-   apply after authentication, inside .workspace-theme.
+   DARK MODE BASIC
+   Light Mode Basic is intentionally the untouched stylesheet above. This
+   section is fully scoped so selecting dark mode cannot alter the login page
+   or the original workspace preset.
    ========================================================================== */
 
-.workspace-theme.theme-basic-dark,
-.workspace-theme.theme-login-glass,
-.workspace-theme.theme-neon-blue {
+.workspace-theme.theme-dark-basic {
+  --dark-canvas: #050f1a;
+  --dark-sidebar: #071522;
+  --dark-surface: #091827;
+  --dark-surface-raised: #0c1d2e;
+  --dark-input: #081522;
+  --dark-border: #1c3042;
+  --dark-border-strong: #29445e;
+  --dark-text: #f4f7fb;
+  --dark-muted: #98a7b9;
+  --dark-accent: #145dff;
+  --dark-accent-hover: #2870ff;
+  background: var(--dark-canvas) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
   color-scheme: dark !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .38) !important;
 }
 
-/* Clean, low-glare dark mode. */
-.workspace-theme.theme-basic-dark {
-  background: #111827 !important;
-  border-color: #334155 !important;
-  color: #e5e7eb !important;
+/* Navigation and solid content surfaces. */
+.workspace-theme.theme-dark-basic > div:first-child {
+  background-color: var(--dark-sidebar) !important;
 }
-.workspace-theme.theme-basic-dark > div:first-child,
-.workspace-theme.theme-basic-dark .bg-white,
-.workspace-theme.theme-basic-dark .bg-slate-50,
-.workspace-theme.theme-basic-dark .bg-slate-100,
-.workspace-theme.theme-basic-dark .bg-\[\#EAF5FF\],
-.workspace-theme.theme-basic-dark .bg-\[\#E3F3FF\],
-.workspace-theme.theme-basic-dark .bg-\[\#C7E3FA\],
-.workspace-theme.theme-basic-dark .bg-\[\#BDDDF8\] {
-  background-color: #1f2937 !important;
+.workspace-theme.theme-dark-basic [class~="bg-white"],
+.workspace-theme.theme-dark-basic [class~="bg-slate-50"],
+.workspace-theme.theme-dark-basic [class~="bg-slate-100"],
+.workspace-theme.theme-dark-basic [class~="bg-gray-50"],
+.workspace-theme.theme-dark-basic [class~="bg-gray-100"],
+.workspace-theme.theme-dark-basic [class~="bg-[#F5FAFF]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#EAF5FF]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#E3F3FF]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#C7E3FA]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#BDDDF8]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#BCD8F0]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#E1EFFD]"] {
+  background-color: var(--dark-surface) !important;
   background-image: none !important;
 }
-.workspace-theme.theme-basic-dark *,
-.workspace-theme.theme-basic-dark ::before,
-.workspace-theme.theme-basic-dark ::after { border-color: #475569 !important; }
-.workspace-theme.theme-basic-dark h1,
-.workspace-theme.theme-basic-dark h2,
-.workspace-theme.theme-basic-dark h3,
-.workspace-theme.theme-basic-dark h4,
-.workspace-theme.theme-basic-dark h5,
-.workspace-theme.theme-basic-dark h6,
-.workspace-theme.theme-basic-dark th,
-.workspace-theme.theme-basic-dark .text-slate-900,
-.workspace-theme.theme-basic-dark .text-slate-800,
-.workspace-theme.theme-basic-dark .text-slate-700,
-.workspace-theme.theme-basic-dark .text-\[\#1F3557\],
-.workspace-theme.theme-basic-dark .text-\[\#342D7E\] { color: #f8fafc !important; }
-.workspace-theme.theme-basic-dark p,
-.workspace-theme.theme-basic-dark span,
-.workspace-theme.theme-basic-dark label,
-.workspace-theme.theme-basic-dark td,
-.workspace-theme.theme-basic-dark .text-slate-400,
-.workspace-theme.theme-basic-dark .text-slate-500,
-.workspace-theme.theme-basic-dark .text-slate-600,
-.workspace-theme.theme-basic-dark .text-\[\#5E7393\] { color: #cbd5e1 !important; }
-.workspace-theme.theme-basic-dark input,
-.workspace-theme.theme-basic-dark textarea,
-.workspace-theme.theme-basic-dark select,
-.workspace-theme.theme-basic-dark option {
-  background: #111827 !important;
-  border-color: #475569 !important;
-  color: #f8fafc !important;
-  color-scheme: dark !important;
+.workspace-theme.theme-dark-basic [class~="bg-slate-200"],
+.workspace-theme.theme-dark-basic [class~="bg-blue-50"],
+.workspace-theme.theme-dark-basic [class~="bg-blue-100"],
+.workspace-theme.theme-dark-basic [class~="bg-[#A9CDEE]"],
+.workspace-theme.theme-dark-basic [class~="bg-[#A9CDEF]"] {
+  background-color: var(--dark-surface-raised) !important;
+  background-image: none !important;
+}
+.workspace-theme.theme-dark-basic [class*="bg-gradient-to-"]:not(button) {
+  background-color: var(--dark-surface) !important;
+  background-image: none !important;
 }
 
-/* Matches the login page's deep blue translucent-card language. */
-.workspace-theme.theme-login-glass {
-  background:
-    radial-gradient(circle at 15% 0%, rgba(59, 130, 246, .34), transparent 34%),
-    radial-gradient(circle at 90% 95%, rgba(99, 102, 241, .25), transparent 38%),
-    linear-gradient(145deg, #071426, #0b1e38 55%, #07111f) !important;
-  border-color: rgba(147, 197, 253, .48) !important;
-  color: #eff6ff !important;
-}
-.workspace-theme.theme-login-glass > div:first-child,
-.workspace-theme.theme-login-glass .bg-white,
-.workspace-theme.theme-login-glass .bg-slate-50,
-.workspace-theme.theme-login-glass .bg-slate-100,
-.workspace-theme.theme-login-glass .bg-\[\#EAF5FF\],
-.workspace-theme.theme-login-glass .bg-\[\#E3F3FF\],
-.workspace-theme.theme-login-glass .bg-\[\#C7E3FA\],
-.workspace-theme.theme-login-glass .bg-\[\#BDDDF8\] {
-  background-color: rgba(10, 35, 65, .72) !important;
-  background-image: linear-gradient(145deg, rgba(30, 64, 105, .38), rgba(4, 18, 37, .28)) !important;
-  backdrop-filter: blur(16px);
-}
-.workspace-theme.theme-login-glass *,
-.workspace-theme.theme-login-glass ::before,
-.workspace-theme.theme-login-glass ::after { border-color: rgba(125, 183, 239, .42) !important; }
-.workspace-theme.theme-login-glass h1,
-.workspace-theme.theme-login-glass h2,
-.workspace-theme.theme-login-glass h3,
-.workspace-theme.theme-login-glass h4,
-.workspace-theme.theme-login-glass h5,
-.workspace-theme.theme-login-glass h6,
-.workspace-theme.theme-login-glass th,
-.workspace-theme.theme-login-glass .text-slate-900,
-.workspace-theme.theme-login-glass .text-slate-800,
-.workspace-theme.theme-login-glass .text-slate-700,
-.workspace-theme.theme-login-glass .text-\[\#1F3557\],
-.workspace-theme.theme-login-glass .text-\[\#342D7E\] { color: #eff6ff !important; }
-.workspace-theme.theme-login-glass p,
-.workspace-theme.theme-login-glass span,
-.workspace-theme.theme-login-glass label,
-.workspace-theme.theme-login-glass td,
-.workspace-theme.theme-login-glass .text-slate-400,
-.workspace-theme.theme-login-glass .text-slate-500,
-.workspace-theme.theme-login-glass .text-slate-600,
-.workspace-theme.theme-login-glass .text-\[\#5E7393\] { color: #bfdbfe !important; }
-.workspace-theme.theme-login-glass input,
-.workspace-theme.theme-login-glass textarea,
-.workspace-theme.theme-login-glass select,
-.workspace-theme.theme-login-glass option {
-  background: rgba(5, 24, 47, .9) !important;
-  border-color: rgba(125, 183, 239, .55) !important;
-  color: #eff6ff !important;
-  color-scheme: dark !important;
+/* Borders remain quiet and structural instead of glowing. */
+.workspace-theme.theme-dark-basic,
+.workspace-theme.theme-dark-basic *,
+.workspace-theme.theme-dark-basic ::before,
+.workspace-theme.theme-dark-basic ::after {
+  border-color: var(--dark-border) !important;
 }
 
-/* Electric-blue preset inspired by the supplied OwnersLOCAL reference. */
-.workspace-theme.theme-neon-blue {
-  background:
-    linear-gradient(120deg, transparent 0 47%, rgba(32, 126, 255, .07) 48%, transparent 49% 100%),
-    radial-gradient(circle at 50% -10%, rgba(0, 153, 255, .32), transparent 38%),
-    linear-gradient(160deg, #020a1a, #061936 55%, #020817) !important;
-  background-size: 34px 34px, auto, auto !important;
-  border-color: #38bdf8 !important;
-  box-shadow: 0 0 12px rgba(56, 189, 248, .75), inset 0 0 24px rgba(37, 99, 235, .22) !important;
-  color: #f0f9ff !important;
+/* Primary and secondary typography. */
+.workspace-theme.theme-dark-basic text,
+.workspace-theme.theme-dark-basic h1,
+.workspace-theme.theme-dark-basic h2,
+.workspace-theme.theme-dark-basic h3,
+.workspace-theme.theme-dark-basic h4,
+.workspace-theme.theme-dark-basic h5,
+.workspace-theme.theme-dark-basic h6,
+.workspace-theme.theme-dark-basic th,
+.workspace-theme.theme-dark-basic [class~="text-slate-900"],
+.workspace-theme.theme-dark-basic [class~="text-slate-800"],
+.workspace-theme.theme-dark-basic [class~="text-slate-700"],
+.workspace-theme.theme-dark-basic [class~="text-gray-900"],
+.workspace-theme.theme-dark-basic [class~="text-[#1F3557]"],
+.workspace-theme.theme-dark-basic [class~="text-[#342D7E]"] {
+  color: var(--dark-text) !important;
 }
-.workspace-theme.theme-neon-blue > div:first-child,
-.workspace-theme.theme-neon-blue .bg-white,
-.workspace-theme.theme-neon-blue .bg-slate-50,
-.workspace-theme.theme-neon-blue .bg-slate-100,
-.workspace-theme.theme-neon-blue .bg-\[\#EAF5FF\],
-.workspace-theme.theme-neon-blue .bg-\[\#E3F3FF\],
-.workspace-theme.theme-neon-blue .bg-\[\#C7E3FA\],
-.workspace-theme.theme-neon-blue .bg-\[\#BDDDF8\] {
-  background-color: rgba(3, 19, 47, .9) !important;
-  background-image: linear-gradient(145deg, rgba(8, 47, 102, .46), rgba(1, 10, 27, .58)) !important;
-  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, .08), 0 0 12px rgba(14, 165, 233, .08);
+.workspace-theme.theme-dark-basic p,
+.workspace-theme.theme-dark-basic span,
+.workspace-theme.theme-dark-basic label,
+.workspace-theme.theme-dark-basic td,
+.workspace-theme.theme-dark-basic [class~="text-slate-400"],
+.workspace-theme.theme-dark-basic [class~="text-slate-500"],
+.workspace-theme.theme-dark-basic [class~="text-slate-600"],
+.workspace-theme.theme-dark-basic [class~="text-gray-400"],
+.workspace-theme.theme-dark-basic [class~="text-gray-500"],
+.workspace-theme.theme-dark-basic [class~="text-[#5E7393]"] {
+  color: var(--dark-muted) !important;
 }
-.workspace-theme.theme-neon-blue *,
-.workspace-theme.theme-neon-blue ::before,
-.workspace-theme.theme-neon-blue ::after { border-color: rgba(56, 189, 248, .58) !important; }
-.workspace-theme.theme-neon-blue h1,
-.workspace-theme.theme-neon-blue h2,
-.workspace-theme.theme-neon-blue h3,
-.workspace-theme.theme-neon-blue h4,
-.workspace-theme.theme-neon-blue h5,
-.workspace-theme.theme-neon-blue h6,
-.workspace-theme.theme-neon-blue th,
-.workspace-theme.theme-neon-blue .text-slate-900,
-.workspace-theme.theme-neon-blue .text-slate-800,
-.workspace-theme.theme-neon-blue .text-slate-700,
-.workspace-theme.theme-neon-blue .text-\[\#1F3557\],
-.workspace-theme.theme-neon-blue .text-\[\#342D7E\] {
-  color: #f0f9ff !important;
-  text-shadow: 0 0 8px rgba(96, 165, 250, .22);
-}
-.workspace-theme.theme-neon-blue p,
-.workspace-theme.theme-neon-blue span,
-.workspace-theme.theme-neon-blue label,
-.workspace-theme.theme-neon-blue td,
-.workspace-theme.theme-neon-blue .text-slate-400,
-.workspace-theme.theme-neon-blue .text-slate-500,
-.workspace-theme.theme-neon-blue .text-slate-600,
-.workspace-theme.theme-neon-blue .text-\[\#5E7393\] { color: #bae6fd !important; }
-.workspace-theme.theme-neon-blue input,
-.workspace-theme.theme-neon-blue textarea,
-.workspace-theme.theme-neon-blue select,
-.workspace-theme.theme-neon-blue option {
-  background: #03142f !important;
-  border-color: #0ea5e9 !important;
-  color: #f0f9ff !important;
-  color-scheme: dark !important;
-  box-shadow: 0 0 8px rgba(14, 165, 233, .16);
-}
-.workspace-theme.theme-neon-blue button.bg-\[\#4A86F7\],
-.workspace-theme.theme-neon-blue button.bg-\[\#4A9BFF\],
-.workspace-theme.theme-neon-blue button.bg-blue-600 {
-  background: linear-gradient(135deg, #075cff, #00a8ff) !important;
-  border-color: #67e8f9 !important;
-  box-shadow: 0 0 12px rgba(0, 168, 255, .34);
+.workspace-theme.theme-dark-basic [class~="text-[#315C9F]"],
+.workspace-theme.theme-dark-basic [class~="text-blue-600"],
+.workspace-theme.theme-dark-basic [class~="text-blue-700"] {
+  color: #62a0ff !important;
 }
 
-/* Preserve semantic colors and readable white button labels in every preset. */
-.workspace-theme.theme-basic-dark .text-white,
-.workspace-theme.theme-login-glass .text-white,
-.workspace-theme.theme-neon-blue .text-white,
-.workspace-theme.theme-basic-dark button[class*="bg-"] *,
-.workspace-theme.theme-login-glass button[class*="bg-"] *,
-.workspace-theme.theme-neon-blue button[class*="bg-"] * { color: #ffffff !important; }
+/* Fields, filters, menus, and table rows. */
+.workspace-theme.theme-dark-basic input,
+.workspace-theme.theme-dark-basic textarea,
+.workspace-theme.theme-dark-basic select,
+.workspace-theme.theme-dark-basic option,
+.workspace-theme.theme-dark-basic .input,
+.workspace-theme.theme-dark-basic .search-container,
+.workspace-theme.theme-dark-basic .input-container,
+.workspace-theme.theme-dark-basic .filter-container,
+.workspace-theme.theme-dark-basic .date-picker-button,
+.workspace-theme.theme-dark-basic .filter-button-group,
+.workspace-theme.theme-dark-basic .custom-dropdown-popover,
+.workspace-theme.theme-dark-basic .custom-dropdown-item {
+  background-color: var(--dark-input) !important;
+  background-image: none !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+  color-scheme: dark !important;
+}
+.workspace-theme.theme-dark-basic input::placeholder,
+.workspace-theme.theme-dark-basic textarea::placeholder {
+  color: #728297 !important;
+}
+.workspace-theme.theme-dark-basic tr,
+.workspace-theme.theme-dark-basic tr:nth-child(odd),
+.workspace-theme.theme-dark-basic tr:nth-child(even) {
+  background-color: var(--dark-surface) !important;
+}
+
+/* Neutral controls stay dark. Only explicitly primary controls turn blue. */
+.workspace-theme.theme-dark-basic button {
+  background-color: var(--dark-surface-raised) !important;
+  background-image: none !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+.workspace-theme.theme-dark-basic button:hover {
+  background-color: #10253a !important;
+  border-color: #376084 !important;
+}
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A86F7]"],
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A9BFF]"],
+.workspace-theme.theme-dark-basic button[class~="bg-blue-600"],
+.workspace-theme.theme-dark-basic button[class~="bg-indigo-600"],
+.workspace-theme.theme-dark-basic button[class~="bg-[#A9CEF5]"] {
+  background-color: var(--dark-accent) !important;
+  border-color: #3678ff !important;
+  color: #ffffff !important;
+}
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A86F7]"]:hover,
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A9BFF]"]:hover,
+.workspace-theme.theme-dark-basic button[class~="bg-blue-600"]:hover,
+.workspace-theme.theme-dark-basic button[class~="bg-indigo-600"]:hover,
+.workspace-theme.theme-dark-basic button[class~="bg-[#A9CEF5]"]:hover {
+  background-color: var(--dark-accent-hover) !important;
+}
+.workspace-theme.theme-dark-basic button[class~="bg-emerald-500"],
+.workspace-theme.theme-dark-basic button[class~="bg-emerald-600"],
+.workspace-theme.theme-dark-basic button[class~="bg-green-600"] {
+  background-color: #15803d !important;
+  border-color: #22c55e !important;
+}
+.workspace-theme.theme-dark-basic button[class~="bg-rose-500"],
+.workspace-theme.theme-dark-basic button[class~="bg-rose-600"],
+.workspace-theme.theme-dark-basic button[class~="bg-red-500"],
+.workspace-theme.theme-dark-basic button[class~="bg-red-600"] {
+  background-color: #b91c1c !important;
+  border-color: #ef4444 !important;
+}
+.workspace-theme.theme-dark-basic button .text-white,
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A86F7]"] *,
+.workspace-theme.theme-dark-basic button[class~="bg-[#4A9BFF]"] *,
+.workspace-theme.theme-dark-basic button[class~="bg-blue-600"] *,
+.workspace-theme.theme-dark-basic button[class~="bg-indigo-600"] *,
+.workspace-theme.theme-dark-basic button[class~="bg-[#A9CEF5]"] * {
+  color: #ffffff !important;
+}
+
+/* Selected navigation, hovers, charts, and overlays. */
+.workspace-theme.theme-dark-basic [class~="bg-[#A9CEF5]"]:not(button),
+.workspace-theme.theme-dark-basic .custom-dropdown-item-active {
+  background-color: rgba(20, 93, 255, .22) !important;
+  color: #dbeafe !important;
+}
+.workspace-theme.theme-dark-basic .group:hover,
+.workspace-theme.theme-dark-basic .custom-dropdown-item:hover {
+  background-color: var(--dark-surface-raised) !important;
+}
+.workspace-theme.theme-dark-basic .recharts-tooltip-wrapper,
+.workspace-theme.theme-dark-basic .recharts-default-tooltip,
+.workspace-theme.theme-dark-basic .recharts-tooltip-wrapper *,
+.workspace-theme.theme-dark-basic .recharts-default-tooltip * {
+  background-color: var(--dark-surface-raised) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}

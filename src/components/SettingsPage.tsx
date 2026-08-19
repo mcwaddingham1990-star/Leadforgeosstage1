@@ -200,7 +200,7 @@ const INITIAL_DEFAULTS = {
     apiTokens: [] as Array<{ name: string; token: string; created: string }>
   },
   appearance: {
-    theme: "Corporate Blue (Default)",
+    theme: "Light Mode Basic",
     accentColor: "Blue",
     menuStyle: "Sidebar",
     cardStyle: "Rounded (16px)",
@@ -217,10 +217,8 @@ const INITIAL_DEFAULTS = {
 };
 
 const THEME_OPTIONS: Array<{ value: string; id: WorkspaceTheme; label: string; description: string }> = [
-  { value: "Corporate Blue (Default)", id: "corporate-light", label: "Corporate Light", description: "Current bright OwnersLOCAL workspace" },
-  { value: "Basic Dark", id: "basic-dark", label: "Basic Dark", description: "Clean charcoal workspace with restrained blue accents" },
-  { value: "Login Glass", id: "login-glass", label: "Login Glass", description: "Deep login-screen background with translucent glass cards" },
-  { value: "Neon Blue", id: "neon-blue", label: "Neon Blue", description: "Midnight navy, electric-blue edges, and cyan glow" }
+  { value: "Light Mode Basic", id: "light-basic", label: "Light Mode Basic", description: "The original OwnersLOCAL design and colors" },
+  { value: "Dark Mode Basic", id: "dark-basic", label: "Dark Mode Basic", description: "Deep navy workspace, solid dark cards, and restrained blue accents" }
 ];
 
 export default function SettingsPage({
@@ -299,10 +297,16 @@ export default function SettingsPage({
               { ...defaults, ...(stored[category] || {}) }
             ])
           ) as typeof INITIAL_DEFAULTS;
+          // Migrate the abandoned first-pass preset names without ever
+          // altering the original Light Mode Basic appearance.
+          merged.appearance.theme =
+            stored?.appearance?.theme === "Dark Mode Basic" || stored?.appearance?.theme === "Basic Dark"
+              ? "Dark Mode Basic"
+              : "Light Mode Basic";
           setLocalConfig(merged);
           setSavedConfig(merged);
           const matchedTheme = THEME_OPTIONS.find(option => option.value === merged.appearance.theme);
-          setWorkspaceTheme(matchedTheme?.id || "corporate-light");
+          setWorkspaceTheme(matchedTheme?.id || "light-basic");
         }
       } catch (err) {
         console.error("Error loading company settings:", err);
@@ -434,7 +438,7 @@ export default function SettingsPage({
     setHasUnsavedChanges(true);
     if (section === "appearance" && key === "theme") {
       const matchedTheme = THEME_OPTIONS.find(option => option.value === value);
-      const nextTheme = matchedTheme?.id || "corporate-light";
+      const nextTheme = matchedTheme?.id || "light-basic";
       setWorkspaceTheme(nextTheme);
       localStorage.setItem("ownerslocal_workspace_theme", value);
     }
@@ -496,7 +500,7 @@ export default function SettingsPage({
 
   const handleUndo = () => {
     setLocalConfig(JSON.parse(JSON.stringify(savedConfig)));
-    setWorkspaceTheme(THEME_OPTIONS.find(option => option.value === savedConfig.appearance.theme)?.id || "corporate-light");
+    setWorkspaceTheme(THEME_OPTIONS.find(option => option.value === savedConfig.appearance.theme)?.id || "light-basic");
     setHasUnsavedChanges(false);
     triggerNotification("↩️ Settings reverted to last saved state.");
   };
@@ -509,7 +513,7 @@ export default function SettingsPage({
         [activeCategory]: JSON.parse(JSON.stringify(defaultSec))
       }));
       setHasUnsavedChanges(true);
-      if (activeCategory === "appearance") setWorkspaceTheme("corporate-light");
+      if (activeCategory === "appearance") setWorkspaceTheme("light-basic");
       triggerNotification(`🔄 Resetted "${activeCategory}" parameters to original defaults.`);
     } else {
       triggerNotification(`Cannot reset built-in parent states.`);
