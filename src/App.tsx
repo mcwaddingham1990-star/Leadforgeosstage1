@@ -330,14 +330,20 @@ export function normalizeSelectedRoles(value: unknown): SelectedRole[] {
     if (!name) continue;
     const fallbackId = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const id = typeof candidate.id === "string" && candidate.id.trim() ? candidate.id.trim() : `custom_${fallbackId}`;
-    const defaults = DEFAULT_ROLES_DATA[id];
-    const permissions = Array.isArray(candidate.permissions)
-      ? [...new Set(candidate.permissions.filter((permission): permission is string => typeof permission === "string" && !!permission))]
-      : [...(defaults?.permissions || ["dashboard", "messages"])] ;
+    const defaults = DEFAULT_ROLES_DATA[id] || (id === "field_technician" ? DEFAULT_ROLES_DATA.technician : undefined);
+    const suppliedPermissions = Array.isArray(candidate.permissions)
+      ? candidate.permissions.filter((permission): permission is string => typeof permission === "string" && !!permission)
+      : [];
+    // Built-in roles evolve as operational modules become real. Union their
+    // current defaults into saved onboarding payloads so an older profile
+    // cannot keep generating permanently under-permissioned invite codes.
+    const permissions = [...new Set([...(defaults?.permissions || []), ...suppliedPermissions])];
+    if (!permissions.length) permissions.push("dashboard", "messages");
     const rawCount = (candidate as { count?: unknown }).count;
     const numericCount = rawCount === null || rawCount === undefined || rawCount === "" ? Number.NaN : Number(rawCount);
     const count = Number.isFinite(numericCount) ? Math.max(id === "owner" ? 1 : 0, Math.floor(numericCount)) : 1;
-    const fallbackModulePermissions = defaultGranularFromModuleList(permissions, id === "owner" ? "delete" : "view");
+    const fallbackLevel = id === "owner" ? "delete" : id.includes("manager") ? "edit" : "view";
+    const fallbackModulePermissions = defaultGranularFromModuleList(permissions, fallbackLevel);
     const modulePermissions = candidate.modulePermissions && typeof candidate.modulePermissions === "object"
       ? { ...fallbackModulePermissions, ...candidate.modulePermissions }
       : fallbackModulePermissions;
@@ -2061,9 +2067,9 @@ Access to full financial telemetry is restricted.`;
       name: "Office Manager",
       count: 1,
       description: "Manager tier -- Create & Edit across office operations",
-      permissions: ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+      permissions: [...DEFAULT_ROLES_DATA.office_manager.permissions],
       modulePermissions: defaultGranularFromModuleList(
-        ["customers", "leads", "estimates", "invoices", "scheduling", "documents", "pdf_editor", "esign", "messages", "reports", "settings"],
+        DEFAULT_ROLES_DATA.office_manager.permissions,
         "edit"
       )
     },
@@ -2086,9 +2092,13 @@ Access to full financial telemetry is restricted.`;
       name: "Field Technician",
       count: 1,
       description: "Jobs, Inventory, Documents, PDF Editor, eSign",
-      permissions: ["jobs", "customers", "inventory", "documents", "pdf_editor", "esign", "routes", "scheduling"],
+      permissions: ["dashboard", "jobs", "timeclock", "messages", "documents", "training", "customers", "inventory", "pdf_editor", "esign", "routes", "scheduling"],
       modulePermissions: {
+        dashboard: "view",
         jobs: "edit",
+        timeclock: "edit",
+        messages: "edit",
+        training: "view",
         customers: "view",
         inventory: "edit",
         documents: "edit",
