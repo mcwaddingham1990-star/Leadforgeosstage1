@@ -582,22 +582,49 @@ function getRevenueChartData(
  * Payroll Overview table shows the same real numbers Run Payroll acts on.
  */
 function computeRecentHours(logs: TimeClockLog[], sinceDaysAgo: number): number {
+  return computeRecentPayrollHours(logs, sinceDaysAgo).hours;
+}
+
+/** Splits worked time into Sunday-Saturday workweeks. The FLSA does not
+ * allow a biweekly 80-hour average: each seven-day workweek stands alone. */
+function computeRecentPayrollHours(logs: TimeClockLog[], sinceDaysAgo: number): { hours: number; regularHours: number; overtimeHours: number } {
   const since = new Date(Date.now() - sinceDaysAgo * 24 * 60 * 60 * 1000);
   const sorted = [...logs]
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  let totalMs = 0;
+  const weekHours = new Map<string, number>();
   let segmentStart: number | null = null;
+  const addSegment = (startMs: number, endMs: number) => {
+    let cursor = Math.max(startMs, since.getTime());
+    while (cursor < endMs) {
+      const date = new Date(cursor);
+      const weekStart = new Date(date);
+      weekStart.setHours(0, 0, 0, 0);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const nextWeek = new Date(weekStart);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const sliceEnd = Math.min(endMs, nextWeek.getTime());
+      const key = weekStart.toISOString().slice(0, 10);
+      weekHours.set(key, (weekHours.get(key) || 0) + Math.max(0, sliceEnd - cursor) / 3600000);
+      cursor = sliceEnd;
+    }
+  };
   for (const log of sorted) {
     const ts = new Date(log.timestamp).getTime();
     if (log.type === "Clock In" || log.type === "Break End") {
       segmentStart = Math.max(ts, since.getTime());
     } else if ((log.type === "Clock Out" || log.type === "Break Start") && segmentStart !== null) {
-      if (ts >= since.getTime()) totalMs += Math.max(0, ts - segmentStart);
+      if (ts >= since.getTime()) addSegment(segmentStart, ts);
       segmentStart = null;
     }
   }
-  if (segmentStart !== null) totalMs += Date.now() - segmentStart;
-  return totalMs / 3600000;
+  if (segmentStart !== null) addSegment(segmentStart, Date.now());
+  let regularHours = 0;
+  let overtimeHours = 0;
+  weekHours.forEach(hours => {
+    regularHours += Math.min(hours, 40);
+    overtimeHours += Math.max(0, hours - 40);
+  });
+  return { hours: regularHours + overtimeHours, regularHours, overtimeHours };
 }
 
 const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
@@ -2808,10 +2835,8 @@ Access to full financial telemetry is restricted.`;
       const newPayrollTransactions: Array<Omit<Transaction, "id">> = [];
       let totalPayroll = 0;
       for (const emp of employees) {
-        const hours = computeRecentHours(timeClockLogs.filter(l => l.employeeEmail === emp.email), 14);
+        const { hours, regularHours: regHours, overtimeHours: otHours } = computeRecentPayrollHours(timeClockLogs.filter(l => l.employeeEmail === emp.email), 14);
         if (hours <= 0 || !emp.hourlyRate) continue;
-        const regHours = Math.min(hours, 80); // 40/wk x 2 weeks before OT
-        const otHours = Math.max(0, hours - 80);
         const pay = regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5;
         if (pay <= 0) continue;
         totalPayroll += pay;
@@ -2847,9 +2872,7 @@ Access to full financial telemetry is restricted.`;
   };
 
   const getPayrollExportRows = () => employees.map(emp => {
-    const hours = computeRecentHours(timeClockLogs.filter(log => log.employeeEmail === emp.email), 14);
-    const regularHours = Math.min(hours, 80);
-    const overtimeHours = Math.max(0, hours - 80);
+    const { regularHours, overtimeHours } = computeRecentPayrollHours(timeClockLogs.filter(log => log.employeeEmail === emp.email), 14);
     const rate = Number(emp.hourlyRate) || 0;
     const grossPay = regularHours * rate + overtimeHours * rate * 1.5;
     const employeeName = `${emp.firstName} ${emp.lastName}`.trim();
@@ -6730,9 +6753,8 @@ Access to full financial telemetry is restricted.`;
                             .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
                             .map((emp) => {
                               const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
-                              const hours = computeRecentHours(myLogs, 14);
-                              const regHours = Math.min(hours, 80);
-                              const otHours = Math.max(0, hours - 80);
+                              const { hours, overtimeHours: otHours } = computeRecentPayrollHours(myLogs, 14);
+                              const regHours = hours - otHours;
                               const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
                               const lastPayroll = transactions
                                 .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
