@@ -370,9 +370,23 @@ select option {
 .workspace-theme.theme-dark-basic [class~="bg-[#EAF5FF]"],
 .workspace-theme.theme-dark-basic [class~="bg-[#E3F3FF]"],
 .workspace-theme.theme-dark-basic [class~="bg-[#C7E3FA]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#C7E3FB]"],
 .workspace-theme.theme-dark-basic [class~="bg-[#BDDDF8]"],
 .workspace-theme.theme-dark-basic [class~="bg-[#BCD8F0]"],
-.workspace-theme.theme-dark-basic [class~="bg-[#E1EFFD]"] {
+.workspace-theme.theme-dark-basic [class~="bg-[#E1EFFD]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#F5FAFF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#EAF5FF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#E3F3FF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#C7E3FA]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#BDDDF8]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#D5EAFF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#D5EAFD]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#D5EAFE]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#EBF5FF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#F8FBFF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#F9FAFB]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#f0f6ff]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#f5f8ff]"] {
   background-color: var(--dark-surface) !important;
   background-image: none !important;
 }
@@ -380,7 +394,8 @@ select option {
 .workspace-theme.theme-dark-basic [class~="bg-blue-50"],
 .workspace-theme.theme-dark-basic [class~="bg-blue-100"],
 .workspace-theme.theme-dark-basic [class~="bg-[#A9CDEE]"],
-.workspace-theme.theme-dark-basic [class~="bg-[#A9CDEF]"] {
+.workspace-theme.theme-dark-basic [class~="bg-[#A9CDEF]"],
+.workspace-theme.theme-dark-basic [class*="bg-[#A1CEF4]"] {
   background-color: var(--dark-surface-raised) !important;
   background-image: none !important;
 }
