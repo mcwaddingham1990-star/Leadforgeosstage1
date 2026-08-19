@@ -625,3 +625,120 @@ select option {
   border-color: #3c7dff !important;
   color: #ffffff !important;
 }
+
+/* Dark Mode Dynamic
+   Inherits the complete Dark Mode Basic coverage, then adds the energetic
+   electric-blue glass treatment shown in the approved reference. */
+.workspace-theme.theme-dark-dynamic {
+  --dynamic-surface: rgba(3, 16, 35, .82);
+  --dynamic-surface-raised: rgba(6, 24, 50, .88);
+  --dynamic-border: rgba(22, 104, 255, .72);
+  --dynamic-border-soft: rgba(32, 124, 255, .42);
+  --dynamic-cyan: #18c8ff;
+  --dynamic-blue: #145dff;
+  background-color: #010713 !important;
+  background-image:
+    radial-gradient(circle at 15% 18%, rgba(11, 88, 255, .22), transparent 31%),
+    radial-gradient(circle at 82% 8%, rgba(0, 173, 255, .12), transparent 27%),
+    repeating-linear-gradient(128deg, transparent 0 32px, rgba(26, 100, 255, .035) 33px, transparent 35px) !important;
+  background-attachment: fixed !important;
+}
+
+/* Main shell and navigation carry the strongest ambient energy. */
+.workspace-theme.theme-dark-dynamic > div,
+.workspace-theme.theme-dark-dynamic > aside,
+.workspace-theme.theme-dark-dynamic > main {
+  background-color: rgba(2, 13, 28, .76) !important;
+  background-image:
+    radial-gradient(circle at 28% 42%, rgba(15, 87, 255, .18), transparent 36%),
+    repeating-linear-gradient(128deg, transparent 0 42px, rgba(24, 107, 255, .04) 43px, transparent 46px) !important;
+}
+
+/* Cards and panels become translucent navy glass with illuminated edges. */
+.workspace-theme.theme-dark-dynamic :is(div, section, article, main, aside, header, footer, form)[class*="rounded"][class*="border"],
+.workspace-theme.theme-dark-dynamic :is(div, section, article, main, aside, header, footer, form)[class*="shadow"] {
+  background-color: var(--dynamic-surface) !important;
+  background-image: linear-gradient(145deg, rgba(17, 55, 112, .12), rgba(1, 10, 25, .08)) !important;
+  border-color: var(--dynamic-border-soft) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(110, 196, 255, .08),
+    0 0 0 1px rgba(0, 77, 255, .08),
+    0 8px 28px rgba(0, 35, 104, .18) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(125%);
+  backdrop-filter: blur(14px) saturate(125%);
+}
+
+/* Keep nested table rows clean while preserving the blue linework. */
+.workspace-theme.theme-dark-dynamic tr,
+.workspace-theme.theme-dark-dynamic tr:nth-child(odd),
+.workspace-theme.theme-dark-dynamic tr:nth-child(even) {
+  background-color: rgba(3, 16, 35, .66) !important;
+  border-color: rgba(27, 103, 216, .35) !important;
+}
+
+.workspace-theme.theme-dark-dynamic input,
+.workspace-theme.theme-dark-dynamic textarea,
+.workspace-theme.theme-dark-dynamic select,
+.workspace-theme.theme-dark-dynamic option,
+.workspace-theme.theme-dark-dynamic .input,
+.workspace-theme.theme-dark-dynamic .search-container,
+.workspace-theme.theme-dark-dynamic .input-container,
+.workspace-theme.theme-dark-dynamic .filter-container,
+.workspace-theme.theme-dark-dynamic .date-picker-button,
+.workspace-theme.theme-dark-dynamic .filter-button-group,
+.workspace-theme.theme-dark-dynamic .custom-dropdown-popover,
+.workspace-theme.theme-dark-dynamic .custom-dropdown-item {
+  background-color: rgba(2, 15, 33, .88) !important;
+  border-color: rgba(41, 126, 237, .58) !important;
+  box-shadow: inset 0 1px 0 rgba(91, 178, 255, .06) !important;
+}
+.workspace-theme.theme-dark-dynamic input:focus,
+.workspace-theme.theme-dark-dynamic textarea:focus,
+.workspace-theme.theme-dark-dynamic select:focus {
+  border-color: var(--dynamic-cyan) !important;
+  box-shadow: 0 0 0 2px rgba(24, 200, 255, .14), 0 0 16px rgba(20, 93, 255, .22) !important;
+  outline: none !important;
+}
+
+/* Neutral controls remain readable; primary and selected controls glow. */
+.workspace-theme.theme-dark-dynamic button {
+  background-color: var(--dynamic-surface-raised) !important;
+  border-color: rgba(43, 115, 209, .58) !important;
+}
+.workspace-theme.theme-dark-dynamic button:hover {
+  background-color: rgba(11, 42, 82, .94) !important;
+  border-color: rgba(41, 156, 255, .9) !important;
+  box-shadow: 0 0 14px rgba(20, 93, 255, .2) !important;
+}
+.workspace-theme.theme-dark-dynamic button[class~="bg-[#4A86F7]"],
+.workspace-theme.theme-dark-dynamic button[class~="bg-[#4A9BFF]"],
+.workspace-theme.theme-dark-dynamic button[class~="bg-blue-600"],
+.workspace-theme.theme-dark-dynamic button[class~="bg-indigo-600"],
+.workspace-theme.theme-dark-dynamic button[class~="bg-[#A9CEF5]"] {
+  background-color: var(--dynamic-blue) !important;
+  background-image: linear-gradient(110deg, #168dff 0%, #123cff 62%, #075cff 100%) !important;
+  border-color: #20c9ff !important;
+  box-shadow: 0 0 10px rgba(0, 193, 255, .52), 0 0 24px rgba(20, 93, 255, .34) !important;
+}
+.workspace-theme.theme-dark-dynamic [class~="bg-[#A9CEF5]"]:not(button),
+.workspace-theme.theme-dark-dynamic .custom-dropdown-item-active {
+  background-color: rgba(17, 78, 218, .56) !important;
+  background-image: linear-gradient(100deg, rgba(20, 141, 255, .86), rgba(22, 53, 235, .92)) !important;
+  border-color: var(--dynamic-cyan) !important;
+  box-shadow: inset 0 0 14px rgba(91, 220, 255, .18), 0 0 16px rgba(0, 123, 255, .38) !important;
+  color: #ffffff !important;
+}
+.workspace-theme.theme-dark-dynamic [class~="bg-[#A9CEF5]"]:not(button) * {
+  color: #ffffff !important;
+}
+
+/* Electric accents without repainting semantic success/warning/error states. */
+.workspace-theme.theme-dark-dynamic [class~="text-[#315C9F]"],
+.workspace-theme.theme-dark-dynamic [class~="text-blue-600"],
+.workspace-theme.theme-dark-dynamic [class~="text-blue-700"] {
+  color: #59c7ff !important;
+  text-shadow: 0 0 12px rgba(36, 157, 255, .24);
+}
+.workspace-theme.theme-dark-dynamic svg:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-rose"]):not([class*="text-yellow"]):not([class*="text-amber"]) {
+  filter: drop-shadow(0 0 5px rgba(32, 145, 255, .18));
+}

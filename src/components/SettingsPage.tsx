@@ -218,7 +218,8 @@ const INITIAL_DEFAULTS = {
 
 const THEME_OPTIONS: Array<{ value: string; id: WorkspaceTheme; label: string; description: string }> = [
   { value: "Light Mode Basic", id: "light-basic", label: "Light Mode Basic", description: "The original OwnersLOCAL design and colors" },
-  { value: "Dark Mode Basic", id: "dark-basic", label: "Dark Mode Basic", description: "Deep navy workspace, solid dark cards, and restrained blue accents" }
+  { value: "Dark Mode Basic", id: "dark-basic", label: "Dark Mode Basic", description: "Deep navy workspace, solid dark cards, and restrained blue accents" },
+  { value: "Dark Mode Dynamic", id: "dark-dynamic", label: "Dark Mode Dynamic", description: "Translucent navy cards, electric-blue edges, and controlled glow" }
 ];
 
 export default function SettingsPage({
@@ -299,8 +300,9 @@ export default function SettingsPage({
           ) as typeof INITIAL_DEFAULTS;
           // Migrate the abandoned first-pass preset names without ever
           // altering the original Light Mode Basic appearance.
-          merged.appearance.theme =
-            stored?.appearance?.theme === "Dark Mode Basic" || stored?.appearance?.theme === "Basic Dark"
+          merged.appearance.theme = stored?.appearance?.theme === "Dark Mode Dynamic"
+            ? "Dark Mode Dynamic"
+            : stored?.appearance?.theme === "Dark Mode Basic" || stored?.appearance?.theme === "Basic Dark"
               ? "Dark Mode Basic"
               : "Light Mode Basic";
           setLocalConfig(merged);
