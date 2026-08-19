@@ -404,6 +404,25 @@ select option {
   background-image: none !important;
 }
 
+/* Components were built over time with dozens of one-off light hex values.
+   Treat every structural element carrying an arbitrary background as a dark
+   surface, regardless of its original shade or opacity suffix. Status badges
+   and primary controls are spans/buttons and keep their semantic colors. */
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form, table, thead, tbody)[class*="bg-[#"]:not([class*="text-white"]) {
+  background-color: var(--dark-surface) !important;
+  background-image: none !important;
+}
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-blue-50"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-blue-100"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-indigo-50"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-slate-50"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-slate-100"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-gray-50"],
+.workspace-theme.theme-dark-basic :is(div, section, article, main, aside, header, footer, form)[class~="bg-gray-100"] {
+  background-color: var(--dark-surface) !important;
+  background-image: none !important;
+}
+
 /* Borders remain quiet and structural instead of glowing. */
 .workspace-theme.theme-dark-basic,
 .workspace-theme.theme-dark-basic *,
