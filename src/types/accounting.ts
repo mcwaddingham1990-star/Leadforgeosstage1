@@ -91,6 +91,20 @@ export interface Bill {
   notes?: string;
   createdAt: string;
   createdBy?: string;
+  /** Simplified Owners Local bill fields. Legacy lineItems remain for ledger compatibility. */
+  serviceProviderId?: string;
+  serviceProvided?: string;
+  estimatedCost?: number;
+  totalCost?: number;
+  recurring?: boolean;
+  recurringDate?: string;
+  history?: Array<{
+    id: string;
+    date: string;
+    action: string;
+    amount?: number;
+    note?: string;
+  }>;
 }
 
 export interface Vendor {
