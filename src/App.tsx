@@ -7000,11 +7000,15 @@ Access to full financial telemetry is restricted.`;
                               { label: "Record Expense", action: "expense", icon: DollarSign },
                               { label: "Run Payroll", action: "payroll", icon: Users },
                               { label: "Create Invoice", action: "invoice", icon: FileText },
-                              { label: "Reconcile Bank", action: "accounting", icon: Landmark }
+                              { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark }
                             ].map((btn, idx) => (
                               <button
                                 key={idx}
                                 onClick={() => {
+                                  if (btn.action === "reconcile_soon") {
+                                    triggerNotification("Reconcile Bank is coming soon.");
+                                    return;
+                                  }
                                   if (btn.action === "expense") {
                                     sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
                                     setLogTransactionType("expense");
@@ -7026,6 +7030,7 @@ Access to full financial telemetry is restricted.`;
                                 <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide leading-tight">
                                   {btn.label}
                                 </span>
+                                {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase text-amber-700">Coming Soon</span>}
                               </button>
                             ))}
                           </div>
