@@ -2052,21 +2052,32 @@ export default function SettingsPage({
                 <div className="space-y-4">
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">User Interface Appearance Styling</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-slate-500">Operational Styling Theme</label>
-                      <select
-                        value={localConfig.appearance.theme}
-                        onChange={(e) => handleConfigChange("appearance", "theme", e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-                      >
-                        {THEME_OPTIONS.map(option => (
-                          <option key={option.id} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        {THEME_OPTIONS.find(option => option.id === workspaceTheme)?.description}
-                      </p>
-                    </div>
+                    <fieldset className="space-y-2 md:col-span-2">
+                      <legend className="text-[10px] uppercase font-bold text-slate-500">Operational Styling Theme</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Operational styling theme">
+                        {THEME_OPTIONS.map(option => {
+                          const isSelected = localConfig.appearance.theme === option.value;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={isSelected}
+                              onClick={() => handleConfigChange("appearance", "theme", option.value)}
+                              className={`min-h-[76px] px-3 py-3 rounded-xl border text-left transition-colors ${isSelected
+                                ? "bg-[#4A86F7] border-[#3977EE] text-white"
+                                : "bg-white border-[#A9CDEE] text-slate-800 hover:bg-[#E3F3FF]"
+                              }`}
+                            >
+                              <span className="block text-xs font-extrabold">{option.label}</span>
+                              <span className={`block mt-1 text-[10px] font-medium leading-snug ${isSelected ? "text-white/80" : "text-slate-500"}`}>
+                                {option.description}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase font-bold text-slate-500">Interface Brand Accent Color</label>
                       <select
