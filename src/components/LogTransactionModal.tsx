@@ -16,7 +16,9 @@ const todayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-const EXPENSE_CATEGORIES = ["Materials", "Fuel", "Vehicle Maintenance", "Payroll", "Rent", "Utilities", "Insurance", "Office Supplies", "Marketing", "Other"];
+// Bills are intentionally excluded: provider obligations are created in the
+// Bills workflow. Operational purchases stay here.
+const EXPENSE_CATEGORIES = ["Materials", "Equipment", "Tools", "Fuel", "Vehicle Maintenance", "Payroll", "Rent", "Utilities", "Insurance", "Office Supplies", "Marketing", "Other"];
 const INCOME_CATEGORIES = ["Job Payment", "Check Deposit", "Deposit", "Refund", "Other"];
 
 /**

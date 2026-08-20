@@ -97,6 +97,7 @@ import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, Cr
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
 import { LeadsPage, INITIAL_LEADS, Lead } from "./components/LeadsPage";
 import { SnapshotsPage } from "./components/SnapshotsPage";
+import { UniversalAIIntake } from "./components/UniversalAIIntake";
 import { EstimatesPage, INITIAL_ESTIMATES, Estimate } from "./components/EstimatesPage";
 import { SchedulingPage, SchedulingEvent } from "./components/SchedulingPage";
 import { DispatchPage } from "./components/DispatchPage";
@@ -432,9 +433,10 @@ const OS_SCREENS = [
 function getRevenueChartData(
   filter: string,
   revenueEvents: RevenueEvent[],
-  transactions: Transaction[] = []
+  transactions: Transaction[] = [],
+  bills: Bill[] = []
 ): {
-  series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>;
+  series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number }>;
   currentTotal: number;
   priorTotal: number;
   currentExpenseTotal: number;
@@ -444,6 +446,14 @@ function getRevenueChartData(
   const now = new Date();
   const expenseTx = transactions.filter((t) => t.type === "expense");
   const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
+  const materialOperationalCategories = new Set(["Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+  const materialTx = expenseTx.filter((t) => materialOperationalCategories.has(t.category || ""));
+  const otherExpenseTx = expenseTx.filter((t) => t.category !== "Payroll" && !materialOperationalCategories.has(t.category || ""));
+  const billCosts = bills.filter((bill) => bill.status !== "void").map((bill) => ({
+    amount: bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    date: bill.issuedDate
+  }));
+  const allExpenseCosts = [...expenseTx, ...billCosts];
   // Real revenue = job-completion events (revenueEvents) + manually-logged
   // or scanned income transactions (e.g. a photographed check) — both are
   // real money in, and logging one should actually move these totals.
@@ -460,12 +470,16 @@ function getRevenueChartData(
 
   const buildRow = (time: string, start: Date, end: Date) => {
     const Revenue = sumInRange(revenueSource, start, end);
-    const Expenses = sumInRange(expenseTx, start, end);
-    return { time, Revenue, Expenses, Profit: Revenue - Expenses };
+    const Bills = sumInRange(billCosts, start, end);
+    const MaterialExpenses = sumInRange(materialTx, start, end);
+    const Payroll = sumInRange(payrollTx, start, end);
+    const OtherExpenses = sumInRange(otherExpenseTx, start, end);
+    const TotalExpenses = Bills + MaterialExpenses + Payroll + OtherExpenses;
+    return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses };
   };
 
   const buildDays = (count: number, labelFn: (d: Date) => string) => {
-    const days: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    const days: ReturnType<typeof buildRow>[] = [];
     for (let i = count - 1; i >= 0; i--) {
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
@@ -475,7 +489,7 @@ function getRevenueChartData(
   };
 
   const withTotals = (
-    series: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>,
+    series: ReturnType<typeof buildRow>[],
     periodStart: Date,
     periodEnd: Date,
     priorTotal: number
@@ -491,20 +505,20 @@ function getRevenueChartData(
         ? series.reduce((s, d) => s + d.Expenses, 0)
         : (series[series.length - 1]?.Expenses || 0),
       currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd),
-      priorExpenseTotal: sumInRange(expenseTx, new Date(periodStart.getTime() - periodDuration), periodStart)
+      priorExpenseTotal: sumInRange(allExpenseCosts, new Date(periodStart.getTime() - periodDuration), periodStart)
     };
   };
 
   // Daily view intentionally shows each day's activity. Every wider view is
   // cumulative so a later expense lowers the running profit by only that
   // expense instead of making the graph look as though earlier income vanished.
-  const cumulative = (rows: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }>) => {
-    let revenue = 0;
-    let expenses = 0;
+  const cumulative = (rows: ReturnType<typeof buildRow>[]) => {
+    let revenue = 0, billsTotal = 0, materialTotal = 0, payrollTotal = 0, otherTotal = 0;
     return rows.map((row) => {
       revenue += row.Revenue;
-      expenses += row.Expenses;
-      return { ...row, Revenue: revenue, Expenses: expenses, Profit: revenue - expenses };
+      billsTotal += row.Bills; materialTotal += row.MaterialExpenses; payrollTotal += row.Payroll; otherTotal += row.OtherExpenses;
+      const expenses = billsTotal + materialTotal + payrollTotal + otherTotal;
+      return { ...row, Revenue: revenue, Bills: billsTotal, MaterialExpenses: materialTotal, Payroll: payrollTotal, OtherExpenses: otherTotal, Expenses: expenses, TotalExpenses: expenses, Profit: revenue - expenses };
     });
   };
 
@@ -545,7 +559,7 @@ function getRevenueChartData(
   }
 
   if (filter === "Quarter") {
-    const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    const months: ReturnType<typeof buildRow>[] = [];
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
     for (let month = quarterStartMonth; month <= now.getMonth(); month++) {
       const monthStart = new Date(now.getFullYear(), month, 1);
@@ -563,7 +577,7 @@ function getRevenueChartData(
   }
 
   if (filter === "Annual") {
-    const months: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+    const months: ReturnType<typeof buildRow>[] = [];
     for (let month = 0; month <= now.getMonth(); month++) {
       const monthStart = new Date(now.getFullYear(), month, 1);
       const monthEnd = new Date(now.getFullYear(), month + 1, 1);
@@ -580,11 +594,11 @@ function getRevenueChartData(
   }
 
   // Total: group the complete ledger by year, then show lifetime running totals.
-  const allDates = [...revenueSource, ...expenseTx]
+  const allDates = [...revenueSource, ...expenseTx, ...billCosts]
     .map((item) => new Date(item.date))
     .filter((date) => !Number.isNaN(date.getTime()));
   const firstYear = allDates.length ? Math.min(...allDates.map((date) => date.getFullYear())) : now.getFullYear();
-  const years: Array<{ time: string; Revenue: number; Expenses: number; Profit: number }> = [];
+  const years: ReturnType<typeof buildRow>[] = [];
   for (let year = firstYear; year <= now.getFullYear(); year++) {
     years.push(buildRow(String(year), new Date(year, 0, 1), new Date(year + 1, 0, 1)));
   }
@@ -1435,6 +1449,8 @@ export default function App() {
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
   const [graphDataType, setGraphDataType] = useState<"revenue" | "expenses" | "profit">("revenue");
+  const [expenseGraphMode, setExpenseGraphMode] = useState<"individual" | "combined">("individual");
+  const [selectedExpenseSeries, setSelectedExpenseSeries] = useState<Array<"Bills" | "MaterialExpenses" | "Payroll" | "OtherExpenses">>(["Bills", "MaterialExpenses", "Payroll", "OtherExpenses"]);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -3409,6 +3425,7 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
+    {isLoggedIn && <UniversalAIIntake />}
     <div
       className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : isDarkTheme ? 'login-theme-dark-basic' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
       style={!isLoggedIn && isDarkTheme ? { backgroundImage: `url(${darkLoginBackground})` } : undefined}
@@ -6306,6 +6323,19 @@ Access to full financial telemetry is restricted.`;
                             </button>
                           ))}
                         </div>
+                        {graphDataType === "expenses" && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
+                            <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {([ ["Bills", "Bills — service/provider obligations"], ["MaterialExpenses", "Material / Operational Expenses"], ["Payroll", "Payroll"], ["OtherExpenses", "Other Expenses"] ] as const).map(([key, label]) => {
+                              const selected = selectedExpenseSeries.includes(key);
+                              return <button key={key} onClick={() => setSelectedExpenseSeries(current => selected ? current.filter(item => item !== key) : [...current, key])} className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${selected ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-400"}`}>{selected ? "✓ " : ""}{label}</button>;
+                            })}
+                          </div>
+                          <p className="text-[9px] text-[#5E7393]">Materials, equipment, fuel, tools, inventory purchases, and supplies stay under Material / Operational Expenses—not Bills.</p>
+                        </div>}
                         <div className="flex flex-wrap gap-2">
                           {([
                             { value: "Day",        label: "Day" },
@@ -6383,7 +6413,7 @@ Access to full financial telemetry is restricted.`;
 
                         {/* Summary Display on Graph card */}
                         {(() => {
-                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions);
+                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions, bills);
                           const balance = currentTotal - currentExpenseTotal;
                           const priorBalance = priorTotal - priorExpenseTotal;
                           const hasPrior = priorBalance !== 0;
@@ -6459,7 +6489,8 @@ Access to full financial telemetry is restricted.`;
 
                         {/* Recharts Live Multi-line Graph — horizontally scrollable */}
                         {(() => {
-                          const chartSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
+                          const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
+                          const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
                           const chartWidth = Math.max(340, chartSeries.length * 78);
                           return (
                             <div className="pt-2">
@@ -6525,9 +6556,13 @@ Access to full financial telemetry is restricted.`;
                                     className="font-sans font-bold text-[11px]"
                                     wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                                   />
-                                  <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />
-                                  <Line type="monotone" dataKey="Expenses" stroke="#F43F5E" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} name="Expenses" />
-                                  <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} name="Profit" />
+                                  {graphDataType === "revenue" && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
+                                  {graphDataType === "profit" && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Profit" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
                                 </LineChart>
                               </div>
                             </div>
@@ -6538,13 +6573,15 @@ Access to full financial telemetry is restricted.`;
                       {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         {(() => {
-                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
                           // Accounting's dashboard is all-time. Keep these headline cards
                           // on that same basis; the chart and comparison cards below remain
                           // controlled by revenuePageFilter.
-                          const allTimeExpenseTotal = transactions
+                          const transactionExpenseTotal = transactions
                             .filter(transaction => transaction.type === "expense")
                             .reduce((sum, transaction) => sum + transaction.amount, 0);
+                          const allTimeBillTotal = bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0);
+                          const allTimeExpenseTotal = transactionExpenseTotal + allTimeBillTotal;
                           const netProfit = completedJobsRevenue - allTimeExpenseTotal;
                           const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                           return [
@@ -6632,11 +6669,12 @@ Access to full financial telemetry is restricted.`;
                       <div className="space-y-3">
                         <div className="flex justify-between items-center px-1">
                           <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
-                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">12 Expenses Recorded</span>
+                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">Financial expense categories</span>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                           {[
+                            { name: "Bills", target: "accounting", label: "Bills" },
                             { name: "Materials", target: "inventory", label: "Inventory" },
                             { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
                             { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
@@ -6650,16 +6688,16 @@ Access to full financial telemetry is restricted.`;
                             { name: "Office Supplies", target: "inventory", label: "Inventory" },
                             { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
                           ].map((cat, idx) => {
-                            const categoryTotal = transactions
-                              .filter((t) => t.type === "expense" && t.category === cat.name)
-                              .reduce((sum, t) => sum + t.amount, 0);
+                            const categoryTotal = cat.name === "Bills"
+                              ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
+                              : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
                             const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                             return (
                               <div
                                 key={idx}
                                 onClick={() => {
-                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations") {
+                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations" || cat.target === "accounting") {
                                     const matched = OS_SCREENS.find(s => s.id === cat.target);
                                     if (matched) {
                                       setActiveScreen(matched);

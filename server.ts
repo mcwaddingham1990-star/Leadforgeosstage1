@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest } from './server/aiHandler';
+import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScanBusinessRecord, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest, ScanBusinessRecordRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 import { sendPushToRecipients } from './server/pushNotifications';
@@ -41,6 +41,15 @@ app.post('/api/ai/scan-financial-document', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'AI request failed' });
+  }
+});
+
+app.post('/api/ai/scan-business-record', async (req, res) => {
+  try {
+    const result = await handleScanBusinessRecord(req.body as ScanBusinessRecordRequest);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'AI record scan failed' });
   }
 });
 

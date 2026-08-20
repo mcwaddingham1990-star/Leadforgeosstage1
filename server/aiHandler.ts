@@ -201,6 +201,86 @@ export interface ScanFinancialDocumentResponse {
   unreadable: boolean;
 }
 
+export interface ScanBusinessRecordRequest {
+  imageBase64: string;
+  mimeType: string;
+  preferredRecordType?: string;
+}
+
+export interface ScanBusinessRecordResponse {
+  recordType: "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "financial" | "unknown";
+  confidence: number;
+  fields: Record<string, string | number | boolean | null>;
+  unreadable: boolean;
+}
+
+const BUSINESS_RECORD_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    recordType: { type: Type.STRING, enum: ["bill", "customer", "lead", "estimate", "inventory", "address", "onboarding", "financial", "unknown"] },
+    confidence: { type: Type.NUMBER },
+    fields: {
+      type: Type.OBJECT,
+      properties: {
+        payee: { type: Type.STRING, nullable: true },
+        serviceProvided: { type: Type.STRING, nullable: true },
+        estimatedCost: { type: Type.NUMBER, nullable: true },
+        totalCost: { type: Type.NUMBER, nullable: true },
+        recurring: { type: Type.BOOLEAN, nullable: true },
+        recurringDate: { type: Type.STRING, nullable: true },
+        name: { type: Type.STRING, nullable: true },
+        company: { type: Type.STRING, nullable: true },
+        contact: { type: Type.STRING, nullable: true },
+        phone: { type: Type.STRING, nullable: true },
+        email: { type: Type.STRING, nullable: true },
+        address: { type: Type.STRING, nullable: true },
+        city: { type: Type.STRING, nullable: true },
+        state: { type: Type.STRING, nullable: true },
+        zip: { type: Type.STRING, nullable: true },
+        description: { type: Type.STRING, nullable: true },
+        amount: { type: Type.NUMBER, nullable: true },
+        quantity: { type: Type.NUMBER, nullable: true },
+        unitCost: { type: Type.NUMBER, nullable: true },
+        category: { type: Type.STRING, nullable: true },
+        dueDate: { type: Type.STRING, nullable: true },
+        notes: { type: Type.STRING, nullable: true }
+      }
+    },
+    unreadable: { type: Type.BOOLEAN }
+  },
+  required: ["recordType", "confidence", "fields", "unreadable"]
+};
+
+/** Universal paper-form intake. Nothing returned here is persisted directly;
+ * the client always displays an editable review step first. */
+export async function handleScanBusinessRecord(req: ScanBusinessRecordRequest): Promise<ScanBusinessRecordResponse> {
+  const ai = getClient();
+  const preferred = req.preferredRecordType?.trim();
+  const response = await generateContentWithFallback(ai, {
+    contents: [{ role: "user", parts: [
+      { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
+      { text: [
+        "Classify this completed paper form, bill, invoice, receipt, customer sheet, lead sheet, estimate, inventory record, address form, onboarding sheet, or other business financial record.",
+        preferred ? `The user opened the scanner for ${preferred}; prefer that type only when the document supports it.` : "",
+        "Extract only legible values. Never invent missing data. Use YYYY-MM-DD for dates. Put extracted values in the matching fields object and null for anything not visible.",
+        "This output will be shown to a human for correction before it can be saved."
+      ].filter(Boolean).join(" ") }
+    ] }],
+    config: { responseMimeType: "application/json", responseSchema: BUSINESS_RECORD_SCHEMA }
+  });
+  try {
+    const parsed = JSON.parse(response.text ?? "{}");
+    return {
+      recordType: parsed.recordType ?? "unknown",
+      confidence: Number(parsed.confidence) || 0,
+      fields: parsed.fields && typeof parsed.fields === "object" ? parsed.fields : {},
+      unreadable: parsed.unreadable ?? false
+    };
+  } catch {
+    return { recordType: "unknown", confidence: 0, fields: {}, unreadable: true };
+  }
+}
+
 const FINANCIAL_DOCUMENT_SCHEMA = {
   type: Type.OBJECT,
   properties: {

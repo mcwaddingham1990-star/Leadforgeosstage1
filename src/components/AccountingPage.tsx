@@ -56,7 +56,8 @@ import {
   Building,
   Trash2,
   ClipboardList,
-  ScrollText
+  ScrollText,
+  Camera
 } from "lucide-react";
 
 type AccountingTab =
@@ -1000,9 +1001,14 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, setVendors, can
           <p className="text-[10px] text-[#5E7393]">Service and provider obligations</p>
         </div>
         {canEdit && (
-          <button onClick={() => setIsCreating(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> New Bill
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button onClick={() => window.dispatchEvent(new CustomEvent("ownerslocal:ai-intake", { detail: { recordType: "bill" } }))} className="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer shadow-sm">
+              <Camera className="w-3.5 h-3.5" /> AI Snapshot
+            </button>
+            <button onClick={() => setIsCreating(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
+              <Plus className="w-3.5 h-3.5" /> Enter Manually
+            </button>
+          </div>
         )}
       </div>
       <div className="relative">
