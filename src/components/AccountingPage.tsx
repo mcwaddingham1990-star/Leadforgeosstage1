@@ -48,6 +48,8 @@ import {
   AlertTriangle,
   Users,
   ChevronRight,
+  ChevronDown,
+  Search,
   Download,
   Loader2,
   CreditCard,
@@ -75,7 +77,7 @@ const TABS: Array<{ id: AccountingTab; label: string; icon: React.ReactNode }> =
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
   { id: "invoices", label: "Invoices", icon: <FileText className="w-3.5 h-3.5" /> },
   { id: "bills", label: "Bills", icon: <Receipt className="w-3.5 h-3.5" /> },
-  { id: "vendors", label: "Vendors", icon: <Users className="w-3.5 h-3.5" /> },
+  { id: "vendors", label: "Service Providers", icon: <Users className="w-3.5 h-3.5" /> },
   { id: "banking", label: "Banking", icon: <Landmark className="w-3.5 h-3.5" /> },
   { id: "chart_of_accounts", label: "Chart of Accounts", icon: <BookOpen className="w-3.5 h-3.5" /> },
   { id: "journal", label: "Journal Entries", icon: <ScrollText className="w-3.5 h-3.5" /> },
@@ -332,6 +334,7 @@ export const AccountingPage: React.FC = () => {
           setBills={setBills}
           setJournalEntries={setJournalEntries}
           vendors={vendors}
+          setVendors={setVendors}
           canEdit={canEdit}
           triggerNotification={triggerNotification}
           logOperationalEvent={logOperationalEvent}
@@ -886,39 +889,82 @@ function InvoicesTab({
 // ============================================================================
 // BILLS
 // ============================================================================
-function BillsTab({ bills, setBills, setJournalEntries, vendors, canEdit, triggerNotification, logOperationalEvent, loggedInUser }: any) {
+function BillsTab({ bills, setBills, setJournalEntries, vendors, setVendors, canEdit, triggerNotification, logOperationalEvent, loggedInUser }: any) {
   const [isCreating, setIsCreating] = useState(false);
-  const [vendor, setVendor] = useState("");
-  const [category, setCategory] = useState("Materials");
-  const [dueInDays, setDueInDays] = useState(30);
-  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
+  const [payee, setPayee] = useState("");
+  const [serviceProvided, setServiceProvided] = useState("");
+  const [estimatedCost, setEstimatedCost] = useState("");
+  const [totalCost, setTotalCost] = useState("");
+  const [recurring, setRecurring] = useState(false);
+  const [recurringDate, setRecurringDate] = useState("");
+  const [search, setSearch] = useState("");
+  const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
   const [payingBill, setPayingBill] = useState<Bill | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
 
+  const filteredBills = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return bills;
+    return bills.filter((bill: Bill) => [
+      bill.billNumber,
+      bill.vendor,
+      bill.serviceProvided || bill.lineItems?.map(item => item.description).join(" "),
+      bill.status,
+      bill.recurring ? "recurring" : "one time",
+      bill.recurringDate || ""
+    ].some(value => String(value || "").toLowerCase().includes(query)));
+  }, [bills, search]);
+
   const handleCreate = () => {
-    if (!vendor.trim() || lineItems.every(li => !li.description.trim())) {
-      triggerNotification("Add a vendor and at least one line item.");
+    const estimated = parseFloat(estimatedCost);
+    const actual = totalCost.trim() ? parseFloat(totalCost) : undefined;
+    if (!payee.trim() || !serviceProvided.trim() || !Number.isFinite(estimated) || estimated < 0) {
+      triggerNotification("Add the payee, service provided, and a valid estimated cost.");
       return;
     }
+    if (totalCost.trim() && (!Number.isFinite(actual) || Number(actual) < 0)) {
+      triggerNotification("Enter a valid total cost or leave it blank.");
+      return;
+    }
+    if (recurring && !recurringDate) {
+      triggerNotification("Select the recurring bill date.");
+      return;
+    }
+    const existingProvider = vendors.find((provider: Vendor) => provider.name.trim().toLowerCase() === payee.trim().toLowerCase());
+    const provider: Vendor = existingProvider || {
+      id: genId("provider"),
+      name: payee.trim(),
+      category: "Service Provider",
+      createdAt: new Date().toISOString()
+    };
+    if (!existingProvider) setVendors((prev: Vendor[]) => [...prev, provider]);
+    const effectiveTotal = actual ?? estimated;
+    const createdAt = new Date().toISOString();
     const bill: Bill = {
       id: genId("bill"),
       billNumber: `BILL-${1000 + bills.length + 1}`,
-      vendor: vendor.trim(),
-      lineItems: lineItems.filter(li => li.description.trim()),
-      category,
+      vendor: provider.name,
+      serviceProviderId: provider.id,
+      serviceProvided: serviceProvided.trim(),
+      estimatedCost: estimated,
+      totalCost: actual,
+      recurring,
+      recurringDate: recurring ? recurringDate : undefined,
+      lineItems: [{ id: genId("li"), description: serviceProvided.trim(), quantity: 1, unitPrice: effectiveTotal }],
+      category: "Bills",
       issuedDate: todayStr(),
-      dueDate: addDays(todayStr(), dueInDays),
+      dueDate: recurring && recurringDate ? recurringDate : todayStr(),
       status: "unpaid",
       amountPaid: 0,
-      createdAt: new Date().toISOString(),
-      createdBy: loggedInUser?.email
+      createdAt,
+      createdBy: loggedInUser?.email,
+      history: [{ id: genId("history"), date: createdAt, action: "Bill created", amount: effectiveTotal, note: serviceProvided.trim() }]
     };
     setBills((prev: Bill[]) => [...prev, bill]);
     setJournalEntries((prev: JournalEntry[]) => [...prev, postBillCreatedEntry(bill, loggedInUser?.email)]);
     if (logOperationalEvent) logOperationalEvent("Bill Created", `${bill.billNumber} from ${bill.vendor}: ${fmt(billTotal(bill))}`, "🧾");
     triggerNotification(`Bill ${bill.billNumber} created for ${fmt(billTotal(bill))}.`);
-    setVendor("");
-    setLineItems([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
+    setPayee(""); setServiceProvided(""); setEstimatedCost(""); setTotalCost(""); setRecurring(false); setRecurringDate("");
     setIsCreating(false);
   };
 
@@ -933,7 +979,13 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, canEdit, trigge
     const newAmountPaid = payingBill.amountPaid + amount;
     const total = billTotal(payingBill);
     const newStatus: Bill["status"] = newAmountPaid >= total - 0.01 ? "paid" : "partial";
-    setBills((prev: Bill[]) => prev.map(b => (b.id === payingBill.id ? { ...b, amountPaid: newAmountPaid, status: newStatus } : b)));
+    const paidAt = new Date().toISOString();
+    setBills((prev: Bill[]) => prev.map(b => (b.id === payingBill.id ? {
+      ...b,
+      amountPaid: newAmountPaid,
+      status: newStatus,
+      history: [...(b.history || []), { id: genId("history"), date: paidAt, action: "Payment recorded", amount }]
+    } : b)));
     setJournalEntries((prev: JournalEntry[]) => [...prev, postBillPaymentEntry(payingBill, amount, loggedInUser?.email)]);
     triggerNotification(`Payment of ${fmt(amount)} recorded on ${payingBill.billNumber}.`);
     setPayingBill(null);
@@ -943,44 +995,47 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, canEdit, trigge
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-black text-[#1F3557] uppercase">Bills</h3>
+        <div>
+          <h3 className="text-sm font-black text-[#1F3557] uppercase">Bills</h3>
+          <p className="text-[10px] text-[#5E7393]">Service and provider obligations</p>
+        </div>
         {canEdit && (
           <button onClick={() => setIsCreating(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> New Bill
           </button>
         )}
       </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5E7393]" />
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search bills by payee, service, status, or recurring date" className="w-full rounded-xl border border-[#9EC8EF] bg-white/80 py-2.5 pl-9 pr-3 text-xs text-[#1F3557] outline-none focus:ring-2 focus:ring-[#315C9F]/20" />
+      </div>
       <div className="bg-[#C7E3FA] rounded-2xl border border-[#9EC8EF] shadow-sm overflow-hidden">
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-xs">
           <thead>
             <tr className="bg-[#EAF5FF] text-[10px] font-bold text-[#1F3557] uppercase">
               <th className="px-4 py-3">Bill #</th>
-              <th className="px-4 py-3">Vendor</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3 text-right">Total</th>
-              <th className="px-4 py-3 text-right">Balance Due</th>
-              <th className="px-4 py-3">Due Date</th>
-              <th className="px-4 py-3 text-center">Status</th>
+              <th className="px-4 py-3">Pay to the Order Of</th>
+              <th className="px-4 py-3">Service Provided</th>
+              <th className="px-4 py-3 text-right">Estimated</th>
+              <th className="px-4 py-3 text-right">Actual Total</th>
+              <th className="px-4 py-3">Recurring</th>
+              <th className="px-4 py-3">History</th>
               <th className="px-4 py-3 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#9EC8EF]/30">
-            {bills.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-[#5E7393]">No bills yet.</td></tr>
+            {filteredBills.length === 0 && (
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-[#5E7393]">{search ? "No bills match your search." : "No bills yet."}</td></tr>
             )}
-            {bills.map((bill: Bill) => (
-              <tr key={bill.id} className="hover:bg-[#BDDDF8]">
+            {filteredBills.map((bill: Bill) => (
+              <React.Fragment key={bill.id}><tr className="hover:bg-[#BDDDF8]">
                 <td className="px-4 py-3 font-bold text-[#1F3557]">{bill.billNumber}</td>
                 <td className="px-4 py-3">{bill.vendor}</td>
-                <td className="px-4 py-3">{bill.category}</td>
-                <td className="px-4 py-3 text-right font-mono">{fmt(billTotal(bill))}</td>
-                <td className="px-4 py-3 text-right font-mono font-bold">{fmt(billBalanceDue(bill))}</td>
-                <td className="px-4 py-3 font-mono text-[#5E7393]">{bill.dueDate}</td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${bill.status === "paid" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20"}`}>
-                    {bill.status}
-                  </span>
-                </td>
+                <td className="px-4 py-3">{bill.serviceProvided || bill.lineItems?.map(item => item.description).join(", ") || "—"}</td>
+                <td className="px-4 py-3 text-right font-mono">{fmt(bill.estimatedCost ?? billTotal(bill))}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold">{bill.totalCost === undefined ? "—" : fmt(bill.totalCost)}</td>
+                <td className="px-4 py-3">{bill.recurring ? `Yes · ${bill.recurringDate || "Date pending"}` : "No"}</td>
+                <td className="px-4 py-3"><button onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} className="inline-flex items-center gap-1 text-[10px] font-bold text-[#315C9F]">{(bill.history || []).length || 1} event{(bill.history || []).length === 1 ? "" : "s"}<ChevronDown className={`w-3 h-3 transition-transform ${expandedBillId === bill.id ? "rotate-180" : ""}`} /></button></td>
                 <td className="px-4 py-3 text-center">
                   {canEdit && billBalanceDue(bill) > 0 && (
                     <button onClick={() => { setPayingBill(bill); setPaymentAmount(billBalanceDue(bill).toFixed(2)); }} className="text-[#315C9F] font-bold text-[10px] hover:underline cursor-pointer">
@@ -988,10 +1043,10 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, canEdit, trigge
                     </button>
                   )}
                 </td>
-              </tr>
+              </tr>{expandedBillId === bill.id && <tr className="bg-[#EAF5FF]/70"><td colSpan={8} className="px-4 py-3"><div className="space-y-1.5"><p className="text-[9px] font-black uppercase text-[#5E7393]">Bill history</p>{(bill.history?.length ? bill.history : [{ id: `${bill.id}_created`, date: bill.createdAt, action: "Bill created", amount: billTotal(bill) }]).map(event => <div key={event.id} className="flex flex-wrap justify-between gap-2 rounded-lg border border-[#9EC8EF]/60 bg-white/70 px-3 py-2 text-[10px]"><span><strong>{event.action}</strong>{event.note ? ` · ${event.note}` : ""}</span><span className="font-mono text-[#5E7393]">{event.amount === undefined ? "" : fmt(event.amount)} · {new Date(event.date).toLocaleString()}</span></div>)}</div></td></tr>}</React.Fragment>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {isCreating && (
@@ -1002,42 +1057,14 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, canEdit, trigge
               <button onClick={() => setIsCreating(false)}><X className="w-4 h-4 text-slate-400" /></button>
             </div>
             <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-[9px] uppercase text-slate-400 font-bold">Vendor</label>
-                <input list="vendor-options" value={vendor} onChange={e => setVendor(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" placeholder="Vendor name" />
-                <datalist id="vendor-options">
-                  {vendors.map((v: Vendor) => <option key={v.id} value={v.name} />)}
-                </datalist>
+              <label className="block"><span className="text-[9px] uppercase text-slate-500 font-bold">Pay to the Order Of *</span><input list="service-provider-options" value={payee} onChange={event => setPayee(event.target.value)} placeholder="Service provider or payee" className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" /><datalist id="service-provider-options">{vendors.map((provider: Vendor) => <option key={provider.id} value={provider.name} />)}</datalist></label>
+              <label className="block"><span className="text-[9px] uppercase text-slate-500 font-bold">Service Provided *</span><textarea value={serviceProvided} onChange={event => setServiceProvided(event.target.value)} placeholder="Describe the service or obligation" rows={3} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1 resize-none" /></label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label><span className="text-[9px] uppercase text-slate-500 font-bold">Estimated Cost *</span><input type="number" min="0" step="0.01" value={estimatedCost} onChange={event => setEstimatedCost(event.target.value)} placeholder="$0.00" className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" /></label>
+                <label><span className="text-[9px] uppercase text-slate-500 font-bold">Total Cost (Optional)</span><input type="number" min="0" step="0.01" value={totalCost} onChange={event => setTotalCost(event.target.value)} placeholder="Add when known" className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" /></label>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[9px] uppercase text-slate-400 font-bold">Category</label>
-                  <select value={category} onChange={e => setCategory(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1">
-                    {["Materials", "Fuel", "Vehicle Maintenance", "Office Supplies", "Marketing", "Utilities", "Insurance", "Other"].map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[9px] uppercase text-slate-400 font-bold">Due In (Days)</label>
-                  <input type="number" value={dueInDays} onChange={e => setDueInDays(parseInt(e.target.value) || 0)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[9px] uppercase text-slate-400 font-bold">Line Items</label>
-                {lineItems.map(li => (
-                  <div key={li.id} className="grid grid-cols-[1fr_60px_80px_24px] gap-1.5 items-center">
-                    <input value={li.description} onChange={e => setLineItems(prev => prev.map(x => (x.id === li.id ? { ...x, description: e.target.value } : x)))} placeholder="Description" className="border border-slate-200 rounded-lg px-2 py-1.5" />
-                    <input type="number" value={li.quantity} onChange={e => setLineItems(prev => prev.map(x => (x.id === li.id ? { ...x, quantity: parseFloat(e.target.value) || 0 } : x)))} className="border border-slate-200 rounded-lg px-2 py-1.5" />
-                    <input type="number" value={li.unitPrice} onChange={e => setLineItems(prev => prev.map(x => (x.id === li.id ? { ...x, unitPrice: parseFloat(e.target.value) || 0 } : x)))} placeholder="$" className="border border-slate-200 rounded-lg px-2 py-1.5" />
-                    <button onClick={() => setLineItems(prev => prev.filter(x => x.id !== li.id))}><Trash2 className="w-3.5 h-3.5 text-rose-400" /></button>
-                  </div>
-                ))}
-                <button onClick={() => setLineItems(prev => [...prev, { id: genId("li"), description: "", quantity: 1, unitPrice: 0 }])} className="text-[#315C9F] font-bold text-[10px] flex items-center gap-1">
-                  <Plus className="w-3 h-3" /> Add Line
-                </button>
-              </div>
-              <div className="text-right font-black text-[#1F3557] text-sm pt-2 border-t border-slate-100">
-                Total: {fmt(lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))}
-              </div>
+              <fieldset><legend className="text-[9px] uppercase text-slate-500 font-bold mb-1.5">Recurring?</legend><div className="grid grid-cols-2 gap-2">{[{ label: "No", value: false }, { label: "Yes", value: true }].map(option => <button key={option.label} type="button" onClick={() => { setRecurring(option.value); if (!option.value) setRecurringDate(""); }} className={`rounded-xl border px-3 py-2 font-bold ${recurring === option.value ? "border-[#315C9F] bg-blue-50 text-[#315C9F]" : "border-slate-200 text-slate-500"}`}>{option.label}</button>)}</div></fieldset>
+              {recurring && <label className="block"><span className="text-[9px] uppercase text-slate-500 font-bold">Recurring Bill Date *</span><input type="date" value={recurringDate} onChange={event => setRecurringDate(event.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1" /></label>}
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={() => setIsCreating(false)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold">Cancel</button>
@@ -1074,6 +1101,8 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const handleAdd = () => {
     if (!name.trim()) {
@@ -1081,7 +1110,7 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
       return;
     }
     setVendors((prev: Vendor[]) => [...prev, { id: genId("vend"), name: name.trim(), contact, email, phone, category, createdAt: new Date().toISOString() }]);
-    triggerNotification(`Vendor "${name}" added.`);
+    triggerNotification(`Service Provider "${name}" added.`);
     setName(""); setContact(""); setEmail(""); setPhone(""); setCategory("");
     setIsAdding(false);
   };
@@ -1089,24 +1118,25 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-black text-[#1F3557] uppercase">Vendors &amp; Suppliers</h3>
+        <div><h3 className="text-sm font-black text-[#1F3557] uppercase">Service Providers</h3><p className="text-[10px] text-[#5E7393]">One provider record connected to every associated bill and service</p></div>
         {canEdit && (
           <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Add Vendor
+            <Plus className="w-3.5 h-3.5" /> Add Service Provider
           </button>
         )}
       </div>
+      <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5E7393]" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search service providers" className="w-full rounded-xl border border-[#9EC8EF] bg-white/80 py-2.5 pl-9 pr-3 text-xs outline-none" /></div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {vendors.length === 0 && <p className="text-xs text-[#5E7393] col-span-full text-center py-8">No vendors yet.</p>}
-        {vendors.map((v: Vendor) => {
-          const vendorBills = bills.filter((b: Bill) => b.vendor === v.name);
+        {vendors.length === 0 && <p className="text-xs text-[#5E7393] col-span-full text-center py-8">No service providers yet. Creating a bill automatically adds its payee here.</p>}
+        {vendors.filter((provider: Vendor) => provider.name.toLowerCase().includes(search.trim().toLowerCase())).map((v: Vendor) => {
+          const vendorBills = bills.filter((b: Bill) => b.serviceProviderId === v.id || b.vendor.trim().toLowerCase() === v.name.trim().toLowerCase());
           const totalSpent = vendorBills.reduce((s: number, b: Bill) => s + billTotal(b), 0);
           return (
             <div key={v.id} className="bg-[#C7E3FA] rounded-2xl p-3.5 border border-[#9EC8EF] shadow-sm space-y-1.5">
               <div className="flex justify-between items-start">
-                <p className="font-black text-[#1F3557] text-xs">{v.name}</p>
+                <button onClick={() => setExpandedProviderId(expandedProviderId === v.id ? null : v.id)} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"><span className="font-black text-[#1F3557] text-xs truncate">{v.name}</span><ChevronDown className={`w-3.5 h-3.5 text-[#315C9F] transition-transform ${expandedProviderId === v.id ? "rotate-180" : ""}`} /></button>
                 {canDelete && (
-                  <button onClick={() => setVendors((prev: Vendor[]) => prev.filter(x => x.id !== v.id))}>
+                  <button className="ml-2" onClick={() => setVendors((prev: Vendor[]) => prev.filter(x => x.id !== v.id))}>
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                   </button>
                 )}
@@ -1118,6 +1148,7 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
               <div className="pt-1.5 border-t border-[#9EC8EF]/30 text-[10px] text-[#1F3557] font-bold">
                 {vendorBills.length} bill{vendorBills.length === 1 ? "" : "s"} · {fmt(totalSpent)} total
               </div>
+              {expandedProviderId === v.id && <div className="space-y-2 pt-2 border-t border-[#9EC8EF]/40"><p className="text-[9px] font-black uppercase text-[#5E7393]">Provider bill &amp; service history</p>{vendorBills.length === 0 ? <p className="text-[10px] text-[#5E7393]">No bills connected yet.</p> : vendorBills.map((bill: Bill) => <div key={bill.id} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] p-2.5 text-[10px]"><div className="flex justify-between gap-2"><strong className="text-[#1F3557]">{bill.serviceProvided || bill.lineItems?.map(item => item.description).join(", ")}</strong><span className="font-mono">{fmt(bill.totalCost ?? bill.estimatedCost ?? billTotal(bill))}</span></div><p className="mt-1 text-[#5E7393]">{bill.billNumber} · {bill.recurring ? `Recurring ${bill.recurringDate || "date pending"}` : "One-time"} · {bill.status}</p>{(bill.history || []).map(event => <p key={event.id} className="mt-1 border-t border-[#9EC8EF]/40 pt-1 text-[#5E7393]">{event.action} · {new Date(event.date).toLocaleDateString()}{event.amount === undefined ? "" : ` · ${fmt(event.amount)}`}</p>)}</div>)}</div>}
             </div>
           );
         })}
@@ -1126,8 +1157,8 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
       {isAdding && (
         <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl p-5 w-[95%] max-w-[400px] shadow-2xl space-y-2.5 text-xs">
-            <h3 className="text-sm font-black text-[#1F3557] uppercase mb-2">Add Vendor</h3>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Vendor name" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
+            <h3 className="text-sm font-black text-[#1F3557] uppercase mb-2">Add Service Provider</h3>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Service provider name" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <input value={contact} onChange={e => setContact(e.target.value)} placeholder="Contact person" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone" className="w-full border border-slate-200 rounded-xl px-3 py-2" />
