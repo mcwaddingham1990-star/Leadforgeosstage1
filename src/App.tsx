@@ -1008,6 +1008,7 @@ export default function App() {
   const refSecurityLogged = React.useRef<Record<string, boolean>>({});
   const isTimeClockLoadedRef = React.useRef(false);
   const [revenueConfirmAction, setRevenueConfirmAction] = useState<{ label: string; icon: string } | null>(null);
+  const [isFinancialInsightsOpen, setIsFinancialInsightsOpen] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -3904,26 +3905,16 @@ Access to full financial telemetry is restricted.`;
                       {/* ONBOARDING HEADER MODULE */}
                       <div className="relative z-10 flex items-center justify-between mb-4 pb-3 border-b border-slate-200/50 shrink-0">
                         <div className="flex items-center gap-2.5">
-                          {/* Heartbeat/Pulse logo matching image exactly */}
-                          <div 
+                          {/* Reuse the exact heartbeat asset shown throughout Owners Local OS. */}
+                          <div
                             style={{
                               width: `${36 * scale}px`,
                               height: `${36 * scale}px`,
                               borderRadius: `${9 * scale}px`,
                             }}
-                            className="bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0"
+                            className="bg-white flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0 overflow-hidden border border-blue-100"
                           >
-                            <svg 
-                              viewBox="0 0 24 24" 
-                              fill="none" 
-                              stroke="currentColor" 
-                              strokeWidth="3.5" 
-                              strokeLinecap="round" 
-                              strokeLinejoin="round" 
-                              className="w-5 h-5 animate-pulse text-white"
-                            >
-                              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                            </svg>
+                            <BrandIcon className="w-full h-full" />
                           </div>
                           <div>
                             <h2 style={getFontSize(14.5)} className="font-sans font-bold text-slate-900 tracking-tight leading-tight uppercase">
@@ -3974,6 +3965,15 @@ Access to full financial telemetry is restricted.`;
                         />
                         {renderDynamicField("business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
                         {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Seattle HQ")}
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-[10px] leading-relaxed text-blue-950">
+                          <p className="flex items-center gap-1.5 font-black uppercase tracking-wide">
+                            <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            Your information and privacy
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-600">
+                            Owners Local OS does not sell or disseminate user data. Information is handled through integrated databases and services using appropriate security and encryption. Authorized Stuffapp personnel or service providers may have limited access when needed to operate, secure, support, or comply with legal requirements.
+                          </p>
+                        </div>
                       </div>
 
                       {/* BOTTOM ACTION BUTTONS */}
@@ -6878,15 +6878,26 @@ Access to full financial telemetry is restricted.`;
                       {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         
-                        {/* Financial Insights Card */}
-                        <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4 lg:col-span-2 text-left">
-                          <div className="border-b border-[#9EC8EF]/30 pb-3">
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Algorithmic Auditing</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Financial Insights</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active warning signals, cost inflations, and profit margin optimizations</p>
-                          </div>
-                          
-                          <div className="space-y-3">
+                        {/* Compact on-demand AI Financial Insights widget */}
+                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm lg:col-span-2 text-left self-start">
+                          <button
+                            type="button"
+                            onClick={() => setIsFinancialInsightsOpen(open => !open)}
+                            aria-expanded={isFinancialInsightsOpen}
+                            className="w-full flex items-center gap-3 rounded-xl bg-[#EAF5FF] border border-[#9EC8EF] px-4 py-3 text-left hover:bg-[#BDDDF8] transition-colors"
+                          >
+                            <span className="p-2 rounded-lg bg-[#315C9F] text-white shadow-sm">
+                              <Sparkles className="w-4 h-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">On-demand analysis</span>
+                              <span className="block text-sm font-sans font-black text-[#1F3557]">AI Financial Insights</span>
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform ${isFinancialInsightsOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {isFinancialInsightsOpen && (
+                          <div className="space-y-3 pt-3">
                             {(() => {
                               // Real insights only, each gated on having a real prior period to
                               // compare against — no invoice or tax-liability system exists in the
@@ -6973,6 +6984,7 @@ Access to full financial telemetry is restricted.`;
                               ));
                             })()}
                           </div>
+                          )}
                         </div>
 
                         {/* Quick Actions Card */}
@@ -7039,13 +7051,11 @@ Access to full financial telemetry is restricted.`;
                           <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
                         </div>
                         
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           {[
-                            { name: "Bank Accounts", icon: Landmark, desc: "Plaid Integration" },
-                            { name: "Payroll Provider", icon: Users, desc: "Gusto / ADP Synced" },
-                            { name: "QuickBooks", icon: Landmark, desc: "Ledger Realtime Sync" },
-                            { name: "Stripe", icon: CreditCard, desc: "Card Payment Gateway" },
-                            { name: "Square", icon: Box, desc: "Mobile Register Sync" }
+                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
+                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
+                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
                           ].map((integ, idx) => (
                             <div
                               key={idx}
