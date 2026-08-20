@@ -144,6 +144,12 @@ const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
   return "light-basic";
 };
 
+const workspaceThemeSettingValue = (theme: WorkspaceTheme): string => {
+  if (theme === "dark-dynamic") return "Dark Mode Dynamic";
+  if (theme === "dark-basic") return "Dark Mode Basic";
+  return "Light Mode Basic";
+};
+
 // Exact fingerprints of demo records used by the original prototype. Older
 // accounts may still have these rows in Firestore even though the seed arrays
 // are now empty. Matching record content protects legitimate user data.
@@ -2295,6 +2301,30 @@ export default function App() {
         )}
 
       </main>
+
+      {!isLoggedIn && (
+        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30">
+          <label className="sr-only" htmlFor="login-theme-selector">Color scheme</label>
+          <select
+            id="login-theme-selector"
+            aria-label="Color scheme"
+            value={workspaceTheme}
+            onChange={(event) => {
+              const nextTheme = event.target.value as WorkspaceTheme;
+              setWorkspaceTheme(nextTheme);
+              localStorage.setItem("ownerslocal_workspace_theme", workspaceThemeSettingValue(nextTheme));
+            }}
+            className={`max-w-[150px] rounded-lg border px-2 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur-md outline-none cursor-pointer ${isDarkTheme
+              ? "border-blue-400/30 bg-[#06152b]/70 text-blue-50"
+              : "border-blue-200/60 bg-white/60 text-[#315C9F]"
+            }`}
+          >
+            <option value="light-basic">Light Mode Basic</option>
+            <option value="dark-basic">Dark Mode Basic</option>
+            <option value="dark-dynamic">Dark Mode Dynamic</option>
+          </select>
+        </div>
+      )}
 
       {!isLoggedIn && (
         <div
