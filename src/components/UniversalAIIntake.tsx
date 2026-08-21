@@ -5,11 +5,20 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { postBillCreatedEntry } from "../lib/accountingEngine";
 
-type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "financial" | "unknown";
+type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
 type Fields = Record<string, string | number | boolean | null>;
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const today = () => new Date().toISOString().slice(0, 10);
-const labels: Record<RecordType, string> = { bill: "Bill / Invoice", customer: "Customer", lead: "Lead", estimate: "Estimate", inventory: "Inventory", address: "Address", onboarding: "Onboarding", financial: "Financial Record", unknown: "Auto-detect" };
+const labels: Record<RecordType, string> = { bill: "Bill / Invoice", customer: "Customer", lead: "Lead", estimate: "Estimate", inventory: "Inventory", address: "Address", onboarding: "Onboarding", material_expense: "Material / Operational Expense", payroll: "Payroll Record", financial: "Other Financial Record", unknown: "Auto-detect" };
+const asBoolean = (value: unknown) => value === true || String(value).trim().toLowerCase() === "true" || String(value).trim().toLowerCase() === "yes";
+const canonicalFinancialCategory = (value: unknown): "Bills" | "Material Expenses" | "Payroll" | "Other Expenses" | null => {
+  const category = String(value || "").trim().toLowerCase();
+  if (["bill", "bills", "vendor bill", "service provider"].includes(category)) return "Bills";
+  if (["material", "materials", "material expense", "material expenses", "equipment", "fuel", "supplies", "operational expense", "operational expenses"].includes(category)) return "Material Expenses";
+  if (["payroll", "wages", "salary", "salaries", "payroll expense"].includes(category)) return "Payroll";
+  if (["other", "other expense", "other expenses"].includes(category)) return "Other Expenses";
+  return null;
+};
 
 export function UniversalAIIntake() {
   const data = useDomainData();
@@ -58,7 +67,8 @@ export function UniversalAIIntake() {
       const existing = data.vendors.find(v => v.name.trim().toLowerCase() === payee.toLowerCase());
       const provider = existing || { id: id("provider"), name: payee, category: "Service Provider", createdAt };
       if (!existing) data.setVendors(prev => [...prev, provider]);
-      const bill: any = { id: id("bill"), billNumber: `BILL-${1000 + data.bills.length + 1}`, vendor: provider.name, serviceProviderId: provider.id, serviceProvided: service, estimatedCost: Number(fields.estimatedCost ?? amount), totalCost: fields.totalCost == null ? undefined : Number(fields.totalCost), recurring: Boolean(fields.recurring), recurringDate: fields.recurringDate ? String(fields.recurringDate) : undefined, lineItems: [{ id: id("li"), description: service, quantity: 1, unitPrice: amount }], category: "Bills", issuedDate: today(), dueDate: String(fields.recurringDate || fields.dueDate || today()), status: "unpaid", amountPaid: 0, notes: fields.notes ? String(fields.notes) : undefined, createdAt, createdBy: actor, source: "ai_snapshot", history: [{ id: id("history"), date: createdAt, action: "AI Snapshot reviewed and saved", amount }] };
+      const recurring = asBoolean(fields.recurring);
+      const bill: any = { id: id("bill"), billNumber: `BILL-${1000 + data.bills.length + 1}`, vendor: provider.name, serviceProviderId: provider.id, serviceProvided: service, estimatedCost: Number(fields.estimatedCost ?? amount), totalCost: fields.totalCost == null ? undefined : Number(fields.totalCost), recurring, recurringDate: recurring && fields.recurringDate ? String(fields.recurringDate) : undefined, lineItems: [{ id: id("li"), description: service, quantity: 1, unitPrice: amount }], category: "Bills", issuedDate: today(), dueDate: String((recurring && fields.recurringDate) || fields.dueDate || today()), status: "unpaid", amountPaid: 0, notes: fields.notes ? String(fields.notes) : undefined, createdAt, createdBy: actor, source: "ai_snapshot", history: [{ id: id("history"), date: createdAt, action: "AI Snapshot reviewed and saved", amount }] };
       data.setBills(prev => [...prev, bill]);
       data.setJournalEntries(prev => [...prev, postBillCreatedEntry(bill, actor)]);
     } else if (recordType === "customer") {
@@ -69,11 +79,13 @@ export function UniversalAIIntake() {
       data.setEstimates(prev => [...prev, { id: id("estimate"), customer: String(fields.company || fields.name || fields.contact || "Unassigned"), title: String(fields.description || fields.serviceProvided || "AI Snapshot estimate"), amount: Number(fields.amount || fields.estimatedCost || 0), status: "Draft", date: today(), createdAt } as any]);
     } else if (recordType === "inventory") {
       data.setInventoryList(prev => [...prev, { id: id("inventory"), name: String(fields.name || fields.description || "Scanned item"), category: String(fields.category || "Materials"), quantity: Number(fields.quantity || 0), unitCost: Number(fields.unitCost || fields.amount || 0), supplier: String(fields.company || fields.payee || ""), source: "AI Snapshot", createdAt } as any]);
-    } else if (recordType === "financial") {
+    } else if (recordType === "financial" || recordType === "material_expense" || recordType === "payroll") {
       const amount = Number(fields.amount || fields.totalCost || 0);
       if (!Number.isFinite(amount) || amount <= 0) return triggerNotification("Review requires a valid financial amount before saving.");
-      if (String(fields.category || "").trim().toLowerCase() === "bills") return triggerNotification("Service/provider obligations must be saved as a Bill. Change 'Save to' to Bill / Invoice so it stays provider-linked.");
-      data.setTransactions(prev => [...prev, { id: id("txn"), type: "expense", source: "ai_scan", amount, description: String(fields.description || fields.serviceProvided || fields.payee || "AI Snapshot financial record"), category: String(fields.category || "Other Expense"), date: String(fields.dueDate || today()), createdAt, createdBy: actor } as any]);
+      const category = recordType === "material_expense" ? "Material Expenses" : recordType === "payroll" ? "Payroll" : canonicalFinancialCategory(fields.category);
+      if (category === "Bills") return triggerNotification("Service/provider obligations must be saved as a Bill so they remain linked to the provider.");
+      if (!category) return triggerNotification("Choose Material / Operational Expense, Payroll Record, or enter a recognized category before saving.");
+      data.setTransactions(prev => [...prev, { id: id("txn"), type: "expense", source: "ai_scan", amount, description: String(fields.description || fields.serviceProvided || fields.payee || labels[recordType]), category, date: String(fields.dueDate || today()), createdAt, createdBy: actor } as any]);
     } else {
       triggerNotification("Choose Bill, Customer, Lead, Estimate, or Inventory before saving this reviewed record."); return;
     }

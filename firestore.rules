@@ -123,6 +123,10 @@ service cloud.firestore {
       );
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
+    match /document_folders/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
     match /roster/{docId} {
       allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);

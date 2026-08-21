@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import SelfieSaveEditor from "./SelfieSaveEditor";
 import {
   Search,
@@ -58,30 +59,14 @@ import {
 export type { DocumentItem } from "../types/domain";
 import type { DocumentItem } from "../types/domain";
 
-// The real, standard filing-cabinet structure every account starts with.
-// Top-level folders marked `perEntity` also get a real dynamic sub-list of
-// every customer/job/employee/vendor (Fleet has no real vehicle collection
-// yet, so it stays an honest empty state rather than fabricated entries).
-export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; perEntity?: "customer" | "employee" | "job" | "vendor" | "fleet"; subfolders: string[] }> = [
-  { id: "Company", icon: "🏢", subfolders: ["Business Licenses", "Permits", "Insurance", "Tax Documents", "Business Certificates", "Company Logo", "Brand Assets", "Policies", "Employee Handbook", "Training Material", "General Documents"] },
-  { id: "Customers", icon: "👥", perEntity: "customer", subfolders: ["Contracts", "Estimates", "Invoices", "Photos", "Videos", "Service History", "Inspection Reports", "Equipment", "Warranty Information", "Emails", "Text Messages", "Signed Documents", "Customer Notes", "Attachments"] },
-  { id: "Leads", icon: "🎯", subfolders: ["New Leads", "Qualified Leads", "Quoted", "Follow-Up", "Waiting", "Won", "Lost", "Archived", "Lead Attachments", "Site Photos", "Voice Notes"] },
-  { id: "Estimates & Quotes", icon: "📝", subfolders: ["Draft", "Sent", "Accepted", "Rejected", "Templates", "Signed Estimates", "Photos"] },
-  { id: "Jobs", icon: "💼", perEntity: "job", subfolders: ["Work Orders", "Before Photos", "Progress Photos", "After Photos", "Inspection Reports", "Materials Used", "Equipment Used", "Employee Notes", "Customer Notes", "Permits", "Completion Forms", "Invoices", "Warranty"] },
-  { id: "Employees", icon: "👤", perEntity: "employee", subfolders: ["Application", "Resume", "Interview Notes", "Employment Agreement", "Emergency Contacts", "Driver License", "Licenses", "Certifications", "Background Check", "Drug Test", "W-4", "I-9", "1099", "Direct Deposit", "Handbook Acknowledgement", "NDA", "Performance Reviews", "Training Certificates", "Attendance", "Payroll Reports", "Time Clock Reports", "Vacation Requests", "PTO Requests", "Workers Compensation", "Incident Reports", "Disciplinary Records", "Termination Documents", "General Documents"] },
-  { id: "Payroll", icon: "💵", subfolders: ["Pay Periods", "Payroll Reports", "Pay Stubs", "Payroll Exports", "Tax Reports", "1099 Reports", "Adjustments"] },
-  { id: "Revenue", icon: "📈", subfolders: ["Paid Invoices", "Revenue Reports", "Deposits", "Sales Reports", "Monthly", "Quarterly", "Yearly", "Profit Reports"] },
-  { id: "Expenses", icon: "🧾", subfolders: ["Fuel", "Materials", "Equipment", "Office Supplies", "Advertising", "Utilities", "Subscriptions", "Vehicle Expenses", "Travel", "Meals", "Repairs", "Receipts", "Expense Reports"] },
-  { id: "Bills", icon: "📄", subfolders: ["Outstanding Bills", "Paid Bills", "Utilities", "Rent", "Insurance", "Phone", "Internet", "Vendor Bills", "Credit Cards", "Loans"] },
-  { id: "Inventory", icon: "📦", subfolders: ["Purchase Orders", "Receiving Reports", "Inventory Audits", "Product Photos", "Supplier Documents", "Vendor Contracts", "Warranty Information"] },
-  { id: "Vendors & Suppliers", icon: "🤝", perEntity: "vendor", subfolders: ["Contracts", "Invoices", "Purchase Orders", "Price Lists", "Insurance", "Certificates", "Communications"] },
-  { id: "Fleet", icon: "🚚", perEntity: "fleet", subfolders: ["Registration", "Insurance", "Maintenance", "Oil Changes", "Repairs", "Fuel Logs", "GPS Reports", "Photos"] },
-  { id: "Marketing", icon: "📣", subfolders: ["Google Business Profile", "Facebook", "Instagram", "Website", "Advertising", "Reviews", "Analytics", "Campaign Reports", "Photos", "Videos"] },
-  { id: "Accounting", icon: "🧮", subfolders: ["Bank Statements", "Sales Tax", "Income Tax", "Financial Statements", "Budgets", "Loans", "CPA Documents", "Reconciliations"] },
-  { id: "AI Generated", icon: "🤖", subfolders: ["Reports", "Business Analysis", "Summaries", "Emails", "Letters", "Marketing", "Images", "Documents"] },
-  { id: "PDF Editor", icon: "🖊️", subfolders: ["Draft PDFs", "Edited PDFs", "Merged PDFs", "Split PDFs", "Compressed PDFs", "OCR Documents", "Templates", "Fillable Forms", "Scanned Documents"] },
-  { id: "eSign", icon: "✍️", subfolders: ["Awaiting Signature", "Sent", "Signed", "Viewed", "Declined", "Expired", "Standard Documents", "Saved Employee Signatures", "Saved Initials", "Audit Logs", "Certificates of Completion"] },
-  { id: "Reports", icon: "📊", subfolders: ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Custom Reports", "Exports"] }
+// The deliberately small filing structure selected for Owners Local OS.
+export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; subfolders: string[] }> = [
+  { id: "Estimates", icon: "📝", subfolders: ["Estimates"] },
+  { id: "Invoices", icon: "💳", subfolders: ["Invoices"] },
+  { id: "Customer Notes", icon: "🗒️", subfolders: ["Customer Notes"] },
+  { id: "Employees", icon: "👤", subfolders: ["Employee Files"] },
+  { id: "Taxes", icon: "🏛️", subfolders: ["Tax Documents"] },
+  { id: "Expenses/Receipts", icon: "🧾", subfolders: ["Expenses", "Receipts"] }
 ];
 
 /**
@@ -91,19 +76,15 @@ export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; perEntity?: "cus
  * mirrors how the fields are actually populated elsewhere in this file.
  */
 export function inferFolderForDoc(doc: DocumentItem): string {
-  if (doc.type === "Payroll Documents") return "Payroll";
-  if (doc.type === "Vehicle Records") return "Fleet";
   if (doc.type === "Employee Files") return "Employees";
-  if (doc.vendor && doc.vendor !== "None") return "Vendors & Suppliers";
-  if (doc.job && doc.job !== "None") return "Jobs";
-  if (doc.customer && doc.customer !== "None") return "Customers";
-  if (doc.tags.includes("AI Scanned") || doc.tags.includes("AI Generated")) return "AI Generated";
-  if (doc.type === "Receipts") return "Expenses";
-  if (doc.type === "Invoices") return "Revenue";
-  if (doc.type === "Estimates") return "Estimates & Quotes";
-  if (doc.type === "Insurance" || doc.type === "Licenses" || doc.type === "Permits") return "Company";
-  return "Company";
+  if (doc.type === "Invoices") return "Invoices";
+  if (doc.type === "Estimates") return "Estimates";
+  if (doc.type === "Receipts" || doc.type === "Expenses") return "Expenses/Receipts";
+  if (doc.type.toLowerCase().includes("tax")) return "Taxes";
+  return "Customer Notes";
 }
+
+interface CustomDocumentFolder { id: string; name: string }
 
 
 const STOCK_TEMPLATES = [
@@ -115,7 +96,7 @@ const STOCK_TEMPLATES = [
 ] as const;
 
 export const DocumentsPage: React.FC = () => {
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees } = useDomainData();
   const {
@@ -166,10 +147,9 @@ export const DocumentsPage: React.FC = () => {
   };
 
   // Dynamic directory lists for Create Folder action
-  // Custom folders the owner adds on top of the standard FOLDER_TAXONOMY
-  // cabinet -- starts empty since every one of those 19 folders is already
-  // real and covered above; nothing here is a pre-made stand-in anymore.
-  const [foldersList, setFoldersList] = useState<string[]>([]);
+  // Owner-created folders are tenant-scoped and persist beside documents.
+  const [customFolderRecords, setCustomFolderRecords] = useFirestoreCollection<CustomDocumentFolder>("document_folders", businessId);
+  const foldersList = useMemo(() => customFolderRecords.map(folder => folder.name), [customFolderRecords]);
 
   // Secondary high-fidelity interactive modals
   const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState(false);
@@ -340,11 +320,12 @@ export const DocumentsPage: React.FC = () => {
     const name = prompt("Enter new folder directory name:");
     if (name && name.trim()) {
       const trimmed = name.trim();
-      if (foldersList.includes(trimmed)) {
+      const existingNames = [...FOLDER_TAXONOMY.map(folder => folder.id), ...foldersList];
+      if (existingNames.some(existing => existing.toLowerCase() === trimmed.toLowerCase())) {
         triggerNotification("⚠️ Folder directory already exists");
         return;
       }
-      setFoldersList(prev => [...prev, trimmed]);
+      setCustomFolderRecords(prev => [...prev, { id: `folder_${Date.now()}`, name: trimmed }]);
       triggerNotification(`📁 Created folder directory: ${trimmed}`);
       if (logOperationalEvent) {
         logOperationalEvent("Folder Created", `New directory '${trimmed}' added to local structure`, "📁");
@@ -375,8 +356,8 @@ export const DocumentsPage: React.FC = () => {
 
   // Form states
   const [uploadName, setUploadName] = useState("");
-  const [uploadFolder, setUploadFolder] = useState("Customers");
-  const [uploadType, setUploadType] = useState("Contracts");
+  const [uploadFolder, setUploadFolder] = useState("Estimates");
+  const [uploadType, setUploadType] = useState("Estimates");
   const [uploadCustomer, setUploadCustomer] = useState("None");
   const [uploadEmployee, setUploadEmployee] = useState("None");
   const [uploadVendor, setUploadVendor] = useState("None");
@@ -393,19 +374,6 @@ export const DocumentsPage: React.FC = () => {
   // Attach state
   const [attachTargetType, setAttachTargetType] = useState<"Customer" | "Job" | "Employee">("Customer");
   const [attachValue, setAttachValue] = useState("");
-
-  // Folder sidebar state
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    "Customers": true,
-    "Jobs": true
-  });
-
-  const toggleFolder = (folderName: string) => {
-    setExpandedFolders(prev => ({
-      ...prev,
-      [folderName]: !prev[folderName]
-    }));
-  };
 
   // Helper arrays for unique list values
   const customers = useMemo(() => {
@@ -468,11 +436,7 @@ export const DocumentsPage: React.FC = () => {
         } else if (FOLDER_TAXONOMY.some(f => f.id === selectedFolderFilter)) {
           if ((doc.folder || inferFolderForDoc(doc)) !== selectedFolderFilter) return false;
         } else {
-          // A custom folder created via "Add Custom Folder" -- real tag
-          // match. Nothing is auto-filed into it, so it's honestly empty
-          // until a document is uploaded/tagged with that folder name,
-          // rather than silently showing every document like before.
-          if (!doc.tags.includes(selectedFolderFilter)) return false;
+          if (doc.folder !== selectedFolderFilter && !doc.tags.includes(selectedFolderFilter)) return false;
         }
       }
 
@@ -652,8 +616,10 @@ export const DocumentsPage: React.FC = () => {
       isArchived: false,
       notes: uploadNotes.trim() || `Uploaded via document dashboard console. File type: ${uploadFile.type || "unknown"}`,
       tags: tagsArray.length > 0 ? tagsArray : [uploadType.replace("s", "")],
-      estimateId: uploadType === "Estimates" ? `EST-${Math.floor(1000 + Math.random() * 9000)}` : "None",
-      invoiceId: uploadType === "Invoices" ? `INV-${Math.floor(1000 + Math.random() * 9000)}` : "None",
+      // Uploading a file does not create an estimate or invoice record.
+      // A real relationship is added only when the user attaches one.
+      estimateId: "None",
+      invoiceId: "None",
       lastModified: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       url: URL.createObjectURL(uploadFile)
     };
@@ -1225,6 +1191,42 @@ export const DocumentsPage: React.FC = () => {
           <Edit3 className="w-4 h-4" />
           Edit PDF
         </button>
+      </div>
+
+      {/* Simple filing controls: six defaults plus owner-created folders. */}
+      <div className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl p-3 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => { setSelectedFolderFilter(null); setSelectedTypeFilter(null); }}
+          className={`px-3 py-2 rounded-xl text-xs font-black transition-colors ${selectedFolderFilter === null ? "bg-[#315C9F] text-white" : "bg-white text-[#1F3557] hover:bg-[#C7E3FA]"}`}
+        >
+          All Documents
+        </button>
+        {FOLDER_TAXONOMY.map(folder => (
+          <button
+            key={folder.id}
+            onClick={() => { setSelectedFolderFilter(folder.id); setSelectedTypeFilter(null); }}
+            className={`px-3 py-2 rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 ${selectedFolderFilter === folder.id ? "bg-[#315C9F] text-white" : "bg-white text-[#1F3557] hover:bg-[#C7E3FA]"}`}
+          >
+            <span>{folder.icon}</span>{folder.id}
+          </button>
+        ))}
+        {foldersList.map(folder => (
+          <button
+            key={folder}
+            onClick={() => { setSelectedFolderFilter(folder); setSelectedTypeFilter(null); }}
+            className={`px-3 py-2 rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 ${selectedFolderFilter === folder ? "bg-[#315C9F] text-white" : "bg-white text-[#1F3557] hover:bg-[#C7E3FA]"}`}
+          >
+            <Folder className="w-3.5 h-3.5" />{folder}
+          </button>
+        ))}
+        {hasManagePermission && (
+          <button
+            onClick={handleCreateFolder}
+            className="px-3 py-2 rounded-xl text-xs font-black border border-dashed border-[#315C9F] text-[#315C9F] hover:bg-[#C7E3FA] flex items-center gap-1.5"
+          >
+            <FolderPlus className="w-3.5 h-3.5" /> Add Custom Folder
+          </button>
+        )}
       </div>
 
       {/* TAB BAR */}
@@ -2094,18 +2096,21 @@ export const DocumentsPage: React.FC = () => {
                       const newFolder = e.target.value;
                       setUploadFolder(newFolder);
                       const match = FOLDER_TAXONOMY.find(f => f.id === newFolder);
-                      if (match) setUploadType(match.subfolders[0]);
+                      setUploadType(match?.subfolders[0] || "Custom");
                     }}
                     className="bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none"
                   >
                     {FOLDER_TAXONOMY.map((f) => (
                       <option key={f.id} value={f.id}>{f.icon} {f.id}</option>
                     ))}
+                    {foldersList.map(folder => (
+                      <option key={folder} value={folder}>📁 {folder}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="space-y-1 flex flex-col">
-                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Subfolder</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#5E7393]">Document Type</label>
                   <select
                     value={uploadType}
                     onChange={(e) => setUploadType(e.target.value)}

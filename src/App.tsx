@@ -446,7 +446,7 @@ function getRevenueChartData(
   const now = new Date();
   const expenseTx = transactions.filter((t) => t.type === "expense");
   const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
-  const materialOperationalCategories = new Set(["Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+  const materialOperationalCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
   const materialTx = expenseTx.filter((t) => materialOperationalCategories.has(t.category || ""));
   const otherExpenseTx = expenseTx.filter((t) => t.category !== "Payroll" && !materialOperationalCategories.has(t.category || ""));
   const billCosts = bills.filter((bill) => bill.status !== "void").map((bill) => ({
@@ -4639,25 +4639,27 @@ Access to full financial telemetry is restricted.`;
                         <span>Back</span>
                       </button>
 
-                      {/* Centered Placeholder Content */}
-                      <div className="text-center space-y-2 animate-fade-in px-4">
-                        <h1 
-                          style={{
-                            letterSpacing: "0.15em",
-                            fontSize: `${Math.max(16, Math.round(28 * scale))}px`
-                          }}
-                          className="font-sans font-bold text-blue-900 uppercase opacity-40"
-                        >
-                          placeholder
-                        </h1>
-                        <p 
-                          style={getFontSize(12)}
-                          className="text-blue-500/60 font-medium font-sans max-w-[80%] mx-auto"
-                        >
-                          {currentView === "placeholder_help" && "Help & Support workflow will be integrated here."}
-                          {currentView === "placeholder_privacy" && "Privacy Policy document will be loaded here."}
-                        </p>
-                      </div>
+                      {currentView === "placeholder_help" ? (
+                        <div className="relative z-10 w-full max-w-sm rounded-3xl border border-blue-100 bg-white/90 p-6 text-center shadow-xl backdrop-blur animate-fade-in">
+                          <HelpCircle className="mx-auto h-10 w-10 text-blue-600" />
+                          <h1 className="mt-3 text-lg font-black text-blue-950">Need Help?</h1>
+                          <p style={getFontSize(12)} className="mt-2 font-semibold leading-relaxed text-slate-600">
+                            Get ahold of me and I’ll personally help you figure it out.
+                          </p>
+                          <a
+                            href="mailto:The.Owner@ownerslocal.com"
+                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-bold text-white shadow-md hover:bg-blue-700"
+                          >
+                            <Mail className="h-4 w-4" />
+                            The.Owner@ownerslocal.com
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-center space-y-2 animate-fade-in px-4">
+                          <h1 style={{ letterSpacing: "0.15em", fontSize: `${Math.max(16, Math.round(28 * scale))}px` }} className="font-sans font-bold text-blue-900 uppercase opacity-40">Privacy</h1>
+                          <p style={getFontSize(12)} className="text-blue-500/60 font-medium font-sans max-w-[80%] mx-auto">Privacy Policy document will be loaded here.</p>
+                        </div>
+                      )}
                     </div>
                   )}
 
