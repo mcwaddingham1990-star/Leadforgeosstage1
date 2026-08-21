@@ -1417,6 +1417,22 @@ export default function App() {
   const [businessLogos, setBusinessLogos] = useState<string[]>([""]);
   const [companyLocations, setCompanyLocations] = useState<string[]>([""]);
 
+  // Keep the visible Business Setup form in sync when reviewed AI intake
+  // updates the same Firestore business profile.
+  useEffect(() => {
+    const applyAiProfileUpdate = (event: Event) => {
+      const update = (event as CustomEvent<Record<string, unknown>>).detail || {};
+      if (Array.isArray(update.ownerNames)) setOwnerNames(update.ownerNames as string[]);
+      if (Array.isArray(update.ownerPhones)) setOwnerPhones(update.ownerPhones as string[]);
+      if (Array.isArray(update.businessNames)) setBusinessNames(update.businessNames as string[]);
+      if (Array.isArray(update.businessPhones)) setBusinessPhones(update.businessPhones as string[]);
+      if (Array.isArray(update.businessAddresses)) setBusinessAddresses(update.businessAddresses as string[]);
+      if (Array.isArray(update.companyLocations)) setCompanyLocations(update.companyLocations as string[]);
+    };
+    window.addEventListener("ownerslocal:business-profile-updated", applyAiProfileUpdate);
+    return () => window.removeEventListener("ownerslocal:business-profile-updated", applyAiProfileUpdate);
+  }, []);
+
   const [optionalProfileFields, setOptionalProfileFields] = useState<string[]>([]);
   const [showOptionalProfileWarning, setShowOptionalProfileWarning] = useState(false);
 
@@ -6677,7 +6693,7 @@ Access to full financial telemetry is restricted.`;
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                           {[
                             { name: "Bills", target: "accounting", label: "Bills" },
-                            { name: "Materials", target: "inventory", label: "Inventory" },
+                            { name: "Material Expenses", target: "inventory", label: "Inventory / Job Costs" },
                             { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
                             { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
                             { name: "Equipment", target: "inventory", label: "Inventory" },
@@ -6690,9 +6706,12 @@ Access to full financial telemetry is restricted.`;
                             { name: "Office Supplies", target: "inventory", label: "Inventory" },
                             { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
                           ].map((cat, idx) => {
+                            const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
                             const categoryTotal = cat.name === "Bills"
                               ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
-                              : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
+                              : cat.name === "Material Expenses"
+                                ? transactions.filter((t) => t.type === "expense" && materialCategories.has(t.category || "")).reduce((sum, t) => sum + t.amount, 0)
+                                : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
                             const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                             return (

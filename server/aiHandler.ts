@@ -208,7 +208,7 @@ export interface ScanBusinessRecordRequest {
 }
 
 export interface ScanBusinessRecordResponse {
-  recordType: "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "financial" | "unknown";
+  recordType: "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
   confidence: number;
   fields: Record<string, string | number | boolean | null>;
   unreadable: boolean;
@@ -217,7 +217,7 @@ export interface ScanBusinessRecordResponse {
 const BUSINESS_RECORD_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    recordType: { type: Type.STRING, enum: ["bill", "customer", "lead", "estimate", "inventory", "address", "onboarding", "financial", "unknown"] },
+    recordType: { type: Type.STRING, enum: ["bill", "customer", "lead", "estimate", "inventory", "address", "onboarding", "material_expense", "payroll", "financial", "unknown"] },
     confidence: { type: Type.NUMBER },
     fields: {
       type: Type.OBJECT,
@@ -260,7 +260,8 @@ export async function handleScanBusinessRecord(req: ScanBusinessRecordRequest): 
     contents: [{ role: "user", parts: [
       { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
       { text: [
-        "Classify this completed paper form, bill, invoice, receipt, customer sheet, lead sheet, estimate, inventory record, address form, onboarding sheet, or other business financial record.",
+        "Classify this completed paper form, bill, invoice, receipt, customer sheet, lead sheet, estimate, inventory record, address form, onboarding sheet, material or operational expense, payroll record, or other business financial record.",
+        "Use bill only for a service/provider obligation. Use material_expense for materials, equipment, fuel, tools, supplies, inventory purchases, and similar operational costs. Use payroll for wages, salaries, pay stubs, or payroll reports. Use financial only when none of those specific financial destinations applies.",
         preferred ? `The user opened the scanner for ${preferred}; prefer that type only when the document supports it.` : "",
         "Extract only legible values. Never invent missing data. Use YYYY-MM-DD for dates. Put extracted values in the matching fields object and null for anything not visible.",
         "This output will be shown to a human for correction before it can be saved."

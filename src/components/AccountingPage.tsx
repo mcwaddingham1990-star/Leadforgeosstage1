@@ -1510,12 +1510,20 @@ function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, es
 
   const expensesByCategory = useMemo(() => {
     const map: Record<string, number> = {};
+    const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
     for (const t of transactions) {
       if (t.type !== "expense") continue;
-      map[t.category || "Uncategorized"] = (map[t.category || "Uncategorized"] || 0) + t.amount;
+      const category = materialCategories.has(t.category || "") ? "Material Expenses" : (t.category || "Uncategorized");
+      map[category] = (map[category] || 0) + t.amount;
     }
-    for (const b of bills as Bill[]) map[b.category] = (map[b.category] || 0) + billTotal(b);
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+    for (const b of bills as Bill[]) map.Bills = (map.Bills || 0) + billTotal(b);
+    const priority = ["Bills", "Material Expenses", "Payroll"];
+    return Object.entries(map).sort((a, b) => {
+      const aPriority = priority.indexOf(a[0]);
+      const bPriority = priority.indexOf(b[0]);
+      if (aPriority >= 0 || bPriority >= 0) return (aPriority < 0 ? priority.length : aPriority) - (bPriority < 0 ? priority.length : bPriority);
+      return b[1] - a[1];
+    });
   }, [transactions, bills]);
 
   const expensesByVendor = useMemo(() => {
