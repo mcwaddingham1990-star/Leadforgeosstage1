@@ -184,7 +184,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents, employees, invoices, transactions } = useDomainData();
-  const { triggerNotification } = useNavTelemetry();
+  const { triggerNotification, navigateToScreen } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
 
@@ -194,15 +194,14 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
         <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-bounce" />
         <h3 className="text-sm font-black uppercase tracking-wider text-red-800">Access Restricted</h3>
         <p className="text-xs text-red-600 leading-relaxed font-sans font-medium">
-          The Owner Console is a high-privilege system control deck. Your current simulated role 
-          (<strong>{activeRole}</strong>) does not hold the required authorization credentials. Please toggle back to the <strong>Owner</strong> role in the top simulation header to review system-level engineering parameters.
+          Only the business owner can open Owner Settings. You are currently viewing the app as <strong>{activeRole}</strong>. Switch back to Owner to continue.
         </p>
       </div>
     );
   }
 
   // --- 1. CORE SIMULATION STATE ---
-  const [activeTab, setActiveTab] = useState<"engine" | "database" | "ai" | "security" | "backups" | "system">("engine");
+  const [activeTab, setActiveTab] = useState<"engine" | "database" | "ai" | "security" | "backups" | "system">("security");
   const [isConfirmReportModalOpen, setIsConfirmReportModalOpen] = useState<boolean>(false);
   const [devModeActive, setDevModeActive] = useState<boolean>(true);
 
@@ -506,135 +505,48 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   }, [selectedEventNode]);
 
   return (
-    <div className="space-y-6 text-left animate-fade-in font-sans">
-      
-      {/* HEADER COMMAND CARD */}
-      <div className="bg-[#1F3557] rounded-3xl p-6 border border-[#2D4F7F] shadow-md relative overflow-hidden text-white">
-        <div className="absolute right-0 top-0 opacity-10 transform translate-x-12 -translate-y-12 select-none">
-          <ShieldAlert className="w-64 h-64 text-white" />
-        </div>
-
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 relative z-10">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="p-2.5 bg-amber-500/10 rounded-2xl border border-amber-500/30">
-                <ShieldAlert className="w-6 h-6 text-amber-500 animate-pulse" />
-              </span>
-              <div>
-                <h1 className="text-xl font-sans font-black uppercase tracking-wider flex items-center gap-2">
-                  Owner Administrative Control Console
-                </h1>
-                <p className="text-xs text-[#BDDDF8] font-medium font-sans">
-                  Owner-only controls for app activity, AI actions, permissions, and system health.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
-            <button
-              onClick={handleRefreshSystem}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#2D4F7F] hover:bg-[#3D69A5] border border-[#4873B0] text-xs font-bold rounded-xl transition-all cursor-pointer text-white"
-              title="Refresh System Metrics"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh System</span>
-            </button>
-
-            <button
-              onClick={handleAISystemAudit}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-indigo-500 shadow-sm"
-              title="Audit prompts, memories, and AI structures"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>AI System Audit</span>
-            </button>
-
-            <button
-              onClick={triggerSignalPacketFlow}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#2D4F7F] hover:bg-[#3D69A5] border border-[#4873B0] text-xs font-bold rounded-xl transition-all cursor-pointer text-white"
-              title="Replay update flow"
-            >
-              <Play className="w-3.5 h-3.5" />
-              <span>Event Engine Monitor</span>
-            </button>
-
-            <button
-              onClick={handleExportSystemReport}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#2D4F7F] hover:bg-[#3D69A5] border border-[#4873B0] text-xs font-bold rounded-xl transition-all cursor-pointer text-white"
-              title="Export complete telemetry JSON file"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Report</span>
-            </button>
-
-            <button
-              onClick={handleBackupNow}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer border border-emerald-500 shadow-sm"
-              title="Backup database collections"
-            >
-              <HardDrive className="w-3.5 h-3.5" />
-              <span>Backup Now</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setDevModeActive(!devModeActive);
-                triggerNotification(`⚙️ Developer tools ${!devModeActive ? "ENABLED" : "DISABLED"}`);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer border ${
-                devModeActive 
-                  ? "bg-amber-500 text-white border-amber-400" 
-                  : "bg-[#2D4F7F] hover:bg-[#3D69A5] border-[#4873B0] text-white"
-              }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>Developer Mode</span>
-            </button>
-          </div>
-        </div>
+    <div className="max-w-2xl space-y-4 text-left animate-fade-in font-sans">
+      <div>
+        <h1 className="text-xl font-black text-[#1F3557]">Owner Settings</h1>
+        <p className="mt-1 text-xs text-[#5E7393]">The technical monitoring screens were removed because they were not needed to run the business.</p>
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button
+          onClick={() => navigateToScreen("roster")}
+          className="rounded-2xl border border-[#9EC8EF] bg-white p-5 text-left hover:bg-[#EAF5FF] transition-colors"
+        >
+          <Users className="w-5 h-5 text-[#315C9F] mb-3" />
+          <span className="block text-sm font-black text-[#1F3557]">Employee Permissions</span>
+          <span className="block mt-1 text-xs text-[#5E7393]">Manage employees, roles, and access.</span>
+        </button>
+        <button
+          onClick={() => navigateToScreen("settings")}
+          className="rounded-2xl border border-[#9EC8EF] bg-white p-5 text-left hover:bg-[#EAF5FF] transition-colors"
+        >
+          <Settings className="w-5 h-5 text-[#315C9F] mb-3" />
+          <span className="block text-sm font-black text-[#1F3557]">Business Settings</span>
+          <span className="block mt-1 text-xs text-[#5E7393]">Manage company and app settings.</span>
+        </button>
+      </div>
+    </div>
+  );
 
-      {/* REAL RECORD COUNTS -- replaces the old fabricated CPU/memory/network/
-          active-user/AI-cost telemetry grid. This is a client-side
-          React/Firebase app with no server process and no metrics/health
-          endpoint, so infrastructure telemetry can never be real here; it
-          has been removed rather than faked. What follows instead are real,
-          live counts from this account's own Firestore-backed data. */}
-      <div className="bg-[#EAF5FF] rounded-3xl p-6 border border-[#BDDDF8] shadow-sm space-y-4">
-        <h3 className="text-xs font-extrabold uppercase text-[#1F3557] tracking-wider flex items-center gap-1.5">
-          <span>📊</span> Account Data Snapshot
-        </h3>
-        <p className="text-[10.5px] text-[#5E7393] font-sans font-medium -mt-2">
-          Infrastructure metrics (CPU, memory, network, server cost) aren't available in this deployment — this app has no server process to sample. The counts below are real, live totals from your account's own data.
-        </p>
+  /* Legacy diagnostic console retained temporarily in source for reference,
+     but intentionally unreachable and no longer shipped in the visible UI. */
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-          {dbCollections.map((col) => (
-            <div key={col.name} className="bg-white border border-[#BDDDF8] p-3 rounded-2xl flex flex-col justify-between hover:scale-[1.01] transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">{col.name}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              </div>
-              <div className="mt-2 text-left">
-                <p className="text-sm font-sans font-black text-[#1F3557]">{col.docCount}</p>
-                <p className="text-[9px] text-[#5E7393] font-medium leading-none mt-0.5 font-sans truncate">records</p>
-              </div>
-            </div>
-          ))}
-        </div>
+  return (
+    <div className="space-y-6 text-left animate-fade-in font-sans">
+      <div>
+        <h1 className="text-xl font-black text-[#1F3557]">Owner Settings</h1>
+        <p className="text-xs text-[#5E7393] mt-1">Manage permissions, AI activity, and backups.</p>
       </div>
 
       {/* TABS DECK */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-[#BDDDF8] pb-1">
         {[
-          { id: "engine", label: "Event Engine", icon: <Network className="w-3.5 h-3.5" /> },
-          { id: "database", label: "Database Center", icon: <Database className="w-3.5 h-3.5" /> },
-          { id: "ai", label: "AI Control Center", icon: <Sparkles className="w-3.5 h-3.5" /> },
-          { id: "security", label: "Security & Role Deck", icon: <Lock className="w-3.5 h-3.5" /> },
-          { id: "backups", label: "Backups Registry", icon: <HardDrive className="w-3.5 h-3.5" /> },
-          { id: "system", label: "System Logs & Developer Settings", icon: <Code className="w-3.5 h-3.5" /> }
+          { id: "security", label: "Permissions", icon: <Lock className="w-3.5 h-3.5" /> },
+          { id: "ai", label: "AI Activity", icon: <Sparkles className="w-3.5 h-3.5" /> },
+          { id: "backups", label: "Backups", icon: <HardDrive className="w-3.5 h-3.5" /> }
         ].map((tab) => {
           const isAct = activeTab === tab.id;
           return (
@@ -717,7 +629,6 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   height: "500px" 
                 }} 
                 className="relative transition-transform duration-300"
-              >
                 {/* SVG CONNECTIONS WITH FLOWING ANIMS */}
                 <svg className="absolute top-0 left-0 w-full h-full pointer-events-none select-none">
                   {/* Dynamic path lines between sequence of nodes */}
