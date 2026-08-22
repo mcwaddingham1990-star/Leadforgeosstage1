@@ -56,21 +56,6 @@ export interface DispatchEvent {
   department?: string; // e.g. Plumbing, HVAC, Electrical
 }
 
-const AVAILABLE_CREWS = [
-  "Crew Alpha",
-  "Crew Beta",
-  "Crew Gamma",
-  "None"
-];
-
-const AVAILABLE_VEHICLES = [
-  "Truck 1 (Ford F-150)",
-  "Truck 2 (Chevrolet Express)",
-  "Van 3 (Mercedes Sprinter)",
-  "Truck 4 (Ram 1500)",
-  "None"
-];
-
 const DEPARTMENTS = ["Plumbing", "HVAC", "Electrical", "General"];
 const EVENT_TYPES = ["Job", "Site Visit", "Estimate", "Consultation", "Meeting", "Custom"];
 
@@ -113,6 +98,8 @@ export const DispatchPage: React.FC = () => {
     .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
     .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
     .sort((a, b) => a.localeCompare(b)), [employees]);
+  const AVAILABLE_CREWS = useMemo(() => ["None", ...Array.from(new Set(events.map(event => event.assignedCrew).filter((crew): crew is string => !!crew && crew !== "None"))).sort()], [events]);
+  const AVAILABLE_VEHICLES = useMemo(() => ["None", ...Array.from(new Set(events.map(event => event.assignedVehicle).filter((vehicle): vehicle is string => !!vehicle && vehicle !== "None"))).sort()], [events]);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,

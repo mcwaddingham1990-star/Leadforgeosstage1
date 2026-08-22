@@ -10,6 +10,7 @@ import {
   getDocFromServer,
   getDocsFromServer
 } from "firebase/firestore";
+import { auth } from "../firebase";
 
 export enum OperationType {
   CREATE = "create",
@@ -46,8 +47,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: "simulated_owner_uid", // App uses simplified email-based login, so we fill what is available
-      email: localStorage.getItem("ownerslocal_logged_in_user_email") || "unknown"
+      userId: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || localStorage.getItem("ownerslocal_logged_in_user_email") || null
     },
     operationType,
     path

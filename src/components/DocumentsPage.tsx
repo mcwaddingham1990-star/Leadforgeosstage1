@@ -161,62 +161,7 @@ export const DocumentsPage: React.FC = () => {
 
   // Photo-to-PDF selection state
   const [photoToPdfName, setPhotoToPdfName] = useState("Photo Compilation.pdf");
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([
-    "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=500",
-    "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500"
-  ]);
-
-  // Seed standard unchanged templates inside local state on component mount
-  useEffect(() => {
-    const hasTemplate1 = documents.some(d => d.name === "Standard Service Agreement (TEMPLATE).pdf");
-    if (!hasTemplate1) {
-      const standardTemplates: DocumentItem[] = [
-        {
-          id: "doc_template_1",
-          name: "Standard Service Agreement (TEMPLATE).pdf",
-          customer: "None",
-          employee: "System Core",
-          vendor: "None",
-          job: "None",
-          type: "Contracts",
-          folder: "Customers",
-          uploadedBy: "System admin",
-          date: "2026-07-01",
-          size: "450 KB",
-          status: "Unsigned",
-          isFavorite: true,
-          isArchived: false,
-          notes: "Standard master service contract. This template remains unchanged; duplicate or open in PDF editor to create copy.",
-          tags: ["Template", "Standard", "Legal"],
-          estimateId: "None",
-          invoiceId: "None",
-          lastModified: "2026-07-01 09:00 AM"
-        },
-        {
-          id: "doc_template_2",
-          name: "Standard Field Assessment (TEMPLATE).pdf",
-          customer: "None",
-          employee: "System Core",
-          vendor: "None",
-          job: "None",
-          type: "Templates",
-          folder: "Estimates & Quotes",
-          uploadedBy: "System admin",
-          date: "2026-07-01",
-          size: "320 KB",
-          status: "Unsigned",
-          isFavorite: false,
-          isArchived: false,
-          notes: "Standard on-site damage and service assessment sheet. Intact template files.",
-          tags: ["Template", "Standard"],
-          estimateId: "None",
-          invoiceId: "None",
-          lastModified: "2026-07-01 09:00 AM"
-        }
-      ];
-      setDocuments(prev => [...prev, ...standardTemplates]);
-    }
-  }, [documents, setDocuments]);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
 
   // Real one-time migration: any document uploaded/scanned/generated before
   // the folder taxonomy existed has no `folder` field. Backfill a real,

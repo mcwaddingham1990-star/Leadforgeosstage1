@@ -59,21 +59,12 @@ import { APIProvider, Map, Marker } from "@vis.gl/react-google-maps";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
 
-// Deterministic DFW-area fallback coordinates until Google returns a real geocode.
+// A missing geocode must never be presented as a real location. Callers filter
+// non-finite coordinates until Google returns the verified address position.
 export function geocodeAddress(address: string, id: string = ""): { lat: number; lng: number } {
-  let hash = 0;
-  const combined = (address || "Dallas, TX") + id;
-  for (let i = 0; i < combined.length; i++) {
-    hash = combined.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  const latDelta = ((Math.abs(hash) % 1000) / 1000) * 0.30 - 0.15;
-  const lngDelta = ((Math.abs(hash >> 3) % 1000) / 1000) * 0.36 - 0.18;
-  
-  return {
-    lat: DFW_FALLBACK.lat + latDelta,
-    lng: DFW_FALLBACK.lng + lngDelta
-  };
+  void address;
+  void id;
+  return { lat: Number.NaN, lng: Number.NaN };
 }
 
 export interface InteractiveMapPageProps {
@@ -188,10 +179,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     if (resolvedDefaultCenter) return;
 
     // 1. Real business address on file.
-    if (businessAddresses?.[0]?.trim()) {
-      setResolvedDefaultCenter(geocodeAddress(businessAddresses[0], "office_hq"));
-      return;
-    }
+    // A supplied HQ is resolved by the Google geocoder below. Do not invent
+    // coordinates while that request is in flight.
+    if (businessAddresses?.[0]?.trim()) return;
 
     // 2. Last position the owner actually viewed, saved locally.
     try {
@@ -455,13 +445,20 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setEditPhones(parsedPhones.length > 0 ? parsedPhones : [""]);
 
     // Parse address parts
-    const parts = (rawAddress || "").split(",").map(s => s.trim());
+    const parts = (rawAddress || "").split(",").map(s => s.trim()).filter(Boolean);
     const street = parts[0] || "";
     let cityState = "";
     let zip = "";
     if (parts.length >= 3) {
-      cityState = parts[1];
-      zip = parts[2];
+      const lastPart = parts[parts.length - 1];
+      const zipMatch = lastPart.match(/\d{5}(?:-\d{4})?$/);
+      if (zipMatch) {
+        zip = zipMatch[0];
+        const statePart = lastPart.slice(0, zipMatch.index).trim();
+        cityState = [...parts.slice(1, -1), statePart].filter(Boolean).join(", ");
+      } else {
+        cityState = parts.slice(1).join(", ");
+      }
     } else if (parts.length === 2) {
       const lastPart = parts[1];
       const zipMatch = lastPart.match(/\d{5}(-\d{4})?$/);
@@ -562,6 +559,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     const geocoder = new google.maps.Geocoder();
     const addressesToGeocode: Array<{ key: string, address: string }> = [];
 
+    const hqAddr = businessAddresses?.find(address => address.trim().length > 0);
+    if (hqAddr) {
+      const cacheKey = `hq_${hqAddr}`;
+      if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
+        addressesToGeocode.push({ key: cacheKey, address: hqAddr });
+      }
+    }
+
     customers.forEach(c => {
       const cacheKey = `cust_${c.id}_${c.address}`;
       if (c.address && !geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
@@ -578,7 +583,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     estimates.forEach(e => {
-      const addr = e.company || e.customerName || "Dallas, TX";
+      const linkedCustomer = customers.find(customer => customer.contact === e.customerName || customer.company === e.company || customer.company === e.customerName);
+      const addr = e.address || linkedCustomer?.address || "";
+      if (!addr) return;
       const cacheKey = `est_${e.id}_${addr}`;
       if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -609,29 +616,27 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               ...prev,
               [key]: { lat: loc.lat(), lng: loc.lng() }
             }));
-          } else {
-            // Put deterministic fallback coordinate in cache to avoid infinite retries
-            const fallback = geocodeAddress(address, key);
-            setGeocodedCache(prev => ({
-              ...prev,
-              [key]: fallback
-            }));
+            if (key.startsWith("hq_")) {
+              const center = { lat: loc.lat(), lng: loc.lng() };
+              setResolvedDefaultCenter(center);
+              setCurrentMapCenter(center);
+            }
           }
         });
       });
     }
-  }, [mapsApiLoaded, customers, leads, estimates, schedulingEvents, geocodedCache]);
+  }, [mapsApiLoaded, customers, leads, estimates, schedulingEvents, businessAddresses, geocodedCache]);
 
   // Only show an office when the owner has supplied a real business address.
   // Never manufacture facilities or locations for a new account.
   const fixedFacilities = useMemo(() => {
     const hqAddr = businessAddresses?.find(address => address.trim().length > 0);
     if (!hqAddr) return [];
-    const hqCoords = geocodeAddress(hqAddr, "office_hq");
+    const hqCoords = geocodedCache[`hq_${hqAddr}`] || geocodeAddress(hqAddr, "office_hq");
     return [
       { id: "office_hq", type: "Office" as const, title: "Business HQ", subtitle: "Primary business location", address: hqAddr, lat: hqCoords.lat, lng: hqCoords.lng, raw: {} }
     ];
-  }, [businessAddresses]);
+  }, [businessAddresses, geocodedCache]);
 
   // Sync / Auto Geocode pins from existing lists
   const allPins = useMemo(() => {
@@ -695,7 +700,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 5. Estimates (Purple files)
     if (showEstimates) {
       estimates.forEach(e => {
-        const address = e.address || e.company || e.customerName || "Dallas, TX";
+        const linkedCustomer = customers.find(customer => customer.contact === e.customerName || customer.company === e.company || customer.company === e.customerName);
+        const address = e.address || linkedCustomer?.address || "";
         const cacheKey = `est_${e.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, e.id);
         list.push({

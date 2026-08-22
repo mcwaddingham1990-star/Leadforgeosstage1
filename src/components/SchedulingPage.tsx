@@ -59,8 +59,6 @@ const DEFAULT_EVENT_TYPES = [
 ];
 
 
-const CREWS = ["Crew Alpha", "Crew Beta", "Crew Gamma", "None"];
-
 const PRIORITIES: Array<"Low" | "Medium" | "High" | "Urgent"> = ["Low", "Medium", "High", "Urgent"];
 
 export const SchedulingPage: React.FC = () => {
@@ -156,7 +154,8 @@ export const SchedulingPage: React.FC = () => {
   const [formCustomZip, setFormCustomZip] = useState("");
 
   const [formEmployee, setFormEmployee] = useState("");
-  const [formCrew, setFormCrew] = useState("Crew Alpha");
+  const crews = useMemo(() => ["None", ...Array.from(new Set(events.map(event => event.assignedCrew).filter((crew): crew is string => !!crew && crew !== "None"))).sort()], [events]);
+  const [formCrew, setFormCrew] = useState("None");
   const [formLocation, setFormLocation] = useState("");
   const [formPriority, setFormPriority] = useState<"Low" | "Medium" | "High" | "Urgent">("Medium");
   const [formNotes, setFormNotes] = useState("");
@@ -235,7 +234,7 @@ export const SchedulingPage: React.FC = () => {
     setFormCustomCityState("");
     setFormCustomZip("");
     setFormEmployee(EMPLOYEES[0] || "");
-    setFormCrew(CREWS[0]);
+    setFormCrew("None");
     setFormLocation("");
     setFormPriority("Medium");
     setFormNotes("");
@@ -904,7 +903,7 @@ export const SchedulingPage: React.FC = () => {
                 className="w-full bg-white border border-[#A9CDEE] rounded-xl p-2 font-medium text-slate-700"
               >
                 <option value="All">All Crews</option>
-                {CREWS.map(cr => (
+                {crews.map(cr => (
                   <option key={cr} value={cr}>{cr}</option>
                 ))}
               </select>
@@ -1604,7 +1603,7 @@ export const SchedulingPage: React.FC = () => {
                     onChange={(e) => setFormCrew(e.target.value)}
                     className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 font-semibold"
                   >
-                    {CREWS.map(cr => (
+                    {crews.map(cr => (
                       <option key={cr} value={cr}>{cr}</option>
                     ))}
                   </select>

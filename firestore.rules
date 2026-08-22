@@ -31,8 +31,8 @@ service cloud.firestore {
       ];
     }
 
-    function canManageProjectCompletion() {
-      return getUserProfile().role in [
+    function canManageProjectCompletion(businessId) {
+      return request.auth.token.email == businessId || getUserProfile().role in [
         "Owner", "Manager", "General Manager", "Office Manager",
         "Operations Manager", "Scheduler", "Dispatch", "Dispatcher"
       ];
@@ -94,20 +94,20 @@ service cloud.firestore {
       // Stock reductions are approval actions. All other inventory edits retain
       // the existing tenant permission behavior.
       allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
-        && (request.resource.data.quantity >= resource.data.quantity || canManageProjectCompletion());
+        && (request.resource.data.quantity >= resource.data.quantity || canManageProjectCompletion(request.resource.data.businessId));
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /project_completion_plans/{jobId} {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
-        && request.resource.data.jobId == jobId && canManageProjectCompletion();
+        && request.resource.data.jobId == jobId && canManageProjectCompletion(request.resource.data.businessId);
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
-        && canManageProjectCompletion();
+        && canManageProjectCompletion(resource.data.businessId);
       allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
         && request.resource.data.businessId == resource.data.businessId
         && request.resource.data.jobId == resource.data.jobId
         && (
-          canManageProjectCompletion()
+          canManageProjectCompletion(request.resource.data.businessId)
           || (isAssignedToJob(resource.data.jobId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'activity', 'updatedAt']))
         );
