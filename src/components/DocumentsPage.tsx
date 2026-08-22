@@ -88,8 +88,6 @@ interface CustomDocumentFolder { id: string; name: string }
 
 
 const STOCK_TEMPLATES = [
-  { id: "tpl-invoice",  name: "Stock Invoice",              icon: "💳", desc: "Standard service invoice template",         color: "from-[#1F3557] to-[#315C9F]",    action: "esign" as const },
-  { id: "tpl-estimate", name: "Stock Estimate",             icon: "📝", desc: "Standard estimate / quote template",        color: "from-emerald-700 to-emerald-500", action: "esign" as const },
   { id: "tpl-w2",       name: "W-2 Wage Statement",         icon: "📋", desc: "IRS W-2 — employee annual wages",           color: "from-violet-700 to-violet-500",   action: "link"  as const, url: "https://www.irs.gov/pub/irs-pdf/fw2.pdf"            },
   { id: "tpl-1099nec",  name: "1099-NEC Contractor",        icon: "📋", desc: "IRS 1099-NEC — non-employee compensation",  color: "from-amber-700 to-amber-500",     action: "link"  as const, url: "https://www.irs.gov/pub/irs-pdf/f1099nec.pdf"        },
   { id: "tpl-i9",       name: "I-9 Employment Eligibility", icon: "🪪", desc: "USCIS I-9 — employment eligibility form",   color: "from-teal-700 to-teal-500",       action: "link"  as const, url: "https://www.uscis.gov/sites/default/files/document/forms/i-9.pdf" },
@@ -136,12 +134,14 @@ export const DocumentsPage: React.FC = () => {
   const [isPDFEditorOpen, setIsPDFEditorOpen] = useState(false);
   const [pdfEditorDocId, setPdfEditorDocId] = useState<string | null>(null);
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
+  const [pdfEditorBase64, setPdfEditorBase64] = useState("");
   const [pdfEditorAutoOpenPicker, setPdfEditorAutoOpenPicker] = useState(false);
 
   useEffect(() => {
     if (!generatedPdfDraft) return;
     setPdfEditorDocId(null);
     setPdfEditorDocName(generatedPdfDraft.filename);
+    setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(false);
     setIsPDFEditorOpen(true);
   }, [generatedPdfDraft]);
@@ -190,6 +190,7 @@ export const DocumentsPage: React.FC = () => {
   const handleOpenPDFEditor = (doc: DocumentItem | null, autoOpenPdfPicker: boolean = false) => {
     setPdfEditorDocId(doc?.id || null);
     setPdfEditorDocName(doc?.name || "");
+    setPdfEditorBase64((doc as any)?.pdfBase64 || "");
     setPdfEditorAutoOpenPicker(autoOpenPdfPicker);
     setIsPDFEditorOpen(true);
     if (doc) {
@@ -228,7 +229,9 @@ export const DocumentsPage: React.FC = () => {
               lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
               metaObjects: metaProperties?.objects || [],
               auditTrail: metaProperties?.auditTrail || (d as any).auditTrail || [],
-              signingOptions: metaProperties?.signingOptions || (d as any).signingOptions || {}
+              signingOptions: metaProperties?.signingOptions || (d as any).signingOptions || {},
+              pdfBase64: metaProperties?.pdfBase64 || (d as any).pdfBase64,
+              size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : d.size
             };
           }
           return d;
@@ -245,7 +248,7 @@ export const DocumentsPage: React.FC = () => {
           type: generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : "Contracts",
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
-          size: "150 KB",
+          size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : "Draft",
           status: metaProperties?.status || "Awaiting Signature",
           folder: "eSign",
           isFavorite: false,
@@ -259,6 +262,7 @@ export const DocumentsPage: React.FC = () => {
         };
         (newDoc as any).auditTrail = metaProperties?.auditTrail || [];
         (newDoc as any).signingOptions = metaProperties?.signingOptions || {};
+        (newDoc as any).pdfBase64 = metaProperties?.pdfBase64 || "";
         return [...prev, newDoc];
       }
     });
@@ -1136,7 +1140,7 @@ export const DocumentsPage: React.FC = () => {
           className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
         >
           <FolderOpen className="w-4 h-4" />
-          Open PDF
+          Open PDF — Device / Drive
         </button>
         <button
           onClick={() => handleOpenPDFEditor(null, true)}
@@ -1633,6 +1637,7 @@ export const DocumentsPage: React.FC = () => {
           accountName={loggedInUser?.name}
           documentId={pdfEditorDocId}
           initialFilename={pdfEditorDocName ? pdfEditorDocName.replace(/\.pdf$/i, "") : undefined}
+          initialPdfBase64={pdfEditorBase64 || undefined}
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
           initialDraft={generatedPdfDraft}
           onClose={closePDFEditor}

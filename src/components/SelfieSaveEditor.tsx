@@ -42,6 +42,7 @@ export interface SelfieSaveEditorProps {
   accountName?: string;
   documentId: string | null;
   initialFilename?: string;
+  initialPdfBase64?: string;
   // When true, immediately opens the native file picker on mount -- this is
   // what makes the Documents Hub's "Open PDF" / "Edit PDF" buttons go
   // straight from click to file picker to loaded document, no extra UI.
@@ -51,7 +52,7 @@ export interface SelfieSaveEditorProps {
   onSave: (docId: string, updatedName: string, metaProperties?: any) => void;
 }
 
-export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,autoOpenPdfPicker,initialDraft,onClose,onSave}:SelfieSaveEditorProps){
+export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,onClose,onSave}:SelfieSaveEditorProps){
   const [splash,setSplash]=useState(true);
   const [setup,setSetup]=useState(!autoOpenPdfPicker);
   const [features,setFeatures]=useState(defaultFeatures);
@@ -93,6 +94,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const nextIdRef=useRef(Date.now());
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
   const initialDraftLoadedRef=useRef(false);
+  const initialPdfLoadedRef=useRef(false);
   const dragRef=useRef<{key:string;pointerId:number;offsetX:number;offsetY:number;w:number;h:number;start:{clientX:number;clientY:number;x:number;y:number;page:number}}|null>(null);
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
@@ -118,6 +120,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     });
     setSetup(false);setSplash(false);setPageCount(1);
   },[initialDraft]);
+  useEffect(()=>{
+    if(!initialPdfBase64||initialPdfLoadedRef.current)return;
+    initialPdfLoadedRef.current=true;
+    try{
+      const binary=atob(initialPdfBase64);
+      const bytes=Uint8Array.from(binary,character=>character.charCodeAt(0));
+      const file=new File([bytes],`${initialFilename||"document"}.pdf`,{type:"application/pdf"});
+      setSplash(false);
+      void loadPdf(file);
+    }catch{
+      notify("Saved PDF could not be reopened. Choose the original file from Device / Drive.");
+    }
+  },[initialPdfBase64,initialFilename]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
   useEffect(()=>{
     const updatePdfSelection=()=>{
@@ -429,31 +444,38 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   async function beginSign(id:number){if(finalLocked)return;const f=fields.find(x=>x.id===id);if(f?.committed)return;setActive(id);setSignerName(f?.name||"");setConsent(false);setCameraError("");if(!features.selfies)return;try{if(!navigator.mediaDevices?.getUserMedia)throw new Error("Camera access is unavailable");const request=navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false});const timeout=new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("Camera request timed out")),12000));const s=await Promise.race([request,timeout]);streamRef.current=s;setTimeout(()=>{if(videoRef.current)videoRef.current.srcObject=s},0)}catch{setCameraError("Front-camera permission is required for this document.")}}
   function saveMark(){if(!active||!signerName.trim()||!consent||cameraError)return;const fieldId=active;const video=videoRef.current;let image="";if(features.selfies&&video){const c=document.createElement("canvas");c.width=320;c.height=240;c.getContext("2d")?.drawImage(video,0,0,320,240);image=c.toDataURL("image/jpeg",.78)}const now=new Date();const stamp=new Intl.DateTimeFormat("en-US",{dateStyle:"medium",timeStyle:"short"}).format(now);const centralStamp=new Intl.DateTimeFormat("en-US",{dateStyle:"medium",timeStyle:"short",timeZone:"America/Chicago"}).format(now)+" Central Time";const save=(coords="")=>{makeRoomForSignedField(fieldId,!!image);setFields(v=>v.map(f=>f.id===fieldId?{...f,signed:true,name:signerName.trim(),image,stamp,centralStamp,coords}:f));streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;setActive(null);notify("Signing field completed — review before committing")};if(features.location&&navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>save(`${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`),()=>save("Location unavailable"));else save()}
   function commitParty(party:number){const mine=fields.filter(f=>f.party===party);if(!mine.length||mine.some(f=>!f.signed))return;const warning="Save Signer "+party+"'s complete portion? This locks the agreement text and this signer's answers. The drafter cannot edit this signed copy afterward.";if(confirm(warning)){setFields(v=>v.map(f=>f.party===party?{...f,committed:true}:f));notify(`Signer ${party} committed — document text is now locked`)}}
-  const persist=(status:"Draft"|"Signed")=>{
+  const persist=(status:"Draft"|"Signed", extra:Record<string,unknown>={})=>{
     const docId=documentId||`doc_selfiesave_${Date.now()}`;
     const finalName=(filename.trim()||"Untitled document")+".pdf";
     onSave(docId,finalName,{
       status,
       objects,
       auditTrail:fields.filter(f=>f.signed).map(f=>({id:`field_${f.id}`,signerName:f.name,role:`party_${f.party}_${f.kind}`,action:f.committed?"committed":"signed",timestamp:f.stamp,centralTime:f.centralStamp,coords:f.coords,hasSelfie:!!f.image})),
-      signingOptions:{features,header,footer,clauses,fields,placements,pageCount,hasImportedPdf:pdfPages.length>0}
+      signingOptions:{features,header,footer,clauses,fields,placements,pageCount,hasImportedPdf:pdfPages.length>0},
+      ...extra
     });
   };
-  function finalize(){
+  const buildFinalPdf=()=>{
+    const clean=(value:string)=>value.replace(/[^\x20-\x7E]/g," ").replace(/([\\()])/g,"\\$1");
+    const source=[filename,"",header,...objects.filter(o=>o.kind==="text").map(o=>o.value),...clauses.map((clause,index)=>`${index+1}. ${clause}`),"",...fields.map(field=>`${field.role||`Signer ${field.party}`} ${field.kind}: ${field.name||""} ${field.stamp||""}`),footer];
+    const lines=source.flatMap(value=>String(value||"").split(/\r?\n/)).flatMap(value=>value.match(/.{1,92}(?:\s|$)|.{1,92}/g)||[""]).slice(0,52);
+    const stream=["BT","/F1 11 Tf","50 760 Td",...lines.flatMap((line,index)=>index===0?[`(${clean(line.trim())}) Tj`]:["0 -14 Td",`(${clean(line.trim())}) Tj`]),"ET"].join("\n");
+    const objectsPdf=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`];
+    let pdf="%PDF-1.4\n",offsets=[0];objectsPdf.forEach((object,index)=>{offsets[index+1]=pdf.length;pdf+=`${index+1} 0 obj\n${object}\nendobj\n`});const xref=pdf.length;pdf+=`xref\n0 ${objectsPdf.length+1}\n0000000000 65535 f \n${offsets.slice(1).map(offset=>String(offset).padStart(10,"0")+" 00000 n ").join("\n")}\ntrailer\n<< /Size ${objectsPdf.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf],{type:"application/pdf"});
+  };
+  async function finalize(){
     if(!complete)return;
     if(confirm("Create the final signed PDF record? This document can never be edited afterward.")){
-      const originalTitle=document.title;
       const pdfName=(filename.trim()||"Untitled document").replace(/[\\/:*?\"<>|]+/g,"-");
-      document.title=pdfName;
       setSelected(null);
       setMenu(null);
       setFinalLocked(true);
-      persist("Signed");
-      notify("Final copy locked and saved to Documents Hub — choose Save as PDF on the next screen");
-      const restoreTitle=()=>{document.title=originalTitle};
-      window.addEventListener("afterprint",restoreTitle,{once:true});
-      window.setTimeout(()=>window.print(),300);
-      window.setTimeout(restoreTitle,60000);
+      const blob=buildFinalPdf();
+      const pdfBase64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||"").split(",")[1]||"");reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob)});
+      persist("Signed",{pdfBase64,actualSizeBytes:blob.size,mimeType:"application/pdf"});
+      const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`${pdfName}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      notify("Final signed PDF saved to Documents and downloaded");
     }
   }
   function pointerDown(e:React.PointerEvent,key:string){

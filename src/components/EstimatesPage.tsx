@@ -487,7 +487,7 @@ export const EstimatesPage: React.FC = () => {
             </span>
             <div>
               <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">
-                Quotation Database Ledger
+                Estimates
               </h3>
               <p className="text-[10px] text-[#5E7393] font-bold">
                 Filtered: {filteredEstimates.length} of {estimates.length} proposals
@@ -615,7 +615,7 @@ export const EstimatesPage: React.FC = () => {
             </span>
             <div>
               <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">
-                Quotation Quick Action Hub
+                Estimate Actions
               </h3>
               <p className="text-[10px] text-[#5E7393] font-semibold">
                 Generate PDFs, duplicate contract drafts, or dispatch direct alerts
@@ -776,7 +776,7 @@ export const EstimatesPage: React.FC = () => {
         </div>
 
         <p className="text-slate-600 text-[11px] leading-relaxed font-sans font-semibold">
-          💡 <strong>Simulated Workflow Pipeline:</strong> When an estimate is marked as <strong className="text-emerald-600 uppercase font-mono">Accepted</strong> by a residential customer, the OwnersLOCAL core engine is engineered to automatically spawn a corresponding <strong>Job</strong>, add it to the live schedule ledger, transmit dispatch alerts to the nearest crew member, and write pending receivables into your Revenue database module.
+          <strong>Accepted estimate workflow:</strong> After you confirm the job details, OwnersLOCAL creates one linked <strong>Job</strong> and adds it to Jobs, Scheduling, Dispatch, and Map.
         </p>
 
         {/* CLICKABLE CONNECTION NODES */}
@@ -784,14 +784,14 @@ export const EstimatesPage: React.FC = () => {
           {[
             { id: "customers", label: "Customers Module", icon: "👥" },
             { id: "leads", label: "Leads Module", icon: "🎯" },
-            { id: "inventory", label: "Inventory Depot", icon: "📦" },
+            { id: "inventory", label: "Inventory", icon: "📦" },
             { id: "scheduling", label: "Scheduling Grid", icon: "📅" },
             { id: "jobs", label: "Jobs Dispatch", icon: "🛠️" },
-            { id: "documents", label: "Documents Safe", icon: "📂" },
-            { id: "revenue", label: "Revenue Vault", icon: "💰" },
-            { id: "ai_assistant", label: "AI Copilot Core", icon: "🤖" },
+            { id: "documents", label: "Documents", icon: "📂" },
+            { id: "revenue", label: "Revenue", icon: "💰" },
+            { id: "ai_assistant", label: "AI Assistant", icon: "🤖" },
             { id: "dashboard", label: "HQ Dashboard", icon: "📊" },
-            { id: "shared_events", label: "Event Logger", icon: "⚙️" }
+            { id: "shared_events", label: "Activity", icon: "⚙️" }
           ].map((node) => (
             <button
               key={node.id}

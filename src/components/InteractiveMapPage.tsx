@@ -55,9 +55,27 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, Marker } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
+
+const FitMapToPins: React.FC<{ pins: Array<{ lat: number; lng: number }> }> = ({ pins }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !pins.length || typeof google === "undefined") return;
+    const validPins = pins.filter(pin => Number.isFinite(pin.lat) && Number.isFinite(pin.lng));
+    if (!validPins.length) return;
+    if (validPins.length === 1) {
+      map.setCenter(validPins[0]);
+      map.setZoom(15);
+      return;
+    }
+    const bounds = new google.maps.LatLngBounds();
+    validPins.forEach(pin => bounds.extend(pin));
+    map.fitBounds(bounds, 64);
+  }, [map, pins]);
+  return null;
+};
 
 // A missing geocode must never be presented as a real location. Callers filter
 // non-finite coordinates until Google returns the verified address position.
@@ -1321,7 +1339,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       customers: customers.length,
       todayJobs: schedulingEvents.filter(e => e.eventType === "Job" && e.date === new Date().toISOString().split("T")[0]).length,
       leads: leads.filter(l => l.status === "New").length,
-      estimates: estimates.filter(e => e.status === "Sent" || e.status === "Pending").length,
+      estimates: estimates.length,
       techs: activeTechnicians.filter(t => t.status !== "Offline").length,
       vehicles: vehicles.length,
       emergency: schedulingEvents.filter(e => e.priority === "High" && e.status !== "Completed").length,
@@ -1342,7 +1360,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           </h2>
         </div>
         <p className="text-xs text-slate-400 font-semibold max-w-xl leading-relaxed">
-          Populated instantly from system ledgers. Dispatch, optimize paths, monitor active fleet movements, and manage CRM operations in real-time.
+          See customers, leads, estimates, jobs, employees, and vehicles in one place.
         </p>
       </div>
 
@@ -1396,7 +1414,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           {/* SMART FILTER SWITCHBOARD */}
           <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-[28px] p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-extrabold text-slate-200 uppercase tracking-wider border-b border-white/10 pb-2 flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-blue-400" /> Active Layer Switchboard
+              <Sliders className="w-4 h-4 text-blue-400" /> Map Layers
             </h3>
 
             <div className="space-y-2.5 text-xs text-slate-300 font-semibold">
@@ -1617,6 +1635,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       : "bg-slate-800/70 border-white/5 text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
+                  <FitMapToPins pins={filteredPins} />
                   {type === "All" ? "🌍 All Layers" : `${type}s`}
                 </button>
               ))}
@@ -2002,9 +2021,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   <LayersIcon className="w-5 h-5 text-blue-400" />
                 </span>
                 <div>
-                  <h4 className="text-[11px] font-extrabold text-white uppercase tracking-wider">Spatial Index Ledger</h4>
+                  <h4 className="text-[11px] font-extrabold text-white uppercase tracking-wider">Map Results</h4>
                   <p className="text-[10px] text-slate-400 font-bold">
-                    Currently streaming {filteredPins.length} geospatial items across DFW.
+                    Showing {filteredPins.length} mapped records.
                   </p>
                 </div>
               </div>
@@ -2325,7 +2344,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
                   {/* DIRECT CRM ACTION BUTTONS */}
                   <div className="space-y-2">
-                    <p className="text-[10px] uppercase font-extrabold text-slate-400">Direct Contact Rig</p>
+                    <p className="text-[10px] uppercase font-extrabold text-slate-400">Contact</p>
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => alert(`Initiating direct voice bridge to phone line of ${selectedPin.title}`)}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -112,6 +112,7 @@ export const DispatchPage: React.FC = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
+  const initialDateAligned = useRef(false);
   
   // Search query
   const [searchQuery, setSearchQuery] = useState("");
@@ -228,6 +229,15 @@ export const DispatchPage: React.FC = () => {
       };
     });
   }, [events]);
+
+  useEffect(() => {
+    if (initialDateAligned.current || !normalizedEvents.length) return;
+    initialDateAligned.current = true;
+    if (normalizedEvents.some(event => event.date === selectedDate)) return;
+    const dates = Array.from(new Set(normalizedEvents.map(event => event.date).filter(Boolean))).sort();
+    const nextDate = dates.find(date => date >= selectedDate) || dates[dates.length - 1];
+    if (nextDate) setSelectedDate(nextDate);
+  }, [normalizedEvents, selectedDate]);
 
   // Compute stats for summary cards
   const stats = useMemo(() => {
@@ -1133,8 +1143,9 @@ export const DispatchPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    alert(`Simulating telephony dialer link for ${selectedEvent.customerPhone || "(555) 555-0199"}...`);
+                    if (selectedEvent.customerPhone) window.location.href = `tel:${selectedEvent.customerPhone}`;
                   }}
+                  disabled={!selectedEvent.customerPhone}
                   className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-[#1F3557] border border-slate-200 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
                 >
                   <PhoneCall className="w-3.5 h-3.5 text-emerald-600" /> Call Client
