@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 120964)
-Total output lines: 7998
-
 import React, { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
@@ -1812,1762 +1809,491 @@ export default function App() {
 
   const takeSnapshot = (pageId: string, pageName: string, metaData?: any) => {
     // A Snapshot is an archive of the module's state, not a camera upload.
-    // Saving…60964 tokens truncated…isibleScreens().some(screen => screen.id === "revenue") ? (
-                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
-                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
-                        <h2 className="text-xl font-bold text-white">Restricted Access</h2>
-                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                          Your account does not have permission to access the Revenue Page or view financial data.
-                        </p>
-                        <button
-                          onClick={() => setActiveScreen(OS_SCREENS[0])}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-                        >
-                          Return to Dashboard
-                        </button>
-                      </div>
-                    ) : (
-                      /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
-                      <div className="space-y-6 animate-fade-in text-left">
-                      {/* HEADER SECTION - Separate clean header block */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                          <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-                            <span className="select-none text-xl">📈</span> Company Revenue Tracking
-                          </h2>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
-                        </div>
-                        <PlaidConnectButton />
-                      </div>
-
-                      {/* CHOOSE GRAPH DATA BLOCK */}
-                      <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
-                        <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "revenue",  label: "Total Revenue" },
-                            { value: "expenses", label: "Total Expenses" },
-                            { value: "profit",   label: "Total Profit" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setGraphDataType(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                graphDataType === value
-                                  ? "bg-[#4A86F7] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        {graphDataType === "expenses" && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
-                            <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {([ ["Bills", "Bills — service/provider obligations"], ["MaterialExpenses", "Material / Operational Expenses"], ["Payroll", "Payroll"], ["OtherExpenses", "Other Expenses"] ] as const).map(([key, label]) => {
-                              const selected = selectedExpenseSeries.includes(key);
-                              return <button key={key} onClick={() => setSelectedExpenseSeries(current => selected ? current.filter(item => item !== key) : [...current, key])} className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${selected ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-400"}`}>{selected ? "✓ " : ""}{label}</button>;
-                            })}
-                          </div>
-                          <p className="text-[9px] text-[#5E7393]">Materials, equipment, fuel, tools, inventory purchases, and supplies stay under Material / Operational Expenses—not Bills.</p>
-                        </div>}
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "Day",        label: "Day" },
-                            { value: "Week",       label: "Week" },
-                            { value: "Pay Period", label: "Pay Period" },
-                            { value: "Quarter",    label: "Quarter" },
-                            { value: "Annual",     label: "Annual" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setRevenuePageFilter(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                revenuePageFilter === value
-                                  ? "bg-[#1F3557] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH MULTI-LINE GRAPH */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Ledger</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
-                              Period: <strong className="text-[#315C9F]">
-                                {(() => {
-                                  const now = new Date();
-                                  if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Week") return `Daily activity — last 7 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
-                                  if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
-                                  if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
-                                  return "Running totals — complete financial history";
-                                })()}
-                              </strong>
-                            </p>
-                          </div>
-
-                          {/* Filter Button Group */}
-                          <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
-                            {[
-                              { value: "Day", label: "View by Day" },
-                              { value: "Week", label: "View by Week" },
-                              { value: "Pay Period", label: "View by Pay Period" },
-                              { value: "Quarter", label: "View by Quarter" },
-                              { value: "Annual", label: "View Annual" },
-                              { value: "Total", label: "View Total" }
-                            ].map(({ value, label }) => {
-                              const isActive = revenuePageFilter === value;
-                              return (
-                                <button
-                                  key={value}
-                                  onClick={() => {
-                                    setRevenuePageFilter(value);
-                                    triggerNotification(`Adjusted graph filter to: ${label}`);
-                                  }}
-                                  className={`px-3 py-1.5 text-[10.5px] rounded-lg transition-all duration-200 cursor-pointer font-bold ${
-                                    isActive
-                                      ? "bg-[#4A86F7] text-white shadow-sm"
-                                      : "text-[#5E7393] hover:text-[#1F3557]"
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Summary Display on Graph card */}
-                        {(() => {
-                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions, bills);
-                          const balance = currentTotal - currentExpenseTotal;
-                          const priorBalance = priorTotal - priorExpenseTotal;
-                          const hasPrior = priorBalance !== 0;
-                          const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
-                          const isUp = pct === null ? balance > 0 : pct >= 0;
-                          const balanceLabel = balanceView === "Total" ? "Total Balance" : `${balanceView} Balance`;
-                          return (
-                            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
-                              <div>
-                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393] mb-1">{balanceLabel}</p>
-                                <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
-                                  {`${balance < 0 ? "-" : ""}$${Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                </span>
-                              </div>
-                              <select
-                                aria-label="Balance view"
-                                value={balanceView}
-                                onChange={(e) => {
-                                  changeBalanceView(e.target.value);
-                                  triggerNotification(`Balance view updated to: ${e.target.options[e.target.selectedIndex].text}`);
-                                }}
-                                className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
-                              >
-                                <option value="Day">View by Day</option>
-                                <option value="Pay Period">View by Pay Period</option>
-                                <option value="Quarter">View by Quarter</option>
-                                <option value="Annual">View Annual</option>
-                                <option value="Total">View Total Balance</option>
-                              </select>
-                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
-                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
-                                {pct === null ? (balance !== 0 ? "Current" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
-                              </span>
-                              <span className="text-xs text-[#5E7393] font-sans font-medium">income minus expenses</span>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Log real income/expenses, run real payroll */}
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Income
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Expense
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isRunningPayroll}
-                            onClick={handleRunPayroll}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
-                          </button>
-                        </div>
-
-                        {logTransactionType && (
-                          <LogTransactionModal
-                            type={logTransactionType}
-                            createdBy={loggedInUser?.email}
-                            onSave={handleSaveTransaction}
-                            onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
-                          />
-                        )}
-
-                        {/* Recharts Live Multi-line Graph — horizontally scrollable */}
-                        {(() => {
-                          const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
-                          const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
-                          const chartWidth = Math.max(340, chartSeries.length * 78);
-                          return (
-                            <div className="pt-2">
-                              {chartSeries.length > 5 && (
-                                <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
-                              )}
-                              <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-                                <LineChart
-                                  width={chartWidth}
-                                  height={280}
-                                  data={chartSeries}
-                                  margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                                  <XAxis
-                                    dataKey="time"
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    dy={10}
-                                    className="font-mono"
-                                  />
-                                  <YAxis
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
-                                    className="font-mono"
-                                    width={48}
-                                  />
-                                  <Tooltip content={
-                                    ({ active, payload, label }) => {
-                                      if (active && payload && payload.length) {
-                                        return (
-                                          <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
-                                            <div className="space-y-1">
-                                              {payload.map((entry: any, index: number) => (
-                                                <div key={index} className="flex items-center justify-between gap-6">
-                                                  <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                    {entry.name}:
-                                                  </span>
-                                                  <span className="font-mono font-bold text-[#1F3557] text-[11px]">
-                                                    ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    }
-                                  } />
-                                  <Legend
-                                    verticalAlign="top"
-                                    height={36}
-                                    iconType="circle"
-                                    iconSize={8}
-                                    className="font-sans font-bold text-[11px]"
-                                    wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                                  />
-                                  {graphDataType === "revenue" && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
-                                  {graphDataType === "profit" && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Profit" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
-                                </LineChart>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {(() => {
-                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
-                          // Accounting's dashboard is all-time. Keep these headline cards
-                          // on that same basis; the chart and comparison cards below remain
-                          // controlled by revenuePageFilter.
-                          const transactionExpenseTotal = transactions
-                            .filter(transaction => transaction.type === "expense")
-                            .reduce((sum, transaction) => sum + transaction.amount, 0);
-                          const allTimeBillTotal = bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0);
-                          const allTimeExpenseTotal = transactionExpenseTotal + allTimeBillTotal;
-                          const netProfit = completedJobsRevenue - allTimeExpenseTotal;
-                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                          return [
-                          {
-                            label: "Total Revenue",
-                            key: "revenue",
-                            val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                            change: null,
-                            isUp: true,
-                            comp: "All-time recognized revenue",
-                            icon: DollarSign,
-                            color: "text-emerald-500",
-                            bgColor: "bg-emerald-500/10"
-                          },
-                          {
-                            label: "Net Profit",
-                            key: "profit",
-                            val: fmt(netProfit),
-                            change: null,
-                            isUp: netProfit >= 0,
-                            comp: "All-time revenue minus logged expenses",
-                            icon: TrendingUp,
-                            color: "text-blue-500",
-                            bgColor: "bg-blue-500/10"
-                          },
-                          {
-                            label: "Total Expenses",
-                            key: "expenses",
-                            val: fmt(allTimeExpenseTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "All-time logged expenses",
-                            icon: TrendingDown,
-                            color: "text-rose-500",
-                            bgColor: "bg-rose-500/10"
-                          },
-                          {
-                            label: "Gross Payroll",
-                            key: "payroll",
-                            val: fmt(currentPayrollTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "Real payroll runs, this period",
-                            icon: Users,
-                            color: "text-purple-500",
-                            bgColor: "bg-purple-500/10"
-                          },
-                          {
-                            label: "Accrued Taxes",
-                            key: "taxes",
-                            val: "$0.00",
-                            change: null,
-                            isUp: false,
-                            comp: "Tax tracking not built yet",
-                            icon: Landmark,
-                            color: "text-amber-500",
-                            bgColor: "bg-amber-500/10"
-                          }
-                          ];
-                        })().map((card, idx) => (
-                          <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
-                            <div className="flex justify-between items-start">
-                              <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
-                              <div className={`p-1.5 rounded-lg ${card.bgColor} ${card.color}`}>
-                                <card.icon className="w-3.5 h-3.5" />
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight">{card.val}</p>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                {card.change && (
-                                  <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
-                                    {card.isUp ? "+" : "-"}{card.change}
-                                  </span>
-                                )}
-                                <span className="text-[9.5px] text-[#5E7393] font-sans font-medium">{card.comp}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* EXPENSE CATEGORIES GRID - 12 SEPARATE FLOATING BLUE CARDS */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center px-1">
-                          <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
-                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">Financial expense categories</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          {[
-                            { name: "Bills", target: "accounting", label: "Bills" },
-                            { name: "Material Expenses", target: "inventory", label: "Inventory / Job Costs" },
-                            { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
-                            { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
-                            { name: "Equipment", target: "inventory", label: "Inventory" },
-                            { name: "Tools", target: "inventory", label: "Inventory" },
-                            { name: "Insurance", target: "documents", label: "Documents" },
-                            { name: "Taxes", target: "documents", label: "Documents" },
-                            { name: "Marketing", target: "integrations", label: "Web Integration" },
-                            { name: "Software & Subs", target: "integrations", label: "Integrations" },
-                            { name: "Utilities", target: "placeholder_utilities", label: "Expenses" },
-                            { name: "Office Supplies", target: "inventory", label: "Inventory" },
-                            { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
-                          ].map((cat, idx) => {
-                            const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-                            const categoryTotal = cat.name === "Bills"
-                              ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
-                              : cat.name === "Material Expenses"
-                                ? transactions.filter((t) => t.type === "expense" && materialCategories.has(t.category || "")).reduce((sum, t) => sum + t.amount, 0)
-                                : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
-                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-                            return (
-                              <div
-                                key={idx}
-                                onClick={() => {
-                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations" || cat.target === "accounting") {
-                                    const matched = OS_SCREENS.find(s => s.id === cat.target);
-                                    if (matched) {
-                                      setActiveScreen(matched);
-                                      triggerNotification(`Navigated to: ${matched.label}`);
-                                    }
-                                  } else {
-                                    openPlaceholderPage(cat.name + " Expense Logs", "💳");
-                                  }
-                                }}
-                                className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm hover:shadow transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 text-left group"
-                              >
-                                <div>
-                                  <span className="text-[9.5px] text-[#5E7393] font-bold uppercase tracking-wider block truncate">{cat.name}</span>
-                                  <span className="text-base font-sans font-black text-[#1F3557] tracking-tight block mt-0.5">{currentAmt}</span>
-                                </div>
-                                
-                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2 mt-1">
-                                  <span className="text-[8.5px] font-bold text-[#315C9F] group-hover:underline flex items-center gap-0.5 shrink-0">
-                                    {cat.label} ➔
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
-                          </div>
-                          
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                            {/* Employee Search Bar */}
-                            <div className="relative flex-1 sm:w-60">
-                              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                                <Search className="w-4 h-4 text-[#5E7393]" />
-                              </span>
-                              <input
-                                value={payrollSearch}
-                                onChange={(e) => setPayrollSearch(e.target.value)}
-                                type="text"
-                                placeholder="Search employees..."
-                                className="w-full pl-9.5 pr-4 py-2 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl focus:outline-none focus:border-[#4A86F7] text-[#1F3557] font-medium placeholder-[#5E7393]/70"
-                              />
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={downloadPayrollCsv}
-                              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              Download CSV
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={printPayrollSummary}
-                              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#315C9F] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              Print / PDF
-                            </button>
-                            
-                            <button
-                              onClick={() => {
-                                const matched = OS_SCREENS.find(s => s.id === "roster");
-                                if (matched) setActiveScreen(matched);
-                              }}
-                              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shrink-0"
-                            >
-                              View Roster
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
-                            <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
-                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
-                            <select value={payrollSchedule} onChange={e => selectPayrollSchedule(e.target.value as PayrollSchedule)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]">
-                              <option value="weekly_friday">Weekly — payday Friday</option>
-                              <option value="biweekly">Every two weeks</option>
-                              <option value="semimonthly">Semimonthly — 1–15 / 16–end</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="custom">Custom date range</option>
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period start
-                            <input type="date" value={payrollPeriodStart} max={payrollPeriodEnd} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodStart(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period end
-                            <input type="date" value={payrollPeriodEnd} min={payrollPeriodStart} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodEnd(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Workweek starts
-                            <select value={payrollWorkweekStart} onChange={e => setPayrollWorkweekStart(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
-                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Payday
-                            <select value={payrollPayday} onChange={e => setPayrollPayday(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
-                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
-                            </select>
-                          </label>
-                          <div className="flex flex-wrap gap-2 lg:col-span-6">
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
-                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
-                          </div>
-                        </div>
-
-                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
-                            using the selected pay period and workweek rules above. recentRoster is a separate
-                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
-                            to real hours — this table uses the real `employees` collection instead. */}
-                        {(() => {
-                          const rows = employees
-                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
-                            .map((emp) => {
-                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
-                              const { hours, overtimeHours: otHours } = computePayrollHoursForRange(myLogs, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
-                              const regHours = hours - otHours;
-                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
-                              const lastPayroll = transactions
-                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
-                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
-                              return { emp, hours, otHours, pay, lastPayroll, status };
-                            });
-                          return (
-                            <>
-                              {payrollSearch && (
-                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
-                                  Found {rows.length} employees matching "{payrollSearch}"
-                                </div>
-                              )}
-
-                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
-                                <table className="w-full text-left border-collapse">
-                                  <thead>
-                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
-                                      <th className="px-4 py-3">Employee</th>
-                                      <th className="px-4 py-3 text-right">Current Hours</th>
-                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
-                                      <th className="px-4 py-3 text-right">Current Pay</th>
-                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
-                                      <th className="px-4 py-3 text-center">Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
-                                    {rows.length === 0 && (
-                                      <tr>
-                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
-                                          No real employees onboarded yet.
-                                        </td>
-                                      </tr>
-                                    )}
-                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
-                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
-                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
-                                      return (
-                                        <tr
-                                          key={emp.email}
-                                          onClick={() => {
-                                            const matched = OS_SCREENS.find(s => s.id === "roster");
-                                            if (matched) setActiveScreen(matched);
-                                          }}
-                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
-                                        >
-                                          <td className="px-4 py-3 flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
-                                              {initials}
-                                            </div>
-                                            <div>
-                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
-                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
-                                            </div>
-                                          </td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
-                                          <td className="px-4 py-3 text-center">
-                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
-                                              {status}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </>
-                          );
-                        })()}
-                        
-                        <div className="text-center pt-2">
-                          <button
-                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
-                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            View All Employees ➔
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        
-                        {/* Compact on-demand AI Financial Insights widget */}
-                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm lg:col-span-2 text-left self-start">
-                          <button
-                            type="button"
-                            onClick={() => setIsFinancialInsightsOpen(open => !open)}
-                            aria-expanded={isFinancialInsightsOpen}
-                            className="w-full flex items-center gap-3 rounded-xl bg-[#EAF5FF] border border-[#9EC8EF] px-4 py-3 text-left hover:bg-[#BDDDF8] transition-colors"
-                          >
-                            <span className="p-2 rounded-lg bg-[#315C9F] text-white shadow-sm">
-                              <Sparkles className="w-4 h-4" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">On-demand analysis</span>
-                              <span className="block text-sm font-sans font-black text-[#1F3557]">AI Financial Insights</span>
-                            </span>
-                            <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform ${isFinancialInsightsOpen ? "rotate-180" : ""}`} />
-                          </button>
-
-                          {isFinancialInsightsOpen && (
-                          <div className="space-y-3 pt-3">
-                            {(() => {
-                              // Real insights only, each gated on having a real prior period to
-                              // compare against — no invoice or tax-liability system exists in the
-                              // app to back "overdue invoices" / "quarterly tax due" style claims,
-                              // so those insight types were removed rather than left fabricated.
-                              const now = new Date();
-                              const periodDays = 14;
-                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
-                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
-                              const priorEnd = curStart;
-                              const sumBetween = (category: string | null, start: Date, end: Date) =>
-                                transactions
-                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
-                                  .reduce((s, t) => s + t.amount, 0);
-                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
-
-                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
-
-                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
-                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
-                              if (curPayroll > 0 && priorPayroll > 0) {
-                                const pct = pctChange(curPayroll, priorPayroll);
-                                insights.push({
-                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review payroll details ➔",
-                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
-                                  icon: Users,
-                                  action: "Payroll Ledger Analysis"
-                                });
-                              }
-
-                              const curFuel = sumBetween("Fuel", curStart, curEnd);
-                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
-                              if (curFuel > 0 && priorFuel > 0) {
-                                const pct = pctChange(curFuel, priorFuel);
-                                insights.push({
-                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review fuel expenses ➔",
-                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
-                                  icon: Landmark,
-                                  action: "Fuel Receipts & Fleet Usage"
-                                });
-                              }
-
-                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
-                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
-                              const curExpenses = sumBetween(null, curStart, curEnd);
-                              if (curRevenue > 0) {
-                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
-                                insights.push({
-                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
-                                  link: "View profit report ➔",
-                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
-                                  icon: TrendingUp,
-                                  action: "Net Profitability Margin Analyzer"
-                                });
-                              }
-
-                              if (insights.length === 0) {
-                                return (
-                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
-                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
-                                  </div>
-                                );
-                              }
-
-                              return insights.map((insight, idx) => (
-                                <div
-                                  key={idx}
-                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
-                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
-                                >
-                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
-                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
-                                  </span>
-                                  <div>
-                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
-                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
-                                      {insight.link}
-                                    </p>
-                                  </div>
-                                </div>
-                              ));
-                            })()}
-                          </div>
-                          )}
-                        </div>
-
-                        {/* Quick Actions Card */}
-                        <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-4 text-left">
-                          <div className="border-b border-[#9EC8EF]/30 pb-3">
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Ledger Actions</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Quick Actions</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Execute double-entry bookkeeping actions</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-3 flex-1 py-1">
-                            {[
-                              { label: "Record Expense", action: "expense", icon: DollarSign },
-                              { label: "Run Payroll", action: "payroll", icon: Users },
-                              { label: "Create Invoice", action: "invoice", icon: FileText },
-                              { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark }
-                            ].map((btn, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  if (btn.action === "reconcile_soon") {
-                                    triggerNotification("Reconcile Bank is coming soon.");
-                                    return;
-                                  }
-                                  if (btn.action === "expense") {
-                                    sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
-                                    setLogTransactionType("expense");
-                                    return;
-                                  }
-                                  if (btn.action === "payroll") {
-                                    handleRunPayroll();
-                                    return;
-                                  }
-                                  const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                                  if (accounting) setActiveScreen(accounting);
-                                  triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
-                                }}
-                                className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
-                              >
-                                <span className="p-1.5 bg-[#EAF5FF] border border-[#9EC8EF]/30 rounded-lg text-[#315C9F] shadow-sm">
-                                  <btn.icon className="w-4 h-4" />
-                                </span>
-                                <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide leading-tight">
-                                  {btn.label}
-                                </span>
-                                {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase text-amber-700">Coming Soon</span>}
-                              </button>
-                            ))}
-                          </div>
-                          
-                          <button
-                            onClick={() => {
-                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                              if (accounting) setActiveScreen(accounting);
-                              triggerNotification("Open Reports for current financial statements.");
-                            }}
-                            className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
-                          >
-                            View Financial Reports
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <div className="border-b border-[#9EC8EF]/30 pb-3">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
-                          <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          {[
-                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
-                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
-                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
-                          ].map((integ, idx) => (
-                            <div
-                              key={idx}
-                              className="border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2.5 opacity-80 bg-[#EAF5FF]/50 hover:opacity-100 transition-opacity"
-                            >
-                              <div className="w-9 h-9 rounded-full bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] flex items-center justify-center text-sm shadow-sm">
-                                <integ.icon className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-extrabold text-[#1F3557] leading-none">{integ.name}</p>
-                                <p className="text-[9px] text-[#5E7393] font-medium mt-0.5">{integ.desc}</p>
-                              </div>
-                              <span className="px-2 py-0.5 bg-[#9EC8EF]/30 text-[#1F3557] border border-[#9EC8EF]/50 text-[8.5px] font-bold rounded">
-                                Coming Soon
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        <div className="text-center pt-2">
-                          <button
-                            onClick={() => {
-                              const matched = OS_SCREENS.find(s => s.id === "integrations");
-                              if (matched) {
-                                setActiveScreen(matched);
-                                triggerNotification("Navigated to Integrations & Gateways Settings");
-                              }
-                            }}
-                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            View All Integrations ➔
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-                    )
-
-                  ) : activeScreen.id === "scheduling" ? (
-                    <SchedulingPage />
-
-                  ) : activeScreen.id === "dispatch" ? (
-                    <DispatchPage />
-
-                  ) : activeScreen.id === "jobs" ? (
-                    <JobsPage />
-
-                  ) : activeScreen.id === "routes" ? (
-                    <MapPageErrorBoundary>
-                      <InteractiveMapPage
-                        businessAddresses={businessAddresses}
-                      />
-                    </MapPageErrorBoundary>
-
-                  ) : activeScreen.id === "bulletins" ? (
-                    
-                    /* BULLETINS PAGE */
-                    <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">
-                      <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
-                        <div>
-                          <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Company Bulletins Center</h2>
-                          <p className="text-xs text-slate-500">Read official notifications or post announcements for administrative approval</p>
-                        </div>
-                        <span className="px-3 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-xs font-mono font-bold rounded-xl border border-[#A9CDEE]">
-                          Active Notices
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Post bulletin form */}
-                        <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] space-y-4 h-fit">
-                          <div>
-                            <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Post New Notice</h3>
-                            <p className="text-[10.5px] text-slate-600 mt-1">
-                              Note: If you are not an owner, manager, or scheduler, your bulletin will require approval.
-                            </p>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Bulletin Title</label>
-                            <input
-                              value={newBulletinTitle}
-                              onChange={(e) => setNewBulletinTitle(e.target.value)}
-                              type="text"
-                              placeholder="e.g. Safety Regulations"
-                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium font-sans text-slate-700"
-                            />
-                          </div>
-
-                          <div className="space-y-1 flex flex-col">
-                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold text-left">Content</label>
-                            <textarea
-                              value={newBulletinContent}
-                              onChange={(e) => setNewBulletinContent(e.target.value)}
-                              placeholder="Describe details clearly..."
-                              rows={4}
-                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium font-sans text-slate-700"
-                            />
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              if (!newBulletinTitle.trim() || !newBulletinContent.trim()) {
-                                triggerNotification("Please fill in both title and content.");
-                                return;
-                              }
-                              const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-                              const nameClean = loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001");
-                              
-                              const directApprovalRoles = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Scheduler"];
-                              const isDirect = directApprovalRoles.includes(activeRole);
-                              
-                              const newBulletinItem = {
-                                id: `${bulletins.length + 1}`,
-                                title: newBulletinTitle.trim(),
-                                content: newBulletinContent.trim(),
-                                author: nameClean,
-                                role: activeRole,
-                                date: "Today, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                status: isDirect ? ("approved" as const) : ("pending" as const)
-                              };
-                              
-                              setBulletins(prev => [newBulletinItem, ...prev]);
-                              setNewBulletinTitle("");
-                              setNewBulletinContent("");
-                              
-                              if (isDirect) {
-                                triggerNotification("Bulletin posted successfully!");
-                              } else {
-                                triggerNotification("Bulletin submitted! Awaiting Manager/Owner approval.");
-                              }
-                            }}
-                            className="w-full py-2.5 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
-                          >
-                            Post Bulletin
-                          </button>
-                        </div>
-
-                        {/* Bulletins listing feed */}
-                        <div className="lg:col-span-2 space-y-4">
-                          {/* Pending approvals section (for management roles) */}
-                          {["Owner", "General Manager", "Office Manager"].includes(simulatedRole || loggedInUser?.role || "Owner") && bulletins.some(b => b.status === "pending") && (
-                            <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl space-y-3">
-                              <h3 className="text-xs font-extrabold text-amber-800 uppercase tracking-wider">Awaiting Manager Approval</h3>
-                              <div className="space-y-3">
-                                {bulletins.filter(b => b.status === "pending").map((b) => (
-                                  <div key={b.id} className="p-3.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl flex flex-col justify-between gap-3 shadow-sm">
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <p className="text-xs font-black text-slate-800">{b.title}</p>
-                                        <p className="text-[10px] text-slate-400 font-medium">By {b.author} ({b.role}) • {b.date}</p>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          onClick={() => {
-                                            setBulletins(prev => prev.map(item => item.id === b.id ? { ...item, status: "approved" as const } : item));
-                                            triggerNotification("Bulletin approved and published!");
-                                          }}
-                                          className="px-2.5 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-600 transition-colors cursor-pointer"
-                                        >
-                                          Approve
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setBulletins(prev => prev.filter(item => item.id !== b.id));
-                                            triggerNotification("Bulletin submission rejected.");
-                                          }}
-                                          className="px-2.5 py-1 bg-rose-500 text-white text-[10px] font-bold rounded-lg hover:bg-rose-600 transition-colors cursor-pointer"
-                                        >
-                                          Reject
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <p className="text-xs text-slate-600 leading-normal font-sans font-medium">{b.content}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Active Bulletins Board</h3>
-                          <div className="space-y-3.5">
-                            {bulletins.filter(b => b.status === "approved").length === 0 ? (
-                              <div className="text-center py-8 text-slate-400 text-xs">
-                                No announcements active currently.
-                              </div>
-                            ) : (
-                              bulletins.filter(b => b.status === "approved").map((b) => (
-                                <div key={b.id} className="p-4 bg-[#E3F3FF] hover:bg-[#E3F3FF]/80 border border-[#A9CDEE] rounded-2xl flex flex-col gap-2 shadow-sm transition-all">
-                                  <div className="flex items-center justify-between text-[10.5px] font-bold text-[#4A9BFF] border-b border-[#A9CDEE]/40 pb-1.5">
-                                    <span className="uppercase tracking-wider">{b.author} ({b.role})</span>
-                                    <span className="font-mono text-slate-400">{b.date}</span>
-                                  </div>
-                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">{b.title}</h4>
-                                  <p className="text-xs text-slate-500 leading-relaxed font-sans font-medium">{b.content}</p>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                  ) : activeScreen.id === "notifications" ? (
-                    
-                    <NotificationsPage
-                      dashboardLeads={dashboardLeads}
-                      setDashboardLeads={setDashboardLeads}
-                    />
-
-                  ) : (
-                    
-                    /* Screens that don't have a dedicated real implementation yet -- shown
-                       honestly as "not built yet" rather than dressed up with fake activity. */
-                    <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm min-h-[420px] flex flex-col justify-between gap-5 animate-fade-in text-left">
-                      <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl select-none">{activeScreen.icon}</span>
-                          <div>
-                            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">{activeScreen.label}</h2>
-                            <p className="text-xs text-slate-500 font-sans font-semibold">This feature isn't built yet</p>
-                          </div>
-                        </div>
-                        <span className="px-2.5 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-[9px] font-mono font-bold rounded-xl border border-[#A9CDEE] uppercase">
-                          Not Built Yet
-                        </span>
-                      </div>
-
-                      <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-[#E3F3FF] rounded-2xl border border-dashed border-[#A9CDEE]">
-                        <div className="w-12 h-12 rounded-full bg-[#F5FAFF] text-[#4A9BFF] flex items-center justify-center text-xl font-bold border border-[#A9CDEE] shadow-sm mb-4">
-                          {activeScreen.icon}
-                        </div>
-                        <h4 className="text-xs font-black text-slate-700 font-sans uppercase tracking-wider">{activeScreen.label}</h4>
-                        <p className="text-slate-600 text-[11px] mt-1.5 max-w-xs leading-relaxed font-sans font-semibold">
-                          We haven't built this screen yet. Use the sidebar to get back to a working part of the app.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-
-              )}
-
-            </div>
-
-            {/* Sidebar toggle button is now integrated into the header of the narrow sidebar itself! */}
-          </div>
-        )}
-
-      </main>
-
-      {!isLoggedIn && (
-        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30">
-          <label className="sr-only" htmlFor="login-theme-selector">Color scheme</label>
-          <select
-            id="login-theme-selector"
-            aria-label="Color scheme"
-            value={workspaceTheme}
-            onChange={(event) => {
-              const nextTheme = event.target.value as WorkspaceTheme;
-              setWorkspaceTheme(nextTheme);
-              localStorage.setItem("ownerslocal_workspace_theme", workspaceThemeSettingValue(nextTheme));
-            }}
-            className={`max-w-[150px] rounded-lg border px-2 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur-md outline-none cursor-pointer ${isDarkTheme
-              ? "border-blue-400/30 bg-[#06152b]/70 text-blue-50"
-              : "border-blue-200/60 bg-white/60 text-[#315C9F]"
-            }`}
-          >
-            <option value="light-basic">Light Mode Basic</option>
-            <option value="light-extreme">Light Mode Extreme</option>
-            <option value="dark-basic">Dark Mode Basic</option>
-            <option value="dark-dynamic">Dark Mode Dynamic</option>
-          </select>
-        </div>
-      )}
-
-      {!isLoggedIn && (
-        <div
-          aria-label="Created by Stuffapp"
-          className="fixed bottom-3 right-4 z-20 pointer-events-none font-sans text-[10px] sm:text-xs font-semibold tracking-[0.08em] text-[#315C9F]/55"
-        >
-          by Stuffapp
-        </div>
-      )}
-
-      {/* CAMERA SHUTTER SNAPSHOT FLASH SIMULATION */}
-      {isFlashing && (
-        <div 
-          className="fixed inset-0 bg-white z-[9999] pointer-events-none transition-opacity duration-300 ease-out opacity-100 animate-pulse" 
-          style={{ animationDuration: "150ms", animationIterationCount: 1 }}
-        />
-      )}
-
-      {/* REVENUE SENSITIVE OPERATIONS CONFIRMATION DIALOG */}
-      {revenueConfirmAction && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl border border-blue-100 space-y-4 text-center">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
-              <Lock className="w-6 h-6 animate-pulse" />
-            </div>
-            <h3 className="text-base font-extrabold text-[#1F3557] uppercase tracking-wider">Confirm Financial Report Download</h3>
-            <p className="text-xs text-[#5E7393] leading-relaxed font-sans font-medium">
-              You are requesting to generate and load: <strong className="text-red-600">{revenueConfirmAction.label}</strong>. 
-              This contains confidential company revenue, profit margins, and payroll balances. 
-              Please confirm your administrative override to compile this data.
-            </p>
-            <div className="flex gap-3 justify-center pt-2">
-              <button
-                onClick={() => setRevenueConfirmAction(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const target = revenueConfirmAction;
-                  setRevenueConfirmAction(null);
-                  openPlaceholderPage(target.label, target.icon);
-                  logOperationalEvent("Financial Export", `User authorized download of sensitive report: ${target.label}`, "📊");
-                }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 shadow-md shadow-blue-500/15"
-              >
-                Authorize & Load
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI OPTION COMPANION WORKSPACE CHATBOT DRAWER */}
-      {isAIAnalysisOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs animate-fade-in">
-          {/* Backdrop Click */}
-          <div className="absolute inset-0" onClick={() => setIsAIAnalysisOpen(false)} />
-
-          {/* Drawer content panel */}
-          <div className="relative w-full max-w-lg h-full bg-[#EAF5FF] border-l border-[#9EC8EF] shadow-2xl flex flex-col justify-between overflow-hidden animate-slide-in-right">
-            
-            {/* Header */}
-            <div className="p-5 bg-[#C7E3FA] border-b border-[#9EC8EF] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-[#EAF5FF] rounded-xl border border-[#9EC8EF]">
-                  <Sparkles className="w-5 h-5 text-[#315C9F] animate-pulse" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-                    Owner's AI Option
-                  </h3>
-                  <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
-                    AI help for this page • {aiPageName}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAIAnalysisOpen(false)}
-                className="w-8 h-8 rounded-full hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold text-sm transition-colors flex items-center justify-center cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Message Area */}
-            <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-[#EAF5FF]">
-              {aiMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col max-w-[85%] text-left ${
-                    msg.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"
-                  }`}
-                >
-                  <span className="text-[9px] uppercase tracking-wider font-bold text-[#5E7393] mb-1">
-                    {msg.sender === "user" ? "You" : "Owner's AI"}
-                  </span>
-                  <div
-                    className={`p-3.5 rounded-2xl text-xs leading-relaxed border shadow-sm ${
-                      msg.sender === "user"
-                        ? "bg-[#315C9F] border-[#1F3557] text-white rounded-tr-none"
-                        : "bg-[#C7E3FA] border-[#9EC8EF] text-[#1F3557] rounded-tl-none whitespace-pre-wrap"
-                    }`}
-                  >
-                    {msg.sender === "ai" ? (
-                      <div className="prose prose-sm max-w-none">
-                        {msg.text.split("\n").map((line, lIdx) => {
-                          if (line.startsWith("###")) {
-                            return <h4 key={lIdx} className="font-extrabold text-sm text-[#1F3557] mt-2 mb-1 uppercase">{line.replace("###", "").trim()}</h4>;
-                          }
-                          if (line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.")) {
-                            return <p key={lIdx} className="ml-1.5 mt-1 text-[#1F3557] font-medium">{line}</p>;
-                          }
-                          if (line.startsWith("-")) {
-                            return <li key={lIdx} className="ml-3 mt-0.5 text-slate-700">{line.replace("-", "").trim()}</li>;
-                          }
-                          return <p key={lIdx} className="mt-1">{line}</p>;
-                        })}
-                      </div>
-                    ) : (
-                      msg.text
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {aiIsLoading && (
-                <div className="flex items-center gap-2 mr-auto text-xs text-[#5E7393] font-semibold bg-[#C7E3FA] border border-[#9EC8EF] px-3.5 py-2.5 rounded-2xl rounded-tl-none animate-pulse">
-                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span>AI Agent is analyzing workspace ledger...</span>
-                </div>
-              )}
-
-              {pendingAiAction && pendingAiAction.type === "drawer" && (
-                <div className="bg-[#FFF5F5] border-2 border-red-200 rounded-2xl p-4 shadow-sm space-y-3 animate-fade-in text-left">
-                  <div className="flex items-start gap-2.5">
-                    <span className="p-1.5 bg-red-100 rounded-lg text-red-600 font-bold text-sm">🔒</span>
-                    <div>
-                      <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
-                      <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 pl-8 pt-1">
-                    <button
-                      onClick={() => {
-                        const queryToRun = pendingAiAction.query;
-                        setPendingAiAction(null);
-                        executeConfirmedAIMessage(queryToRun);
-                      }}
-                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10.5px] font-extrabold rounded-lg shadow-sm transition-all uppercase cursor-pointer tracking-wider"
-                    >
-                      Confirm & Reveal
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPendingAiAction(null);
-                      }}
-                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[10.5px] font-bold rounded-lg transition-all uppercase cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Suggestions list */}
-            <div className="px-5 py-2 bg-[#C7E3FA]/40 border-t border-[#9EC8EF]/40 flex flex-wrap gap-1.5 justify-start">
-              {[
-                "Who is our top performer?",
-                "How can we grow conversions?",
-                "Analyze outstanding unpaid invoices"
-              ].map((sug, sIdx) => (
-                <button
-                  key={sIdx}
-                  disabled={!!pendingAiAction}
-                  onClick={() => {
-                    setAiInputMessage(sug);
-                  }}
-                  className={`px-2.5 py-1 text-[10px] font-sans font-bold text-[#315C9F] hover:text-white hover:bg-[#315C9F] bg-white border border-[#9EC8EF] rounded-lg transition-all cursor-pointer shadow-sm shrink-0 ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  {sug}
-                </button>
-              ))}
-            </div>
-
-            {/* Input Bar */}
-            <div className="p-4 bg-[#C7E3FA] border-t border-[#9EC8EF] flex items-center gap-2">
-              <input
-                type="text"
-                value={aiInputMessage}
-                disabled={!!pendingAiAction}
-                onChange={(e) => setAiInputMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !pendingAiAction) handleSendAIMessage();
-                }}
-                placeholder={pendingAiAction ? "Confirmation pending... make a selection above" : `Ask about ${aiPageName} metrics or suggestions...`}
-                className={`flex-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-4 py-3 text-xs text-[#1F3557] placeholder-[#5E7393]/70 focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
-              />
-              <button
-                onClick={handleSendAIMessage}
-                disabled={!!pendingAiAction}
-                className={`px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl transition-all uppercase tracking-wider cursor-pointer shadow-sm ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it */}
-      <div
-        id="floating-ai-widget"
-        className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
-        style={aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
-      >
-
-        {/* Toggle Trigger Pill (drag by pressing and moving) */}
-        {!isFloatingAiOpen && isLoggedIn && (
-          <button
-            onClick={() => { if (!aiDragState.current.dragging) setIsFloatingAiOpen(true); }}
-            onPointerDown={(e) => startAiWidgetDrag(e, 180, 52)}
-            className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-grab active:cursor-grabbing group font-sans font-black text-xs uppercase tracking-wider"
-            title="Drag to move, click to open"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span>Owner's AI</span>
-            <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
-          </button>
-        )}
-
-        {/* Slide-Up Panel Overlay */}
-        {isFloatingAiOpen && (
-          <div className="w-96 h-[550px] bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl flex flex-col overflow-hidden animate-slide-up select-text">
-
-            {/* Drawer Header (drag handle) */}
-            <div
-              onPointerDown={(e) => startAiWidgetDrag(e, 384, 550)}
-              className="bg-[#1F3557] text-white px-4 py-3 flex items-center justify-between border-b border-white/10 shrink-0 cursor-grab active:cursor-grabbing"
-              title="Drag to move"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#315C9F] to-[#4A86F7] text-white flex items-center justify-center text-lg font-bold">
-                  🤖
-                </div>
-                <div className="text-left">
-                  <h3 className="text-xs font-black uppercase tracking-wider">OwnersLOCAL AI</h3>
-                  <p className="text-[9.5px] text-slate-300 font-mono">Module: {activeScreen.label}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {/* Collapse button */}
-                <button
-                  onClick={() => setIsFloatingAiOpen(false)}
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-xs font-bold cursor-pointer"
-                  title="Collapse Panel"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* TAB BAR NAVIGATION */}
-            <div className="flex bg-[#EAF5FF] border-b border-[#9EC8EF]/30 p-1 shrink-0">
-              {[
-                { id: "ask", label: "Ask AI", icon: "💬" },
-                { id: "actions", label: "Actions", icon: "⚡" },
-                { id: "settings", label: "Settings", icon: "⚙️" },
-                { id: "recent", label: "Ledger", icon: "📋" }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setFloatingAiTab(tab.id as any)}
-                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wide rounded-lg border transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                    floatingAiTab === tab.id
-                      ? "bg-[#315C9F] text-white border-[#315C9F] shadow-sm"
-                      : "bg-transparent text-[#5E7393] border-transparent hover:bg-white/50"
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Current page context (real — reflects the actual active screen) */}
-            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex items-center justify-between text-left text-[9.5px] text-[#855D00] font-sans font-bold uppercase tracking-wider">
-              <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Viewing: {activeScreen.label}</span>
-            </div>
-
-            {/* PANEL BODY CONTENT AREA */}
-            <div className="flex-1 overflow-y-auto p-4 bg-[#F8FBFF]">
-              
-              {/* ASK AI CHAT TAB */}
-              {floatingAiTab === "ask" && (
-                <div className="h-full flex flex-col justify-between gap-3 text-left">
-                  <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 select-text">
-                    {floatingAiMessages.map((m, idx) => (
-                      <div key={idx} className={`flex flex-col max-w-[85%] ${m.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}>
-                        <span className="text-[8.5px] font-bold text-slate-400 uppercase mb-0.5 tracking-wider">
-                          {m.sender === "user" ? "You" : "Owner's AI"}
-                        </span>
-                        <div className={`p-3 rounded-2xl text-[11px] leading-relaxed border shadow-xs ${
-                          m.sender === "user"
-                            ? "bg-[#315C9F] text-white border-[#315C9F]"
-                            : "bg-white text-slate-700 border-[#9EC8EF]/40"
-                        }`}>
-                          {m.sender === "ai" ? (
-                            <div className="prose prose-sm max-w-none text-left">
-                              {/* Simple Markdown Render helpers */}
-                              {m.text.split("\n\n").map((para, pIdx) => {
-                                if (para.startsWith("###")) {
-                                  return <h4 key={pIdx} className="text-xs font-black uppercase text-[#1F3557] mb-1.5 mt-2">{para.replace("###", "").trim()}</h4>;
-                                }
-                                if (para.startsWith("*") || para.startsWith("-")) {
-                                  return (
-                                    <ul key={pIdx} className="list-disc pl-4 space-y-1 my-1.5 text-[10.5px]">
-                                      {para.split("\n").map((li, lIdx) => (
-                                        <li key={lIdx}>{li.replace(/^[*\-\s]+/, "").trim()}</li>
-                                      ))}
-                                    </ul>
-                                  );
-                                }
-                                return <p key={pIdx} className="mb-1.5 font-medium leading-relaxed">{para}</p>;
-                              })}
-                            </div>
-                          ) : (
-                            <p className="font-semibold leading-relaxed">{m.text}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {floatingAiLoading && (
-                      <div className="flex items-center gap-1.5 p-2 text-[10px] text-[#5E7393] font-bold font-mono">
-                        <span className="animate-bounce">●</span>
-                        <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>●</span>
-                        <span className="animate-bounce" style={{ animationDelay: '0.4s' }}>●</span>
-                        <span className="text-[9px]">Model is processing viewport...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {pendingAiAction && pendingAiAction.type === "floating" && (
-                    <div className="bg-[#FFF5F5] border border-red-200 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
-                      <div className="flex items-start gap-2">
-                        <span className="p-1 bg-red-100 rounded text-red-600 font-bold text-xs">🔒</span>
-                        <div>
-                          <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
-                          <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 pl-6">
-                        <button
-                          onClick={() => {
-                            const queryToRun = pendingAiAction.query;
-                            const cTxt = pendingAiAction.customText;
-                            setPendingAiAction(null);
-                            executeConfirmedFloatingAiMessage(queryToRun, cTxt);
-                          }}
-                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPendingAiAction(null);
-                          }}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Grounded data-action confirmation: shows the exact real record(s) affected and
-                      requires explicit approval before anything is written. */}
-                  {pendingDataAction && (
-                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
-                      <div className="flex items-start gap-2">
-                        <span className="p-1 bg-amber-100 rounded text-amber-700 font-bold text-xs">⚠️</span>
-                        <div>
-                          <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Confirm Action</h4>
-                          {pendingDataAction.type === "reorder" ? (
-                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
-                              Flag <strong>{pendingDataAction.item.name}</strong> for reorder — currently <strong>{pendingDataAction.item.quantity}</strong> on hand (minimum {pendingDataAction.item.minQuantity}). Suggested reorder quantity: <strong>{pendingDataAction.suggestedQty} units</strong>{pendingDataAction.item.vendor ? ` from ${pendingDataAction.item.vendor}` : " (no vendor on file)"}.
-                            </p>
-                          ) : (
-                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
-                              Move <strong>{pendingDataAction.event.customer}</strong>'s job from <strong>{pendingDataAction.event.date}</strong> to <strong>{pendingDataAction.newDate}</strong>.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 pl-6">
-                        <button
-                          onClick={confirmPendingDataAction}
-                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => setPendingDataAction(null)}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Smart suggestion chips based on active module */}
-                  <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
-                    <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
-                    {activeScreen.id === "inventory" && (
-                      <button
-                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Order more.")}
-                        disabled={!!pendingAiAction || !!pendingDataAction}
-                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Order more
-                      </button>
-                    )}
-                    {activeScreen.id === "scheduling" && (
-                      <button
-                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
-                        disabled={!!pendingAiAction || !!pendingDataAction}
-                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Move to tomorrow
-                      </button>
-                    )}
-                    {activeScreen.id === "revenue" && (
-                      <button
-                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Why did profit drop?")}
-                        disabled={!!pendingAiAction || !!pendingDataAction}
-                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        ⚡ Analyze drop
-                      </button>
-                    )}
-                    <span className="text-[9px] text-slate-400 font-medium">Ask simple or complex queries using input below.</span>
-                  </div>
-
-                  {/* Input form */}
-                  <div className="flex gap-1.5 pt-2 border-t border-slate-100 shrink-0">
-                    <input
-                      type="text"
-                      value={floatingAiInput}
-                      disabled={!!pendingAiAction || !!pendingDataAction}
-                      onChange={(e) => setFloatingAiInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
-                      }}
-                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask Owner's AI about ${activeScreen.label}...`}
-                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
-                    />
-                    <button
-                      onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage()}
-                      disabled={!!pendingAiAction || !!pendingDataAction}
-                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction || pendingDataAction ? "opacity-55 cursor-not-allowed" : ""}`}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* MODULE-SPECIFIC AI ACTIONS TAB */}
-              {floatingAiTab === "actions" && (
-                <div className="space-y-3.5 text-left">
-                  <div className="bg-[#FFF9EA] p-3 rounded-2xl border border-amber-200 text-[10px] leading-relaxed text-amber-800 font-sans font-bold uppercase tracking-wider flex items-start gap-1.5">
-                    <span className="text-sm shrink-0">⚡</span>
-                    <span>Ready-to-Run operations for {activeScreen.label}</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {/* Map of page actions */}
-                    {(
-                      activeScreen.id === "dashboard" ? ["Analyze Business", "Daily Summary", "Weekly Summary", "Monthly Summary"] :
-                      activeScreen.id === "revenue" ? ["Analyze Profit", "Forecast Revenue", "Analyze Expenses", "Payroll Summary"] :
-                      activeScreen.id === "customers" ? ["Customer Insights", "Follow-up Suggestions", "Customer Timeline"] :
-                      activeScreen.id === "leads" ? ["Prioritize Leads", "Draft Follow-up", "Predict Closing Probability"] :
-                      activeScreen.id === "estimates" ? ["Improve Estimate", "Suggest Pricing", "Compare Similar Jobs"] :
-                      activeScreen.id === "scheduling" ? ["Optimize Schedule", "Detect Conflicts", "Assign Technician"] :
-                      activeScreen.id === "dispatch" ? ["Assign Crew", "Optimize Dispatch"] :
-                      activeScreen.id === "routes" ? ["Optimize Route", "Reduce Drive Time"] :
-                      activeScreen.id === "jobs" ? ["Review Job", "Suggest Next Step"] :
-                      activeScreen.id === "inventory" ? ["Detect Low Inventory", "Generate Purchase Order", "Scan Receipt", "Analyze Inventory"] :
-                      activeScreen.id === "documents" ? ["Summarize Document", "Organize Files"] :
-                      activeScreen.id === "messages" ? ["Draft Reply", "Rewrite Message", "Summarize Conversation"] :
-                      activeScreen.id === "training" ? ["Assign Courses", "Generate Quiz", "Build Course"] :
-                      activeScreen.id === "settings" ? ["Explain Settings", "Recommend Configuration"] :
-                      activeScreen.id === "integrations" ? ["Diagnose Integration", "Sync Status"] :
-                      activeScreen.id === "roster" ? ["Employee Summary", "Performance Review"] :
-                      ["Post Bulletin Alert", "Summarize Announcements"]
-                    ).map((act, aIdx) => (
-                      <button
-                        key={aIdx}
-                        onClick={() => {
-                          setFloatingAiTab("ask");
-                          handleSendFloatingAiMessage(`Perform standard action: ${act}`);
-                        }}
-                        className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-slate-200 hover:border-[#315C9F] rounded-2xl text-[10.5px] font-black text-[#1F3557] flex items-center justify-between transition-all cursor-pointer uppercase tracking-wider"
-                      >
-                        <span className="truncate">{act}</span>
-                        <ChevronRight className="w-3.5 h-3.5 text-[#315C9F]" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* MODULE AI SETTINGS TAB */}
-              {floatingAiTab === "settings" && (
-                <div className="space-y-4 text-left">
-                  <div className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 space-y-1.5">
-                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Module Override AI Level</h4>
-                    <p className="text-[9px] text-slate-400 font-sans font-medium">
-                      Control parameters for {activeScreen.label} specifically. Specific overrides customize the global fallback configured below.
-                    </p>
-                    <select
-                      value={moduleAiSettings[activeScreen.id] || "DEFAULT"}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setModuleAiSettings(prev => ({ ...prev, [activeScreen.id]: val as any }));
-                        triggerNotification(`⚙️ Override for ${activeScreen.label} set to ${val}`);
-                      }}
-                      className="w-full mt-2 text-[10px] font-bold text-[#1F3557] bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
-                    >
-                      <option value="DEFAULT">INHERIT DEFAULT ({globalAiSetting})</option>
-                      <option value="OFF">OFF</option>
-                      <option value="ASSIST">ASSIST</option>
-                      <option value="ASSIST + APPROVAL">ASSIST + APPROVAL</option>
-                      <option value="AUTO">AUTO (AUTONOMOUS)</option>
-                    </select>
-                  </div>
-
-                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
-                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Default Global Policy</h4>
-                    <p className="text-[9px] text-slate-400 font-sans font-medium">
-                      Baseline fallback for all workspaces.
-                    </p>
-                    <div className="grid grid-cols-2 gap-1.5 pt-1">
-                      {["OFF", "ASSIST", "ASSIST + APPROVAL", "AUTO"].map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setGlobalAiSetting(mode as any);
-                            triggerNotification(`🤖 Global AI baseline updated to ${mode}`);
-                          }}
-                          className={`p-1.5 rounded-lg border text-center text-[9px] font-black uppercase transition-all cursor-pointer ${
-                            globalAiSetting === mode
-                              ? "bg-[#315C9F] text-white border-transparent"
-                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                          }`}
-                        >
-                          {mode === "ASSIST + APPROVAL" ? "ASSIST + APP" : mode}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* RECENT AI ACTIONS LEDGER TAB */}
-              {floatingAiTab === "recent" && (
-                <div className="space-y-3.5 text-left">
-                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Audit Log Checklist</h4>
-                    <span className="text-[8.5px] bg-[#EAF5FF] text-[#315C9F] px-2 py-0.5 rounded font-mono font-black">
-                      {recentAiActions.filter(a => a.status === "Completed").length} Active
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                    {recentAiActions.map((act) => (
-                      <div key={act.id} className={`p-3 rounded-2xl border transition-all text-left ${
-                        act.status === "Undone" 
-                          ? "bg-rose-50/50 border-rose-100 text-slate-400" 
-                          : "bg-slate-50 border-slate-200 text-slate-700 hover:border-[#315C9F]"
-                      }`}>
-                        <div className="flex justify-between items-center w-full">
-                          <span className="text-[8px] bg-slate-200 px-1.5 py-0.5 rounded font-mono font-bold uppercase">{act.module}</span>
-                          {act.status !== "Undone" && (
-                            <button
-                              onClick={() => {
-                                // NOTE: this only marks the log entry as undone (audit annotation).
-                                // Recent AI actions don't currently carry structured revert data, so
-                                // this deliberately does not attempt to reverse the underlying change —
-                                // doing that with guessed/hardcoded values would silently corrupt data.
-                                setRecentAiActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "Undone" } : a));
-                                triggerNotification(`Marked as undone: ${act.action}. Reverse the change manually on the relevant page if needed.`);
-                              }}
-                              className="px-1.5 py-0.5 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-100 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
-                            >
-                              Undo
-                            </button>
-                          )}
-                        </div>
-                        <h5 className={`text-[10.5px] font-black uppercase mt-1.5 ${act.status === "Undone" ? "line-through text-slate-400" : "text-slate-800"}`}>{act.action}</h5>
-                        <p className="text-[9.5px] leading-relaxed text-slate-500 font-sans font-semibold mt-0.5">{act.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </div>
-
-          </div>
-        )}
-
-      </div>
-
-      {/* FLOATING SUCCESS/WARNING NOTIFICATIONS SYSTEM */}
-      {showNotification && (
-        <div className="fixed bottom-6 right-6 bg-slate-900 border border-blue-500/30 shadow-[0_10px_30px_rgba(30,144,255,0.2)] rounded-2xl px-4 py-3.5 flex items-center gap-3 z-50 text-xs md:text-sm animate-fade-in text-slate-100 max-w-sm">
-          <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
-            <CheckCircle className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="font-bold text-white mb-0.5">System Alert</p>
-            <p className="text-slate-400 font-medium text-xs leading-tight">{showNotification}</p>
-          </div>
-        </div>
-      )}
-
-
-
-
-
-      {/* Universal footer */}
-      <footer className="w-full py-4 text-center border-t border-white/5 bg-slate-950/80 backdrop-blur text-[11px] font-mono tracking-wider text-slate-500 z-10">
-        OWNER'S LOCAL OS • CLOUD RUN PREVIEW SECURED CLIENT ENVIRONMENT • © 2026
-      </footer>
-
-    </div>
-    </NavTelemetryContext.Provider>
-    </DomainDataContext.Provider>
-    </AuthContext.Provider>
-  );
-}
+    // Saving used to wait for a hidden file chooser; cancelling it produces
+    // no change event, so both module and AI snapshot actions silently did
+    // nothing. Persist the lightweight state archive immediately. Avoiding a
+    // base64 screenshot also keeps the Firestore document below its 1 MiB
+    // limit on high-resolution phones.
+    createAndAddSnapshot(pageId, pageName, metaData);
+  };
+
+  const handleCameraCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      // Fallback if no file was selected or camera was closed
+      if (pendingSnapshotRef.current) {
+        const { pageId, pageName, metaData } = pendingSnapshotRef.current;
+        createAndAddSnapshot(pageId, pageName, metaData);
+        pendingSnapshotRef.current = null;
+      }
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      if (pendingSnapshotRef.current) {
+        const { pageId, pageName, metaData } = pendingSnapshotRef.current;
+        createAndAddSnapshot(pageId, pageName, metaData);
+        pendingSnapshotRef.current = null;
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input value so same file can be captured again
+    event.target.value = "";
+  };
+
+  const deleteSnapshot = (id: string) => {
+    setSnapshots(prev => prev.filter(s => s.id !== id));
+    triggerNotification("Snapshot deleted from folder index");
+  };
+
+  function logOperationalEvent(type: string, desc: string, icon: string = "🤖") {
+    triggerNotification(`${icon} ${type}: ${desc}`);
+    const recipientEmail = loggedInUser?.email;
+    if (recipientEmail) {
+      const normalizedType = type.toLowerCase();
+      const category = normalizedType.includes("estimate") ? "estimates"
+        : normalizedType.includes("job") ? "jobs"
+        : normalizedType.includes("customer") ? "customer"
+        : normalizedType.includes("lead") ? "leads"
+        : normalizedType.includes("inventory") ? "inventory"
+        : normalizedType.includes("invoice") || normalizedType.includes("payment") || normalizedType.includes("financial") ? "revenue"
+        : normalizedType.includes("message") ? "messages"
+        : normalizedType.includes("schedule") ? "scheduling"
+        : normalizedType.includes("document") || normalizedType.includes("snapshot") ? "documents"
+        : "system";
+      const now = new Date();
+      setNotifications(prev => [{
+        id: `notif_event_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`,
+        category,
+        title: type,
+        description: desc,
+        time: now.toISOString().slice(0, 16).replace("T", " "),
+        isRead: false,
+        isArchived: false,
+        isPinned: false,
+        priority: "Normal",
+        assignedUser: loggedInUser?.name || loggedInUser?.role || "Owner",
+        recipientEmail,
+        createdBy: loggedInUser?.name || recipientEmail,
+        history: [`${now.toISOString()}: ${type} completed.`]
+      }, ...prev]);
+    }
+    const newAct = {
+      id: "act_sec_" + Math.random().toString(36).substring(2, 9),
+      date: new Date().toISOString().slice(0, 10),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      module: type,
+      action: desc,
+      reason: "Security tracking log",
+      status: "Completed" as const,
+      approvedBy: loggedInUser?.name || "System"
+    };
+    setRecentAiActions(prev => [newAct, ...prev]);
+  }
+
+  // AI PAGE ANALYSIS STATE & DIALOG ENGINE
+  const [isAIAnalysisOpen, setIsAIAnalysisOpen] = useState(false);
+  const [aiPageId, setAiPageId] = useState("");
+  const [aiPageName, setAiPageName] = useState("");
+  const [aiCustomContext, setAiCustomContext] = useState("");
+  const [aiMessages, setAiMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([]);
+  const [aiInputMessage, setAiInputMessage] = useState("");
+  const [aiIsLoading, setAiIsLoading] = useState(false);
+  const [pendingAiAction, setPendingAiAction] = useState<{ type: "drawer" | "floating"; query: string; customText?: string } | null>(null);
+
+  // Grounded, confirmation-gated data actions for the floating AI widget. Unlike the old
+  // fake "autonomous actions" (which fabricated PO numbers/vendors and mutated data from
+  // keyword matching with zero confirmation), these are computed from real live data and
+  // require an explicit approval click before anything is written.
+  type PendingDataAction =
+    | { type: "reorder"; item: InventoryItem; suggestedQty: number }
+    | { type: "reschedule"; event: SchedulingEvent; newDate: string };
+  const [pendingDataAction, setPendingDataAction] = useState<PendingDataAction | null>(null);
+
+  const proposeReorderAction = () => {
+    const lowStock = inventoryList.filter(i => i.quantity <= i.minQuantity);
+    if (lowStock.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "No inventory items are currently at or below their minimum stock threshold — nothing needs reordering right now." }]);
+      return;
+    }
+    const item = lowStock[0];
+    const suggestedQty = Math.max(item.maxQuantity - item.quantity, 1);
+    setPendingDataAction({ type: "reorder", item, suggestedQty });
+  };
+
+  const proposeRescheduleAction = () => {
+    const upcoming = schedulingEvents
+      .filter(e => e.status === "Scheduled")
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (upcoming.length === 0) {
+      setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "There are no scheduled jobs to reschedule." }]);
+      return;
+    }
+    const event = upcoming[0];
+    const [y, m, d] = event.date.split("-").map(Number);
+    const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
+    const newDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    setPendingDataAction({ type: "reschedule", event, newDate });
+  };
+
+  const confirmPendingDataAction = () => {
+    if (!pendingDataAction) return;
+    if (pendingDataAction.type === "reorder") {
+      const { item, suggestedQty } = pendingDataAction;
+      logOperationalEvent(
+        "Reorder Flagged",
+        `${item.name}: ${item.quantity} on hand (min ${item.minQuantity}). Flagged for reorder of ${suggestedQty} units${item.vendor ? ` from ${item.vendor}` : " (no vendor on file)"}.`,
+        "📦"
+      );
+      triggerNotification(`Reorder flagged for ${item.name} (${suggestedQty} units)`);
+    } else {
+      const { event, newDate } = pendingDataAction;
+      setSchedulingEvents(prev => prev.map(e => (e.id === event.id ? { ...e, date: newDate } : e)));
+      logOperationalEvent("Job Rescheduled", `Moved ${event.customer}'s job from ${event.date} to ${newDate}.`, "📅");
+      triggerNotification(`Moved ${event.customer}'s job to ${newDate}`);
+    }
+    setFloatingAiMessages(prev => [...prev, { sender: "ai", text: "✅ Done — approved and applied." }]);
+    setPendingDataAction(null);
+  };
+
+  const openPageAIAnalysis = (pageId: string, pageName: string, customContext?: string) => {
+    setAiPageId(pageId);
+    setAiPageName(pageName);
+    const resolvedContext = customContext || "";
+    setAiCustomContext(resolvedContext);
+    setIsAIAnalysisOpen(true);
+    setAiIsLoading(true);
+
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const businessSummary = buildBusinessSummary(pageId);
+
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId, pageName, customContext: resolvedContext, businessSummary, isOwnerOrAdmin })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages([{ sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages([{
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}. Make sure GEMINI_API_KEY is configured on the server.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
+  };
+
+  // Builds a real (not fabricated) summary of live business data for the AI prompt, scoped to the page being analyzed.
+  const buildBusinessSummary = (pageId: string): string => {
+    const pastDue = customers.filter(c => c.status === "Past Due");
+    const totalPastDue = pastDue.reduce((sum, c) => sum + (c.outstandingBalance || 0), 0);
+    const topCustomer = [...customers].sort((a, b) => (b.lifetimeValue || 0) - (a.lifetimeValue || 0))[0];
+
+    switch (pageId) {
+      case "dashboard":
+        return [
+          `Customers: ${customers.length} total, ${pastDue.length} past due ($${totalPastDue.toLocaleString()} outstanding)`,
+          `Leads: ${leads.length} total, ${leads.filter(l => l.status === "New").length} new`,
+          `Estimates: ${estimates.length} total, ${estimates.filter(e => e.status === "Sent" || e.status === "Viewed").length} awaiting response`,
+          `Scheduled jobs: ${schedulingEvents.filter(e => e.status === "Scheduled").length} upcoming, ${schedulingEvents.filter(e => e.status === "Completed").length} completed`,
+          `Revenue recognized from completed jobs: $${completedJobsRevenue.toLocaleString()}`
+        ].join("\n");
+      case "customers":
+        return [
+          `Total customers: ${customers.length}`,
+          `Past due: ${pastDue.length} accounts, $${totalPastDue.toLocaleString()} total outstanding`,
+          `VIP customers: ${customers.filter(c => c.isVIP).length}`,
+          topCustomer ? `Highest lifetime value: ${topCustomer.company} at $${(topCustomer.lifetimeValue || 0).toLocaleString()}` : ""
+        ].filter(Boolean).join("\n");
+      case "leads":
+        return [
+          `Total leads: ${leads.length}`,
+          `By status: ${Object.entries(leads.reduce((acc: Record<string, number>, l) => { acc[l.status] = (acc[l.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total pipeline value: $${leads.reduce((sum, l) => sum + (l.estimatedValue || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "estimates":
+        return [
+          `Total estimates: ${estimates.length}`,
+          `By status: ${Object.entries(estimates.reduce((acc: Record<string, number>, e) => { acc[e.status] = (acc[e.status] || 0) + 1; return acc; }, {})).map(([s, c]) => `${s}: ${c}`).join(", ")}`,
+          `Total estimate value: $${estimates.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}`
+        ].join("\n");
+      case "inventory":
+        return [
+          `Total inventory items: ${inventoryList.length}`,
+          `Low stock (below minimum): ${inventoryList.filter(i => i.quantity <= i.minQuantity).length}`
+        ].join("\n");
+      default:
+        return `${customers.length} customers, ${leads.length} leads, ${estimates.length} estimates, ${schedulingEvents.length} scheduled events on record.`;
+    }
+  };
+
+  const executeConfirmedAIMessage = (query: string) => {
+    setAiIsLoading(true);
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = aiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
+
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: aiPageId,
+        pageName: aiPageName,
+        businessSummary: buildBusinessSummary(aiPageId),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setAiIsLoading(false));
+  };
+
+  const handleSendAIMessage = () => {
+    if (!aiInputMessage.trim()) return;
+
+    const userMsgText = aiInputMessage;
+    setAiMessages(prev => [...prev, { sender: "user", text: userMsgText }]);
+    setAiInputMessage("");
+
+    const lower = userMsgText.toLowerCase();
+    const isFinancialQuery = lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("highest") || lower.includes("top") || lower.includes("best") || lower.includes("profit") || lower.includes("revenue") || lower.includes("expense") || lower.includes("billing") || lower.includes("ltv") || lower.includes("lifetime") || lower.includes("financial") || lower.includes("invoice");
+
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+
+    if (isFinancialQuery) {
+      if (!isOwnerOrAdmin) {
+        setAiIsLoading(true);
+        setTimeout(() => {
+          let blockedText = "";
+          if (lower.includes("past due") || lower.includes("balance") || lower.includes("unpaid") || lower.includes("debt") || lower.includes("invoice")) {
+            blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
+          } else {
+            const topCustomer = customers.length > 0 ? [...customers].sort((a, b) => b.lifetimeValue - a.lifetimeValue)[0] : null;
+            const topLead = leads.length > 0 ? [...leads].sort((a, b) => b.estimatedValue - a.estimatedValue)[0] : null;
+            if (aiPageId === "customers") {
+              blockedText = topCustomer
+                ? `Your highest value client is **${topCustomer.contact}** representing **${topCustomer.company}** with a Lifetime Value of **[REDACTED - OWNER ONLY]**. They have ${topCustomer.openJobs} open jobs currently.`
+                : "No customers on record yet.";
+            } else if (aiPageId === "leads") {
+              blockedText = topLead
+                ? `The highest value lead is **${topLead.name}** representing **${topLead.source}** source with an estimated contract value of **[REDACTED - OWNER ONLY]**, currently marked in '${topLead.status}' status.`
+                : "No leads on record yet.";
+            } else if (topCustomer) {
+              const sourceCounts: Record<string, number> = {};
+              leads.forEach((l) => { sourceCounts[l.source] = (sourceCounts[l.source] || 0) + 1; });
+              const topSourceEntry = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+              blockedText = `Based on our operational ledger, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
+            } else {
+              blockedText = "No customer or lead data on record yet.";
+            }
+          }
+          setAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
+          setAiIsLoading(false);
+        }, 600);
+        return;
+      }
+
+      setPendingAiAction({
+        type: "drawer",
+        query: userMsgText
+      });
+      return;
+    }
+
+    executeConfirmedAIMessage(userMsgText);
+  };
+
+  const executeConfirmedFloatingAiMessage = (query: string, _customText?: string) => {
+    setFloatingAiLoading(true);
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+    const conversation = floatingAiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
+
+    fetch("/api/ai/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pageId: activeScreen.id,
+        pageName: activeScreen.label,
+        businessSummary: buildBusinessSummary(activeScreen.id),
+        isOwnerOrAdmin,
+        conversation,
+        query
+      })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI request failed");
+        setFloatingAiMessages(prev => [...prev, { sender: "ai", text: data.text }]);
+      })
+      .catch((err) => {
+        setFloatingAiMessages(prev => [...prev, {
+          sender: "ai",
+          text: `⚠️ AI request failed: ${err instanceof Error ? err.message : "Unknown error"}.`
+        }]);
+      })
+      .finally(() => setFloatingAiLoading(false));
+  };
+
+  const handleSendFloatingAiMessage = (customText?: string) => {
+    const textToSend = customText || floatingAiInput;
+    if (!textToSend.trim()) return;
+
+    setFloatingAiMessages(prev => [...prev, { sender: "user", text: textToSend }]);
+    setFloatingAiInput("");
+
+    const lowerText = textToSend.toLowerCase();
+    const isFinancialQuery = lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("highest") || lowerText.includes("top") || lowerText.includes("best") || lowerText.includes("profit") || lowerText.includes("revenue") || lowerText.includes("expense") || lowerText.includes("billing") || lowerText.includes("ltv") || lowerText.includes("lifetime") || lowerText.includes("financial") || lowerText.includes("invoice");
+
+    const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
+
+    if (isFinancialQuery) {
+      if (!isOwnerOrAdmin) {
+        setFloatingAiLoading(true);
+        setTimeout(() => {
+          let blockedText = "";
+          if (lowerText.includes("why did profit drop") || lowerText.includes("past due") || lowerText.includes("balance") || lowerText.includes("unpaid") || lowerText.includes("debt") || lowerText.includes("invoice")) {
+            blockedText = "🚫 **Access Denied (Role Check Failed)**: You are simulating or logged in with a lower-permission role. Access to sensitive unpaid balances, customer debt records, or billing sheets is strictly restricted to Owner or Admin roles.";
+          } else {
+            blockedText = `### 🤖 Owner's AI Solution
+Processed context query for **${activeScreen.label} Page**:
+- **User Role**: ${simulatedRole || loggedInUser?.role || "Owner"}
+- **Lifetime Value**: **[REDACTED - OWNER ONLY]**
+- **Outstanding Balance**: **[REDACTED - OWNER ONLY]**
+
+Access to full financial telemetry is restricted.`;
+          }
+          setFloatingAiMessages(prev => [...prev, { sender: "ai", text: blockedText }]);
+          setFloatingAiLoading(false);
+        }, 600);
+        return;
+      }
+
+      setPendingAiAction({
+        type: "floating",
+        query: textToSend,
+        customText: customText
+      });
+      return;
+    }
+
+    // Grounded, confirmation-gated actions: these PROPOSE a real change computed from live
+    // data and require an explicit Approve click (see pendingDataAction) before anything is
+    // written — no data mutation happens directly from parsing this text.
+    if (lowerText.includes("order more") && activeScreen.id === "inventory") {
+      proposeReorderAction();
+      return;
+    }
+    if (lowerText.includes("move") && lowerText.includes("tomorrow") && activeScreen.id === "scheduling") {
+      proposeRescheduleAction();
+      return;
+    }
+
+    executeConfirmedFloatingAiMessage(textToSend);
+  };
+
+  // TEAM BUILDER STATE - Owner always gets every module at full access;
+  // every other starter role gets an independent per-module level, not one
+  // tier applied blanket -- managers default to Create & Edit on their
+  // department's modules, base employees default to View except on the
+  // handful of modules their job actually requires editing.
+  const [selectedRoles, setSelectedRoles] = useState<SelectedRole[]>([
+    {
+      id: "owner",
+      name: "Owner",
+      count: 1,
+      description: "Full access to every module",
+      permissions: MODULE_CATALOG.map(m => m.id),
+      modulePermissions: fullAccessGranular(MODULE_CATALOG.map(m => m.id))
+    }
+  ]);
+  
+  // Custom dialogs & UI states for team setup
+  const [customizingRole, setCustomizingRole] = useState<SelectedRole | null>(null);
+  const [showRoleInfoPopup, setShowRoleInfoPopup] = useState<string | null>(null);
+  const [showCustomRoleModal, setShowCustomRoleModal] = useState(false);
+  const [customRoleName, setCustomRoleName] = useState("");
+  const [roleIdPendingDelete, setRoleIdPendingDelete] = useState<string | null>(null);
+  
+  // Generated invites state for modal
+  const [generatedInvites, setGeneratedInvites] = useState<Array<{ code: string; role: string; permissions: string[]; granularPermissions?: GranularPermissions }>>([]);
+  const [showInvitesModal, setShowInvitesModal] = useState(false);
+
+  useEffect(() => {
+    refSecurityLogged.current = {};
+  }, [loggedInUser, simulatedRole]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+    if (activeRole === "Technician" && (activeScreen.id === "owner_console" || activeScreen.id === "revenue")) {
+      if (!refSecurityLogged.current[activeScreen.id]) {
+        refSecurityLogged.current[activeScreen.id] = true;
+        logOperationalEvent("Security Violation", `Blocked unauthorized attempt to access page: ${activeScreen.label}`, "🚨");
+      }
+    }
+  }, [activeScreen, isLoggedIn, loggedInUser, simulatedRole]);
+
+  useEffect(() => {
+    if (!loggedInUser) return;
+    const isDemoUser = loggedInUser.email === "admin@ownerslocal.com" || loggedInUser.email === "sec_manager@ownerslocal.com";
+    if (!isDemoUser) {
+      // Clear all Ironclad Plumbing & HVAC demo data for a fresh start
+      setCustomers([]);
+      setDashboardLeads([]);
+      setRecentRoster([]);
+      setDocuments([]);
+      setSchedulingEvents([]);
+      
+      // Load any existing profile settings if they exist in firestore
+      const loadBizProfile = async () => {
+        try {
+          const bizSnap = await getDoc(doc(db, "business_profiles", loggedInUser.email));
+          if (bizSnap.exists()) {
+            const bizData = bizSnap.data();
+            if (bizData.businessNames) setBusinessNames(bizData.businessNames);
+            if (bizData.ownerNames) setOwnerNames(bizData.ownerNames);
+            if (bizData.businessPhones) setBusinessPhones(bizData.businessPhones);
+            if (bizData.businessAddresses) setBusinessAddresses(bizData.businessAddresses);
+            if (bizData.businessLogos) setBusinessLogos(bizData.businessLogos.map((logo: string) => logo === "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60" ? "" : logo));
+            if (bizData.companyLocations) setCompanyLocations(bizData.companyLocations);
+          } else {
+            // For brand-new accounts, start completely blank
+            setBusinessNames([]);
+            setOwnerNames([]);
+            setBusinessPhones([]);
+            setBusinessAddresses([]);
+            setBusinessLogos([]);
+            setCompanyLocations([]);
+          }
+        } catch (err) {
+          console.error("Error loading non-demo business profile:", err);
+        }
+      };
+      
+      if (!loggedInUser.isEmployee) {
+        loadBizProfile();
+      }
+    }
+  }, [loggedInUser]);
+
+  // Employee Onboarding form states
+  const [empInviteCode, setEmpInviteCode] = useState("");
+  const [empEmail, setEmpEmail] = useState("");
+  const [empPassword, setEmpPassword] = useState("");
+  c
