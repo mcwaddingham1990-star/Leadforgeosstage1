@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 120774)
-Total output lines: 7981
+Warning: truncated output (original token count: 120964)
+Total output lines: 7998
 
 import React, { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase";
@@ -98,6 +98,7 @@ import {
 } from "recharts";
 import { LineChart, Line } from "recharts";
 import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
+
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
 import { LeadsPage, INITIAL_LEADS, Lead } from "./components/LeadsPage";
 import { SnapshotsPage } from "./components/SnapshotsPage";
@@ -137,6 +138,11 @@ import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTele
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 import darkLoginBackground from "../Src/Assets/Login/Darkloginbg.png";
 import darkLoginCard from "../Src/Assets/Login/Darkmodecard.png";
+
+const validPersonName = (value: unknown): string => {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) ? name : "";
+};
 
 export type WorkspaceTheme = "light-basic" | "light-extreme" | "dark-basic" | "dark-dynamic";
 
@@ -1702,7 +1708,7 @@ export default function App() {
                 permissions: resolvedPermissions,
                 granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "edit") : fullAccessGranular(resolvedPermissions)),
                 isEmployee: isEmployee,
-                name: profileData.name || user.displayName || "Owner",
+                name: validPersonName(profileData.name) || validPersonName(user.displayName) || "Owner",
                 goals: profileData.goals || "",
                 businessEmail: isEmployee ? profileData.businessEmail : (user.email || "")
               });
@@ -1743,15 +1749,15 @@ export default function App() {
             } else {
               // Not onboarded yet! Direct to Onboarding Step 1 within Interactive Login Card
               setEmail(user.email || "");
-              setBusinessNames([profileData.name || ""]);
-              setOwnerNames([profileData.name || ""]);
+              setBusinessNames([profileData.businessName || ""]);
+              setOwnerNames([validPersonName(profileData.name)]);
               setLoggedInUser({
                 email: user.email || "",
                 role: "Owner",
                 permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
                 granularPermissions: profileData.granularPermissions || fullAccessGranular(profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
                 isEmployee: false,
-                name: profileData.name || "Owner",
+                name: validPersonName(profileData.name) || "Owner",
                 goals: ""
               });
               setIsLoggedIn(false);
@@ -1764,7 +1770,7 @@ export default function App() {
               permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
               granularPermissions: fullAccessGranular(["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
               isEmployee: false,
-              name: user.displayName || "Owner",
+              name: validPersonName(user.displayName) || "Owner",
               goals: ""
             });
             setIsLoggedIn(false);
@@ -1806,10 +1812,7 @@ export default function App() {
 
   const takeSnapshot = (pageId: string, pageName: string, metaData?: any) => {
     // A Snapshot is an archive of the module's state, not a camera upload.
-    // Saving used to wait for a hidden file chooser; cancelling it produces
-    // no change event, so both module and AI snapshot actions silently did
-    // nothing. Persist the lightweight state archive immediately. Avoiding a
-    // base64 screenshot also keeps the Firestore document be…60774 tokens truncated…isibleScreens().some(screen => screen.id === "revenue") ? (
+    // Saving…60964 tokens truncated…isibleScreens().some(screen => screen.id === "revenue") ? (
                       <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
                         <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
                         <h2 className="text-xl font-bold text-white">Restricted Access</h2>
