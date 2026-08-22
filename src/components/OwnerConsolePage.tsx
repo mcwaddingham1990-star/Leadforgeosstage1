@@ -629,6 +629,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
                   height: "500px" 
                 }} 
                 className="relative transition-transform duration-300"
+              >
                 {/* SVG CONNECTIONS WITH FLOWING ANIMS */}
                 <svg className="absolute top-0 left-0 w-full h-full pointer-events-none select-none">
                   {/* Dynamic path lines between sequence of nodes */}
