@@ -2296,4 +2296,5703 @@ Access to full financial telemetry is restricted.`;
   const [empInviteCode, setEmpInviteCode] = useState("");
   const [empEmail, setEmpEmail] = useState("");
   const [empPassword, setEmpPassword] = useState("");
-  c
+  const [empFirstName, setEmpFirstName] = useState("");
+  const [empLastName, setEmpLastName] = useState("");
+  const [empAddress, setEmpAddress] = useState("");
+  const [empPhone, setEmpPhone] = useState("");
+  const [empPhoto, setEmpPhoto] = useState("");
+  const [empGoals, setEmpGoals] = useState("");
+  const [empHourlyRate, setEmpHourlyRate] = useState("");
+
+  // Trigger brief floating notifications
+  const triggerNotification = (message: string) => {
+    setShowNotification(message);
+    setTimeout(() => {
+      setShowNotification(null);
+    }, 4000);
+  };
+
+  const openPlaceholderPage = (label: string, icon: string) => {
+    setActiveScreen({
+      id: "placeholder_screen",
+      label: label,
+      icon: icon,
+      url: ""
+    });
+    triggerNotification(`Navigated to Placeholder for: ${label}`);
+  };
+
+  // Canonical cross-page navigation: every page-to-page link (map pin, table
+  // row, dropdown, card) should route through this so "many roads lead to the
+  // same record" behaves identically everywhere, instead of each page call
+  // site redefining its own copy of this logic.
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string }) => {
+    setPreSelectedCustomerId(params?.customerId ?? undefined);
+    setPreSelectedDate(params?.date ?? undefined);
+    const matched = OS_SCREENS.find(s => s.id === screenId);
+    if (matched) {
+      setActiveScreen(matched);
+    }
+  };
+
+  const handleOwnerSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = signUpInstructionsEmail.trim().toLowerCase();
+    const cleanUser = signUpInstructionsBusinessName.trim();
+    const cleanOwner = signUpInstructionsOwnerName.trim();
+    const cleanPass = signUpInstructionsPassword.trim();
+
+    if (!cleanUser || !cleanOwner || !cleanEmail || !cleanPass) {
+      setSignUpInstructionsError("All fields are required.");
+      return;
+    }
+
+    if (!validPersonName(cleanOwner)) {
+      setSignUpInstructionsError("Enter the owner's name, not an email address.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setSignUpInstructionsError("Please enter a valid email address.");
+      return;
+    }
+
+    if (cleanPass.length < 6) {
+      setSignUpInstructionsError("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (cleanPass !== signUpInstructionsConfirmPassword) {
+      setSignUpInstructionsError("Create Password and Confirm Password must match.");
+      return;
+    }
+
+    setSignUpInstructionsError("");
+    setIsSignUpSubmitting(true);
+
+    // Keep the submitted company identity locally until both Auth and Firestore
+    // finish. Firebase Auth can succeed just before a transient network failure;
+    // this lets the next sign-in repair the otherwise orphaned owner account.
+    localStorage.setItem("ownerslocalPendingOwnerSignup", JSON.stringify({
+      email: cleanEmail,
+      businessName: cleanUser,
+      ownerName: cleanOwner
+    }));
+
+    try {
+      // 1. Create real authentication user
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
+      const user = userCredential.user;
+
+      // 2. Create owner user profile document
+      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
+      const userProfile = {
+        uid: user.uid,
+        email: cleanEmail,
+        role: "Owner",
+        permissions: ownerPermissions,
+        granularPermissions: fullAccessGranular(ownerPermissions),
+        name: cleanOwner,
+        isEmployee: false,
+        businessEmail: cleanEmail,
+        isOnboarded: false,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, "user_profiles", user.uid), userProfile);
+
+      // 3. Create owner business profile document in Firestore
+      await setDoc(doc(db, "business_profiles", cleanEmail), {
+        businessNames: [cleanUser],
+        ownerNames: [cleanOwner],
+        businessPhones: [""],
+        businessAddresses: [""],
+        businessLogos: [""],
+        companyLocations: [""],
+        updatedAt: new Date().toISOString()
+      });
+      localStorage.removeItem("ownerslocalPendingOwnerSignup");
+
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(user);
+        verificationEmailSent = true;
+      } catch (verificationError) {
+        console.error("Could not send owner verification email:", verificationError);
+      }
+
+      // Update relevant states for consistency
+      setEmail(cleanEmail);
+      setPassword(cleanPass);
+      setBusinessNames([cleanUser]);
+      setOwnerNames([cleanOwner]);
+
+      setLoggedInUser({
+        email: cleanEmail,
+        role: "Owner",
+        permissions: userProfile.permissions,
+        granularPermissions: userProfile.granularPermissions,
+        isEmployee: false,
+        name: cleanOwner,
+        goals: ""
+      });
+
+      // Directly show Step 1 of Onboarding!
+      setCurrentView("placeholder_password");
+      setShowSignUpInstructions(false);
+      triggerNotification(verificationEmailSent
+        ? `Verification email sent to ${cleanEmail}. Check your inbox or spam folder.`
+        : "Account created, but the verification email could not be sent. Try again from Account Settings.");
+    } catch (err: any) {
+      console.error("Error signing up:", err);
+      let errMsg = err.message || "Unknown error";
+      if (err.code === "auth/email-already-in-use") {
+        errMsg = "This email address is already registered.";
+      }
+      setSignUpInstructionsError("Sign up failed: " + errMsg);
+    } finally {
+      setIsSignUpSubmitting(false);
+    }
+  };
+
+  // Real Firebase Auth Password sign-in
+  const handlePasswordSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (rememberMe) {
+      localStorage.setItem("rememberMe", "true");
+      localStorage.setItem("rememberedEmail", email);
+      localStorage.setItem("rememberedPassword", password);
+    } else {
+      localStorage.removeItem("rememberMe");
+      localStorage.removeItem("rememberedEmail");
+      localStorage.removeItem("rememberedPassword");
+    }
+
+    // 1. Business Email must be a valid email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setLoginError("Please enter a valid business email address.");
+      triggerNotification("Invalid email format.");
+      return;
+    }
+
+    // 2. Password cannot be empty
+    if (!cleanPass) {
+      setLoginError("Password cannot be empty.");
+      triggerNotification("Password cannot be empty.");
+      return;
+    }
+
+    setLoginError(null);
+    setIsSubmitting(true);
+    setLoginMethod("password");
+    
+    try {
+      // Authenticate with real Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+      const user = userCredential.user;
+
+      // Fetch user profile from user_profiles to load their role and permissions
+      const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
+        const isEmployeeAcct = profileData.isEmployee ?? false;
+        const resolvedPerms = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
+        setLoggedInUser({
+          email: user.email || "",
+          role: profileData.role || "Owner",
+          permissions: resolvedPerms,
+          granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "edit") : fullAccessGranular(resolvedPerms)),
+          isEmployee: isEmployeeAcct,
+          name: validPersonName(profileData.name) || validPersonName(user.displayName) || "Owner",
+          goals: profileData.goals || "",
+          businessEmail: isEmployeeAcct ? profileData.businessEmail : (user.email || "")
+        });
+        setIsLoggedIn(true);
+
+        const isEmployee = profileData.isEmployee ?? false;
+        if (isEmployee) {
+          const firstPermitted = OS_SCREENS.find(s => (profileData.permissions || []).includes(s.id)) || OS_SCREENS[0];
+          setActiveScreen(firstPermitted);
+          triggerNotification(`Signed in as employee: ${profileData.name || "User"} (${profileData.role})`);
+        } else {
+          setActiveScreen(OS_SCREENS[0]);
+          triggerNotification(`Signed in as Owner`);
+        }
+      } else {
+        const ownerPerms = DEFAULT_ROLES_DATA.owner.permissions;
+        const pendingRaw = localStorage.getItem("ownerslocalPendingOwnerSignup");
+        let pending: { email?: string; businessName?: string; ownerName?: string } | null = null;
+        try { pending = pendingRaw ? JSON.parse(pendingRaw) : null; } catch { pending = null; }
+        const recoverable = pending?.email?.toLowerCase() === cleanEmail;
+        const ownerName = validPersonName(recoverable ? pending?.ownerName : user.displayName) || "Owner";
+
+        if (recoverable) {
+          await setDoc(doc(db, "user_profiles", user.uid), {
+            uid: user.uid, email: cleanEmail, role: "Owner", permissions: ownerPerms,
+            granularPermissions: fullAccessGranular(ownerPerms), name: ownerName,
+            isEmployee: false, businessEmail: cleanEmail, isOnboarded: false,
+            createdAt: new Date().toISOString()
+          });
+          await setDoc(doc(db, "business_profiles", cleanEmail), {
+            businessNames: [pending?.businessName || "Your Business"], ownerNames: [ownerName],
+            businessPhones: [""], businessAddresses: [""], businessLogos: [""],
+            companyLocations: [""],
+            updatedAt: new Date().toISOString()
+          });
+          localStorage.removeItem("ownerslocalPendingOwnerSignup");
+        }
+        setLoggedInUser({
+          email: user.email || "",
+          role: "Owner",
+          permissions: ownerPerms,
+          granularPermissions: fullAccessGranular(ownerPerms),
+          isEmployee: false,
+          name: ownerName,
+          goals: ""
+        });
+        setIsLoggedIn(true);
+        setActiveScreen(OS_SCREENS[0]);
+        triggerNotification(`Signed in successfully.`);
+      }
+    } catch (err: any) {
+      console.error("Error signing in with Firebase Auth:", err);
+      let errMsg = "Incorrect password or email. Please try again.";
+      if (err.code === "auth/user-not-found") {
+        errMsg = "User account not found. Please sign up.";
+      } else if (err.code === "auth/wrong-password") {
+        errMsg = "Incorrect password. Please try again.";
+      } else if (err.code === "auth/invalid-credential") {
+        errMsg = "Invalid login credentials. Please check your email and password.";
+      }
+      setLoginError(errMsg);
+      triggerNotification("Sign-in failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async () => {
+    if (!forgotEmail) {
+      triggerNotification("Please provide an email.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail.trim());
+      setForgotSubmitted(true);
+      triggerNotification("Password recovery email transmitted successfully!");
+    } catch (err: any) {
+      console.error("Password reset failed:", err);
+      triggerNotification("Reset failed: " + (err.message || "Unknown error"));
+    }
+  };
+
+  // Real Firestore check for Employee Invite code
+  const handleInviteSignIn = async () => {
+    const codeTrim = inviteCode.trim().toUpperCase();
+
+    if (!codeTrim) {
+      triggerNotification("Please enter an employee invite code.");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setLoginMethod("invite");
+    
+    try {
+      const inviteSnap = await getDoc(doc(db, "employee_invites", codeTrim));
+      if (inviteSnap.exists()) {
+        const inviteData = inviteSnap.data();
+        if (inviteData.status === "completed") {
+          triggerNotification("This code is already registered. Sign in with email above.");
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Start Employee Onboarding Step 1 of 1
+        setEmpInviteCode(codeTrim);
+        setEmpEmail("");
+        setEmpPassword("");
+        setEmpFirstName("");
+        setEmpLastName("");
+        setEmpAddress("");
+        setEmpPhone("");
+        setEmpGoals("");
+        setCurrentView("employee_onboarding");
+        triggerNotification(`Invite verified for: ${inviteData.role}! Complete setup.`);
+      } else {
+        triggerNotification("Invite code not found in database. Please ask your owner or manager for a valid code.");
+      }
+    } catch (err) {
+      console.error("Error verifying invite:", err);
+      triggerNotification("Couldn't verify the invite code right now. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Real Google OAuth via Firebase Auth. This used to be a fake account
+  // picker with 3 hardcoded emails that logged the user in as whichever
+  // identity was clicked, with zero verification — a full authentication
+  // bypass. signInWithPopup performs a real Google sign-in; the existing
+  // onAuthStateChanged listener above already loads the resulting user's
+  // real profile from user_profiles/{uid}, so no duplicate state-setting
+  // logic is needed here.
+  const handleGoogleSignIn = async () => {
+    setIsSubmitting(true);
+    setLoginMethod("google");
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error("Google sign in error:", err);
+      if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+        setLoginError("Google sign-in failed. Please try again.");
+        triggerNotification("Google sign-in failed.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Back to Login routine
+  const handleBackToLogin = () => {
+    setCurrentView("login");
+  };
+
+  const openBusinessProfileEditor = () => {
+    setOnboardingErrors({});
+    setShowOptionalProfileWarning(false);
+    setCurrentView("placeholder_password");
+    setIsLoggedIn(false);
+    triggerNotification("Business Setup opened. Update Steps 1–2 and save when finished.");
+  };
+
+  // Logout routine
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsLoggedIn(false);
+      setCurrentView("login");
+      setLoginMethod(null);
+      setPassword("••••••••••••••••");
+      triggerNotification("Logged out of OwnersLOCAL.");
+    } catch (err) {
+      console.error("Logout error:", err);
+      // Fallback
+      setIsLoggedIn(false);
+      setCurrentView("login");
+      setLoginMethod(null);
+      setPassword("••••••••••••••••");
+    }
+  };
+
+  // Load business profile from Firestore on mount or when view transitions to onboarding
+  useEffect(() => {
+    const loadProfile = async () => {
+      const profileEmail = businessId || email;
+      if (!profileEmail) return;
+      try {
+        const docRef = doc(db, "business_profiles", profileEmail);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.ownerNames) setOwnerNames(data.ownerNames);
+          if (data.ownerPhones) setOwnerPhones(data.ownerPhones);
+          if (data.businessNames) setBusinessNames(data.businessNames);
+          if (data.businessPhones) setBusinessPhones(data.businessPhones);
+          if (data.businessAddresses) setBusinessAddresses(data.businessAddresses);
+          if (data.businessLogos) setBusinessLogos(data.businessLogos.map((logo: string) => logo === "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&auto=format&fit=crop&q=60" ? "" : logo));
+          if (data.companyLocations) setCompanyLocations(data.companyLocations);
+          if (Array.isArray(data.selectedRoles) && data.selectedRoles.length) setSelectedRoles(normalizeSelectedRoles(data.selectedRoles));
+          triggerNotification("Synced business profile from cloud database!");
+        }
+      } catch (err) {
+        console.error("Error loading profile from Firestore:", err);
+      }
+    };
+
+    if (currentView === "placeholder_google" || currentView === "placeholder_password" || currentView === "placeholder_invite") {
+      loadProfile();
+    }
+  }, [currentView, email, businessId]);
+
+  const saveProfileToFirestore = async () => {
+    const profileEmail = businessId || email;
+    if (!profileEmail) return;
+    try {
+      const docRef = doc(db, "business_profiles", profileEmail);
+      await setDoc(docRef, {
+        ownerNames,
+        ownerPhones,
+        businessNames,
+        businessPhones,
+        businessAddresses,
+        businessLogos,
+        companyLocations,
+        selectedRoles: normalizeSelectedRoles(selectedRoles),
+        updatedAt: new Date().toISOString()
+      });
+      triggerNotification("Saved to cloud Firestore successfully!");
+    } catch (err) {
+      console.error("Error saving profile to Firestore:", err);
+      triggerNotification("Cloud save failed. Please check connection.");
+    }
+  };
+
+  const finishBusinessProfileStep = async () => {
+    setShowOptionalProfileWarning(false);
+    setOnboardingErrors({});
+    setIsSubmitting(true);
+    await saveProfileToFirestore();
+    setIsSubmitting(false);
+    setCurrentView("placeholder_team_setup");
+  };
+
+  const reviewBusinessProfileStep = async () => {
+    const errors: Record<string, string> = {};
+    const firstValue = (values: string[]) => String(values?.[0] || "").trim();
+    const businessEmail = String(businessId || email || "").trim();
+
+    if (!firstValue(ownerNames)) errors["account administrator name"] = "Account Administrator Name is required.";
+    if (!firstValue(businessNames)) errors["business name"] = "Business Name is required.";
+    if (!businessEmail) errors["business email"] = "Business Email is required.";
+
+    if (Object.keys(errors).length) {
+      setOnboardingErrors(errors);
+      triggerNotification("Add the three required business-profile fields.");
+      return;
+    }
+
+    const optional = [
+      ["Administrator phone", firstValue(ownerPhones)],
+      ["Business phone", firstValue(businessPhones)],
+      ["Business headquarters address", firstValue(businessAddresses)],
+      ["Business logo", firstValue(businessLogos)],
+      ["Company locations", firstValue(companyLocations)]
+    ].filter(([, value]) => !value).map(([label]) => label);
+
+    if (optional.length) {
+      setOptionalProfileFields(optional);
+      setShowOptionalProfileWarning(true);
+      return;
+    }
+
+    await finishBusinessProfileStep();
+  };
+
+  // Increment/Decrement role count
+  const handleIncrementRoleCount = (roleId: string) => {
+    setSelectedRoles(prev => prev.map(r => r.id === roleId ? { ...r, count: (Number.isFinite(Number(r.count)) ? Number(r.count) : 0) + 1 } : r));
+  };
+
+  const handleDecrementRoleCount = (roleId: string) => {
+    setSelectedRoles(prev => {
+      return prev.map(r => {
+        if (r.id === roleId) {
+          const newCount = (Number.isFinite(Number(r.count)) ? Number(r.count) : 0) - 1;
+          return { ...r, count: Math.max(0, newCount) };
+        }
+        return r;
+      });
+    });
+  };
+
+  const handleRemoveRole = (roleId: string) => {
+    if (roleId === "owner") {
+      triggerNotification("Cannot remove the Owner role.");
+      return;
+    }
+    setSelectedRoles(prev => prev.filter(r => r.id !== roleId));
+    triggerNotification("Role removed successfully.");
+  };
+
+  // Add a role from the dropdown selection
+  const handleAddRole = (roleId: string) => {
+    if (roleId === "__create_custom__") {
+      setShowCustomRoleModal(true);
+      return;
+    }
+    const defaultData = DEFAULT_ROLES_DATA[roleId];
+    if (!defaultData) return;
+    
+    // Check if already selected
+    const exists = selectedRoles.find(r => r.id === roleId);
+    if (exists) {
+      handleIncrementRoleCount(roleId);
+      triggerNotification(`Increased count for ${defaultData.name}`);
+      return;
+    }
+
+    const newRole: SelectedRole = {
+      id: roleId,
+      name: defaultData.name,
+      count: 1,
+      description: defaultData.description,
+      permissions: [...defaultData.permissions],
+      modulePermissions: defaultGranularFromModuleList(defaultData.permissions, "edit")
+    };
+    setSelectedRoles(prev => [...prev, newRole]);
+    triggerNotification(`Added role: ${defaultData.name}`);
+  };
+
+  // Duplicate an existing role
+  const handleDuplicateRole = (role: SelectedRole) => {
+    const randomId = "custom_" + Math.random().toString(36).substring(2, 7);
+    const newRole: SelectedRole = {
+      ...role,
+      id: randomId,
+      name: `${role.name} Copy`,
+      isCustom: true,
+      count: 1,
+      modulePermissions: JSON.parse(JSON.stringify(role.modulePermissions))
+    };
+    setSelectedRoles(prev => [...prev, newRole]);
+    triggerNotification(`Duplicated ${role.name}`);
+  };
+
+  // Create a brand new custom role
+  const handleCreateCustomRole = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = customRoleName.trim();
+    if (!cleanName) {
+      triggerNotification("Please enter a custom role name.");
+      return;
+    }
+    const existingRole = selectedRoles.find(role => role.name.trim().toLowerCase() === cleanName.toLowerCase());
+    if (existingRole) {
+      handleIncrementRoleCount(existingRole.id);
+      setShowCustomRoleModal(false);
+      setCustomRoleName("");
+      triggerNotification(`${existingRole.name} already exists, so another seat was added instead.`);
+      return;
+    }
+    const randomId = "custom_" + Math.random().toString(36).substring(2, 7);
+    const newRole: SelectedRole = {
+      id: randomId,
+      name: cleanName,
+      count: 1,
+      description: "Custom user defined role",
+      isCustom: true,
+      permissions: ["dashboard", "messages"],
+      modulePermissions: defaultGranularFromModuleList(["dashboard", "messages"], "view")
+    };
+    setSelectedRoles(prev => [...prev, newRole]);
+    setShowCustomRoleModal(false);
+    setCustomRoleName("");
+    setCustomizingRole(newRole); // Open customize modal immediately for custom roles
+    triggerNotification(`Created custom role: ${cleanName}`);
+  };
+
+  // Save customized permissions
+  const handleSaveCustomPermissions = (updated: SelectedRole) => {
+    setSelectedRoles(prev => prev.map(r => r.id === updated.id ? updated : r));
+    setCustomizingRole(null);
+    triggerNotification(`Updated permissions for ${updated.name}`);
+  };
+
+  // Save a real income/expense transaction -- typed manually or scanned via
+  // real Gemini vision, always confirmed/edited by the user before saving.
+  const handleSaveTransaction = async (t: Omit<Transaction, "id">) => {
+    try {
+      const newTxn: Transaction = { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+      const journalEntry = postTransactionEntry(newTxn);
+      if (!businessId) throw new Error("Missing business account");
+      // Firestore rejects `undefined` values. Category and createdBy are
+      // intentionally optional in the manual-entry form, so omit them from
+      // the persisted documents instead of letting an uncategorized expense
+      // make the entire batch fail.
+      const persistedTxn = Object.fromEntries(
+        Object.entries({ ...newTxn, businessId, updatedAt: new Date().toISOString() })
+          .filter(([, value]) => value !== undefined)
+      );
+      const persistedJournalEntry = Object.fromEntries(
+        Object.entries({ ...journalEntry, businessId, updatedAt: new Date().toISOString() })
+          .filter(([, value]) => value !== undefined)
+      );
+      const batch = writeBatch(db);
+      batch.set(doc(db, "transactions", newTxn.id), persistedTxn);
+      batch.set(doc(db, "journal_entries", journalEntry.id), persistedJournalEntry);
+      await batch.commit();
+      setTransactions(prev => [...prev, newTxn]);
+      // Real double-entry posting -- every logged transaction moves the
+      // real ledger (Cash + Revenue or Cash + the matching expense
+      // account), not just a line in a list. See accountingEngine.ts.
+      setJournalEntries(prev => [...prev, journalEntry]);
+      setLogTransactionType(null);
+      sessionStorage.removeItem("ownerslocal_pending_financial_scan");
+      triggerNotification(`${t.type === "income" ? "Income" : "Expense"} logged: $${t.amount.toLocaleString()}`);
+    } catch (err) {
+      console.error("Error saving transaction:", err);
+      triggerNotification("Couldn't save that — check your connection and try again.");
+      throw err;
+    }
+  };
+
+  const selectPayrollSchedule = (schedule: PayrollSchedule) => {
+    setPayrollSchedule(schedule);
+    if (schedule !== "custom") {
+      const period = scheduledPayrollPeriod(schedule);
+      setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+    }
+  };
+  const movePayrollPeriod = (direction: -1 | 1) => {
+    if (payrollSchedule === "custom") return;
+    const anchor = new Date(`${direction < 0 ? payrollPeriodStart : payrollPeriodEnd}T12:00:00`);
+    anchor.setDate(anchor.getDate() + direction);
+    const period = scheduledPayrollPeriod(payrollSchedule, anchor);
+    setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+  };
+  const useCurrentPayrollPeriod = () => {
+    if (payrollSchedule === "custom") return;
+    const period = scheduledPayrollPeriod(payrollSchedule);
+    setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
+  };
+
+  // Runs payroll for the employer-selected pay period: real hours from
+  // time_clock_logs x each real employee's real hourlyRate. The
+  // calculation is fully automatic and real -- there's no real background
+  // cron infrastructure in a client-side app, so a manual click is what
+  // starts it, same as any payroll software's "Run Payroll" action.
+  const handleRunPayroll = async () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. No payroll was created.`);
+    setIsRunningPayroll(true);
+    try {
+      const newPayrollTransactions: Transaction[] = [];
+      let totalPayroll = 0;
+      for (const emp of employees) {
+        const { hours, regularHours: regHours, overtimeHours: otHours } = computePayrollHoursForRange(timeClockLogs.filter(l => l.employeeEmail === emp.email), payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
+        if (hours <= 0 || !emp.hourlyRate) continue;
+        const pay = regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5;
+        if (pay <= 0) continue;
+        totalPayroll += pay;
+        const payrollId = `txn_payroll_${payrollPeriodStart}_${payrollPeriodEnd}_${emp.email}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+        if (transactions.some(tx => tx.id === payrollId)) continue;
+        newPayrollTransactions.push({
+          id: payrollId,
+          type: "expense",
+          source: "payroll",
+          amount: Math.round(pay * 100) / 100,
+          description: `${emp.firstName} ${emp.lastName}`.trim(),
+          category: "Payroll",
+          date: new Date().toISOString().split("T")[0],
+          createdAt: new Date().toISOString(),
+          createdBy: loggedInUser?.email
+        });
+      }
+
+      if (newPayrollTransactions.length === 0) {
+        triggerNotification("No unpaid hours exist in the selected pay period.");
+        return;
+      }
+
+      const finalizedPayrollTransactions = newPayrollTransactions;
+      setTransactions(prev => [...prev, ...finalizedPayrollTransactions]);
+      // Real double-entry posting for every payroll transaction -- Debit
+      // Payroll Expense, Credit Cash, same as any other logged expense.
+      setJournalEntries(prev => [...prev, ...finalizedPayrollTransactions.map(postTransactionEntry)]);
+      triggerNotification(`Payroll run: $${totalPayroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} across ${newPayrollTransactions.length} employee${newPayrollTransactions.length === 1 ? "" : "s"}, based on real logged hours.`);
+    } catch (err) {
+      console.error("Error running payroll:", err);
+      triggerNotification("Couldn't run payroll — check your connection and try again.");
+    } finally {
+      setIsRunningPayroll(false);
+    }
+  };
+
+  const getPayrollExportRows = () => employees.map(emp => {
+    const { regularHours, overtimeHours } = computePayrollHoursForRange(timeClockLogs.filter(log => log.employeeEmail === emp.email), payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
+    const rate = Number(emp.hourlyRate) || 0;
+    const grossPay = regularHours * rate + overtimeHours * rate * 1.5;
+    const employeeName = `${emp.firstName} ${emp.lastName}`.trim();
+    const year = new Date().getFullYear();
+    const priorYearPayroll = transactions
+      .filter(tx => tx.source === "payroll" && tx.description === employeeName && new Date(tx.date).getFullYear() === year)
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    const socialSecurityWages = Math.max(0, Math.min(grossPay, 184500 - priorYearPayroll));
+    const socialSecurity = socialSecurityWages * 0.062;
+    const medicare = grossPay * 0.0145;
+    const additionalMedicareWages = Math.max(0, priorYearPayroll + grossPay - 200000) - Math.max(0, priorYearPayroll - 200000);
+    const additionalMedicare = additionalMedicareWages * 0.009;
+    const federalIncomeTax = 0; // Requires the employee's current signed W-4 elections.
+    const texasIncomeTax = 0; // Texas has no individual state income tax.
+    const deductions = socialSecurity + medicare + additionalMedicare + federalIncomeTax + texasIncomeTax;
+    const texasSutaWages = Math.max(0, Math.min(grossPay, 9000 - priorYearPayroll));
+    const employerTexasSuta = texasSutaWages * 0.027; // 2026 new-employer rate; configurable rate comes next.
+    return {
+      name: employeeName, email: emp.email,
+      role: emp.role, regularHours, overtimeHours, rate,
+      grossPay, socialSecurity, medicare, additionalMedicare,
+      federalIncomeTax, texasIncomeTax, deductions, netPay: grossPay - deductions,
+      employerSocialSecurity: socialSecurityWages * 0.062,
+      employerMedicare: grossPay * 0.0145,
+      employerTexasSuta
+    };
+  });
+
+  const downloadPayrollCsv = () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. CSV export is blocked.`);
+    const rows = getPayrollExportRows();
+    if (!rows.length) return triggerNotification("No employees are available to export.");
+    const period = { start: payrollPeriodStart, end: payrollPeriodEnd };
+    const safe = (value: string | number) => {
+      const text = String(value);
+      const protectedText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${protectedText.replace(/"/g, '""')}"`;
+    };
+    const header = ["Pay Period Start","Pay Period End","Employee","Email","Role","Regular Hours","Overtime Hours","Hourly Rate","Gross Pay","Employee Social Security","Employee Medicare","Additional Medicare","Federal Income Tax (W-4 Required)","Texas Income Tax","Total Employee Deductions","Net Pay","Employer Social Security","Employer Medicare","Employer Texas SUTA Estimate","Payment Method","Check/Confirmation Number"];
+    const csv = [header.map(safe).join(","), ...rows.map(row => [
+      period.start, period.end, row.name, row.email, row.role,
+      row.regularHours.toFixed(2), row.overtimeHours.toFixed(2), row.rate.toFixed(2),
+      row.grossPay.toFixed(2), row.socialSecurity.toFixed(2), row.medicare.toFixed(2), row.additionalMedicare.toFixed(2),
+      row.federalIncomeTax.toFixed(2), row.texasIncomeTax.toFixed(2), row.deductions.toFixed(2), row.netPay.toFixed(2),
+      row.employerSocialSecurity.toFixed(2), row.employerMedicare.toFixed(2), row.employerTexasSuta.toFixed(2), "", ""
+    ].map(safe).join(","))].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ownerslocal-payroll-${period.start}-to-${period.end}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerNotification("Payroll CSV downloaded.");
+  };
+
+  const printPayrollSummary = () => {
+    if (payrollState !== "TX") return triggerNotification(`${payrollState} payroll tax rules are not configured yet. PDF export is blocked.`);
+    const rows = getPayrollExportRows();
+    if (!rows.length) return triggerNotification("No employees are available to print.");
+    const period = { start: payrollPeriodStart, end: payrollPeriodEnd };
+    const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
+    const money = (value: number) => `$${value.toFixed(2)}`;
+    const totals = rows.reduce((sum, row) => ({ hours: sum.hours + row.regularHours, overtime: sum.overtime + row.overtimeHours, gross: sum.gross + row.grossPay, deductions: sum.deductions + row.deductions, net: sum.net + row.netPay }), { hours: 0, overtime: 0, gross: 0, deductions: 0, net: 0 });
+    const report = window.open("", "_blank", "noopener,noreferrer");
+    if (!report) return triggerNotification("Allow pop-ups to print the payroll summary.");
+    report.document.write(`<!doctype html><html><head><title>Payroll ${period.start} to ${period.end}</title><style>body{font:11px Arial,sans-serif;color:#17233b;padding:24px}h1{margin:0}p{color:#60708a}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #d9e3f1;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5fc}tfoot{font-weight:bold}.note{margin-top:16px;font-size:10px}@media print{button{display:none}}</style></head><body><h1>${escape(businessNames[0] || "OwnersLOCAL")} Texas Payroll Summary</h1><p>Pay period: ${period.start} through ${period.end}</p><table><thead><tr><th>Employee</th><th>Regular</th><th>OT</th><th>Gross</th><th>Social Security</th><th>Medicare</th><th>Add'l Medicare</th><th>Federal W/H</th><th>Texas W/H</th><th>Net Check</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escape(row.name)}<br><small>${escape(row.role)}</small></td><td>${row.regularHours.toFixed(2)}</td><td>${row.overtimeHours.toFixed(2)}</td><td>${money(row.grossPay)}</td><td>${money(row.socialSecurity)}</td><td>${money(row.medicare)}</td><td>${money(row.additionalMedicare)}</td><td>${money(row.federalIncomeTax)}*</td><td>${money(row.texasIncomeTax)}</td><td>${money(row.netPay)}</td></tr>`).join("")}</tbody><tfoot><tr><td>Total</td><td>${totals.hours.toFixed(2)}</td><td>${totals.overtime.toFixed(2)}</td><td>${money(totals.gross)}</td><td colspan="5">Employee deductions: ${money(totals.deductions)}</td><td>${money(totals.net)}</td></tr></tfoot></table><p class="note">* Federal income-tax withholding is $0 until the employee's signed W-4 elections are configured. Texas has no individual state income tax. Employer Social Security, Medicare, and estimated Texas unemployment amounts are included in the CSV. Review all records before issuing payment.</p><button onclick="window.print()">Print / Save as PDF</button><script>window.onload=()=>window.print()<\/script></body></html>`);
+    report.document.close();
+    logOperationalEvent("Payroll Export", `Printed payroll summary for ${period.start} through ${period.end}`, "👥");
+  };
+
+  // Launch Local OS: generates invites, saves to db, triggers invites modal
+  const handleLaunchOS = async () => {
+    if (!email) {
+      triggerNotification("Missing your business email — please sign in again.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      // 1. Save owner business profile
+      await saveProfileToFirestore();
+      
+      // 2. Generate invite codes for all staff
+      const generated: Array<{ code: string; role: string; permissions: string[]; granularPermissions: GranularPermissions }> = [];
+      for (const r of normalizeSelectedRoles(selectedRoles)) {
+        // Skip main owner seat (count = 1) since owner is already logged in
+        const startIndex = r.id === "owner" ? 1 : 0;
+        const granularPermissions = r.id === "owner"
+          ? fullAccessGranular(r.permissions)
+          // Only keep entries for currently-authorized modules — a module
+          // toggled off after being configured shouldn't leave a stale
+          // permission entry behind.
+          : Object.fromEntries(
+              Object.entries(r.modulePermissions).filter(([moduleId]) => r.permissions.includes(moduleId))
+            ) as GranularPermissions;
+        for (let i = startIndex; i < r.count; i++) {
+          const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+          const cleanRolePrefix = r.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8);
+          const code = `${cleanRolePrefix}-${randomStr}`;
+          generated.push({
+            code,
+            role: r.name,
+            permissions: r.permissions,
+            granularPermissions
+          });
+        }
+      }
+
+      // 3. Save codes to Firestore
+      for (const inv of generated) {
+        await setDoc(doc(db, "employee_invites", inv.code), {
+          code: inv.code,
+          role: inv.role,
+          businessEmail: email,
+          permissions: inv.permissions,
+          granularPermissions: inv.granularPermissions,
+          status: "pending",
+          createdAt: new Date().toISOString()
+        });
+      }
+      
+      setGeneratedInvites(generated);
+      setShowInvitesModal(true);
+      triggerNotification("Generated secure team invite codes!");
+    } catch (err) {
+      console.error("Error launching OS:", err);
+      triggerNotification("Couldn't generate invite codes — check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Complete Employee Onboarding Flow
+  const handleCompleteEmployeeOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = empEmail.trim();
+    if (!cleanEmail || !empPassword || !empFirstName || !empLastName || !empPhone || !empAddress) {
+      triggerNotification("Please fill in all required employee fields.");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    // Look up role & permissions from the real invite record. This must
+    // succeed and resolve a real businessEmail — falling back to a fake
+    // default here would attach a new employee to a business that doesn't
+    // exist, or worse, to whichever fake default every failed lookup shares.
+    let inviteRole = "Driver";
+    let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
+    let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view");
+    let inviteRequiresClockVerification = false;
+    let businessEmail: string | null = null;
+
+    try {
+      if (!empInviteCode) {
+        triggerNotification("No invite code found. Please start from the invite code screen.");
+        setIsSubmitting(false);
+        return;
+      }
+      const inviteSnap = await getDoc(doc(db, "employee_invites", empInviteCode));
+      if (!inviteSnap.exists()) {
+        triggerNotification("This invite code is no longer valid. Please request a new one.");
+        setIsSubmitting(false);
+        return;
+      }
+      const inviteData = inviteSnap.data();
+      inviteRole = inviteData.role || inviteRole;
+      invitePermissions = inviteData.permissions || invitePermissions;
+      inviteGranularPermissions = inviteData.granularPermissions || inviteGranularPermissions;
+      inviteRequiresClockVerification = !!inviteData.requireTimeClockVerification;
+      businessEmail = inviteData.businessEmail || null;
+      if (!businessEmail) {
+        triggerNotification("This invite is missing a business account. Please ask your owner for a new invite.");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch (lookupErr) {
+      console.error("Invite lookup failed:", lookupErr);
+      triggerNotification("Couldn't verify your invite code right now. Please try again.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      // 1. Create real Auth User
+      const authResult = await createUserWithEmailAndPassword(auth, cleanEmail, empPassword);
+      const user = authResult.user;
+
+      // 2. Initialize user_profile
+      await setDoc(doc(db, "user_profiles", user.uid), {
+        role: inviteRole,
+        permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
+        isEmployee: true,
+        businessEmail,
+        requireTimeClockVerification: inviteRequiresClockVerification,
+        isOnboarded: true,
+        name: `${empFirstName} ${empLastName}`,
+        goals: empGoals,
+        createdAt: new Date().toISOString()
+      });
+
+      // 3. Save detailed employees entry
+      const newEmployee = {
+        id: cleanEmail,
+        userUid: user.uid,
+        email: cleanEmail,
+        firstName: empFirstName,
+        lastName: empLastName,
+        address: empAddress,
+        phone: empPhone,
+        photo: empPhoto || "",
+        goals: empGoals,
+        hourlyRate: parseFloat(empHourlyRate) || 0,
+        role: inviteRole,
+        permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
+        requireTimeClockVerification: inviteRequiresClockVerification,
+        businessEmail,
+        // Also tagged as businessId (same value) so this collection is
+        // queryable through the same convention every other Firestore
+        // collection uses (see subscribeToCollection).
+        businessId: businessEmail,
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, "employees", cleanEmail), newEmployee);
+
+      // 4. Update invite status
+      if (empInviteCode && empInviteCode !== "DRIVER-X4F91") {
+        await setDoc(doc(db, "employee_invites", empInviteCode), { status: "completed", usedBy: cleanEmail }, { merge: true });
+      }
+
+      let verificationEmailSent = false;
+      try {
+        await sendEmailVerification(user);
+        verificationEmailSent = true;
+      } catch (verificationError) {
+        console.error("Could not send employee verification email:", verificationError);
+      }
+
+      // 5. Update UI local state
+      setLoggedInUser({
+        email: cleanEmail,
+        role: inviteRole,
+        permissions: invitePermissions,
+        granularPermissions: inviteGranularPermissions,
+        isEmployee: true,
+        name: `${empFirstName} ${empLastName}`,
+        goals: empGoals,
+        businessEmail
+      });
+      setIsLoggedIn(true);
+      
+      // Redirect to Employee Training (Coming Soon)
+      const trainingScreen = OS_SCREENS.find(s => s.id === "training") || OS_SCREENS[0];
+      setActiveScreen(trainingScreen);
+      triggerNotification(verificationEmailSent
+        ? `Employee registered. Verification email sent to ${cleanEmail}.`
+        : "Employee registered, but the verification email could not be sent.");
+    } catch (err: any) {
+      console.error("Employee onboarding database save failed:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification(`Registration failed: ${errMsg}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderDynamicField = (
+    label: string, 
+    items: string[], 
+    setter: React.Dispatch<React.SetStateAction<string[]>>, 
+    placeholder: string
+  ) => {
+    return (
+      <DynamicFieldList
+        label={label}
+        items={items}
+        setter={setter}
+        placeholder={placeholder}
+        scale={scale}
+        error={onboardingErrors[label.toLowerCase()]}
+      />
+    );
+  };
+
+  const authContextValue: AuthContextValue = {
+    loggedInUser,
+    isLoggedIn,
+    currentView,
+    setCurrentView,
+    simulatedRole,
+    setSimulatedRole,
+    businessId,
+    handleLogout
+  };
+
+  const domainDataContextValue: DomainDataContextValue = {
+    customers,
+    setCustomers,
+    leads,
+    setLeads,
+    estimates,
+    setEstimates,
+    schedulingEvents,
+    setSchedulingEvents,
+    inventoryList,
+    setInventoryList,
+    documents,
+    setDocuments,
+    recentRoster,
+    setRecentRoster,
+    bulletins,
+    setBulletins,
+    notifications,
+    setNotifications,
+    recentAiActions,
+    setRecentAiActions,
+    snapshots,
+    setSnapshots,
+    revenueEvents,
+    setRevenueEvents,
+    completedJobsRevenue,
+    employees,
+    setEmployees,
+    refreshEmployees,
+    timeClockLogs,
+    setTimeClockLogs,
+    refreshTimeClockLogs,
+    transactions,
+    setTransactions,
+    saveTransaction: handleSaveTransaction,
+    accounts,
+    setAccounts,
+    journalEntries,
+    setJournalEntries,
+    invoices,
+    setInvoices,
+    bills,
+    setBills,
+    vendors,
+    setVendors,
+    bankAccounts,
+    setBankAccounts,
+    recurringTransactions,
+    setRecurringTransactions,
+    mileageLogs,
+    setMileageLogs,
+    budgets,
+    setBudgets,
+    salesTaxRates,
+    setSalesTaxRates,
+    preSelectedDate,
+    setPreSelectedDate,
+    preSelectedCustomerId,
+    setPreSelectedCustomerId,
+    generatedPdfDraft,
+    setGeneratedPdfDraft
+  };
+
+  const navTelemetryContextValue: NavTelemetryContextValue = {
+    activeScreen,
+    setActiveScreen,
+    navigateToScreen,
+    logOperationalEvent,
+    takeSnapshot,
+    deleteSnapshot,
+    openPageAIAnalysis,
+    openPlaceholderPage,
+    triggerNotification
+  };
+
+  return (
+    <AuthContext.Provider value={authContextValue}>
+    <DomainDataContext.Provider value={domainDataContextValue}>
+    <NavTelemetryContext.Provider value={navTelemetryContextValue}>
+    <EventEngineEffects />
+    {isLoggedIn && <UniversalAIIntake />}
+    <div
+      className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : isDarkTheme ? 'login-theme-dark-basic' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
+      style={!isLoggedIn && isDarkTheme ? { backgroundImage: `url(${darkLoginBackground})` } : undefined}
+    >
+      {!authReady && (
+        <div className="fixed inset-0 z-[100] bg-[#edf4fa] flex items-center justify-center">
+          <div className="text-[#315C9F] text-xs font-bold uppercase tracking-wider animate-pulse">Restoring secure session…</div>
+        </div>
+      )}
+      {/* Hidden device camera capture input */}
+      <input
+        type="file"
+        ref={cameraInputRef}
+        onChange={handleCameraCapture}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        style={{ display: "none" }}
+      />
+      
+      {/* Background ambient light effects */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-cyan-500/10 blur-[150px] rounded-full pointer-events-none" />
+
+      {/* Header section (only shown when logged out to present the gateway metadata) */}
+      {!isLoggedIn && (
+        <header className="hidden sm:flex w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex-col sm:flex-row items-center justify-between gap-3 border-b border-blue-200/50 bg-white/45 backdrop-blur-md z-10">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">OWNER'S LOCAL OS CLOUD GATEWAY v2.8.4</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-[#342D7E]/75 font-mono bg-blue-100/60 px-2 py-1 rounded">
+              PORT: 3000 (SECURE)
+            </div>
+          </div>
+        </header>
+      )}
+
+      {/* Main Container */}
+      <main className="flex-1 flex items-center justify-center p-0 sm:p-4 md:p-8 z-10 w-full overflow-y-auto">
+        
+        {/* VIEW 1: INTERACTIVE LOGIN CARD */}
+        {!isLoggedIn ? (
+          <div className="w-full min-h-[100dvh] sm:min-h-0 flex flex-col items-center justify-center sm:py-6">
+            
+            {/* Aspect ratio bounding box for the login card */}
+            <div 
+              id="login-card-container"
+              ref={containerRef}
+              className="relative max-w-[440px] aspect-[1440/3200] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
+              style={{
+                width: "min(440px, calc(100% - 24px))",
+                backgroundImage: `url(${isDarkTheme ? darkLoginCard : CARD_BG_URL})`
+              }}
+            >
+              {/* Inner glassmorphic shading overlay */}
+              <div className="absolute inset-0 bg-blue-500/[0.02] pointer-events-none" />
+
+              {/* INNER ROUTING VIEW: LOGIN OR PLACEHOLDER */}
+              {currentView === "login" ? (
+                <>
+                  {/* LOGO BANNER - Centered to the inset login-card edges.
+                      Keep the complete source image at its native 734:302
+                      aspect ratio: no crop, distortion, or asset changes. */}
+                  {!isDarkTheme && (
+                    <div
+                      style={{
+                        top: "11.65%",
+                        left: "8%",
+                        width: "84%",
+                        aspectRatio: "734 / 302"
+                      }}
+                      className="absolute pointer-events-none"
+                    >
+                      <img
+                        src="/branding/Logoactual.png"
+                        alt="OwnersLOCAL"
+                        style={{ width: "100%", height: "100%" }}
+                        className="object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span
+                        style={{
+                          right: "3.5%",
+                          bottom: "27%",
+                          fontSize: `${Math.max(6, Math.round(7 * scale))}px`,
+                          letterSpacing: "0.08em",
+                        }}
+                        className="absolute font-sans font-semibold text-[#315C9F]/65"
+                      >
+                        by Stuffapp
+                      </span>
+                    </div>
+                  )}
+
+                  {/* CONTINUE WITH GOOGLE BUTTON */}
+                  <div 
+                    style={{ top: "27.2%", left: "11%", width: "78%", height: "4.5%" }}
+                    className="absolute"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleGoogleSignIn()}
+                      style={{
+                        borderRadius: `${14 * scale}px`,
+                        gap: `${8 * scale}px`,
+                        ...getFontSize(14.5)
+                      }}
+                      className="w-full h-full bg-white hover:bg-slate-50 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer"
+                    >
+                      <svg 
+                        style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} 
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                      <span>Continue with Google</span>
+                    </button>
+                  </div>
+
+                  {/* SEPARATOR - OR SIGN IN WITH PASSWORD */}
+                  <div 
+                    style={{ top: "34.7625%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                    className="absolute flex items-center justify-between"
+                  >
+                    <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
+                    <span 
+                      style={{
+                        letterSpacing: "0.12em",
+                        ...getFontSize(10.5)
+                      }}
+                      className="font-bold text-blue-900/60 font-sans"
+                    >
+                      OR SIGN IN WITH PASSWORD
+                    </span>
+                    <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
+                  </div>
+
+                  {/* PASSWORD SIGN-IN FORM VIEW */}
+                  <form onSubmit={handlePasswordSignIn}>
+                    
+                    {/* BUSINESS EMAIL FIELD */}
+                    <div 
+                      style={{ top: "38.14375%", left: "11%", width: "78%" }}
+                      className="absolute"
+                    >
+                      <label 
+                        style={{
+                          letterSpacing: "0.05em",
+                          marginBottom: `${4 * scale}px`,
+                          ...getFontSize(11.5)
+                        }}
+                        className="block font-bold text-blue-900/80"
+                      >
+                        BUSINESS EMAIL
+                      </label>
+                      <div 
+                        style={{ height: `${46 * scale}px` }}
+                        className="relative w-full"
+                      >
+                        <div 
+                          style={{ left: `${14 * scale}px` }}
+                          className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
+                        >
+                          <Mail style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                        </div>
+                        <input
+                          type="text"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          style={{
+                            paddingLeft: `${42 * scale}px`,
+                            paddingRight: `${14 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            ...getFontSize(13.5)
+                          }}
+                          className="w-full h-full bg-[#f0f6ff]/95 hover:bg-white focus:bg-white text-slate-800 font-medium border border-slate-200/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner-sm transition-all placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* PASSWORD FIELD */}
+                    <div 
+                      style={{ top: "48.0625%", left: "11%", width: "78%" }}
+                      className="absolute"
+                    >
+                      <div 
+                        style={{ marginBottom: `${4 * scale}px` }}
+                        className="flex items-center justify-between"
+                      >
+                        <label 
+                          style={{
+                            letterSpacing: "0.05em",
+                            ...getFontSize(11.5)
+                          }}
+                          className="block font-bold text-blue-900/80"
+                        >
+                          PASSWORD
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowForgotPassword(true)}
+                          style={getFontSize(11.5)}
+                          className="font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                        >
+                          Forgot?
+                        </button>
+                      </div>
+                      <div 
+                        style={{ height: `${46 * scale}px` }}
+                        className="relative w-full"
+                      >
+                        <div 
+                          style={{ left: `${14 * scale}px` }}
+                          className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
+                        >
+                          <Lock style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                        </div>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••••••"
+                          style={{
+                            paddingLeft: `${42 * scale}px`,
+                            paddingRight: `${42 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            ...getFontSize(13.5)
+                          }}
+                          className="w-full h-full bg-[#f0f6ff]/95 hover:bg-white focus:bg-white text-slate-800 font-medium border border-slate-200/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner-sm transition-all placeholder:text-slate-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{ right: `${14 * scale}px` }}
+                          className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 hover:text-blue-800/80 transition-colors cursor-pointer"
+                        >
+                          {showPassword ? (
+                            <EyeOff style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                          ) : (
+                            <Eye style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* REMEMBER ME CHECKBOX */}
+                      <div 
+                        style={{ marginTop: `${5 * scale}px`, gap: `${6 * scale}px` }}
+                        className="flex items-center select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          id="remember-me-checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          style={{ width: `${14 * scale}px`, height: `${14 * scale}px` }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <label 
+                          htmlFor="remember-me-checkbox"
+                          style={getFontSize(11.5)}
+                          className="font-bold text-blue-900/80 cursor-pointer"
+                        >
+                          Remember Me
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* SIGN IN GENERATED GLOWING BUTTON */}
+                    <div 
+                      style={{ top: "58.2%", left: "11%", width: "78%", height: "4.5%" }}
+                      className="absolute flex items-center"
+                    >
+                      <button
+                        type="submit"
+                        style={{
+                          borderRadius: `${14 * scale}px`,
+                          ...getFontSize(14.5)
+                        }}
+                        className="w-full h-full border-0 font-sans font-bold uppercase tracking-[0.08em] text-white cursor-pointer select-none relative overflow-hidden transition-all duration-300 bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-110 hover:shadow-[0_0_24px_rgba(0,176,255,0.5)] active:shadow-[0_0_35px_rgba(0,176,255,0.7)] active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <span>Sign In ➔</span>
+                      </button>
+                    </div>
+
+                    {loginError && (
+                      <div 
+                        style={{ top: "54.1%", left: "11%", width: "78%" }}
+                        className="absolute text-rose-600 font-bold text-[10px] sm:text-[11px] leading-tight flex items-center gap-1.5 bg-rose-50/95 py-1 px-2 border border-rose-200/50 rounded-lg shadow-sm"
+                      >
+                        <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
+                        <span>{loginError}</span>
+                      </div>
+                    )}
+
+                  </form>
+
+                  {/* DYNAMIC OR SIGN UP LINK */}
+                  <div 
+                    style={{ 
+                      top: "62.333%", 
+                      left: "11%", 
+                      width: "78%", 
+                      height: "3.5%",
+                    }}
+                    className="absolute flex items-center justify-center"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSignUpInstructionsEmail("");
+                        setSignUpInstructionsBusinessName("");
+                        setSignUpInstructionsOwnerName("");
+                        setSignUpInstructionsPassword("");
+                        setSignUpInstructionsError("");
+                        setSignUpInstructionsStep("input");
+                        setShowSignUpInstructions(true);
+                      }}
+                      style={getFontSize(11.5)}
+                      className="font-bold text-[#1E3A8A] hover:text-[#2563EB] transition-colors cursor-pointer flex items-center justify-center gap-1 hover:underline"
+                    >
+                      <span>Don't have an account?</span>
+                      <span className="font-extrabold text-[#315C9F] underline">Or Sign Up</span>
+                    </button>
+                  </div>
+
+                  {/* SEPARATOR - FIELD SERVICE LOG IN */}
+                  <div 
+                    style={{ top: "67.68%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                    className="absolute flex items-center justify-between"
+                  >
+                    <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
+                    <span 
+                      style={{
+                        letterSpacing: "0.12em",
+                        ...getFontSize(10.5)
+                      }}
+                      className="font-bold text-blue-900/60 font-sans"
+                    >
+                      FIELD SERVICE LOG IN
+                    </span>
+                    <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
+                  </div>
+
+                  {/* INVITE CODE SECTION */}
+                  <div 
+                    style={{ top: "72.204%", left: "11%", width: "54%" }}
+                    className="absolute"
+                  >
+                    <label 
+                      style={{
+                        letterSpacing: "0.03em",
+                        marginBottom: `${4 * scale}px`,
+                        ...getFontSize(10.5)
+                      }}
+                      className="block font-bold text-blue-900/80"
+                    >
+                      ENTER EMPLOYEE INVITE CODE
+                    </label>
+                    <div 
+                      style={{ height: `${46 * scale}px` }}
+                      className="relative w-full"
+                    >
+                      <div 
+                        style={{ left: `${14 * scale}px` }}
+                        className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
+                      >
+                        <User style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                      </div>
+                      <input
+                        type="text"
+                        value={inviteCode}
+                        onChange={(e) => setInviteCode(e.target.value)}
+                        placeholder="DRIVER-X4F91"
+                        style={{
+                          paddingLeft: `${42 * scale}px`,
+                          paddingRight: `${12 * scale}px`,
+                          borderRadius: `${12 * scale}px`,
+                          ...getFontSize(13.5)
+                        }}
+                        className="w-full h-full bg-[#f0f6ff]/95 hover:bg-white focus:bg-white text-slate-800 font-mono font-bold uppercase border border-slate-200/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner-sm transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GO GENERATED GLOWING BUTTON */}
+                  <div 
+                    style={{ top: "74.454%", left: "68%", width: "21%", height: "4.5%" }}
+                    className="absolute"
+                  >
+                    <button
+                      type="button"
+                      onClick={handleInviteSignIn}
+                      style={{
+                        borderRadius: `${14 * scale}px`,
+                        ...getFontSize(14.5)
+                      }}
+                      className="w-full h-full border-0 font-sans font-bold uppercase tracking-[0.05em] text-white cursor-pointer select-none relative overflow-hidden transition-all duration-300 bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-110 hover:shadow-[0_0_24px_rgba(0,176,255,0.5)] active:shadow-[0_0_35px_rgba(0,176,255,0.7)] active:scale-[0.98] flex items-center justify-center"
+                    >
+                      <span>Go ➔</span>
+                    </button>
+                  </div>
+
+                  {/* FOOTER NAV LINKS */}
+                  <div 
+                    style={{ 
+                      bottom: "13.5%", 
+                      left: "11%", 
+                      width: "78%",
+                      gap: `${16 * scale}px`
+                    }}
+                    className="absolute flex items-center justify-center text-blue-700 font-sans"
+                  >
+                    <button 
+                      onClick={() => setCurrentView("placeholder_help")}
+                      style={{ gap: `${4 * scale}px`, ...getFontSize(12.5) }}
+                      className="flex items-center font-bold hover:text-blue-900 transition-colors cursor-pointer"
+                    >
+                      <HelpCircle style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                      <span>Need Help?</span>
+                    </button>
+                    
+                    <div style={{ height: `${12 * scale}px` }} className="w-[1px] bg-blue-300" />
+                    
+                    <button 
+                      onClick={() => setCurrentView("placeholder_privacy")}
+                      style={{ gap: `${4 * scale}px`, ...getFontSize(12.5) }}
+                      className="flex items-center font-bold hover:text-blue-900 transition-colors cursor-pointer"
+                    >
+                      <Shield style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                      <span>Privacy Policy</span>
+                    </button>
+                  </div>
+
+                  {/* AI BUTTONS ON THE BOTTOM OF THE BLUE BACKGROUND */}
+                  <div 
+                    style={{ 
+                      bottom: "5.5%", 
+                      left: "11%", 
+                      width: "78%"
+                    }}
+                    className="absolute flex items-center justify-center pointer-events-auto"
+                  >
+                    {/* AI ASSISTANT BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFloatingAiOpen(true)}
+                      style={{
+                        padding: `${6 * scale}px ${10 * scale}px`,
+                        borderRadius: `${10 * scale}px`,
+                        ...getFontSize(10)
+                      }}
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:scale-105 active:scale-[0.98] border border-blue-300/30 transition-all cursor-pointer"
+                    >
+                      <span className="relative flex" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}></span>
+                      </span>
+                      <span>Owner's AI</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* ONBOARDING FLOW SCREEN - STEP 1 (CREATE YOUR BUSINESS) */}
+                  {(currentView === "placeholder_google" || currentView === "placeholder_password" || currentView === "placeholder_invite") ? (
+                    <div 
+                      style={{
+                        padding: `${20 * scale}px ${16 * scale}px`,
+                      }}
+                      className="absolute inset-0 bg-[#f5f8ff] flex flex-col justify-between overflow-hidden select-none"
+                    >
+                      {/* Subtle decorative glowing backgrounds inside card */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-400/10 blur-xl rounded-full pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-400/10 blur-xl rounded-full pointer-events-none" />
+                      
+                      {/* ONBOARDING HEADER MODULE */}
+                      <div className="relative z-10 flex items-center justify-between mb-4 pb-3 border-b border-slate-200/50 shrink-0">
+                        <div className="flex items-center gap-2.5">
+                          {/* Reuse the exact heartbeat asset shown throughout Owners Local OS. */}
+                          <div
+                            style={{
+                              width: `${36 * scale}px`,
+                              height: `${36 * scale}px`,
+                              borderRadius: `${9 * scale}px`,
+                            }}
+                            className="bg-white flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0 overflow-hidden border border-blue-100"
+                          >
+                            <BrandIcon className="w-full h-full" />
+                          </div>
+                          <div>
+                            <h2 style={getFontSize(14.5)} className="font-sans font-bold text-slate-900 tracking-tight leading-tight uppercase">
+                              Create Your Business
+                            </h2>
+                            <p style={getFontSize(10.5)} className="font-sans text-slate-500 font-medium">
+                              Step 1 of 2. Profile settings
+                            </p>
+                          </div>
+                        </div>
+                        {/* Badge */}
+                        <span 
+                          style={{
+                            padding: `${2 * scale}px ${6 * scale}px`,
+                            borderRadius: `${10 * scale}px`,
+                            ...getFontSize(9)
+                          }}
+                          className="font-sans font-bold text-blue-700 bg-blue-50 border border-blue-200 uppercase tracking-wider select-none shrink-0"
+                        >
+                          Onboarding
+                        </span>
+                      </div>
+
+                      {/* FORM FIELDS - SCROLLABLE GROUP */}
+                      <div className="relative z-10 flex-1 space-y-3.5 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-blue-200/50">
+                        {renderDynamicField("account administrator name", ownerNames, setOwnerNames, "e.g. John Doe")}
+                        {renderDynamicField("administrator phone (optional)", ownerPhones, setOwnerPhones, "e.g. (206) 555-0199")}
+                        {renderDynamicField("business name", businessNames, setBusinessNames, "e.g. Ironclad Plumbing & HVAC")}
+                        <div className="space-y-1.5">
+                          <label style={getFontSize(11)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider px-1">
+                            Business Email
+                          </label>
+                          <input
+                            type="email"
+                            value={businessId || email}
+                            readOnly
+                            aria-readonly="true"
+                            style={{ height: `${42 * scale}px`, borderRadius: `${12 * scale}px`, ...getFontSize(12.5) }}
+                            className="w-full bg-blue-50 border border-blue-200 px-3.5 text-slate-700 font-semibold cursor-not-allowed"
+                          />
+                          {onboardingErrors["business email"] && <p className="text-[10px] font-bold text-rose-600 px-1">{onboardingErrors["business email"]}</p>}
+                        </div>
+                        {renderDynamicField("business phone (optional)", businessPhones, setBusinessPhones, "e.g. (206) 565-0144")}
+                        <StructuredAddressFields
+                          label="Business Headquarters Address (Optional)"
+                          value={businessAddresses[0] || ""}
+                          onChange={(value) => setBusinessAddresses(prev => [value, ...prev.slice(1)])}
+                        />
+                        {renderDynamicField("business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
+                        {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Seattle HQ")}
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-[10px] leading-relaxed text-blue-950">
+                          <p className="flex items-center gap-1.5 font-black uppercase tracking-wide">
+                            <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                            Your information and privacy
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-600">
+                            Owners Local OS does not sell or disseminate user data. Information is handled through integrated databases and services using appropriate security and encryption. Authorized Stuffapp personnel or service providers may have limited access when needed to operate, secure, support, or comply with legal requirements.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* BOTTOM ACTION BUTTONS */}
+                      <div className="relative z-10 flex items-center justify-between gap-2.5 pt-3 mt-3 border-t border-slate-200/50 bg-white/10 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleBackToLogin}
+                          style={{
+                            height: `${38 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            paddingLeft: `${14 * scale}px`,
+                            paddingRight: `${14 * scale}px`,
+                            ...getFontSize(12.5)
+                          }}
+                          className="font-sans font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100/80 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 bg-white shadow-sm"
+                        >
+                          Back
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={reviewBusinessProfileStep}
+                          style={{
+                            height: `${38 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            paddingLeft: `${16 * scale}px`,
+                            paddingRight: `${16 * scale}px`,
+                            ...getFontSize(12.5)
+                          }}
+                          className="flex-1 font-sans font-bold text-white bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-105 active:scale-[0.98] shadow-md hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <span>Continue</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : currentView === "placeholder_team_setup" ? (
+                    <div 
+                      style={{
+                        padding: `${18 * scale}px ${16 * scale}px`,
+                        backgroundImage: `url("https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Step1step2blank.png")`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center"
+                      }}
+                      className="absolute inset-0 flex flex-col justify-between overflow-hidden select-none"
+                    >
+                      {/* Subtle floating glow effects inside card */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-400/10 blur-xl rounded-full pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-400/10 blur-xl rounded-full pointer-events-none" />
+                      
+                      {/* STEP 2 HEADER */}
+                      <div className="relative z-10 flex items-center justify-between mb-2 pb-2 border-b border-slate-200/50 shrink-0">
+                        <div className="flex items-center gap-2">
+                          {/* Heartbeat/Pulse logo in bright blue */}
+                          <div 
+                            style={{
+                              width: `${32 * scale}px`,
+                              height: `${32 * scale}px`,
+                              borderRadius: `${8 * scale}px`
+                            }}
+                            className="bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 animate-pulse"
+                          >
+                            <Users style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                          </div>
+                          <div>
+                            <h2 style={getFontSize(14)} className="font-sans font-extrabold text-blue-950 uppercase tracking-tight">
+                              Build Your Team
+                            </h2>
+                            <p style={getFontSize(9.5)} className="text-slate-400 font-sans font-medium">
+                              Step 2 of 2 • Assign initial roles & codes
+                            </p>
+                          </div>
+                        </div>
+                        {/* Pill badge matching image */}
+                        <span 
+                          style={{
+                            padding: `${2 * scale}px ${6 * scale}px`,
+                            borderRadius: `${10 * scale}px`,
+                            ...getFontSize(8.5)
+                          }}
+                          className="font-sans font-bold text-blue-700 bg-blue-50 border border-blue-200 uppercase tracking-wider select-none shrink-0"
+                        >
+                          Team Assignment
+                        </span>
+                      </div>
+
+                      {/* TEAM SYSTEM INITIATED NOTICE BOX */}
+                      <div 
+                        style={{
+                          padding: `${8 * scale}px ${10 * scale}px`,
+                          borderRadius: `${10 * scale}px`,
+                          marginBottom: `${8 * scale}px`
+                        }}
+                        className="relative z-10 bg-emerald-50/90 border border-emerald-100 flex gap-2 shrink-0"
+                      >
+                        <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p style={getFontSize(10)} className="font-sans font-bold text-emerald-950">
+                            Role-Based System Permissions Initiated
+                          </p>
+                          <p style={getFontSize(8.5)} className="text-emerald-800 leading-normal font-sans font-medium">
+                            Each staff member receives an individual invite code. Employees only see sidebar tabs corresponding directly to assigned permissions.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* DROPDOWN SELECTOR & HELP INFO LINK */}
+                      <div className="relative z-10 space-y-1.5 mb-2 shrink-0">
+                        <div className="flex items-center justify-between px-1">
+                          <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider flex items-center gap-1">
+                            <span>Select Roles to Add</span>
+                            {/* Floating panel explanation icon */}
+                            <button
+                              type="button"
+                              onClick={() => setShowRoleInfoPopup(showRoleInfoPopup ? null : "info")}
+                              className="text-blue-500 hover:text-blue-700 focus:outline-none flex items-center justify-center cursor-pointer"
+                            >
+                              <Info className="w-3.5 h-3.5 animate-bounce" />
+                            </button>
+                          </label>
+                          <span style={getFontSize(9)} className="text-slate-400 font-mono">
+                            {normalizeSelectedRoles(selectedRoles).reduce((acc, role) => acc + role.count, 0)} Seats Configured
+                          </span>
+                        </div>
+                        
+                        <div className="relative">
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAddRole(e.target.value);
+                                e.target.value = ""; // Reset after selection
+                              }
+                            }}
+                            style={{
+                              height: `${38 * scale}px`,
+                              borderRadius: `${10 * scale}px`,
+                              paddingLeft: `${12 * scale}px`,
+                              paddingRight: `${32 * scale}px`,
+                              ...getFontSize(12)
+                            }}
+                            className="w-full bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 font-bold focus:outline-none transition-all shadow-sm appearance-none cursor-pointer"
+                          >
+                            <option value="">+ Add a team role...</option>
+                            <option value="__create_custom__" className="text-blue-600 font-bold">
+                              ★ + Create Custom Role from scratch...
+                            </option>
+                            {/* Custom Role stays first; Owner is already added. */}
+                            {Object.entries(DEFAULT_ROLES_DATA)
+                              .filter(([key]) => key !== "owner")
+                              .map(([key, role]) => {
+                                const isAdded = selectedRoles.some(r => r.id === key);
+                                return (
+                                  <option key={key} value={key}>
+                                    {role.name} {isAdded ? "• Add another seat" : ""}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                            <ChevronDown className="w-4 h-4" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* STAFF ROLES SCROLLABLE LIST */}
+                      <div className="relative z-10 flex-1 overflow-y-auto pr-0.5 space-y-2 mb-3 scrollbar-thin scrollbar-thumb-blue-200/50">
+                        {selectedRoles.map((role) => (
+                          <div 
+                            key={role.id}
+                            style={{
+                              padding: `${10 * scale}px ${12 * scale}px`,
+                              borderRadius: `${12 * scale}px`
+                            }}
+                            className="bg-white border border-slate-200/80 shadow-sm flex flex-col gap-2 relative group hover:border-blue-200 transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 style={getFontSize(12)} className="font-sans font-bold text-blue-950 flex items-center gap-1">
+                                  <span>{role.name}</span>
+                                  {role.isCustom && (
+                                    <span style={getFontSize(8)} className="px-1 py-0.5 bg-purple-50 text-purple-600 border border-purple-200 rounded font-bold uppercase">
+                                      Custom
+                                    </span>
+                                  )}
+                                </h4>
+                                <p style={getFontSize(9.5)} className="text-slate-400 font-sans font-medium line-clamp-1">
+                                  {role.description}
+                                </p>
+                              </div>
+
+                              {/* COUNTER MODULE */}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDecrementRoleCount(role.id)}
+                                  style={{
+                                    width: `${24 * scale}px`,
+                                    height: `${24 * scale}px`
+                                  }}
+                                  className="rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-90 flex items-center justify-center cursor-pointer font-bold border border-slate-200/30"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span style={getFontSize(12)} className="font-mono font-bold text-slate-800 w-4 text-center">
+                                  {role.count}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleIncrementRoleCount(role.id)}
+                                  style={{
+                                    width: `${24 * scale}px`,
+                                    height: `${24 * scale}px`
+                                  }}
+                                  className="rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-90 flex items-center justify-center cursor-pointer font-bold border border-blue-200/30"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* PERMISSIONS SNAPSHOT TAGS */}
+                            <div className="flex flex-wrap gap-1">
+                              {role.permissions.slice(0, 4).map((p) => (
+                                <span 
+                                  key={p} 
+                                  style={{
+                                    padding: `${1 * scale}px ${4 * scale}px`,
+                                    borderRadius: `${4 * scale}px`,
+                                    ...getFontSize(8.5)
+                                  }}
+                                  className="bg-blue-50/50 text-blue-600 font-mono font-bold capitalize border border-blue-100/50"
+                                >
+                                  {p}
+                                </span>
+                              ))}
+                              {role.permissions.length > 4 && (
+                                <span 
+                                  style={{
+                                    padding: `${1 * scale}px ${4 * scale}px`,
+                                    borderRadius: `${4 * scale}px`,
+                                    ...getFontSize(8.5)
+                                  }}
+                                  className="bg-slate-50 text-slate-400 font-mono font-bold"
+                                >
+                                  +{role.permissions.length - 4} more
+                                </span>
+                              )}
+                            </div>
+
+                            {/* CARD SUB-ACTIONS */}
+                            {roleIdPendingDelete === role.id ? (
+                              <div className="flex items-center justify-between w-full bg-rose-50/90 px-2 py-1 rounded border border-rose-100/50 animate-fade-in mt-1">
+                                <span style={getFontSize(9.5)} className="text-rose-700 font-bold flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
+                                  <span>Remove this role?</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleRemoveRole(role.id);
+                                      setRoleIdPendingDelete(null);
+                                    }}
+                                    className="font-sans font-extrabold text-rose-600 hover:text-rose-800 bg-rose-100 hover:bg-rose-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                    style={getFontSize(9.5)}
+                                  >
+                                    Yes, Remove
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoleIdPendingDelete(null)}
+                                    className="font-sans font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                    style={getFontSize(9.5)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100/50 text-[10px] text-slate-500">
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomizingRole(role)}
+                                  className="font-sans font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Settings className="w-3 h-3 text-blue-500 animate-spin-slow" />
+                                  <span>Customize Permissions</span>
+                                </button>
+
+                                <div className="flex items-center gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDuplicateRole(role)}
+                                    className="font-sans font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Copy className="w-3 h-3 text-slate-400" />
+                                    <span>Duplicate</span>
+                                  </button>
+
+                                  {role.id !== "owner" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRoleIdPendingDelete(role.id)}
+                                      className="font-sans font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-400" />
+                                      <span>Remove Role</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* BOTTOM ACTION BUTTONS */}
+                      <div className="relative z-10 flex items-center justify-between gap-2.5 pt-3 mt-1 border-t border-slate-200/50 bg-white/10 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentView("placeholder_password")}
+                          style={{
+                            height: `${38 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            paddingLeft: `${14 * scale}px`,
+                            paddingRight: `${14 * scale}px`,
+                            ...getFontSize(12.5)
+                          }}
+                          className="font-sans font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100/80 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 bg-white shadow-sm"
+                        >
+                          Back
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={handleLaunchOS}
+                          style={{
+                            height: `${38 * scale}px`,
+                            borderRadius: `${12 * scale}px`,
+                            paddingLeft: `${16 * scale}px`,
+                            paddingRight: `${16 * scale}px`,
+                            ...getFontSize(12.5)
+                          }}
+                          className="flex-1 font-sans font-bold text-white bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-105 active:scale-[0.98] shadow-md hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSubmitting ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <span>Launch OS</span>
+                              <ChevronRight className="w-4 h-4" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                    </div>
+                  ) : currentView === "employee_onboarding" ? (
+                    /* EMPLOYEE ONBOARDING VIEW (STEP 1 OF 1) */
+                    <div 
+                      style={{
+                        padding: `${16 * scale}px ${16 * scale}px`,
+                        backgroundColor: "#f8faff"
+                      }}
+                      className="absolute inset-0 flex flex-col justify-between overflow-hidden select-none animate-fade-in"
+                    >
+                      {/* Decorative elements */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 blur-xl rounded-full pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-500/5 blur-xl rounded-full pointer-events-none" />
+
+                      {/* Header */}
+                      <div className="relative z-10 flex items-center justify-between mb-3 pb-2 border-b border-slate-200/50 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            style={{
+                              width: `${32 * scale}px`,
+                              height: `${32 * scale}px`,
+                              borderRadius: `${8 * scale}px`
+                            }}
+                            className="bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/10"
+                          >
+                            <User style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                          </div>
+                          <div>
+                            <h2 style={getFontSize(14)} className="font-sans font-extrabold text-blue-950 uppercase tracking-tight">
+                              Employee Onboarding
+                            </h2>
+                            <p style={getFontSize(9.5)} className="text-indigo-600 font-sans font-medium">
+                              Step 1 of 1 • Create Your Profile
+                            </p>
+                          </div>
+                        </div>
+                        <span 
+                          style={{
+                            padding: `${2 * scale}px ${6 * scale}px`,
+                            borderRadius: `${10 * scale}px`,
+                            ...getFontSize(8.5)
+                          }}
+                          className="font-sans font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 uppercase tracking-wider select-none shrink-0"
+                        >
+                          Registration
+                        </span>
+                      </div>
+
+                      {/* SCROLLABLE REGISTRATION FORM */}
+                      <form 
+                        onSubmit={handleCompleteEmployeeOnboarding}
+                        className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden"
+                      >
+                        <div className="flex-1 overflow-y-auto pr-0.5 space-y-3 scrollbar-thin scrollbar-thumb-blue-100">
+                          
+                          {/* Invite Code field (Disabled) */}
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Invite Code (Verified)
+                            </label>
+                            <input
+                              type="text"
+                              name="ownerName"
+                              autoComplete="name"
+                              value={empInviteCode}
+                              disabled
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-slate-100 border border-slate-200 px-3 text-slate-500 font-mono font-bold uppercase"
+                            />
+                          </div>
+
+                          {/* Personal Info Row */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                                First Name
+                              </label>
+                              <input
+                                type="text"
+                                value={empFirstName}
+                                onChange={(e) => setEmpFirstName(e.target.value)}
+                                placeholder="John"
+                                required
+                                style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                                className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                                Last Name
+                              </label>
+                              <input
+                                type="text"
+                                value={empLastName}
+                                onChange={(e) => setEmpLastName(e.target.value)}
+                                placeholder="Smith"
+                                required
+                                style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                                className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Email Input */}
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Verify Email Address
+                            </label>
+                            <input
+                              type="email"
+                              value={empEmail}
+                              onChange={(e) => setEmpEmail(e.target.value)}
+                              placeholder="john.smith@ironclad.com"
+                              required
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
+                          {/* Create Password */}
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Create Password
+                            </label>
+                            <input
+                              type="password"
+                              value={empPassword}
+                              onChange={(e) => setEmpPassword(e.target.value)}
+                              placeholder="••••••••"
+                              required
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
+                          {/* Contact Details */}
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Contact Phone
+                            </label>
+                            <input
+                              type="tel"
+                              value={empPhone}
+                              onChange={(e) => setEmpPhone(e.target.value)}
+                              placeholder="(206) 555-0199"
+                              required
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
+                          <StructuredAddressFields
+                            label="Home Address"
+                            value={empAddress}
+                            onChange={setEmpAddress}
+                            required
+                            compact
+                            inputClassName="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-sans text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                          />
+
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Hourly Pay Rate (Optional)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={empHourlyRate}
+                              onChange={(e) => setEmpHourlyRate(e.target.value)}
+                              placeholder="e.g. 28.50"
+                              style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 px-3 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                            />
+                          </div>
+
+                          {/* Avatar Selection (Optional Profile Photo) */}
+                          <div className="space-y-2">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Select Avatar Photo (Optional)
+                            </label>
+                            <div className="flex gap-3 items-center">
+                              {[
+                                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+                                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80",
+                                "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
+                                "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80"
+                              ].map((url, i) => {
+                                const isSelected = empPhoto === url;
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setEmpPhoto(url)}
+                                    className={`relative rounded-full overflow-hidden w-10 h-10 border-2 cursor-pointer transition-all ${
+                                      isSelected ? "border-indigo-600 scale-110 shadow-md" : "border-slate-200 opacity-60 hover:opacity-100"
+                                    }`}
+                                  >
+                                    <img src={url} alt="Avatar" className="w-full h-full object-cover" />
+                                    {isSelected && (
+                                      <div className="absolute inset-0 bg-indigo-600/30 flex items-center justify-center">
+                                        <Check className="w-4 h-4 text-white font-bold" />
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Employment Goals */}
+                          <div className="space-y-1">
+                            <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                              Employment Goals & Career Plan
+                            </label>
+                            <textarea
+                              value={empGoals}
+                              onChange={(e) => setEmpGoals(e.target.value)}
+                              placeholder="e.g., Aspiring to become lead technician and coordinate regional operations."
+                              rows={2}
+                              style={{ borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                              className="w-full bg-white border border-slate-200 p-2.5 text-slate-800 font-sans focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all resize-none"
+                            />
+                          </div>
+
+                        </div>
+
+                        {/* Actions */}
+                        <div className="relative z-10 flex items-center justify-between gap-3 pt-3 mt-2 border-t border-slate-200/50 bg-white/10 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentView("login")}
+                            style={{
+                              height: `${38 * scale}px`,
+                              borderRadius: `${12 * scale}px`,
+                              paddingLeft: `${16 * scale}px`,
+                              paddingRight: `${16 * scale}px`,
+                              ...getFontSize(12.5)
+                            }}
+                            className="font-sans font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center justify-center bg-white shadow-sm"
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            style={{
+                              height: `${38 * scale}px`,
+                              borderRadius: `${12 * scale}px`,
+                              paddingLeft: `${18 * scale}px`,
+                              paddingRight: `${18 * scale}px`,
+                              ...getFontSize(12.5)
+                            }}
+                            className="flex-1 font-sans font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            {isSubmitting ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <span>Complete Onboarding</span>
+                                <ChevronRight className="w-4 h-4" />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    /* ORIGINAL HELP / PRIVACY PLACEHOLDER VIEWS */
+                    <div className="absolute inset-0 bg-gradient-to-b from-[#f0f6ff] to-[#e6efff] flex flex-col items-center justify-center p-8">
+                      {/* Subtle glowing ambient lights inside the card */}
+                      <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-blue-400/10 blur-2xl rounded-full pointer-events-none" />
+                      <div className="absolute bottom-1/4 right-1/4 w-32 h-32 bg-cyan-400/10 blur-2xl rounded-full pointer-events-none" />
+                      
+                      {/* Premium sleek Back button */}
+                      <button
+                        onClick={handleBackToLogin}
+                        style={{
+                          top: `${24 * scale}px`,
+                          left: `${24 * scale}px`,
+                          borderRadius: `${12 * scale}px`,
+                          padding: `${8 * scale}px ${16 * scale}px`,
+                          gap: `${6 * scale}px`,
+                          ...getFontSize(12.5)
+                        }}
+                        className="absolute flex items-center font-bold text-blue-600 hover:text-blue-800 bg-white/80 hover:bg-white border border-blue-100 shadow-sm active:scale-95 transition-all cursor-pointer animate-fade-in"
+                      >
+                        <ArrowLeft style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                        <span>Back</span>
+                      </button>
+
+                      {currentView === "placeholder_help" ? (
+                        <div className="relative z-10 w-full max-w-sm rounded-3xl border border-blue-100 bg-white/90 p-6 text-center shadow-xl backdrop-blur animate-fade-in">
+                          <HelpCircle className="mx-auto h-10 w-10 text-blue-600" />
+                          <h1 className="mt-3 text-lg font-black text-blue-950">Need Help?</h1>
+                          <p style={getFontSize(12)} className="mt-2 font-semibold leading-relaxed text-slate-600">
+                            Get ahold of me and I’ll personally help you figure it out.
+                          </p>
+                          <a
+                            href="mailto:The.Owner@ownerslocal.com"
+                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-bold text-white shadow-md hover:bg-blue-700"
+                          >
+                            <Mail className="h-4 w-4" />
+                            The.Owner@ownerslocal.com
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-center space-y-2 animate-fade-in px-4">
+                          <h1 style={{ letterSpacing: "0.15em", fontSize: `${Math.max(16, Math.round(28 * scale))}px` }} className="font-sans font-bold text-blue-900 uppercase opacity-40">Privacy</h1>
+                          <p style={getFontSize(12)} className="text-blue-500/60 font-medium font-sans max-w-[80%] mx-auto">Privacy Policy document will be loaded here.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {showOptionalProfileWarning && (
+                    <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                      <div className="w-[92%] max-w-[360px] rounded-3xl border border-blue-100 bg-white p-5 text-left shadow-2xl">
+                        <h3 className="text-sm font-black uppercase tracking-tight text-blue-950">Optional profile information is missing</h3>
+                        <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-600">
+                          These fields are not required, but leaving them blank may limit address-based tools, contact workflows, maps, branding, and other relevant features.
+                        </p>
+                        <ul className="mt-3 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10.5px] font-bold text-amber-900">
+                          {optionalProfileFields.map(field => <li key={field}>• {field}</li>)}
+                        </ul>
+                        <div className="mt-4 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowOptionalProfileWarning(false)}
+                            className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100"
+                          >
+                            Complete Profile
+                          </button>
+                          <button
+                            type="button"
+                            onClick={finishBusinessProfileStep}
+                            className="flex-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-blue-700"
+                          >
+                            Continue Anyway
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 2 MODAL 1: SYSTEM PERMISSIONS EXPLANATION INFO POPUP */}
+                  {showRoleInfoPopup && (
+                    <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                      <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[350px] shadow-2xl border border-blue-100 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg border border-blue-200">
+                              <Info className="w-4 h-4 text-blue-600 animate-pulse" />
+                            </div>
+                            <h3 className="text-sm font-extrabold text-blue-950 uppercase tracking-tight font-sans">
+                              OwnersLOCAL Role Matrix
+                            </h3>
+                          </div>
+                          <p style={getFontSize(11.5)} className="text-slate-600 leading-relaxed font-sans mb-3.5">
+                            Our local operating system employs strict **Role-Based Access Control (RBAC)** guidelines. 
+                            Each employee instance only renders screens and tabs associated directly with their authorized template.
+                          </p>
+                          <div className="bg-slate-50 border border-slate-150/50 p-2.5 rounded-2xl mb-4 space-y-1.5">
+                            <p style={getFontSize(10.5)} className="font-sans font-bold text-slate-700 uppercase tracking-wider">
+                              Default Access Profiles:
+                            </p>
+                            <div className="grid grid-cols-2 gap-1.5 font-sans">
+                              <div>
+                                <span className="font-bold text-[10px] text-blue-600 block">Office Manager</span>
+                                <span className="text-[9px] text-slate-400">Leads, Jobs, Docs, Sched, Msg</span>
+                              </div>
+                              <div>
+                                <span className="font-bold text-[10px] text-blue-600 block">Technician / Driver</span>
+                                <span className="text-[9px] text-slate-400">Routes, Jobs, Messages, Clock</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowRoleInfoPopup(null)}
+                          className="w-full py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-all cursor-pointer font-sans"
+                        >
+                          I Understand
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STEP 2 MODAL 2: CREATE CUSTOM ROLE FROM SCRATCH */}
+                  {showCustomRoleModal && (
+                    <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                      <form 
+                        onSubmit={handleCreateCustomRole}
+                        className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100 flex flex-col gap-3"
+                      >
+                        <div>
+                          <h3 className="text-sm font-extrabold text-blue-950 uppercase tracking-tight flex items-center gap-1.5 mb-1 font-sans">
+                            <Sparkles className="w-4 h-4 text-blue-600" /> New Custom Role
+                          </h3>
+                          <p style={getFontSize(10.5)} className="text-slate-400 font-sans leading-relaxed">
+                            Define a brand new staff category. You can custom-configure their permissions on the next screen.
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider block">
+                            Role Title Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={customRoleName}
+                            onChange={(e) => setCustomRoleName(e.target.value)}
+                            placeholder="e.g., Lead Appraiser"
+                            style={{ height: `${36 * scale}px`, borderRadius: `${8 * scale}px`, ...getFontSize(12) }}
+                            className="w-full bg-slate-50 border border-slate-200 px-3 text-slate-800 font-sans font-bold focus:border-blue-500 focus:outline-none transition-all placeholder:text-slate-400"
+                          />
+                        </div>
+
+                        <div className="flex gap-2.5 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomRoleModal(false);
+                              setCustomRoleName("");
+                            }}
+                            className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md transition-all cursor-pointer"
+                          >
+                            Create Role
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* STEP 2 MODAL 3: GRANULAR ROLE PERMISSION CUSTOMIZER MATRIX */}
+                  {customizingRole && (
+                    <RolePermissionEditorModal
+                      role={customizingRole}
+                      onSave={handleSaveCustomPermissions}
+                      onClose={() => setCustomizingRole(null)}
+                      position="absolute"
+                    />
+                  )}
+
+                  {/* STEP 2 MODAL 4: SECURE GENERATED INVITE CODES PANEL */}
+                  {showInvitesModal && (
+                    <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-3 z-30 animate-fade-in">
+                      <div className="bg-white text-slate-800 rounded-3xl p-5 w-[95%] max-w-[420px] max-h-[92%] shadow-2xl border border-blue-100 flex flex-col justify-between overflow-hidden">
+                        
+                        <div className="text-center shrink-0 pb-3 border-b border-slate-100">
+                          <div className="mx-auto w-10 h-10 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mb-2 shadow-sm">
+                            <CheckCircle className="w-5 h-5 text-emerald-600 animate-bounce" />
+                          </div>
+                          <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight font-sans">
+                            Staff Invites Generated!
+                          </h3>
+                          <p style={getFontSize(9.5)} className="text-slate-400 max-w-[85%] mx-auto font-sans font-medium mt-0.5 leading-normal">
+                            Single-use activation codes are prepared. Share these with team members to onboard them securely.
+                          </p>
+                        </div>
+
+                        {/* CODES LIST */}
+                        <div className="flex-1 overflow-y-auto my-3 pr-1 space-y-2 scrollbar-thin scrollbar-thumb-blue-100">
+                          {generatedInvites.map((inv, index) => (
+                            <div 
+                              key={index}
+                              style={{ padding: `${8 * scale}px ${10 * scale}px`, borderRadius: `${10 * scale}px` }}
+                              className="bg-slate-50 border border-slate-150/50 flex items-center justify-between gap-3 font-sans group hover:bg-slate-100/50 transition-colors"
+                            >
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-900 block font-sans">
+                                  {inv.role} Profile Seat
+                                </span>
+                                <span className="text-[9px] font-mono font-bold text-slate-400 block uppercase">
+                                  KEY: {inv.code}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(inv.code);
+                                  triggerNotification(`Copied key: ${inv.code}`);
+                                }}
+                                className="px-2.5 py-1 text-[9.5px] font-sans font-bold text-blue-600 hover:text-blue-800 bg-white hover:bg-blue-50 border border-blue-100 rounded-lg shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                              >
+                                <Copy className="w-3 h-3 text-blue-500" />
+                                <span>Copy</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* BOTTOM ACTIONS */}
+                        <div className="space-y-2.5 pt-2 border-t border-slate-100 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allCodes = generatedInvites.map(i => `${i.role}: ${i.code}`).join("\n");
+                              navigator.clipboard.writeText(allCodes);
+                              triggerNotification("Copied all invite keys to clipboard!");
+                            }}
+                            className="w-full py-2 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-xl transition-all cursor-pointer text-center block"
+                          >
+                            Copy All Invite Keys
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                if (auth.currentUser) {
+                                  await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
+                                    isOnboarded: true
+                                  }, { merge: true });
+                                }
+                              } catch (err) {
+                                console.error("Error setting onboarded flag:", err);
+                              }
+                              const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
+                              setLoggedInUser({
+                                email,
+                                role: "Owner",
+                                permissions: ownerDashboardPerms,
+                                granularPermissions: fullAccessGranular(ownerDashboardPerms)
+                              });
+                              setIsLoggedIn(true);
+                              setActiveScreen(OS_SCREENS[0]); // Go to dashboard
+                              setShowInvitesModal(false);
+                              triggerNotification("Welcome to OwnersLOCAL Dashboard!");
+                            }}
+                            className="w-full py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:brightness-105 active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer text-center block font-sans uppercase tracking-wider"
+                          >
+                            Proceed to Local OS Dashboard ➔
+                          </button>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Loading spinner overlay */}
+              {isSubmitting && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex flex-col items-center justify-center z-20">
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                    <Sparkles className="w-5 h-5 text-blue-600 absolute animate-pulse" />
+                  </div>
+                  <p className="text-blue-950 font-bold mt-4 text-xs md:text-sm tracking-wider font-sans animate-pulse">
+                    {loginMethod === "google" && "Signing in..."}
+                    {loginMethod === "password" && "Signing in..."}
+                    {loginMethod === "invite" && "Verifying invite..."}
+                  </p>
+                </div>
+              )}
+
+              {/* SUB-MODAL 1: PASSWORD RECOVERY */}
+              {showForgotPassword && (
+                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                  <div className="bg-white text-slate-800 rounded-3xl p-6 w-[90%] max-w-[340px] shadow-2xl border border-blue-100 flex flex-col">
+                    <h3 className="text-sm font-bold text-blue-950 tracking-tight flex items-center gap-1.5 mb-2">
+                      <Sparkles className="w-4 h-4 text-blue-600" /> Password Recovery
+                    </h3>
+                    
+                    {!forgotSubmitted ? (
+                      <>
+                        <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+                          Enter your registered business email and we'll transmit a secure password recovery link.
+                        </p>
+                        <div className="relative mb-4">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="email"
+                            value={forgotEmail}
+                            onChange={(e) => setForgotEmail(e.target.value)}
+                            placeholder="Enter business email"
+                            className="w-full py-2 pl-9 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowForgotPassword(false);
+                              setForgotEmail("");
+                            }}
+                            className="flex-1 py-2 text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleForgotPasswordSubmit}
+                            className="flex-1 py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-md transition-colors cursor-pointer"
+                          >
+                            Send Link
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-2">
+                        <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+                        <p className="text-xs font-bold text-slate-800 mb-1">Transmission Transmitted!</p>
+                        <p className="text-[10px] text-slate-500 mb-4 leading-relaxed">
+                          If {forgotEmail} is in our system registry, you will receive a code shortly.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowForgotPassword(false);
+                            setForgotSubmitted(false);
+                            setForgotEmail("");
+                          }}
+                          className="w-full py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors cursor-pointer"
+                        >
+                          Return to Terminal
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-MODAL 2: NEED HELP? */}
+              {showHelpDialog && (
+                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
+                    <h3 className="text-sm font-bold text-blue-950 tracking-tight flex items-center gap-1.5 mb-2">
+                      <HelpCircle className="w-4 h-4 text-blue-600" /> OwnersLOCAL Support Desk
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+                      Need help accessing the Local OS platform? Here are your secure options:
+                    </p>
+                    <div className="space-y-2 mb-4">
+                      <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-[10px] text-blue-950">
+                        <span className="font-bold">Password Log In:</span> Use your primary corporate email and registered password to log in.
+                      </div>
+                      <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-[10px] text-blue-950">
+                        <span className="font-bold">Employee Invite Log In:</span> Use a custom invite code generated in settings.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpDialog(false)}
+                      className="w-full py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Dismiss Desk
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-MODAL 3: PRIVACY POLICY */}
+              {showPrivacyDialog && (
+                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100">
+                    <h3 className="text-sm font-bold text-blue-950 tracking-tight flex items-center gap-1.5 mb-2">
+                      <Shield className="w-4 h-4 text-emerald-600" /> Platform Privacy Protocol
+                    </h3>
+                    <p className="text-[10px] text-slate-500 leading-relaxed space-y-2 max-h-[160px] overflow-y-auto pr-1 mb-4">
+                      <span>We use industry-standard AES-256 encryption to protect your business data.</span>
+                      <br /><br />
+                      <span>Information stored locally stays on this device. Your password is not sent to outside services.</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyDialog(false)}
+                      className="w-full py-2 text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Acknowledge & Close
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-MODAL 5: SIGN UP INSTRUCTIONS WITH REAL FIREBASE AUTH */}
+              {showSignUpInstructions && (
+                <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4 z-30 animate-fade-in">
+                  <div className="bg-white text-slate-800 rounded-3xl p-5 w-[90%] max-w-[340px] shadow-2xl border border-blue-100 flex flex-col justify-between max-h-[92%] overflow-y-auto font-sans">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded-xl">
+                          <UserPlus className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-blue-950 tracking-tight uppercase">
+                            Create Owner Account
+                          </h3>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                            Secure business setup
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mb-4 leading-relaxed font-semibold">
+                        Register your business and verify your email to continue.
+                      </p>
+
+                      <form onSubmit={handleOwnerSignUp} className="space-y-3">
+                        {/* OWNER NAME */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Owner Full Name
+                          </label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="text"
+                              name="organization"
+                              autoComplete="organization"
+                              required
+                              value={signUpInstructionsOwnerName}
+                              onChange={(e) => setSignUpInstructionsOwnerName(e.target.value)}
+                              placeholder="e.g. John Doe"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* BUSINESS NAME */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Business Name
+                          </label>
+                          <div className="relative">
+                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="text"
+                              required
+                              value={signUpInstructionsBusinessName}
+                              onChange={(e) => setSignUpInstructionsBusinessName(e.target.value)}
+                              placeholder="e.g. Ironclad Plumbing"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* BUSINESS EMAIL */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Business Email
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="email"
+                              name="email"
+                              autoComplete="email"
+                              required
+                              value={signUpInstructionsEmail}
+                              onChange={(e) => setSignUpInstructionsEmail(e.target.value)}
+                              placeholder="e.g. owner@ironclad.com"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* PASSWORD */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Create Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="password"
+                              required
+                              value={signUpInstructionsPassword}
+                              onChange={(e) => setSignUpInstructionsPassword(e.target.value)}
+                              placeholder="••••••••"
+                              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300"
+                            />
+                          </div>
+                        </div>
+
+                        {/* CONFIRM PASSWORD */}
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-blue-900/80 uppercase tracking-wider mb-1">
+                            Confirm Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-800/50" />
+                            <input
+                              type="password"
+                              required
+                              value={signUpInstructionsConfirmPassword}
+                              onChange={(e) => setSignUpInstructionsConfirmPassword(e.target.value)}
+                              placeholder="••••••••"
+                              aria-invalid={Boolean(signUpInstructionsConfirmPassword && signUpInstructionsPassword !== signUpInstructionsConfirmPassword)}
+                              className={`w-full pl-9 pr-3 py-1.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-300 ${signUpInstructionsConfirmPassword && signUpInstructionsPassword !== signUpInstructionsConfirmPassword ? "border-rose-400 focus:border-rose-500" : "border-slate-200 focus:border-blue-500"}`}
+                            />
+                          </div>
+                        </div>
+
+                        {signUpInstructionsError && (
+                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200/50 animate-pulse leading-snug">
+                            {signUpInstructionsError}
+                          </p>
+                        )}
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowSignUpInstructions(false);
+                              setSignUpInstructionsError("");
+                              setSignUpInstructionsConfirmPassword("");
+                            }}
+                            className="flex-1 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer text-center"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isSignUpSubmitting}
+                            className="flex-1 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer text-center disabled:opacity-50"
+                          >
+                            {isSignUpSubmitting ? "Registering..." : "Sign Up"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
+
+            </div>
+
+          </div>
+        ) : (
+          
+          /* VIEW 2: THE INTERACTIVE SHOWCASE OPERATING SYSTEM */
+          <div 
+            style={{
+              borderRadius: "24px"
+            }}
+            className={`w-full h-[calc(100vh-100px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
+          >
+            
+            {/* COLLAPSIBLE LEFT NAV MENU */}
+            <div 
+              style={{
+                width: isSidebarCollapsed ? "72px" : "240px",
+                backgroundColor: "#C7E3FA",
+                transition: "width 0.2s ease-in-out"
+              }}
+              className="flex flex-col border-r border-[#9EC8EF] text-[#1F3557] shrink-0 relative"
+            >
+              {/* Menu Header with Badges */}
+              <div className="p-4 border-b border-[#9EC8EF] flex flex-col gap-2 relative">
+                <div className="flex items-center justify-between">
+                  {!isSidebarCollapsed ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+                        <BrandIcon className="w-full h-full" />
+                      </div>
+                      <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none">OwnersLOCAL</span>
+                      <span className="text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider select-none">Local OS</span>
+                    </div>
+                  ) : (
+                    <div className="mx-auto w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
+                      <BrandIcon className="w-full h-full" />
+                    </div>
+                  )}
+
+                  {/* Collapse/Expand Toggle Button - ALWAYS visible on the right border! */}
+                  <button
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                    }}
+                    className="absolute -right-3 top-5 bg-[#4A86F7] hover:bg-[#3977EE] border border-[#9EC8EF] rounded-full flex items-center justify-center text-white shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer z-20"
+                    title={isSidebarCollapsed ? "Expand Menu" : "Collapse Menu"}
+                  >
+                    {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Plain Text Business Name Header below Badges */}
+                {!isSidebarCollapsed && (
+                  <div className="mt-2.5 px-0.5 animate-fade-in text-left">
+                    <p className="font-sans font-black text-xs text-[#1F3557] tracking-wider uppercase leading-normal">
+                      {businessNames?.[0] || "Your Business"}
+                    </p>
+                    {["Owner", "Manager", "General Manager", "Office Manager"].includes(simulatedRole || loggedInUser?.role || "") && (
+                      <button
+                        type="button"
+                        onClick={openBusinessProfileEditor}
+                        className="mt-2 w-full rounded-lg border border-[#9EC8EF] bg-[#EAF5FF] px-2 py-1.5 text-left text-[9px] font-black uppercase tracking-wide text-[#315C9F] hover:border-[#4A86F7] hover:bg-white"
+                      >
+                        Business Setup / Edit Business Profile
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Dynamic Menu List (Role-Based Visibility) */}
+              <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-none">
+                {getVisibleScreens().filter(screen => screen.id !== "owner_console").map((screen) => {
+                  const isCurrent = activeScreen.id === screen.id;
+                  // Calculate unread count for this screen
+                  const pendingCustomerCount = screen.id === "customers" ? customers.filter(customer => customer.pendingConfirmation).length : 0;
+                  const unreadCount = Math.max(notifications.filter(n => n.screenId === screen.id && !n.isRead).length, pendingCustomerCount);
+
+                  return (
+                    <button
+                      key={screen.id}
+                      onClick={() => {
+                        setActiveScreen(screen);
+                        setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
+                        triggerNotification(`Navigated to: ${screen.label}`);
+                      }}
+                      className={`w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
+                        isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
+                      } ${
+                        isCurrent
+                          ? "bg-[#A9CEF5] text-[#1F3557] font-bold shadow-sm"
+                          : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
+                      }`}
+                      title={screen.label}
+                    >
+                      {isSidebarCollapsed ? (
+                        /* Only show menu icons when collapsed */
+                        <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                          {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
+                        </span>
+                      ) : (
+                        /* Show both icon and label when expanded */
+                        <div className="flex items-center gap-2.5 w-full min-w-0">
+                          <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                            {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
+                          </span>
+                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                            {screen.label}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Badge for AI Assistant */}
+                      {!isSidebarCollapsed && screen.badge && (
+                        <span className="text-[7.5px] bg-[#1F3557]/10 text-[#1F3557] px-1 py-0.5 rounded font-black tracking-wider uppercase select-none">
+                          {screen.badge}
+                        </span>
+                      )}
+
+                      {/* Subtle red notification dot next to menu item (no count, extremely refined!) */}
+                      {unreadCount > 0 && (
+                        <span className="absolute top-2 right-2 flex h-2 w-2 items-center justify-center rounded-full bg-red-500 ring-1 ring-white" />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {/* Role preview card */}
+                {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
+                  <div className="mx-1 my-3 p-4 bg-[#1F3557]/5 border border-[#1F3557]/10 rounded-2xl flex flex-col gap-1.5 text-left animate-fade-in">
+                    <p className="text-[8.5px] font-black text-[#1F3557]/80 uppercase tracking-wider">ROLE PREVIEW</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-[#1F3557]">Preview employee access</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-[#1F3557]" />
+                    </div>
+                    <p className="text-[10px] text-[#1F3557]/60 leading-relaxed font-sans font-medium">
+                      Instantly switch roles to preview permission-guarded tools.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom profile info block */}
+              <div className="p-3 border-t border-[#9EC8EF] bg-transparent flex flex-col gap-2 relative">
+                
+                {/* Notification Panel Popover */}
+                {showNotificationPanel && (
+                  <div className="absolute bottom-16 left-4 right-4 bg-[#C7E3FA] text-[#1F3557] rounded-2xl p-4 shadow-2xl border border-[#9EC8EF] z-50 flex flex-col max-h-[300px] overflow-hidden animate-slide-up">
+                    <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-2 mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <BellRing className="w-4 h-4 text-red-500 animate-bounce" />
+                        <span className="text-xs font-black text-[#1F3557] uppercase tracking-wider">Operational Alerts</span>
+                      </div>
+                      <button 
+                        onClick={() => setShowNotificationPanel(false)}
+                        className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    
+                    {/* List of active notifications */}
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                      {notifications.length === 0 ? (
+                        <div className="text-center py-6 text-[#5E7393] text-xs font-sans">
+                          No pending alerts. Clear board!
+                        </div>
+                      ) : (
+                        notifications.map((notif) => (
+                          <div 
+                            key={notif.id} 
+                            onClick={() => {
+                              // Mark as read
+                              setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
+                              if (notif.screenId) {
+                                const matched = OS_SCREENS.find(s => s.id === notif.screenId);
+                                if (matched) setActiveScreen(matched);
+                              }
+                              triggerNotification(`Viewed alert: ${notif.title}`);
+                            }}
+                            className={`p-2 rounded-xl text-left border transition-all cursor-pointer hover:bg-[#BDDDF8] ${
+                              notif.isRead 
+                                ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#5E7393]" 
+                                : "bg-[#BDDDF8] border-[#9EC8EF] font-semibold text-[#1F3557]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] uppercase font-black tracking-wider text-[#4A86F7]">{notif.title}</span>
+                              <span className="text-[8px] text-[#5E7393] font-mono">{notif.time}</span>
+                            </div>
+                            <p className="text-[10px] mt-0.5 leading-normal truncate">{notif.description}</p>
+                            {notif.type === "time_clock_approval" && notif.actionable && !notif.actionedAt && (
+                              <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setReviewingClockNotifLogId(notif.relatedLogId)}
+                                  className="px-2 py-1 bg-[#315C9F] hover:bg-[#1F3557] text-white rounded-lg text-[9px] font-black uppercase cursor-pointer"
+                                >
+                                  Review & Approve
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    
+                    <div className="border-t border-[#9EC8EF] pt-2 flex items-center justify-between text-[10px] mt-2 font-bold">
+                      <button 
+                        onClick={() => {
+                          setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+                          triggerNotification("Marked all alerts as read");
+                        }}
+                        className="text-[#4A86F7] hover:underline cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNotifications([]);
+                          triggerNotification("Cleared all alert logs");
+                        }}
+                        className="text-red-500 hover:underline cursor-pointer"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {reviewingClockNotifLogId && (() => {
+                  const reviewingLog = timeClockLogs.find(l => l.id === reviewingClockNotifLogId);
+                  if (!reviewingLog) return null;
+                  return (
+                    <TimeClockApprovalModal
+                      log={reviewingLog}
+                      timeClockLogs={timeClockLogs}
+                      setTimeClockLogs={setTimeClockLogs}
+                      setNotifications={setNotifications}
+                      businessId={businessId}
+                      actingUserEmail={loggedInUser?.email}
+                      actingUserName={loggedInUser?.name}
+                      logOperationalEvent={logOperationalEvent}
+                      notify={triggerNotification}
+                      onClose={() => setReviewingClockNotifLogId(null)}
+                    />
+                  );
+                })()}
+
+                <div className={`flex ${isSidebarCollapsed ? "flex-col items-center gap-2.5" : "items-center gap-2 justify-between"} overflow-hidden`}>
+                  <div className={`flex ${isSidebarCollapsed ? "flex-col items-center" : "items-center gap-2"} min-w-0`}>
+                    <div className="w-10 h-10 rounded-full bg-[#A9CEF5] text-[#1F3557] flex items-center justify-center text-xs font-black shrink-0 border border-[#9EC8EF] uppercase select-none">
+                      {loggedInUser?.name ? loggedInUser.name.slice(0, 2) : (loggedInUser?.role === "Owner" ? "SJ" : "EM")}
+                    </div>
+                    {!isSidebarCollapsed && (
+                      <div className="flex-1 min-w-0 animate-fade-in text-left">
+                        <p className="text-xs font-sans font-extrabold text-[#1F3557] truncate leading-tight">
+                           {loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001")}
+                        </p>
+                        <div 
+                          className="flex items-center gap-1.5 mt-0.5 cursor-pointer hover:opacity-80"
+                          onClick={() => {
+                            const actRole = simulatedRole || loggedInUser?.role || "Owner";
+                            if (actRole === "Owner") {
+                              const scr = OS_SCREENS.find((s) => s.id === "owner_console");
+                              if (scr) {
+                                setActiveScreen(scr);
+                                triggerNotification("🔑 Secure shortcut activated: Entering Owner Control Console.");
+                              }
+                            }
+                          }}
+                          title={ (simulatedRole || loggedInUser?.role || "Owner") === "Owner" ? "Launch Owner Console" : undefined }
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <p className="text-[10px] font-mono text-[#1F3557]/60 truncate uppercase tracking-wider leading-none">
+                            {simulatedRole || loggedInUser?.role || "Owner"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions Block: Notification Bell + Redo Onboarding Trigger + Sign out */}
+                  <div className={`flex items-center gap-1.5 ${isSidebarCollapsed ? "flex-col w-full mt-1.5" : ""}`}>
+                    {/* Notification bell button */}
+                    <button
+                      onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                      className="relative p-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[#315C9F] transition-all cursor-pointer flex items-center justify-center"
+                      title="Alert Center"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-[#315C9F]" />
+                      
+                      {/* Quiet red notification dot */}
+                      {notifications.some(n => !n.isRead) && (
+                        <span className="absolute top-1 right-1 flex h-1.5 w-1.5 items-center justify-center rounded-full bg-red-500" />
+                      )}
+                    </button>
+
+                    {/* Redo Onboarding reset simulation */}
+                    <button
+                      onClick={() => {
+                        setCurrentView("login");
+                        setIsLoggedIn(false);
+                        triggerNotification("System onboarding sequence re-triggered!");
+                      }}
+                      className="p-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[#315C9F] transition-all cursor-pointer flex items-center justify-center"
+                      title="Redo Onboarding Sequence"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Standard Sign out */}
+                    <button
+                      onClick={handleLogout}
+                      className="p-1.5 bg-[#EAF5FF] hover:bg-rose-100/50 border border-[#9EC8EF] hover:border-rose-200 rounded-xl text-[#315C9F] hover:text-rose-600 transition-all cursor-pointer flex items-center justify-center"
+                      title="Sign Out Session"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* MAIN APP BODY CONTENT AREA */}
+            <div className="flex-1 flex flex-col min-w-0 min-h-[640px] overflow-hidden relative bg-[#EAF5FF]">
+              
+              {/* Workspace Top Toolbar Header */}
+              {activeScreen.id !== "dashboard" && (
+                <div className="px-5 py-3 border-b border-[#9EC8EF] bg-[#C7E3FA] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-[#5E7393] uppercase font-mono tracking-wider">Workspace:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-extrabold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] px-2.5 py-1 rounded-xl">
+                      {activeScreen.label}
+                    </span>
+                  </div>
+
+                  {/* Simulated Role Dropdown (Only visible to Owners) */}
+                  {loggedInUser?.role === "Owner" && (
+                    <div className="relative flex items-center gap-1.5 ml-2 pl-2 border-l border-[#9EC8EF]">
+                      <span className="text-[9px] text-[#5E7393] font-mono">SIMULATION:</span>
+                      <select
+                        value={simulatedRole || "Owner"}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSimulatedRole(val === "Owner" ? null : val);
+                          triggerNotification(`Simulating permissions for: ${val}`);
+                        }}
+                        className="text-[10px] font-extrabold text-[#1F3557] bg-[#EAF5FF] hover:bg-[#EAF5FF]/80 border border-[#9EC8EF] rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Owner">Owner (View All 17)</option>
+                        <option value="Office Manager">Office Manager (View 11)</option>
+                        <option value="Technician">Technician</option>
+                        <option value="Salesperson">Sales Representative</option>
+                        <option value="Driver">Driver / Installer</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+              )}
+
+              {/* RENDER DYNAMIC SECTION */}
+              {(
+
+                /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
+
+                  {simulatedRole && (
+                    <div className="sticky top-0 z-40 bg-amber-500 text-amber-950 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 font-bold text-xs">
+                      <span>⚠️ PREVIEWING AS "{simulatedRole}" — some tabs and data are hidden to match that role's real permissions. This is not your real Owner view.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSimulatedRole(null);
+                          triggerNotification("Exited simulation — back to your real Owner view.");
+                        }}
+                        className="shrink-0 px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-[10.5px] uppercase tracking-wide cursor-pointer hover:bg-amber-900"
+                      >
+                        Exit Simulation
+                      </button>
+                    </div>
+                  )}
+
+                  {activeScreen.id === "dashboard" ? ( (() => {
+                    // NOTE: there's no persisted pay-period hours ledger yet (TimeClockPage logs
+                    // individual clock in/out events but nothing here aggregates them into a
+                    // pay-period total) — this only reflects the current live clock-in session,
+                    // not fabricated baseline hours.
+                    const totalHours = (clockInDuration / 3600).toFixed(1);
+                    const isAuthorizedToCustomize = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Accountant / Bookkeeper", "Accountant"].includes(simulatedRole || loggedInUser?.role || "Owner");
+
+                    // Keep the dashboard widget on the exact same selected period and
+                    // financial series as the Revenue page graph.
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
+                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                    const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
+
+                    // Renders card by slot target ID
+                    const renderCardSlot = (targetId: string, slotLabel: string) => {
+                      switch (targetId) {
+                        case "revenue":
+                          {
+                            const activeRoleVal = simulatedRole || loggedInUser?.role || "Owner";
+                            const isFinAuthorized = ["Owner", "Admin", "Administrator", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"].includes(activeRoleVal);
+                            return (
+                              <div 
+                                key={slotLabel}
+                                onClick={() => {
+                                  if (!isFinAuthorized) {
+                                    triggerNotification("⚠️ Access Denied: Financial metrics are restricted to Owners/Admins.");
+                                    logOperationalEvent("Security Violation", `User with role ${activeRoleVal} attempted to navigate to financial details via dashboard widget`, "🚨");
+                                    return;
+                                  }
+                                  const matched = OS_SCREENS.find(s => s.id === "revenue");
+                                  if (matched) setActiveScreen(matched);
+                                  triggerNotification("Navigated to Revenue details");
+                                }}
+                                className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer relative text-left"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                    {getScreenIcon("revenue", "w-4 h-4 text-[#315C9F]")}
+                                    <span className="text-[10px] font-black tracking-wider uppercase">COMPANY REVENUE</span>
+                                  </div>
+                                  <span className="text-[8px] bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                    {revenuePageFilter}
+                                  </span>
+                                </div>
+                                
+                                <div className="my-1 text-left">
+                                  <p className="text-lg font-sans font-black text-[#1F3557] tracking-tight leading-none">
+                                    {isFinAuthorized ? (
+                                      <>
+                                        {`${dashboardNetRevenue < 0 ? "-" : ""}$${Math.abs(dashboardNetRevenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      </>
+                                    ) : (
+                                      <span className="text-sm font-sans font-extrabold text-red-600 bg-red-100 px-2 py-0.5 rounded-md border border-red-200">
+                                        [REDACTED - OWNER ONLY]
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-0.5">Live Income vs Expenses & Taxes</p>
+                                </div>
+
+                                <div className="flex-1 w-full min-h-[100px] mt-2 relative">
+                                  {isFinAuthorized ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <LineChart data={getDashboardGraphData()} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                        <XAxis
+                                          dataKey="time"
+                                          stroke="#5E7393"
+                                          fontSize={8}
+                                          tickLine={false}
+                                          axisLine={false}
+                                          className="font-mono"
+                                        />
+                                        <YAxis
+                                          stroke="#5E7393"
+                                          fontSize={8}
+                                          tickLine={false}
+                                          axisLine={false}
+                                          className="font-mono"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Revenue"
+                                          stroke="#4A86F7"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Revenue"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Expenses"
+                                          stroke="#F43F5E"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Expenses"
+                                        />
+                                        <Line
+                                          type="monotone"
+                                          dataKey="Profit"
+                                          stroke="#22C55E"
+                                          strokeWidth={1.5}
+                                          dot={{ r: 1 }}
+                                          activeDot={{ r: 3 }}
+                                          name="Profit"
+                                        />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950/5 border border-dashed border-red-300 rounded-2xl p-2 text-center">
+                                      <span className="text-lg">🔒</span>
+                                      <p className="text-[10px] font-sans font-bold text-red-700 mt-1 uppercase tracking-wider">Financial Visualization Locked</p>
+                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business ledger streams.</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                        case "leads":
+                          return (
+                            <div 
+                              key={slotLabel}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "leads");
+                                if (matched) setActiveScreen(matched);
+                                triggerNotification("Navigated to Leads Center");
+                              }}
+                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                {getScreenIcon("leads", "w-4 h-4 text-[#315C9F]")}
+                                <span className="text-[10px] font-black tracking-wider uppercase">ACTIVE LEADS</span>
+                              </div>
+                              
+                              <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
+                                <div>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{leads.length} Leads</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Adjusted from connected sources</p>
+                                </div>
+
+                                <div className="space-y-1 my-3 text-[10px] text-[#1F3557]/85 font-semibold">
+                                  {leads.length === 0 ? (
+                                    <p className="text-[9px] text-[#5E7393]/70 italic">No active leads yet.</p>
+                                  ) : (
+                                    [...leads]
+                                      .sort((a, b) => (a.addedDaysAgo ?? 0) - (b.addedDaysAgo ?? 0))
+                                      .slice(0, 3)
+                                      .map((lead) => (
+                                        <div key={lead.id} className="flex items-center justify-between border-b border-blue-200/40 pb-1 last:border-b-0">
+                                          <span className="flex items-center gap-1 text-[#1F3557]/90 truncate">👤 {lead.name}</span>
+                                          <span className="bg-[#315C9F]/10 text-[#315C9F] px-1.5 py-0.2 rounded text-[8px] font-bold shrink-0">{lead.source}</span>
+                                        </div>
+                                      ))
+                                  )}
+                                </div>
+
+                                <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
+                                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                  Active Live CRM Sync OK
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        case "scheduling": {
+                          const todayStr = `${liveTime.getFullYear()}-${String(liveTime.getMonth() + 1).padStart(2, "0")}-${String(liveTime.getDate()).padStart(2, "0")}`;
+                          const todayEvents = schedulingEvents.filter(e => e.date === todayStr);
+                          return (
+                            <div 
+                              key={slotLabel}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "scheduling");
+                                if (matched) setActiveScreen(matched);
+                                triggerNotification("Navigated to Schedule calendar");
+                              }}
+                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                {getScreenIcon("scheduling", "w-4 h-4 text-[#315C9F]")}
+                                <span className="text-[10px] font-black tracking-wider uppercase">ACTIVE JOBS TODAY</span>
+                              </div>
+                              
+                              <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
+                                <div>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{todayEvents.length} Jobs Scheduled</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Populated from monthly calendar</p>
+                                </div>
+
+                                <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
+                                  {todayEvents.slice(0, 3).map((e) => (
+                                    <div key={e.id} className="flex items-center gap-1.5 truncate">
+                                      <span className="w-1.5 h-1.5 bg-[#315C9F]/40 rounded-full shrink-0" />
+                                      <span className="font-mono text-[8px] text-[#5E7393]">{e.startTime}</span>
+                                      <span className="truncate text-[#1F3557]/90 font-bold">{e.notes || e.eventType} - {e.customer}</span>
+                                    </div>
+                                  ))}
+                                  {todayEvents.length === 0 && (
+                                    <p className="text-[10px] text-slate-500 italic">No events scheduled for today</p>
+                                  )}
+                                </div>
+
+                                <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] hover:underline">
+                                  View Interactive Calendar ➔
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        case "fleet":
+                          return (
+                            <div 
+                              key={slotLabel}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "routes");
+                                if (matched) setActiveScreen(matched);
+                                triggerNotification("Navigated to Fleet Routes");
+                              }}
+                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                {getScreenIcon("dispatch", "w-4 h-4 text-[#315C9F]")}
+                                <span className="text-[10px] font-black tracking-wider uppercase">FLEET TELEMETRY</span>
+                              </div>
+                              
+                              <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
+                                <div>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">3 Drivers Online</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">GPX Navigation tracking active</p>
+                                </div>
+
+                                <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[#1F3557]/90 font-bold">Truck #1 (John D.)</span>
+                                    <span className="text-[#5E7393] font-mono text-[8.5px]">En Route</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[#1F3557]/90 font-bold">Truck #2 (Pete M.)</span>
+                                    <span className="text-[#315C9F] font-mono text-[8.5px]">On Site</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[#1F3557]/90 font-bold">Truck #3 (Sarah T.)</span>
+                                    <span className="text-[#5E7393] font-mono text-[8.5px]">Staged</span>
+                                  </div>
+                                </div>
+
+                                <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F]">
+                                  GPS tracking connected
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        case "messages":
+                          return (
+                            <div 
+                              key={slotLabel}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "messages");
+                                if (matched) setActiveScreen(matched);
+                                triggerNotification("Navigated to Messages Board");
+                              }}
+                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                {getScreenIcon("messages", "w-4 h-4 text-[#315C9F]")}
+                                <span className="text-[10px] font-black tracking-wider uppercase">MESSAGES FEED</span>
+                              </div>
+                              
+                              <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
+                                <div>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{dashboardConversations.reduce((s: number, c: any) => s + (c.unreadCount || 0), 0)} Unread Chats</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">{dashboardConversations.length} conversation{dashboardConversations.length === 1 ? "" : "s"} total</p>
+                                </div>
+
+                                {dashboardConversations.length === 0 ? (
+                                  <p className="text-[9px] text-[#5E7393] font-sans font-semibold my-2">No conversations yet.</p>
+                                ) : (
+                                  <div className="space-y-1.5 my-2 text-[9px] text-[#1F3557]/85 leading-normal">
+                                    {[...dashboardConversations]
+                                      .sort((a: any, b: any) => (b.lastMessageTime || "").localeCompare(a.lastMessageTime || ""))
+                                      .slice(0, 2)
+                                      .map((c: any) => (
+                                        <p key={c.id} className="border-l-2 border-[#315C9F] pl-1.5 font-sans font-semibold truncate">
+                                          <strong className="text-[#1F3557]">{c.lastMessageSender || c.title}:</strong> "{c.lastMessage || "No messages yet"}"
+                                        </p>
+                                      ))}
+                                  </div>
+                                )}
+
+                                {dashboardConversations.some((c: any) => (c.unreadCount || 0) > 0) && (
+                                  <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
+                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                    New Messages Available
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        case "inventory": {
+                          const lowStockItems = inventoryList
+                            .filter(i => i.quantity <= i.minQuantity)
+                            .sort((a, b) => (a.quantity - a.minQuantity) - (b.quantity - b.minQuantity));
+                          return (
+                            <div
+                              key={slotLabel}
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "inventory");
+                                if (matched) setActiveScreen(matched);
+                                triggerNotification("Navigated to Inventory ledger");
+                              }}
+                              className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-1.5 text-[#1F3557]">
+                                {getScreenIcon("inventory", "w-4 h-4 text-[#315C9F]")}
+                                <span className="text-[10px] font-black tracking-wider uppercase">INVENTORY MONITORS</span>
+                              </div>
+
+                              <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
+                                <div>
+                                  <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{lowStockItems.length} Alert{lowStockItems.length === 1 ? "" : "s"} Active</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">{inventoryList.length} item{inventoryList.length === 1 ? "" : "s"} on file</p>
+                                </div>
+
+                                {lowStockItems.length === 0 ? (
+                                  <p className="text-[9.5px] text-[#5E7393]/70 italic my-3">
+                                    {inventoryList.length === 0 ? "No inventory items yet." : "All items above their minimum quantity."}
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
+                                    {lowStockItems.slice(0, 2).map(item => (
+                                      <div key={item.id} className="flex items-center justify-between text-[#1F3557]/90">
+                                        <span className="flex items-center gap-1 truncate">
+                                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.quantity === 0 ? "bg-red-500" : "bg-[#F59E0B]"}`} />
+                                          <span className="truncate">{item.name}</span>
+                                        </span>
+                                        <span className="shrink-0">Qty: {item.quantity}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {lowStockItems.length > 0 && (
+                                  <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] hover:underline">
+                                    Review low stock ➔
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        default:
+                          return null;
+                      }
+                    };
+
+                    return (
+                      <>
+                      <div className="flex justify-end">
+                        <PlaidConnectButton />
+                      </div>
+                      <div className="flex-1 flex flex-col gap-5 animate-fade-in text-[#1F3557]">
+                        
+                        {/* TEAM MEMBER TERMINAL (Top side-to-side card) */}
+                        <div className="w-full bg-[#C7E3FA] border border-[#9EC8EF] p-5 rounded-[24px] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden text-left">
+                          {/* Left contents */}
+                          <div className="text-left space-y-1 bg-transparent border-none p-0 shadow-none">
+                            <div className="flex items-center gap-1.5 text-[10px] font-black text-[#1F3557] uppercase tracking-wider">
+                              <Laptop className="w-3.5 h-3.5 text-[#315C9F]" />
+                              <span>TEAM DASHBOARD</span>
+                            </div>
+                            <h2 className="text-base md:text-lg font-sans font-black tracking-tight text-[#1F3557] flex items-center gap-2">
+                              Welcome, {loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001")}!
+                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
+                            </h2>
+                            <p className="text-[11px] font-sans font-bold text-[#5E7393]">
+                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Hours Clocked This Session: <strong className="text-[#1F3557]">{totalHours} hours</strong>
+                            </p>
+                          </div>
+
+                          {/* Right clock & date block & action buttons */}
+                          <div className="flex flex-col sm:flex-row md:flex-col items-stretch md:items-end gap-2 shrink-0 w-full md:w-auto">
+                            <div className="bg-[#4A86F7] hover:bg-[#3977EE] text-white p-3 px-4 rounded-2xl flex flex-col items-center justify-center min-w-[170px] shadow-md border border-[#9EC8EF]/40 text-center">
+                              <span className="text-[9px] font-black tracking-widest text-blue-100 uppercase leading-none mb-1.5">
+                                {liveTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }).toUpperCase()}
+                              </span>
+                              <span className="text-base font-mono font-black tracking-wider leading-none select-all text-white">
+                                {liveTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                              </span>
+                              <span className="text-[8px] font-bold text-blue-200 font-mono mt-1 uppercase tracking-widest leading-none">
+                                Secure Workspace
+                              </span>
+                            </div>
+                            <div className="flex gap-2 w-full">
+                              <button
+                                onClick={() => takeSnapshot("dashboard", "Dashboard", {
+                                  recordCount: 3,
+                                  filters: `Role: ${simulatedRole || loggedInUser?.role || "Owner"}`,
+                                  details: "Dashboard quick capture. Modules rendered successfully."
+                                })}
+                                className="flex-1 px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-[10px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                                title="Take Page Snapshot"
+                              >
+                                <Camera className="w-3.5 h-3.5 text-[#315C9F]" />
+                                Snapshot
+                              </button>
+                              <button
+                                onClick={() => openPageAIAnalysis("dashboard", "Dashboard")}
+                                className="flex-1 px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-[10px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                                title="AI Option"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                AI Option
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* MIDDLE ROW: 4 SEPARATE SQUARE SHAPED NEUTRAL CARDS */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                          {renderCardSlot(customCardTargets.card1, "Slot 1")}
+                          {renderCardSlot(customCardTargets.card2, "Slot 2")}
+                          {renderCardSlot(customCardTargets.card3, "Slot 3")}
+
+                          {/* Card 4: Customize Daily View */}
+                          <div 
+                            onClick={() => {
+                              if (!isAuthorizedToCustomize) {
+                                triggerNotification("Access Denied: Only Owners, Managers, and Accountants can customize the daily view panels.");
+                                return;
+                              }
+                              setIsCustomizingDailyViewOpen(true);
+                              triggerNotification("Opening dashboard daily view customizer...");
+                            }}
+                            className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left group"
+                          >
+                            <div className="flex items-center gap-1.5 text-[#1F3557]">
+                              {getScreenIcon("settings", "w-4 h-4 text-[#315C9F]")}
+                              <span className="text-[10px] font-black tracking-wider uppercase">CUSTOMIZE DAILY VIEW</span>
+                            </div>
+
+                            <div className="my-1 text-left flex-1 flex flex-col justify-center">
+                              <p className="text-xs font-black text-[#1F3557] leading-relaxed">
+                                Rearrange dashboard panel metrics instantly.
+                              </p>
+                              <p className="text-[10.5px] text-[#5E7393] leading-normal font-sans font-medium mt-1">
+                                Choose which metrics you want displayed on your primary three operational panels.
+                              </p>
+                            </div>
+
+                            <button 
+                              className={`w-full py-2 rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                isAuthorizedToCustomize
+                                  ? "bg-[#4A86F7] hover:bg-[#3977EE] text-white shadow-sm"
+                                  : "bg-blue-100/50 text-blue-400 border border-blue-200/50 cursor-not-allowed"
+                              }`}
+                            >
+                              {isAuthorizedToCustomize ? (
+                                <>
+                                  <Sliders className="w-3.5 h-3.5" />
+                                  <span>Configure Slots ➔</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Restricted To Management 🔒</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* BOTTOM ROW: COMPANY BULLETINS (Side to side rectangular card) */}
+                        <div 
+                          onClick={() => {
+                            const matched = OS_SCREENS.find(s => s.id === "bulletins");
+                            if (matched) setActiveScreen(matched);
+                            triggerNotification("Navigated to Company Bulletin Board");
+                          }}
+                          className="w-full bg-[#C7E3FA] border border-[#9EC8EF] p-5 rounded-[24px] shadow-sm flex flex-col gap-3 text-left hover:scale-[1.002] transition-all cursor-pointer relative"
+                        >
+                          <div className="flex items-center justify-between border-b border-[#9EC8EF]/30 pb-2">
+                            <div className="flex items-center gap-1.5 text-[#1F3557]">
+                              {getScreenIcon("bulletins", "w-4 h-4 text-[#315C9F]")}
+                              <span>COMPANY BULLETIN BOARD</span>
+                            </div>
+                            <span className="text-[9.5px] font-black text-[#315C9F] hover:underline flex items-center gap-1">
+                              View Bulletin Board ➔
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                            {bulletins.filter(b => b.status === "approved").slice(0, 2).map((bulletin) => (
+                              <div key={bulletin.id} className="p-4 bg-[#EAF5FF] border border-[#9EC8EF]/60 rounded-2xl flex flex-col gap-1.5 shadow-sm hover:shadow transition-shadow">
+                                <div className="flex items-center justify-between text-[9px] font-bold text-[#1F3557]">
+                                  <span className="uppercase tracking-wider text-[#5E7393]">{bulletin.author} ({bulletin.role})</span>
+                                  <span className="font-mono text-[#5E7393]">{bulletin.date}</span>
+                                </div>
+                                <h4 className="text-xs font-black text-[#1F3557] uppercase tracking-wider leading-tight">{bulletin.title}</h4>
+                                <p className="text-[10.5px] text-[#5E7393] line-clamp-2 leading-relaxed font-sans font-medium">{bulletin.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* CUSTOMIZATION DIALOG MODAL PANEL */}
+                        {isCustomizingDailyViewOpen && (
+                          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                            <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[420px] shadow-2xl border border-[#9EC8EF] text-left animate-scale-up">
+                              <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3.5 mb-4">
+                                <div className="flex items-center gap-2">
+                                  <Sliders className="w-5 h-5 text-[#315C9F]" />
+                                  <h3 className="text-sm font-black text-[#1F3557] uppercase tracking-wider">Customize Daily View</h3>
+                                </div>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsCustomizingDailyViewOpen(false);
+                                  }}
+                                  className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+
+                              <p className="text-xs text-[#5E7393] font-sans font-semibold mb-4 leading-relaxed">
+                                Select which metric cards populate your primary three dashboard panel slots. Save to update immediately.
+                              </p>
+
+                              <div className="space-y-4">
+                                <div className="space-y-1 flex flex-col">
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 1 Metric Card</label>
+                                  <CustomDropdown
+                                    value={customCardTargets.card1}
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card1: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
+                                </div>
+
+                                <div className="space-y-1 flex flex-col">
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 2 Metric Card</label>
+                                  <CustomDropdown
+                                    value={customCardTargets.card2}
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card2: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
+                                </div>
+
+                                <div className="space-y-1 flex flex-col">
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 3 Metric Card</label>
+                                  <CustomDropdown
+                                    value={customCardTargets.card3}
+                                    onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card3: val }))}
+                                    options={DAILY_VIEW_OPTIONS}
+                                    scale={scale}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2.5 mt-6 pt-3 border-t border-[#9EC8EF]">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsCustomizingDailyViewOpen(false);
+                                  }}
+                                  className="flex-1 py-2.5 border border-[#9EC8EF] bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#1F3557] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsCustomizingDailyViewOpen(false);
+                                    triggerNotification("Dashboard Daily View slots successfully updated!");
+                                  }}
+                                  className="flex-1 py-2.5 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center shadow-sm uppercase tracking-wider"
+                                >
+                                  Save Layout
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                      </>
+                    );
+                  })()
+
+                  ) : activeScreen.id === "customers" ? (
+                    <CustomersPage
+                      onOpenPlaceholder={(screenId) => {
+                        const matched = OS_SCREENS.find(s => s.id === screenId);
+                        if (matched) {
+                          setActiveScreen(matched);
+                          triggerNotification(`Navigated to Placeholder for: ${matched.label}`);
+                        }
+                      }}
+                    />
+
+                  ) : activeScreen.id === "leads" ? (
+                    <LeadsPage />
+
+                  ) : activeScreen.id === "snapshots" ? (
+                    <SnapshotsPage />
+
+                  ) : activeScreen.id === "estimates" ? (
+                    <EstimatesPage />
+
+                  ) : activeScreen.id === "roster" ? (
+                    <RosterPage />
+
+                  ) : activeScreen.id === "timeclock" ? (
+                    <TimeClockPage
+                      isClockedIn={isClockedIn}
+                      setIsClockedIn={setIsClockedIn}
+                      clockInTime={clockInTime}
+                      setClockInTime={setClockInTime}
+                      clockInDuration={clockInDuration}
+                      setClockInDuration={setClockInDuration}
+                    />
+
+                  ) : activeScreen.id === "inventory" ? (
+                    <InventoryPage />
+
+                  ) : activeScreen.id === "documents" ? (
+                    <DocumentsPage />
+
+                  ) : activeScreen.id === "accounting" ? (
+                    <AccountingPage />
+
+                  ) : activeScreen.id === "messages" ? (
+                    <MessagesPage />
+
+                  ) : activeScreen.id === "training" ? (
+                    <TrainingPage />
+
+                  ) : activeScreen.id === "ai_assistant" ? (
+                    <AIAssistantPage
+                      globalAiSetting={globalAiSetting}
+                      setGlobalAiSetting={setGlobalAiSetting}
+                      moduleAiSettings={moduleAiSettings}
+                      setModuleAiSettings={setModuleAiSettings}
+                    />
+
+                  ) : activeScreen.id === "integrations" ? (
+                    
+                    <IntegrationsPage
+                      dashboardLeads={dashboardLeads}
+                      setDashboardLeads={setDashboardLeads}
+                    />
+
+                  ) : activeScreen.id === "settings" ? (
+                    
+                    <SettingsPage
+                      businessNames={businessNames}
+                      setBusinessNames={setBusinessNames}
+                      businessPhones={businessPhones}
+                      setBusinessPhones={setBusinessPhones}
+                      businessAddresses={businessAddresses}
+                      setBusinessAddresses={setBusinessAddresses}
+                      businessLogos={businessLogos}
+                      setBusinessLogos={setBusinessLogos}
+                      ownerNames={ownerNames}
+                      setOwnerNames={setOwnerNames}
+                      ownerPhones={ownerPhones}
+                      setOwnerPhones={setOwnerPhones}
+                      companyLocations={companyLocations}
+                      setCompanyLocations={setCompanyLocations}
+                      employeeRedoOnboardingAllowed={employeeRedoOnboardingAllowed}
+                      setEmployeeRedoOnboardingAllowed={setEmployeeRedoOnboardingAllowed}
+                      revenueResetInterval={revenueResetInterval}
+                      setRevenueResetInterval={setRevenueResetInterval}
+                      globalAiSetting={globalAiSetting}
+                      setGlobalAiSetting={setGlobalAiSetting}
+                      moduleAiSettings={moduleAiSettings}
+                      setModuleAiSettings={setModuleAiSettings}
+                      selectedRoles={selectedRoles}
+                      setSelectedRoles={setSelectedRoles}
+                      workspaceTheme={workspaceTheme}
+                      setWorkspaceTheme={setWorkspaceTheme}
+                    />
+
+                  ) : activeScreen.id === "owner_console" ? (
+                    (simulatedRole || loggedInUser?.role || "Owner") === "Technician" ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access – Owner only</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account role (Technician) does not have permissions to access the Owner Console. This event has been logged for security audit purposes.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
+                      <OwnerConsolePage
+                        dashboardLeads={dashboardLeads}
+                        setDashboardLeads={setDashboardLeads}
+                        revenueResetInterval={revenueResetInterval}
+                      />
+                    )
+
+                  ) : activeScreen.id === "revenue" ? (
+                    !getVisibleScreens().some(screen => screen.id === "revenue") ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account does not have permission to access the Revenue Page or view financial data.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
+                      /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
+                      <div className="space-y-6 animate-fade-in text-left">
+                      {/* HEADER SECTION - Separate clean header block */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                          <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
+                            <span className="select-none text-xl">📈</span> Company Revenue Tracking
+                          </h2>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
+                        </div>
+                        <PlaidConnectButton />
+                      </div>
+
+                      {/* CHOOSE GRAPH DATA BLOCK */}
+                      <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
+                        <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: "revenue",  label: "Total Revenue" },
+                            { value: "expenses", label: "Total Expenses" },
+                            { value: "profit",   label: "Total Profit" },
+                          ] as const).map(({ value, label }) => (
+                            <button
+                              key={value}
+                              onClick={() => setGraphDataType(value)}
+                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                graphDataType === value
+                                  ? "bg-[#4A86F7] text-white shadow-sm"
+                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {graphDataType === "expenses" && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
+                            <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {([ ["Bills", "Bills — service/provider obligations"], ["MaterialExpenses", "Material / Operational Expenses"], ["Payroll", "Payroll"], ["OtherExpenses", "Other Expenses"] ] as const).map(([key, label]) => {
+                              const selected = selectedExpenseSeries.includes(key);
+                              return <button key={key} onClick={() => setSelectedExpenseSeries(current => selected ? current.filter(item => item !== key) : [...current, key])} className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${selected ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-400"}`}>{selected ? "✓ " : ""}{label}</button>;
+                            })}
+                          </div>
+                          <p className="text-[9px] text-[#5E7393]">Materials, equipment, fuel, tools, inventory purchases, and supplies stay under Material / Operational Expenses—not Bills.</p>
+                        </div>}
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: "Day",        label: "Day" },
+                            { value: "Week",       label: "Week" },
+                            { value: "Pay Period", label: "Pay Period" },
+                            { value: "Quarter",    label: "Quarter" },
+                            { value: "Annual",     label: "Annual" },
+                          ] as const).map(({ value, label }) => (
+                            <button
+                              key={value}
+                              onClick={() => setRevenuePageFilter(value)}
+                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                revenuePageFilter === value
+                                  ? "bg-[#1F3557] text-white shadow-sm"
+                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH MULTI-LINE GRAPH */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Ledger</span>
+                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
+                            <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
+                              Period: <strong className="text-[#315C9F]">
+                                {(() => {
+                                  const now = new Date();
+                                  if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                  if (revenuePageFilter === "Week") return `Daily activity — last 7 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
+                                  if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
+                                  if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
+                                  if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
+                                  return "Running totals — complete financial history";
+                                })()}
+                              </strong>
+                            </p>
+                          </div>
+
+                          {/* Filter Button Group */}
+                          <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
+                            {[
+                              { value: "Day", label: "View by Day" },
+                              { value: "Week", label: "View by Week" },
+                              { value: "Pay Period", label: "View by Pay Period" },
+                              { value: "Quarter", label: "View by Quarter" },
+                              { value: "Annual", label: "View Annual" },
+                              { value: "Total", label: "View Total" }
+                            ].map(({ value, label }) => {
+                              const isActive = revenuePageFilter === value;
+                              return (
+                                <button
+                                  key={value}
+                                  onClick={() => {
+                                    setRevenuePageFilter(value);
+                                    triggerNotification(`Adjusted graph filter to: ${label}`);
+                                  }}
+                                  className={`px-3 py-1.5 text-[10.5px] rounded-lg transition-all duration-200 cursor-pointer font-bold ${
+                                    isActive
+                                      ? "bg-[#4A86F7] text-white shadow-sm"
+                                      : "text-[#5E7393] hover:text-[#1F3557]"
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Summary Display on Graph card */}
+                        {(() => {
+                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions, bills);
+                          const balance = currentTotal - currentExpenseTotal;
+                          const priorBalance = priorTotal - priorExpenseTotal;
+                          const hasPrior = priorBalance !== 0;
+                          const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
+                          const isUp = pct === null ? balance > 0 : pct >= 0;
+                          const balanceLabel = balanceView === "Total" ? "Total Balance" : `${balanceView} Balance`;
+                          return (
+                            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                              <div>
+                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393] mb-1">{balanceLabel}</p>
+                                <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
+                                  {`${balance < 0 ? "-" : ""}$${Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </span>
+                              </div>
+                              <select
+                                aria-label="Balance view"
+                                value={balanceView}
+                                onChange={(e) => {
+                                  changeBalanceView(e.target.value);
+                                  triggerNotification(`Balance view updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                }}
+                                className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
+                              >
+                                <option value="Day">View by Day</option>
+                                <option value="Pay Period">View by Pay Period</option>
+                                <option value="Quarter">View by Quarter</option>
+                                <option value="Annual">View Annual</option>
+                                <option value="Total">View Total Balance</option>
+                              </select>
+                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
+                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
+                                {pct === null ? (balance !== 0 ? "Current" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+                              </span>
+                              <span className="text-xs text-[#5E7393] font-sans font-medium">income minus expenses</span>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Log real income/expenses, run real payroll */}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Income
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                          >
+                            + Log Expense
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isRunningPayroll}
+                            onClick={handleRunPayroll}
+                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
+                          </button>
+                        </div>
+
+                        {logTransactionType && (
+                          <LogTransactionModal
+                            type={logTransactionType}
+                            createdBy={loggedInUser?.email}
+                            onSave={handleSaveTransaction}
+                            onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
+                          />
+                        )}
+
+                        {/* Recharts Live Multi-line Graph — horizontally scrollable */}
+                        {(() => {
+                          const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
+                          const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
+                          const chartWidth = Math.max(340, chartSeries.length * 78);
+                          return (
+                            <div className="pt-2">
+                              {chartSeries.length > 5 && (
+                                <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
+                              )}
+                              <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <LineChart
+                                  width={chartWidth}
+                                  height={280}
+                                  data={chartSeries}
+                                  margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                  <XAxis
+                                    dataKey="time"
+                                    stroke="#5E7393"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    dy={10}
+                                    className="font-mono"
+                                  />
+                                  <YAxis
+                                    stroke="#5E7393"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
+                                    className="font-mono"
+                                    width={48}
+                                  />
+                                  <Tooltip content={
+                                    ({ active, payload, label }) => {
+                                      if (active && payload && payload.length) {
+                                        return (
+                                          <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
+                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
+                                            <div className="space-y-1">
+                                              {payload.map((entry: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between gap-6">
+                                                  <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
+                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                    {entry.name}:
+                                                  </span>
+                                                  <span className="font-mono font-bold text-[#1F3557] text-[11px]">
+                                                    ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    }
+                                  } />
+                                  <Legend
+                                    verticalAlign="top"
+                                    height={36}
+                                    iconType="circle"
+                                    iconSize={8}
+                                    className="font-sans font-bold text-[11px]"
+                                    wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                                  />
+                                  {graphDataType === "revenue" && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
+                                  {graphDataType === "profit" && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Profit" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
+                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
+                                </LineChart>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {(() => {
+                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
+                          // Accounting's dashboard is all-time. Keep these headline cards
+                          // on that same basis; the chart and comparison cards below remain
+                          // controlled by revenuePageFilter.
+                          const transactionExpenseTotal = transactions
+                            .filter(transaction => transaction.type === "expense")
+                            .reduce((sum, transaction) => sum + transaction.amount, 0);
+                          const allTimeBillTotal = bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0);
+                          const allTimeExpenseTotal = transactionExpenseTotal + allTimeBillTotal;
+                          const netProfit = completedJobsRevenue - allTimeExpenseTotal;
+                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                          return [
+                          {
+                            label: "Total Revenue",
+                            key: "revenue",
+                            val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                            change: null,
+                            isUp: true,
+                            comp: "All-time recognized revenue",
+                            icon: DollarSign,
+                            color: "text-emerald-500",
+                            bgColor: "bg-emerald-500/10"
+                          },
+                          {
+                            label: "Net Profit",
+                            key: "profit",
+                            val: fmt(netProfit),
+                            change: null,
+                            isUp: netProfit >= 0,
+                            comp: "All-time revenue minus logged expenses",
+                            icon: TrendingUp,
+                            color: "text-blue-500",
+                            bgColor: "bg-blue-500/10"
+                          },
+                          {
+                            label: "Total Expenses",
+                            key: "expenses",
+                            val: fmt(allTimeExpenseTotal),
+                            change: null,
+                            isUp: true,
+                            comp: "All-time logged expenses",
+                            icon: TrendingDown,
+                            color: "text-rose-500",
+                            bgColor: "bg-rose-500/10"
+                          },
+                          {
+                            label: "Gross Payroll",
+                            key: "payroll",
+                            val: fmt(currentPayrollTotal),
+                            change: null,
+                            isUp: true,
+                            comp: "Real payroll runs, this period",
+                            icon: Users,
+                            color: "text-purple-500",
+                            bgColor: "bg-purple-500/10"
+                          },
+                          {
+                            label: "Accrued Taxes",
+                            key: "taxes",
+                            val: "$0.00",
+                            change: null,
+                            isUp: false,
+                            comp: "Tax tracking not built yet",
+                            icon: Landmark,
+                            color: "text-amber-500",
+                            bgColor: "bg-amber-500/10"
+                          }
+                          ];
+                        })().map((card, idx) => (
+                          <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
+                            <div className="flex justify-between items-start">
+                              <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
+                              <div className={`p-1.5 rounded-lg ${card.bgColor} ${card.color}`}>
+                                <card.icon className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight">{card.val}</p>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {card.change && (
+                                  <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
+                                    {card.isUp ? "+" : "-"}{card.change}
+                                  </span>
+                                )}
+                                <span className="text-[9.5px] text-[#5E7393] font-sans font-medium">{card.comp}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* EXPENSE CATEGORIES GRID - 12 SEPARATE FLOATING BLUE CARDS */}
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                          <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
+                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">Financial expense categories</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                          {[
+                            { name: "Bills", target: "accounting", label: "Bills" },
+                            { name: "Material Expenses", target: "inventory", label: "Inventory / Job Costs" },
+                            { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
+                            { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
+                            { name: "Equipment", target: "inventory", label: "Inventory" },
+                            { name: "Tools", target: "inventory", label: "Inventory" },
+                            { name: "Insurance", target: "documents", label: "Documents" },
+                            { name: "Taxes", target: "documents", label: "Documents" },
+                            { name: "Marketing", target: "integrations", label: "Web Integration" },
+                            { name: "Software & Subs", target: "integrations", label: "Integrations" },
+                            { name: "Utilities", target: "placeholder_utilities", label: "Expenses" },
+                            { name: "Office Supplies", target: "inventory", label: "Inventory" },
+                            { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
+                          ].map((cat, idx) => {
+                            const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                            const categoryTotal = cat.name === "Bills"
+                              ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
+                              : cat.name === "Material Expenses"
+                                ? transactions.filter((t) => t.type === "expense" && materialCategories.has(t.category || "")).reduce((sum, t) => sum + t.amount, 0)
+                                : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
+                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations" || cat.target === "accounting") {
+                                    const matched = OS_SCREENS.find(s => s.id === cat.target);
+                                    if (matched) {
+                                      setActiveScreen(matched);
+                                      triggerNotification(`Navigated to: ${matched.label}`);
+                                    }
+                                  } else {
+                                    openPlaceholderPage(cat.name + " Expense Logs", "💳");
+                                  }
+                                }}
+                                className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm hover:shadow transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 text-left group"
+                              >
+                                <div>
+                                  <span className="text-[9.5px] text-[#5E7393] font-bold uppercase tracking-wider block truncate">{cat.name}</span>
+                                  <span className="text-base font-sans font-black text-[#1F3557] tracking-tight block mt-0.5">{currentAmt}</span>
+                                </div>
+                                
+                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2 mt-1">
+                                  <span className="text-[8.5px] font-bold text-[#315C9F] group-hover:underline flex items-center gap-0.5 shrink-0">
+                                    {cat.label} ➔
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
+                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
+                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                            {/* Employee Search Bar */}
+                            <div className="relative flex-1 sm:w-60">
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                                <Search className="w-4 h-4 text-[#5E7393]" />
+                              </span>
+                              <input
+                                value={payrollSearch}
+                                onChange={(e) => setPayrollSearch(e.target.value)}
+                                type="text"
+                                placeholder="Search employees..."
+                                className="w-full pl-9.5 pr-4 py-2 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl focus:outline-none focus:border-[#4A86F7] text-[#1F3557] font-medium placeholder-[#5E7393]/70"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={downloadPayrollCsv}
+                              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Download CSV
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={printPayrollSummary}
+                              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#315C9F] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Print / PDF
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "roster");
+                                if (matched) setActiveScreen(matched);
+                              }}
+                              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shrink-0"
+                            >
+                              View Roster
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
+                            <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
+                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
+                            <select value={payrollSchedule} onChange={e => selectPayrollSchedule(e.target.value as PayrollSchedule)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]">
+                              <option value="weekly_friday">Weekly — payday Friday</option>
+                              <option value="biweekly">Every two weeks</option>
+                              <option value="semimonthly">Semimonthly — 1–15 / 16–end</option>
+                              <option value="monthly">Monthly</option>
+                              <option value="custom">Custom date range</option>
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period start
+                            <input type="date" value={payrollPeriodStart} max={payrollPeriodEnd} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodStart(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period end
+                            <input type="date" value={payrollPeriodEnd} min={payrollPeriodStart} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodEnd(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Workweek starts
+                            <select value={payrollWorkweekStart} onChange={e => setPayrollWorkweekStart(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Payday
+                            <select value={payrollPayday} onChange={e => setPayrollPayday(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <div className="flex flex-wrap gap-2 lg:col-span-6">
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
+                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
+                          </div>
+                        </div>
+
+                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
+                            using the selected pay period and workweek rules above. recentRoster is a separate
+                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
+                            to real hours — this table uses the real `employees` collection instead. */}
+                        {(() => {
+                          const rows = employees
+                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
+                            .map((emp) => {
+                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
+                              const { hours, overtimeHours: otHours } = computePayrollHoursForRange(myLogs, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
+                              const regHours = hours - otHours;
+                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
+                              const lastPayroll = transactions
+                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
+                              return { emp, hours, otHours, pay, lastPayroll, status };
+                            });
+                          return (
+                            <>
+                              {payrollSearch && (
+                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
+                                  Found {rows.length} employees matching "{payrollSearch}"
+                                </div>
+                              )}
+
+                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
+                                      <th className="px-4 py-3">Employee</th>
+                                      <th className="px-4 py-3 text-right">Current Hours</th>
+                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
+                                      <th className="px-4 py-3 text-right">Current Pay</th>
+                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
+                                      <th className="px-4 py-3 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
+                                    {rows.length === 0 && (
+                                      <tr>
+                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
+                                          No real employees onboarded yet.
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
+                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
+                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+                                      return (
+                                        <tr
+                                          key={emp.email}
+                                          onClick={() => {
+                                            const matched = OS_SCREENS.find(s => s.id === "roster");
+                                            if (matched) setActiveScreen(matched);
+                                          }}
+                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
+                                        >
+                                          <td className="px-4 py-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
+                                              {initials}
+                                            </div>
+                                            <div>
+                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
+                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
+                                          <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
+                                              {status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          );
+                        })()}
+                        
+                        <div className="text-center pt-2">
+                          <button
+                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
+                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            View All Employees ➔
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        {/* Compact on-demand AI Financial Insights widget */}
+                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm lg:col-span-2 text-left self-start">
+                          <button
+                            type="button"
+                            onClick={() => setIsFinancialInsightsOpen(open => !open)}
+                            aria-expanded={isFinancialInsightsOpen}
+                            className="w-full flex items-center gap-3 rounded-xl bg-[#EAF5FF] border border-[#9EC8EF] px-4 py-3 text-left hover:bg-[#BDDDF8] transition-colors"
+                          >
+                            <span className="p-2 rounded-lg bg-[#315C9F] text-white shadow-sm">
+                              <Sparkles className="w-4 h-4" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">On-demand analysis</span>
+                              <span className="block text-sm font-sans font-black text-[#1F3557]">AI Financial Insights</span>
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform ${isFinancialInsightsOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {isFinancialInsightsOpen && (
+                          <div className="space-y-3 pt-3">
+                            {(() => {
+                              // Real insights only, each gated on having a real prior period to
+                              // compare against — no invoice or tax-liability system exists in the
+                              // app to back "overdue invoices" / "quarterly tax due" style claims,
+                              // so those insight types were removed rather than left fabricated.
+                              const now = new Date();
+                              const periodDays = 14;
+                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
+                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
+                              const priorEnd = curStart;
+                              const sumBetween = (category: string | null, start: Date, end: Date) =>
+                                transactions
+                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
+                                  .reduce((s, t) => s + t.amount, 0);
+                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
+
+                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
+
+                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
+                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
+                              if (curPayroll > 0 && priorPayroll > 0) {
+                                const pct = pctChange(curPayroll, priorPayroll);
+                                insights.push({
+                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review payroll details ➔",
+                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
+                                  icon: Users,
+                                  action: "Payroll Ledger Analysis"
+                                });
+                              }
+
+                              const curFuel = sumBetween("Fuel", curStart, curEnd);
+                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
+                              if (curFuel > 0 && priorFuel > 0) {
+                                const pct = pctChange(curFuel, priorFuel);
+                                insights.push({
+                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
+                                  link: "Review fuel expenses ➔",
+                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
+                                  icon: Landmark,
+                                  action: "Fuel Receipts & Fleet Usage"
+                                });
+                              }
+
+                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
+                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
+                              const curExpenses = sumBetween(null, curStart, curEnd);
+                              if (curRevenue > 0) {
+                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
+                                insights.push({
+                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
+                                  link: "View profit report ➔",
+                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
+                                  icon: TrendingUp,
+                                  action: "Net Profitability Margin Analyzer"
+                                });
+                              }
+
+                              if (insights.length === 0) {
+                                return (
+                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
+                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
+                                  </div>
+                                );
+                              }
+
+                              return insights.map((insight, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
+                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
+                                >
+                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
+                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
+                                  </span>
+                                  <div>
+                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
+                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
+                                      {insight.link}
+                                    </p>
+                                  </div>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                          )}
+                        </div>
+
+                        {/* Quick Actions Card */}
+                        <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-4 text-left">
+                          <div className="border-b border-[#9EC8EF]/30 pb-3">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Ledger Actions</span>
+                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Quick Actions</h3>
+                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Execute double-entry bookkeeping actions</p>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 flex-1 py-1">
+                            {[
+                              { label: "Record Expense", action: "expense", icon: DollarSign },
+                              { label: "Run Payroll", action: "payroll", icon: Users },
+                              { label: "Create Invoice", action: "invoice", icon: FileText },
+                              { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark }
+                            ].map((btn, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  if (btn.action === "reconcile_soon") {
+                                    triggerNotification("Reconcile Bank is coming soon.");
+                                    return;
+                                  }
+                                  if (btn.action === "expense") {
+                                    sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                    setLogTransactionType("expense");
+                                    return;
+                                  }
+                                  if (btn.action === "payroll") {
+                                    handleRunPayroll();
+                                    return;
+                                  }
+                                  const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                                  if (accounting) setActiveScreen(accounting);
+                                  triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
+                                }}
+                                className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
+                              >
+                                <span className="p-1.5 bg-[#EAF5FF] border border-[#9EC8EF]/30 rounded-lg text-[#315C9F] shadow-sm">
+                                  <btn.icon className="w-4 h-4" />
+                                </span>
+                                <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide leading-tight">
+                                  {btn.label}
+                                </span>
+                                {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase text-amber-700">Coming Soon</span>}
+                              </button>
+                            ))}
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                              if (accounting) setActiveScreen(accounting);
+                              triggerNotification("Open Reports for current financial statements.");
+                            }}
+                            className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
+                          >
+                            View Financial Reports
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
+                        <div className="border-b border-[#9EC8EF]/30 pb-3">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
+                          <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          {[
+                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
+                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
+                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
+                          ].map((integ, idx) => (
+                            <div
+                              key={idx}
+                              className="border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2.5 opacity-80 bg-[#EAF5FF]/50 hover:opacity-100 transition-opacity"
+                            >
+                              <div className="w-9 h-9 rounded-full bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] flex items-center justify-center text-sm shadow-sm">
+                                <integ.icon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-extrabold text-[#1F3557] leading-none">{integ.name}</p>
+                                <p className="text-[9px] text-[#5E7393] font-medium mt-0.5">{integ.desc}</p>
+                              </div>
+                              <span className="px-2 py-0.5 bg-[#9EC8EF]/30 text-[#1F3557] border border-[#9EC8EF]/50 text-[8.5px] font-bold rounded">
+                                Coming Soon
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="text-center pt-2">
+                          <button
+                            onClick={() => {
+                              const matched = OS_SCREENS.find(s => s.id === "integrations");
+                              if (matched) {
+                                setActiveScreen(matched);
+                                triggerNotification("Navigated to Integrations & Gateways Settings");
+                              }
+                            }}
+                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            View All Integrations ➔
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                    )
+
+                  ) : activeScreen.id === "scheduling" ? (
+                    <SchedulingPage />
+
+                  ) : activeScreen.id === "dispatch" ? (
+                    <DispatchPage />
+
+                  ) : activeScreen.id === "jobs" ? (
+                    <JobsPage />
+
+                  ) : activeScreen.id === "routes" ? (
+                    <MapPageErrorBoundary>
+                      <InteractiveMapPage
+                        businessAddresses={businessAddresses}
+                      />
+                    </MapPageErrorBoundary>
+
+                  ) : activeScreen.id === "bulletins" ? (
+                    
+                    /* BULLETINS PAGE */
+                    <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">
+                      <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
+                        <div>
+                          <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Company Bulletins Center</h2>
+                          <p className="text-xs text-slate-500">Read official notifications or post announcements for administrative approval</p>
+                        </div>
+                        <span className="px-3 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-xs font-mono font-bold rounded-xl border border-[#A9CDEE]">
+                          Active Notices
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Post bulletin form */}
+                        <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] space-y-4 h-fit">
+                          <div>
+                            <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Post New Notice</h3>
+                            <p className="text-[10.5px] text-slate-600 mt-1">
+                              Note: If you are not an owner, manager, or scheduler, your bulletin will require approval.
+                            </p>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Bulletin Title</label>
+                            <input
+                              value={newBulletinTitle}
+                              onChange={(e) => setNewBulletinTitle(e.target.value)}
+                              type="text"
+                              placeholder="e.g. Safety Regulations"
+                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium font-sans text-slate-700"
+                            />
+                          </div>
+
+                          <div className="space-y-1 flex flex-col">
+                            <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold text-left">Content</label>
+                            <textarea
+                              value={newBulletinContent}
+                              onChange={(e) => setNewBulletinContent(e.target.value)}
+                              placeholder="Describe details clearly..."
+                              rows={4}
+                              className="w-full text-xs bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium font-sans text-slate-700"
+                            />
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (!newBulletinTitle.trim() || !newBulletinContent.trim()) {
+                                triggerNotification("Please fill in both title and content.");
+                                return;
+                              }
+                              const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+                              const nameClean = loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001");
+                              
+                              const directApprovalRoles = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Scheduler"];
+                              const isDirect = directApprovalRoles.includes(activeRole);
+                              
+                              const newBulletinItem = {
+                                id: `${bulletins.length + 1}`,
+                                title: newBulletinTitle.trim(),
+                                content: newBulletinContent.trim(),
+                                author: nameClean,
+                                role: activeRole,
+                                date: "Today, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                status: isDirect ? ("approved" as const) : ("pending" as const)
+                              };
+                              
+                              setBulletins(prev => [newBulletinItem, ...prev]);
+                              setNewBulletinTitle("");
+                              setNewBulletinContent("");
+                              
+                              if (isDirect) {
+                                triggerNotification("Bulletin posted successfully!");
+                              } else {
+                                triggerNotification("Bulletin submitted! Awaiting Manager/Owner approval.");
+                              }
+                            }}
+                            className="w-full py-2.5 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
+                          >
+                            Post Bulletin
+                          </button>
+                        </div>
+
+                        {/* Bulletins listing feed */}
+                        <div className="lg:col-span-2 space-y-4">
+                          {/* Pending approvals section (for management roles) */}
+                          {["Owner", "General Manager", "Office Manager"].includes(simulatedRole || loggedInUser?.role || "Owner") && bulletins.some(b => b.status === "pending") && (
+                            <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-2xl space-y-3">
+                              <h3 className="text-xs font-extrabold text-amber-800 uppercase tracking-wider">Awaiting Manager Approval</h3>
+                              <div className="space-y-3">
+                                {bulletins.filter(b => b.status === "pending").map((b) => (
+                                  <div key={b.id} className="p-3.5 bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl flex flex-col justify-between gap-3 shadow-sm">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <p className="text-xs font-black text-slate-800">{b.title}</p>
+                                        <p className="text-[10px] text-slate-400 font-medium">By {b.author} ({b.role}) • {b.date}</p>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          onClick={() => {
+                                            setBulletins(prev => prev.map(item => item.id === b.id ? { ...item, status: "approved" as const } : item));
+                                            triggerNotification("Bulletin approved and published!");
+                                          }}
+                                          className="px-2.5 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-600 transition-colors cursor-pointer"
+                                        >
+                                          Approve
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setBulletins(prev => prev.filter(item => item.id !== b.id));
+                                            triggerNotification("Bulletin submission rejected.");
+                                          }}
+                                          className="px-2.5 py-1 bg-rose-500 text-white text-[10px] font-bold rounded-lg hover:bg-rose-600 transition-colors cursor-pointer"
+                                        >
+                                          Reject
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-xs text-slate-600 leading-normal font-sans font-medium">{b.content}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Active Bulletins Board</h3>
+                          <div className="space-y-3.5">
+                            {bulletins.filter(b => b.status === "approved").length === 0 ? (
+                              <div className="text-center py-8 text-slate-400 text-xs">
+                                No announcements active currently.
+                              </div>
+                            ) : (
+                              bulletins.filter(b => b.status === "approved").map((b) => (
+                                <div key={b.id} className="p-4 bg-[#E3F3FF] hover:bg-[#E3F3FF]/80 border border-[#A9CDEE] rounded-2xl flex flex-col gap-2 shadow-sm transition-all">
+                                  <div className="flex items-center justify-between text-[10.5px] font-bold text-[#4A9BFF] border-b border-[#A9CDEE]/40 pb-1.5">
+                                    <span className="uppercase tracking-wider">{b.author} ({b.role})</span>
+                                    <span className="font-mono text-slate-400">{b.date}</span>
+                                  </div>
+                                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">{b.title}</h4>
+                                  <p className="text-xs text-slate-500 leading-relaxed font-sans font-medium">{b.content}</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  ) : activeScreen.id === "notifications" ? (
+                    
+                    <NotificationsPage
+                      dashboardLeads={dashboardLeads}
+                      setDashboardLeads={setDashboardLeads}
+                    />
+
+                  ) : (
+                    
+                    /* Screens that don't have a dedicated real implementation yet -- shown
+                       honestly as "not built yet" rather than dressed up with fake activity. */
+                    <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm min-h-[420px] flex flex-col justify-between gap-5 animate-fade-in text-left">
+                      <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl select-none">{activeScreen.icon}</span>
+                          <div>
+                            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">{activeScreen.label}</h2>
+                            <p className="text-xs text-slate-500 font-sans font-semibold">This feature isn't built yet</p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-[9px] font-mono font-bold rounded-xl border border-[#A9CDEE] uppercase">
+                          Not Built Yet
+                        </span>
+                      </div>
+
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-[#E3F3FF] rounded-2xl border border-dashed border-[#A9CDEE]">
+                        <div className="w-12 h-12 rounded-full bg-[#F5FAFF] text-[#4A9BFF] flex items-center justify-center text-xl font-bold border border-[#A9CDEE] shadow-sm mb-4">
+                          {activeScreen.icon}
+                        </div>
+                        <h4 className="text-xs font-black text-slate-700 font-sans uppercase tracking-wider">{activeScreen.label}</h4>
+                        <p className="text-slate-600 text-[11px] mt-1.5 max-w-xs leading-relaxed font-sans font-semibold">
+                          We haven't built this screen yet. Use the sidebar to get back to a working part of the app.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+              )}
+
+            </div>
+
+            {/* Sidebar toggle button is now integrated into the header of the narrow sidebar itself! */}
+          </div>
+        )}
+
+      </main>
+
+      {!isLoggedIn && (
+        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30">
+          <label className="sr-only" htmlFor="login-theme-selector">Color scheme</label>
+          <select
+            id="login-theme-selector"
+            aria-label="Color scheme"
+            value={workspaceTheme}
+            onChange={(event) => {
+              const nextTheme = event.target.value as WorkspaceTheme;
+              setWorkspaceTheme(nextTheme);
+              localStorage.setItem("ownerslocal_workspace_theme", workspaceThemeSettingValue(nextTheme));
+            }}
+            className={`max-w-[150px] rounded-lg border px-2 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur-md outline-none cursor-pointer ${isDarkTheme
+              ? "border-blue-400/30 bg-[#06152b]/70 text-blue-50"
+              : "border-blue-200/60 bg-white/60 text-[#315C9F]"
+            }`}
+          >
+            <option value="light-basic">Light Mode Basic</option>
+            <option value="light-extreme">Light Mode Extreme</option>
+            <option value="dark-basic">Dark Mode Basic</option>
+            <option value="dark-dynamic">Dark Mode Dynamic</option>
+          </select>
+        </div>
+      )}
+
+      {!isLoggedIn && (
+        <div
+          aria-label="Created by Stuffapp"
+          className="fixed bottom-3 right-4 z-20 pointer-events-none font-sans text-[10px] sm:text-xs font-semibold tracking-[0.08em] text-[#315C9F]/55"
+        >
+          by Stuffapp
+        </div>
+      )}
+
+      {/* CAMERA SHUTTER SNAPSHOT FLASH SIMULATION */}
+      {isFlashing && (
+        <div 
+          className="fixed inset-0 bg-white z-[9999] pointer-events-none transition-opacity duration-300 ease-out opacity-100 animate-pulse" 
+          style={{ animationDuration: "150ms", animationIterationCount: 1 }}
+        />
+      )}
+
+      {/* REVENUE SENSITIVE OPERATIONS CONFIRMATION DIALOG */}
+      {revenueConfirmAction && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-xl border border-blue-100 space-y-4 text-center">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
+              <Lock className="w-6 h-6 animate-pulse" />
+            </div>
+            <h3 className="text-base font-extrabold text-[#1F3557] uppercase tracking-wider">Confirm Financial Report Download</h3>
+            <p className="text-xs text-[#5E7393] leading-relaxed font-sans font-medium">
+              You are requesting to generate and load: <strong className="text-red-600">{revenueConfirmAction.label}</strong>. 
+              This contains confidential company revenue, profit margins, and payroll balances. 
+              Please confirm your administrative override to compile this data.
+            </p>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                onClick={() => setRevenueConfirmAction(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const target = revenueConfirmAction;
+                  setRevenueConfirmAction(null);
+                  openPlaceholderPage(target.label, target.icon);
+                  logOperationalEvent("Financial Export", `User authorized download of sensitive report: ${target.label}`, "📊");
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1 shadow-md shadow-blue-500/15"
+              >
+                Authorize & Load
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI OPTION COMPANION WORKSPACE CHATBOT DRAWER */}
+      {isAIAnalysisOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+          {/* Backdrop Click */}
+          <div className="absolute inset-0" onClick={() => setIsAIAnalysisOpen(false)} />
+
+          {/* Drawer content panel */}
+          <div className="relative w-full max-w-lg h-full bg-[#EAF5FF] border-l border-[#9EC8EF] shadow-2xl flex flex-col justify-between overflow-hidden animate-slide-in-right">
+            
+            {/* Header */}
+            <div className="p-5 bg-[#C7E3FA] border-b border-[#9EC8EF] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-[#EAF5FF] rounded-xl border border-[#9EC8EF]">
+                  <Sparkles className="w-5 h-5 text-[#315C9F] animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
+                    Owner's AI Option
+                  </h3>
+                  <p className="text-[10px] text-[#5E7393] font-bold uppercase tracking-widest">
+                    AI help for this page • {aiPageName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAIAnalysisOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold text-sm transition-colors flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Message Area */}
+            <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-[#EAF5FF]">
+              {aiMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`flex flex-col max-w-[85%] text-left ${
+                    msg.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"
+                  }`}
+                >
+                  <span className="text-[9px] uppercase tracking-wider font-bold text-[#5E7393] mb-1">
+                    {msg.sender === "user" ? "You" : "Owner's AI"}
+                  </span>
+                  <div
+                    className={`p-3.5 rounded-2xl text-xs leading-relaxed border shadow-sm ${
+                      msg.sender === "user"
+                        ? "bg-[#315C9F] border-[#1F3557] text-white rounded-tr-none"
+                        : "bg-[#C7E3FA] border-[#9EC8EF] text-[#1F3557] rounded-tl-none whitespace-pre-wrap"
+                    }`}
+                  >
+                    {msg.sender === "ai" ? (
+                      <div className="prose prose-sm max-w-none">
+                        {msg.text.split("\n").map((line, lIdx) => {
+                          if (line.startsWith("###")) {
+                            return <h4 key={lIdx} className="font-extrabold text-sm text-[#1F3557] mt-2 mb-1 uppercase">{line.replace("###", "").trim()}</h4>;
+                          }
+                          if (line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.")) {
+                            return <p key={lIdx} className="ml-1.5 mt-1 text-[#1F3557] font-medium">{line}</p>;
+                          }
+                          if (line.startsWith("-")) {
+                            return <li key={lIdx} className="ml-3 mt-0.5 text-slate-700">{line.replace("-", "").trim()}</li>;
+                          }
+                          return <p key={lIdx} className="mt-1">{line}</p>;
+                        })}
+                      </div>
+                    ) : (
+                      msg.text
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {aiIsLoading && (
+                <div className="flex items-center gap-2 mr-auto text-xs text-[#5E7393] font-semibold bg-[#C7E3FA] border border-[#9EC8EF] px-3.5 py-2.5 rounded-2xl rounded-tl-none animate-pulse">
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span>AI Agent is analyzing workspace ledger...</span>
+                </div>
+              )}
+
+              {pendingAiAction && pendingAiAction.type === "drawer" && (
+                <div className="bg-[#FFF5F5] border-2 border-red-200 rounded-2xl p-4 shadow-sm space-y-3 animate-fade-in text-left">
+                  <div className="flex items-start gap-2.5">
+                    <span className="p-1.5 bg-red-100 rounded-lg text-red-600 font-bold text-sm">🔒</span>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pl-8 pt-1">
+                    <button
+                      onClick={() => {
+                        const queryToRun = pendingAiAction.query;
+                        setPendingAiAction(null);
+                        executeConfirmedAIMessage(queryToRun);
+                      }}
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10.5px] font-extrabold rounded-lg shadow-sm transition-all uppercase cursor-pointer tracking-wider"
+                    >
+                      Confirm & Reveal
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPendingAiAction(null);
+                      }}
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[10.5px] font-bold rounded-lg transition-all uppercase cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Suggestions list */}
+            <div className="px-5 py-2 bg-[#C7E3FA]/40 border-t border-[#9EC8EF]/40 flex flex-wrap gap-1.5 justify-start">
+              {[
+                "Who is our top performer?",
+                "How can we grow conversions?",
+                "Analyze outstanding unpaid invoices"
+              ].map((sug, sIdx) => (
+                <button
+                  key={sIdx}
+                  disabled={!!pendingAiAction}
+                  onClick={() => {
+                    setAiInputMessage(sug);
+                  }}
+                  className={`px-2.5 py-1 text-[10px] font-sans font-bold text-[#315C9F] hover:text-white hover:bg-[#315C9F] bg-white border border-[#9EC8EF] rounded-lg transition-all cursor-pointer shadow-sm shrink-0 ${pendingAiAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+
+            {/* Input Bar */}
+            <div className="p-4 bg-[#C7E3FA] border-t border-[#9EC8EF] flex items-center gap-2">
+              <input
+                type="text"
+                value={aiInputMessage}
+                disabled={!!pendingAiAction}
+                onChange={(e) => setAiInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !pendingAiAction) handleSendAIMessage();
+                }}
+                placeholder={pendingAiAction ? "Confirmation pending... make a selection above" : `Ask about ${aiPageName} metrics or suggestions...`}
+                className={`flex-1 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-4 py-3 text-xs text-[#1F3557] placeholder-[#5E7393]/70 focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction ? "opacity-60 cursor-not-allowed" : ""}`}
+              />
+              <button
+                onClick={handleSendAIMessage}
+                disabled={!!pendingAiAction}
+                className={`px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl transition-all uppercase tracking-wider cursor-pointer shadow-sm ${pendingAiAction ? "opacity-55 cursor-not-allowed" : ""}`}
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it */}
+      <div
+        id="floating-ai-widget"
+        className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
+        style={aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
+      >
+
+        {/* Toggle Trigger Pill (drag by pressing and moving) */}
+        {!isFloatingAiOpen && isLoggedIn && (
+          <button
+            onClick={() => { if (!aiDragState.current.dragging) setIsFloatingAiOpen(true); }}
+            onPointerDown={(e) => startAiWidgetDrag(e, 180, 52)}
+            className="flex items-center gap-2 px-4 py-3.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white rounded-2xl shadow-[0_4px_25px_rgba(31,53,87,0.35)] hover:shadow-[0_4px_30px_rgba(74,134,247,0.5)] hover:scale-105 border border-[#9EC8EF]/40 transition-all cursor-grab active:cursor-grabbing group font-sans font-black text-xs uppercase tracking-wider"
+            title="Drag to move, click to open"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span>Owner's AI</span>
+            <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
+          </button>
+        )}
+
+        {/* Slide-Up Panel Overlay */}
+        {isFloatingAiOpen && (
+          <div className="w-96 h-[550px] bg-white rounded-3xl border border-[#9EC8EF] shadow-2xl flex flex-col overflow-hidden animate-slide-up select-text">
+
+            {/* Drawer Header (drag handle) */}
+            <div
+              onPointerDown={(e) => startAiWidgetDrag(e, 384, 550)}
+              className="bg-[#1F3557] text-white px-4 py-3 flex items-center justify-between border-b border-white/10 shrink-0 cursor-grab active:cursor-grabbing"
+              title="Drag to move"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#315C9F] to-[#4A86F7] text-white flex items-center justify-center text-lg font-bold">
+                  🤖
+                </div>
+                <div className="text-left">
+                  <h3 className="text-xs font-black uppercase tracking-wider">OwnersLOCAL AI</h3>
+                  <p className="text-[9.5px] text-slate-300 font-mono">Module: {activeScreen.label}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {/* Collapse button */}
+                <button
+                  onClick={() => setIsFloatingAiOpen(false)}
+                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-xs font-bold cursor-pointer"
+                  title="Collapse Panel"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* TAB BAR NAVIGATION */}
+            <div className="flex bg-[#EAF5FF] border-b border-[#9EC8EF]/30 p-1 shrink-0">
+              {[
+                { id: "ask", label: "Ask AI", icon: "💬" },
+                { id: "actions", label: "Actions", icon: "⚡" },
+                { id: "settings", label: "Settings", icon: "⚙️" },
+                { id: "recent", label: "Ledger", icon: "📋" }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFloatingAiTab(tab.id as any)}
+                  className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wide rounded-lg border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    floatingAiTab === tab.id
+                      ? "bg-[#315C9F] text-white border-[#315C9F] shadow-sm"
+                      : "bg-transparent text-[#5E7393] border-transparent hover:bg-white/50"
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Current page context (real — reflects the actual active screen) */}
+            <div className="bg-[#FFF9EA] border-b border-amber-200/50 px-3.5 py-2 flex items-center justify-between text-left text-[9.5px] text-[#855D00] font-sans font-bold uppercase tracking-wider">
+              <span className="text-[8.5px] bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 text-amber-700">Viewing: {activeScreen.label}</span>
+            </div>
+
+            {/* PANEL BODY CONTENT AREA */}
+            <div className="flex-1 overflow-y-auto p-4 bg-[#F8FBFF]">
+              
+              {/* ASK AI CHAT TAB */}
+              {floatingAiTab === "ask" && (
+                <div className="h-full flex flex-col justify-between gap-3 text-left">
+                  <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 select-text">
+                    {floatingAiMessages.map((m, idx) => (
+                      <div key={idx} className={`flex flex-col max-w-[85%] ${m.sender === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}>
+                        <span className="text-[8.5px] font-bold text-slate-400 uppercase mb-0.5 tracking-wider">
+                          {m.sender === "user" ? "You" : "Owner's AI"}
+                        </span>
+                        <div className={`p-3 rounded-2xl text-[11px] leading-relaxed border shadow-xs ${
+                          m.sender === "user"
+                            ? "bg-[#315C9F] text-white border-[#315C9F]"
+                            : "bg-white text-slate-700 border-[#9EC8EF]/40"
+                        }`}>
+                          {m.sender === "ai" ? (
+                            <div className="prose prose-sm max-w-none text-left">
+                              {/* Simple Markdown Render helpers */}
+                              {m.text.split("\n\n").map((para, pIdx) => {
+                                if (para.startsWith("###")) {
+                                  return <h4 key={pIdx} className="text-xs font-black uppercase text-[#1F3557] mb-1.5 mt-2">{para.replace("###", "").trim()}</h4>;
+                                }
+                                if (para.startsWith("*") || para.startsWith("-")) {
+                                  return (
+                                    <ul key={pIdx} className="list-disc pl-4 space-y-1 my-1.5 text-[10.5px]">
+                                      {para.split("\n").map((li, lIdx) => (
+                                        <li key={lIdx}>{li.replace(/^[*\-\s]+/, "").trim()}</li>
+                                      ))}
+                                    </ul>
+                                  );
+                                }
+                                return <p key={pIdx} className="mb-1.5 font-medium leading-relaxed">{para}</p>;
+                              })}
+                            </div>
+                          ) : (
+                            <p className="font-semibold leading-relaxed">{m.text}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {floatingAiLoading && (
+                      <div className="flex items-center gap-1.5 p-2 text-[10px] text-[#5E7393] font-bold font-mono">
+                        <span className="animate-bounce">●</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>●</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.4s' }}>●</span>
+                        <span className="text-[9px]">Model is processing viewport...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {pendingAiAction && pendingAiAction.type === "floating" && (
+                    <div className="bg-[#FFF5F5] border border-red-200 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-red-100 rounded text-red-600 font-bold text-xs">🔒</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
+                          <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
+                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={() => {
+                            const queryToRun = pendingAiAction.query;
+                            const cTxt = pendingAiAction.customText;
+                            setPendingAiAction(null);
+                            executeConfirmedFloatingAiMessage(queryToRun, cTxt);
+                          }}
+                          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPendingAiAction(null);
+                          }}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grounded data-action confirmation: shows the exact real record(s) affected and
+                      requires explicit approval before anything is written. */}
+                  {pendingDataAction && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 shadow-xs space-y-2.5 animate-fade-in text-left shrink-0">
+                      <div className="flex items-start gap-2">
+                        <span className="p-1 bg-amber-100 rounded text-amber-700 font-bold text-xs">⚠️</span>
+                        <div>
+                          <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Confirm Action</h4>
+                          {pendingDataAction.type === "reorder" ? (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Flag <strong>{pendingDataAction.item.name}</strong> for reorder — currently <strong>{pendingDataAction.item.quantity}</strong> on hand (minimum {pendingDataAction.item.minQuantity}). Suggested reorder quantity: <strong>{pendingDataAction.suggestedQty} units</strong>{pendingDataAction.item.vendor ? ` from ${pendingDataAction.item.vendor}` : " (no vendor on file)"}.
+                            </p>
+                          ) : (
+                            <p className="text-[9.5px] text-slate-700 mt-0.5 leading-relaxed font-semibold">
+                              Move <strong>{pendingDataAction.event.customer}</strong>'s job from <strong>{pendingDataAction.event.date}</strong> to <strong>{pendingDataAction.newDate}</strong>.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-6">
+                        <button
+                          onClick={confirmPendingDataAction}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black rounded transition-all uppercase cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setPendingDataAction(null)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-500 border border-slate-200 text-[9px] font-bold rounded transition-all uppercase cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Smart suggestion chips based on active module */}
+                  <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1 bg-white p-2 rounded-xl border border-slate-100 shrink-0">
+                    <span className="text-[8px] text-slate-400 font-extrabold uppercase w-full mb-1">Context Shortcuts:</span>
+                    {activeScreen.id === "inventory" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Order more.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Order more
+                      </button>
+                    )}
+                    {activeScreen.id === "scheduling" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Move him to tomorrow.")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Move to tomorrow
+                      </button>
+                    )}
+                    {activeScreen.id === "revenue" && (
+                      <button
+                        onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage("Why did profit drop?")}
+                        disabled={!!pendingAiAction || !!pendingDataAction}
+                        className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[9.5px] font-black cursor-pointer uppercase tracking-wider ${pendingAiAction || pendingDataAction ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        ⚡ Analyze drop
+                      </button>
+                    )}
+                    <span className="text-[9px] text-slate-400 font-medium">Ask simple or complex queries using input below.</span>
+                  </div>
+
+                  {/* Input form */}
+                  <div className="flex gap-1.5 pt-2 border-t border-slate-100 shrink-0">
+                    <input
+                      type="text"
+                      value={floatingAiInput}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      onChange={(e) => setFloatingAiInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !pendingAiAction && !pendingDataAction) handleSendFloatingAiMessage();
+                      }}
+                      placeholder={pendingAiAction ? "Clearance check active..." : pendingDataAction ? "Confirmation pending... approve or cancel above" : `Ask Owner's AI about ${activeScreen.label}...`}
+                      className={`flex-1 bg-slate-50 border border-[#9EC8EF]/40 rounded-xl px-3 py-2 text-[11px] text-[#1F3557] focus:outline-none focus:border-[#315C9F] font-semibold ${pendingAiAction || pendingDataAction ? "opacity-60 cursor-not-allowed" : ""}`}
+                    />
+                    <button
+                      onClick={() => !pendingAiAction && !pendingDataAction && handleSendFloatingAiMessage()}
+                      disabled={!!pendingAiAction || !!pendingDataAction}
+                      className={`px-3.5 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-wider cursor-pointer ${pendingAiAction || pendingDataAction ? "opacity-55 cursor-not-allowed" : ""}`}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODULE-SPECIFIC AI ACTIONS TAB */}
+              {floatingAiTab === "actions" && (
+                <div className="space-y-3.5 text-left">
+                  <div className="bg-[#FFF9EA] p-3 rounded-2xl border border-amber-200 text-[10px] leading-relaxed text-amber-800 font-sans font-bold uppercase tracking-wider flex items-start gap-1.5">
+                    <span className="text-sm shrink-0">⚡</span>
+                    <span>Ready-to-Run operations for {activeScreen.label}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {/* Map of page actions */}
+                    {(
+                      activeScreen.id === "dashboard" ? ["Analyze Business", "Daily Summary", "Weekly Summary", "Monthly Summary"] :
+                      activeScreen.id === "revenue" ? ["Analyze Profit", "Forecast Revenue", "Analyze Expenses", "Payroll Summary"] :
+                      activeScreen.id === "customers" ? ["Customer Insights", "Follow-up Suggestions", "Customer Timeline"] :
+                      activeScreen.id === "leads" ? ["Prioritize Leads", "Draft Follow-up", "Predict Closing Probability"] :
+                      activeScreen.id === "estimates" ? ["Improve Estimate", "Suggest Pricing", "Compare Similar Jobs"] :
+                      activeScreen.id === "scheduling" ? ["Optimize Schedule", "Detect Conflicts", "Assign Technician"] :
+                      activeScreen.id === "dispatch" ? ["Assign Crew", "Optimize Dispatch"] :
+                      activeScreen.id === "routes" ? ["Optimize Route", "Reduce Drive Time"] :
+                      activeScreen.id === "jobs" ? ["Review Job", "Suggest Next Step"] :
+                      activeScreen.id === "inventory" ? ["Detect Low Inventory", "Generate Purchase Order", "Scan Receipt", "Analyze Inventory"] :
+                      activeScreen.id === "documents" ? ["Summarize Document", "Organize Files"] :
+                      activeScreen.id === "messages" ? ["Draft Reply", "Rewrite Message", "Summarize Conversation"] :
+                      activeScreen.id === "training" ? ["Assign Courses", "Generate Quiz", "Build Course"] :
+                      activeScreen.id === "settings" ? ["Explain Settings", "Recommend Configuration"] :
+                      activeScreen.id === "integrations" ? ["Diagnose Integration", "Sync Status"] :
+                      activeScreen.id === "roster" ? ["Employee Summary", "Performance Review"] :
+                      ["Post Bulletin Alert", "Summarize Announcements"]
+                    ).map((act, aIdx) => (
+                      <button
+                        key={aIdx}
+                        onClick={() => {
+                          setFloatingAiTab("ask");
+                          handleSendFloatingAiMessage(`Perform standard action: ${act}`);
+                        }}
+                        className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-slate-200 hover:border-[#315C9F] rounded-2xl text-[10.5px] font-black text-[#1F3557] flex items-center justify-between transition-all cursor-pointer uppercase tracking-wider"
+                      >
+                        <span className="truncate">{act}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-[#315C9F]" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MODULE AI SETTINGS TAB */}
+              {floatingAiTab === "settings" && (
+                <div className="space-y-4 text-left">
+                  <div className="bg-white p-3.5 rounded-2xl border border-[#9EC8EF]/40 space-y-1.5">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Module Override AI Level</h4>
+                    <p className="text-[9px] text-slate-400 font-sans font-medium">
+                      Control parameters for {activeScreen.label} specifically. Specific overrides customize the global fallback configured below.
+                    </p>
+                    <select
+                      value={moduleAiSettings[activeScreen.id] || "DEFAULT"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setModuleAiSettings(prev => ({ ...prev, [activeScreen.id]: val as any }));
+                        triggerNotification(`⚙️ Override for ${activeScreen.label} set to ${val}`);
+                      }}
+                      className="w-full mt-2 text-[10px] font-bold text-[#1F3557] bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
+                    >
+                      <option value="DEFAULT">INHERIT DEFAULT ({globalAiSetting})</option>
+                      <option value="OFF">OFF</option>
+                      <option value="ASSIST">ASSIST</option>
+                      <option value="ASSIST + APPROVAL">ASSIST + APPROVAL</option>
+                      <option value="AUTO">AUTO (AUTONOMOUS)</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Default Global Policy</h4>
+                    <p className="text-[9px] text-slate-400 font-sans font-medium">
+                      Baseline fallback for all workspaces.
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      {["OFF", "ASSIST", "ASSIST + APPROVAL", "AUTO"].map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setGlobalAiSetting(mode as any);
+                            triggerNotification(`🤖 Global AI baseline updated to ${mode}`);
+                          }}
+                          className={`p-1.5 rounded-lg border text-center text-[9px] font-black uppercase transition-all cursor-pointer ${
+                            globalAiSetting === mode
+                              ? "bg-[#315C9F] text-white border-transparent"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {mode === "ASSIST + APPROVAL" ? "ASSIST + APP" : mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* RECENT AI ACTIONS LEDGER TAB */}
+              {floatingAiTab === "recent" && (
+                <div className="space-y-3.5 text-left">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-wider">Audit Log Checklist</h4>
+                    <span className="text-[8.5px] bg-[#EAF5FF] text-[#315C9F] px-2 py-0.5 rounded font-mono font-black">
+                      {recentAiActions.filter(a => a.status === "Completed").length} Active
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                    {recentAiActions.map((act) => (
+                      <div key={act.id} className={`p-3 rounded-2xl border transition-all text-left ${
+                        act.status === "Undone" 
+                          ? "bg-rose-50/50 border-rose-100 text-slate-400" 
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:border-[#315C9F]"
+                      }`}>
+                        <div className="flex justify-between items-center w-full">
+                          <span className="text-[8px] bg-slate-200 px-1.5 py-0.5 rounded font-mono font-bold uppercase">{act.module}</span>
+                          {act.status !== "Undone" && (
+                            <button
+                              onClick={() => {
+                                // NOTE: this only marks the log entry as undone (audit annotation).
+                                // Recent AI actions don't currently carry structured revert data, so
+                                // this deliberately does not attempt to reverse the underlying change —
+                                // doing that with guessed/hardcoded values would silently corrupt data.
+                                setRecentAiActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "Undone" } : a));
+                                triggerNotification(`Marked as undone: ${act.action}. Reverse the change manually on the relevant page if needed.`);
+                              }}
+                              className="px-1.5 py-0.5 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-100 rounded text-[8px] font-black uppercase transition-colors cursor-pointer"
+                            >
+                              Undo
+                            </button>
+                          )}
+                        </div>
+                        <h5 className={`text-[10.5px] font-black uppercase mt-1.5 ${act.status === "Undone" ? "line-through text-slate-400" : "text-slate-800"}`}>{act.action}</h5>
+                        <p className="text-[9.5px] leading-relaxed text-slate-500 font-sans font-semibold mt-0.5">{act.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* FLOATING SUCCESS/WARNING NOTIFICATIONS SYSTEM */}
+      {showNotification && (
+        <div className="fixed bottom-6 right-6 bg-slate-900 border border-blue-500/30 shadow-[0_10px_30px_rgba(30,144,255,0.2)] rounded-2xl px-4 py-3.5 flex items-center gap-3 z-50 text-xs md:text-sm animate-fade-in text-slate-100 max-w-sm">
+          <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
+            <CheckCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="font-bold text-white mb-0.5">System Alert</p>
+            <p className="text-slate-400 font-medium text-xs leading-tight">{showNotification}</p>
+          </div>
+        </div>
+      )}
+
+
+
+
+
+      {/* Universal footer */}
+      <footer className="w-full py-4 text-center border-t border-white/5 bg-slate-950/80 backdrop-blur text-[11px] font-mono tracking-wider text-slate-500 z-10">
+        OWNER'S LOCAL OS • CLOUD RUN PREVIEW SECURED CLIENT ENVIRONMENT • © 2026
+      </footer>
+
+    </div>
+    </NavTelemetryContext.Provider>
+    </DomainDataContext.Provider>
+    </AuthContext.Provider>
+  );
+}
