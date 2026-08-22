@@ -98,7 +98,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, generatedPdfDraft, setGeneratedPdfDraft } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -138,12 +138,21 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
   const [pdfEditorAutoOpenPicker, setPdfEditorAutoOpenPicker] = useState(false);
 
+  useEffect(() => {
+    if (!generatedPdfDraft) return;
+    setPdfEditorDocId(null);
+    setPdfEditorDocName(generatedPdfDraft.filename);
+    setPdfEditorAutoOpenPicker(false);
+    setIsPDFEditorOpen(true);
+  }, [generatedPdfDraft]);
+
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
   const [activeDocTab, setActiveDocTab] = useState<DocTab>('all');
 
   const closePDFEditor = () => {
     setIsPDFEditorOpen(false);
+    setGeneratedPdfDraft(null);
   };
 
   // Dynamic directory lists for Create Folder action
@@ -229,11 +238,11 @@ export const DocumentsPage: React.FC = () => {
         const newDoc: DocumentItem = {
           id: docId,
           name: updatedName,
-          customer: "None",
+          customer: generatedPdfDraft?.customerName || "None",
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
-          job: "None",
-          type: "Contracts",
+          job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
+          type: generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : "Contracts",
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: "150 KB",
@@ -243,8 +252,8 @@ export const DocumentsPage: React.FC = () => {
           isArchived: false,
           notes: "Generated from OwnersLOCAL Native PDF Editor tool.",
           tags: ["Editor", "Draft"],
-          estimateId: "None",
-          invoiceId: "None",
+          estimateId: generatedPdfDraft?.sourceType === "Estimate" ? generatedPdfDraft.sourceId : "None",
+          invoiceId: generatedPdfDraft?.sourceType === "Invoice" ? generatedPdfDraft.sourceId : "None",
           lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
           metaObjects: metaProperties?.objects || []
         };
@@ -1625,6 +1634,7 @@ export const DocumentsPage: React.FC = () => {
           documentId={pdfEditorDocId}
           initialFilename={pdfEditorDocName ? pdfEditorDocName.replace(/\.pdf$/i, "") : undefined}
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
+          initialDraft={generatedPdfDraft}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
         />

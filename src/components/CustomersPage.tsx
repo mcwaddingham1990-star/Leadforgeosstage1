@@ -57,7 +57,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setGeneratedPdfDraft } = useDomainData();
   const {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
@@ -81,6 +81,16 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const customers = propCustomers || localCustomers;
   const setCustomers = propSetCustomers || setLocalCustomers;
   const pendingCustomers = useMemo(() => customers.filter(customer => customer.pendingConfirmation), [customers]);
+  const compileCustomerDocuments = (customer: Customer) => {
+    const names=[customer.id,customer.contact,customer.company].filter(Boolean);
+    const customerEstimates=estimates.filter(item=>names.includes(item.customerName)||names.includes(item.company));
+    const customerInvoices=invoices.filter(item=>names.includes(item.customer));
+    const customerJobs=schedulingEvents.filter(item=>names.includes(item.customer)||item.customerId===customer.id);
+    const customerDocs=documents.filter(item=>names.includes(item.customer));
+    const lines=[`Customer: ${customer.contact}`,`Company: ${customer.company||"—"}`,`Phone: ${customer.phone||"—"}`,`Email: ${customer.email||"—"}`,`Address: ${customer.address||"—"}`,"",`Estimates (${customerEstimates.length}): ${customerEstimates.map(item=>item.number).join(", ")||"None"}`,`Invoices (${customerInvoices.length}): ${customerInvoices.map(item=>item.invoiceNumber).join(", ")||"None"}`,`Jobs (${customerJobs.length}): ${customerJobs.map(item=>item.jobNumber||item.id).join(", ")||"None"}`,`Documents (${customerDocs.length}): ${customerDocs.map(item=>item.name).join(", ")||"None"}`];
+    setGeneratedPdfDraft({filename:`${customer.company||customer.contact}-documents.pdf`,title:"Customer Document Summary",sourceType:"Customer",sourceId:customer.id,customerName:customer.contact||customer.company,representativeName:loggedInUser?.name||"Company Representative",lines});
+    onNavigateToScreen("documents");
+  };
 
   useEffect(() => {
     if (!propCustomers) {
@@ -732,6 +742,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               >
                 <MessageSquare className="w-3.5 h-3.5 text-[#1F3557]" />
                 Message Customer
+              </button>
+              <button
+                onClick={() => selectedCustomer && compileCustomerDocuments(selectedCustomer)}
+                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 text-left transition-colors cursor-pointer flex items-center gap-2"
+              >
+                <FileText className="w-3.5 h-3.5" /> Compile Documents
               </button>
               <button
                 onClick={() => onOpenPlaceholder("estimates")}

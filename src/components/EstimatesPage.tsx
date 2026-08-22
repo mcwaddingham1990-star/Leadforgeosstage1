@@ -45,7 +45,7 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -107,7 +107,12 @@ export const EstimatesPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleAddEstimate = () => {
+  const generateEstimatePdf = (est: Estimate) => {
+    setGeneratedPdfDraft({filename:`${est.number}.pdf`,title:`Estimate ${est.number}`,sourceType:"Estimate",sourceId:est.id,customerName:est.customerName,representativeName:est.salesRep||loggedInUser?.name||"Company Representative",lines:[`Customer: ${est.customerName}`,`Company: ${est.company||"—"}`,`Created: ${est.createdDate}`,`Expires: ${est.expirationDate}`,`Status: ${est.status}`,`Estimated total: $${Number(est.amount||0).toLocaleString()}`,"",`Scope / Notes: ${est.notes||"—"}`]});
+    onNavigateToScreen("documents");
+  };
+
+  const handleAddEstimate = (openPdf = false) => {
     if (!formCustomerName.trim()) return;
     const newEst: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
@@ -135,6 +140,7 @@ export const EstimatesPage: React.FC = () => {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
     }
     setIsAddModalOpen(false);
+    if (openPdf) generateEstimatePdf(newEst);
   };
 
   const openViewModal = (est: Estimate) => {
@@ -148,7 +154,7 @@ export const EstimatesPage: React.FC = () => {
     setIsEditMode(false);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = (openPdf = false) => {
     if (!selectedEstimate) return;
     const updated = {
       ...selectedEstimate,
@@ -170,6 +176,7 @@ export const EstimatesPage: React.FC = () => {
     }
     setSelectedEstimate(updated);
     setIsEditMode(false);
+    if (openPdf) generateEstimatePdf(updated);
     if (selectedEstimate.status !== "Accepted" && updated.status === "Accepted") {
       setConversionComplete(false);
       setIsConversionOpen(true);
@@ -340,6 +347,12 @@ export const EstimatesPage: React.FC = () => {
               Export
             </button>
             {onTakeSnapshot && (
+              <button
+                type="button"
+                disabled={!formCustomerName.trim()}
+                onClick={() => handleAddEstimate(true)}
+                className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300"
+              >Generate PDF</button>
               <button
                 onClick={() =>
                   onTakeSnapshot("estimates", "Estimates & Bids", {
@@ -622,7 +635,11 @@ export const EstimatesPage: React.FC = () => {
               <button
                 key={btn.label}
                 onClick={() => {
-                  if (btn.label === "Convert to Job") {
+                  if (btn.label === "Generate PDF") {
+                    const target = selectedEstimate || estimates[0];
+                    if (target) generateEstimatePdf(target);
+                    else triggerNotification("Create or select an estimate first.");
+                  } else if (btn.label === "Convert to Job") {
                     if (convertibleEstimates.length === 0) {
                       triggerNotification("No accepted estimates are waiting to be converted.");
                       setActiveStatusFilter("Accepted");
@@ -924,7 +941,7 @@ export const EstimatesPage: React.FC = () => {
               <button
                 type="button"
                 disabled={!formCustomerName.trim()}
-                onClick={handleAddEstimate}
+                onClick={() => handleAddEstimate(false)}
                 className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                   formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                 }`}
@@ -1132,7 +1149,7 @@ export const EstimatesPage: React.FC = () => {
                   <button
                     type="button"
                     disabled={!formCustomerName.trim()}
-                    onClick={handleSaveEdit}
+                    onClick={() => handleSaveEdit(false)}
                     className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                       formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                     }`}
@@ -1140,6 +1157,8 @@ export const EstimatesPage: React.FC = () => {
                     Save Changes
                   </button>
                 )}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit(true)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Generate PDF</button>}
+                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
               </div>
             </div>
           </div>

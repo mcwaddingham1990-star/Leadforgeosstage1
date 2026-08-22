@@ -599,6 +599,8 @@ function InvoicesTab({
   logOperationalEvent,
   loggedInUser
 }: any) {
+  const { setGeneratedPdfDraft } = useDomainData();
+  const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
   const [customer, setCustomer] = useState("");
   const [dueInDays, setDueInDays] = useState(30);
@@ -613,7 +615,14 @@ function InvoicesTab({
     setLineItems([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
   };
 
-  const handleCreate = () => {
+  const generateInvoicePdf = (invoice: Invoice) => {
+    const subtotal=invoice.lineItems.reduce((sum,item)=>sum+item.quantity*item.unitPrice,0);
+    const total=invoiceTotal(invoice);
+    setGeneratedPdfDraft({filename:`${invoice.invoiceNumber}.pdf`,title:`Invoice ${invoice.invoiceNumber}`,sourceType:"Invoice",sourceId:invoice.id,customerName:invoice.customer,representativeName:loggedInUser?.name||loggedInUser?.email||"Company Representative",lines:[`Customer: ${invoice.customer}`,`Issued: ${invoice.issuedDate}`,`Due: ${invoice.dueDate}`,`Status: ${invoice.status}`,"",...invoice.lineItems.map(item=>`${item.description} — ${item.quantity} × ${fmt(item.unitPrice)} = ${fmt(item.quantity*item.unitPrice)}`),"",`Subtotal: ${fmt(subtotal)}`,`Tax (${invoice.taxRate}%): ${fmt(total-subtotal)}`,`Total: ${fmt(total)}`,`Amount paid: ${fmt(invoice.amountPaid)}`,`Balance due: ${fmt(invoiceBalanceDue(invoice))}`,"",`Notes: ${invoice.notes||"—"}`]});
+    navigateToScreen("documents");
+  };
+
+  const handleCreate = (openPdf = false) => {
     if (!customer.trim() || lineItems.every(li => !li.description.trim())) {
       triggerNotification("Add a customer and at least one line item.");
       return;
@@ -635,6 +644,7 @@ function InvoicesTab({
     setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoiceCreatedEntry(invoice, loggedInUser?.email)]);
     if (logOperationalEvent) logOperationalEvent("Invoice Created", `${invoice.invoiceNumber} for ${invoice.customer}: ${fmt(invoiceTotal(invoice))}`, "🧾");
     triggerNotification(`Invoice ${invoice.invoiceNumber} created for ${fmt(invoiceTotal(invoice))}.`);
+    if (openPdf) generateInvoicePdf(invoice);
     resetForm();
     setIsCreating(false);
   };
@@ -774,6 +784,7 @@ function InvoicesTab({
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center">
+                  <button onClick={()=>generateInvoicePdf(inv)} className="mr-2 text-emerald-700 font-bold text-[10px] hover:underline cursor-pointer">Generate PDF</button>
                   {canEdit && invoiceBalanceDue(inv) > 0 && (
                     <button
                       onClick={() => {
@@ -859,7 +870,8 @@ function InvoicesTab({
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={() => setIsCreating(false)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold">Cancel</button>
-              <button onClick={handleCreate} className="flex-1 py-2 bg-[#315C9F] text-white rounded-xl text-xs font-bold">Create Invoice</button>
+              <button onClick={() => handleCreate(true)} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">Generate PDF</button>
+              <button onClick={() => handleCreate(false)} className="flex-1 py-2 bg-[#315C9F] text-white rounded-xl text-xs font-bold">Create Invoice</button>
             </div>
           </div>
         </div>

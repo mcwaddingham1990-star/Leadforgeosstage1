@@ -4,9 +4,10 @@ import "./selfiesave-editor.css";
 // worker version locked to whatever `pdfjs-dist` is installed -- no risk of
 // a stale/mismatched worker file drifting out of sync with the library.
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import type { GeneratedPdfDraft } from "../types/generatedPdf";
 
 type FieldKind = "signature" | "initials";
-type SignField = { id:number; party:number; line:number; kind:FieldKind; signed:boolean; committed:boolean; name?:string; image?:string; stamp?:string; centralStamp?:string; coords?:string };
+type SignField = { id:number; party:number; line:number; kind:FieldKind; signed:boolean; committed:boolean; role?:string; name?:string; image?:string; stamp?:string; centralStamp?:string; coords?:string };
 type CanvasObject = { id:number; kind:"text"|"image"|"link"|"video"; page:number; x:number; y:number; w:number; h:number; value:string; scale?:number; source?:"pdf"; fontSize?:number; fontFamily?:string; backgroundColor?:string };
 type Placement = { page?:number; x:number; y:number; w?:number; h?:number };
 type Features = { signatures:boolean; initials:boolean; selfies:boolean; photoId:boolean; location:boolean; displayLocation:boolean; timestamps:boolean; draftingDate:boolean };
@@ -45,11 +46,12 @@ export interface SelfieSaveEditorProps {
   // what makes the Documents Hub's "Open PDF" / "Edit PDF" buttons go
   // straight from click to file picker to loaded document, no extra UI.
   autoOpenPdfPicker?: boolean;
+  initialDraft?: GeneratedPdfDraft | null;
   onClose: () => void;
   onSave: (docId: string, updatedName: string, metaProperties?: any) => void;
 }
 
-export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,autoOpenPdfPicker,onClose,onSave}:SelfieSaveEditorProps){
+export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,autoOpenPdfPicker,initialDraft,onClose,onSave}:SelfieSaveEditorProps){
   const [splash,setSplash]=useState(true);
   const [setup,setSetup]=useState(!autoOpenPdfPicker);
   const [features,setFeatures]=useState(defaultFeatures);
@@ -90,10 +92,32 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const lastScrollTopRef=useRef(0);
   const nextIdRef=useRef(Date.now());
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
+  const initialDraftLoadedRef=useRef(false);
   const dragRef=useRef<{key:string;pointerId:number;offsetX:number;offsetY:number;w:number;h:number;start:{clientX:number;clientY:number;x:number;y:number;page:number}}|null>(null);
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
   useEffect(()=>{const t=setTimeout(()=>setSplash(false),1400);return()=>clearTimeout(t)},[]);
+  useEffect(()=>{
+    if(!initialDraft||initialDraftLoadedRef.current)return;
+    initialDraftLoadedRef.current=true;
+    const base=Date.now();
+    const body=[initialDraft.title,"",...initialDraft.lines,"",`Customer signer: ${initialDraft.customerName}`,`Company representative: ${initialDraft.representativeName}`].join("\n");
+    setFilename(initialDraft.filename.replace(/\.pdf$/i,""));
+    setObjects([{id:base,kind:"text",page:1,x:70,y:105,w:680,h:430,value:body,scale:1,fontSize:12,fontFamily:"Arial, Helvetica, sans-serif"}]);
+    setFields([
+      {id:base+1,party:1,line:1,kind:"signature",role:`Customer — ${initialDraft.customerName}`,signed:false,committed:false},
+      {id:base+2,party:1,line:1,kind:"initials",role:`Customer — ${initialDraft.customerName}`,signed:false,committed:false},
+      {id:base+3,party:2,line:1,kind:"signature",role:`Company representative — ${initialDraft.representativeName}`,signed:false,committed:false},
+      {id:base+4,party:2,line:1,kind:"initials",role:`Company representative — ${initialDraft.representativeName}`,signed:false,committed:false}
+    ]);
+    setPlacements({
+      [`field:${base+1}`]:{page:1,x:70,y:575,w:325,h:90},
+      [`field:${base+2}`]:{page:1,x:70,y:690,w:325,h:90},
+      [`field:${base+3}`]:{page:1,x:425,y:575,w:325,h:90},
+      [`field:${base+4}`]:{page:1,x:425,y:690,w:325,h:90}
+    });
+    setSetup(false);setSplash(false);setPageCount(1);
+  },[initialDraft]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
   useEffect(()=>{
     const updatePdfSelection=()=>{

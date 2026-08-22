@@ -1,6 +1,7 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
 import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
+import type { GeneratedPdfDraft } from "../types/generatedPdf";
 
 export interface RosterEntry {
   id?: string;
@@ -73,6 +74,8 @@ export interface DomainDataContextValue {
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
   setPreSelectedCustomerId: Dispatch<SetStateAction<string | undefined>>;
+  generatedPdfDraft: GeneratedPdfDraft | null;
+  setGeneratedPdfDraft: Dispatch<SetStateAction<GeneratedPdfDraft | null>>;
 }
 
 export const DomainDataContext = createContext<DomainDataContextValue | undefined>(undefined);
