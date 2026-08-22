@@ -346,13 +346,13 @@ export const EstimatesPage: React.FC = () => {
               <Download className="w-3.5 h-3.5" />
               Export
             </button>
+            <button
+              type="button"
+              disabled={!formCustomerName.trim()}
+              onClick={() => handleAddEstimate(true)}
+              className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300"
+            >Generate PDF</button>
             {onTakeSnapshot && (
-              <button
-                type="button"
-                disabled={!formCustomerName.trim()}
-                onClick={() => handleAddEstimate(true)}
-                className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300"
-              >Generate PDF</button>
               <button
                 onClick={() =>
                   onTakeSnapshot("estimates", "Estimates & Bids", {
