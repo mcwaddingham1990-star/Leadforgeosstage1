@@ -28,6 +28,7 @@ import {
   invoiceTotal
 } from "../lib/accountingEngine";
 import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
+import { composeEmail, composeSms } from "../lib/deviceHandoff";
 import type { DocumentItem } from "../types/domain";
 import {
   LayoutDashboard,
@@ -962,8 +963,13 @@ function InvoicesTab({
             <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between gap-2 shrink-0">
               {(() => {
                 const match = customers.find((c: any) => c.contact === viewingInvoice.customer || c.company === viewingInvoice.customer);
+                const total = invoiceTotal(viewingInvoice);
                 return (
-                  <button onClick={() => match ? navigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Open Customer</button>
+                  <div className="flex gap-2">
+                    <button onClick={() => match ? navigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Open Customer</button>
+                    <button disabled={!match?.email} onClick={() => composeEmail({ to: match?.email, subject: `Invoice ${viewingInvoice.invoiceNumber}`, body: `Hi ${viewingInvoice.customer},\n\nPlease find invoice ${viewingInvoice.invoiceNumber} attached (Generate PDF, then attach the download).\n\nTotal: ${fmt(total)}\nDue: ${viewingInvoice.dueDate}` })} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Email</button>
+                    <button disabled={!match?.phone} onClick={() => composeSms({ to: match?.phone, body: `Hi ${viewingInvoice.customer}, invoice ${viewingInvoice.invoiceNumber} total is ${fmt(total)}, due ${viewingInvoice.dueDate}.` })} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Text</button>
+                  </div>
                 );
               })()}
               <div className="flex gap-2">

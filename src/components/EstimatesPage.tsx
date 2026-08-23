@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { CustomerPickerModal } from "./CustomerPickerModal";
 import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
+import { composeEmail, composeSms } from "../lib/deviceHandoff";
 import type { DocumentItem } from "../types/domain";
 
 export type { Estimate } from "../types/domain";
@@ -1185,12 +1186,28 @@ export const EstimatesPage: React.FC = () => {
                 {!isEditMode && (() => {
                   const match = customers.find(c => c.contact === selectedEstimate.customerName || c.company === selectedEstimate.company);
                   return (
-                    <button
-                      onClick={() => match ? onNavigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")}
-                      className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                    >
-                      Open Customer
-                    </button>
+                    <>
+                      <button
+                        onClick={() => match ? onNavigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")}
+                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        Open Customer
+                      </button>
+                      <button
+                        disabled={!match?.email}
+                        onClick={() => composeEmail({ to: match?.email, subject: `Estimate ${selectedEstimate.number}`, body: `Hi ${selectedEstimate.customerName},\n\nPlease find your estimate ${selectedEstimate.number} attached (Generate PDF, then attach the download).\n\nTotal: $${selectedEstimate.amount.toLocaleString()}` })}
+                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Email
+                      </button>
+                      <button
+                        disabled={!match?.phone}
+                        onClick={() => composeSms({ to: match?.phone, body: `Hi ${selectedEstimate.customerName}, your estimate ${selectedEstimate.number} total is $${selectedEstimate.amount.toLocaleString()}.` })}
+                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Text
+                      </button>
+                    </>
                   );
                 })()}
               </div>
