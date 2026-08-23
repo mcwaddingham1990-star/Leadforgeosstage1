@@ -96,7 +96,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, generatedPdfDraft, setGeneratedPdfDraft } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, generatedPdfDraft, setGeneratedPdfDraft, businessProfile } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -1637,9 +1637,11 @@ export const DocumentsPage: React.FC = () => {
           accountName={loggedInUser?.name}
           documentId={pdfEditorDocId}
           initialFilename={pdfEditorDocName ? pdfEditorDocName.replace(/\.pdf$/i, "") : undefined}
-          initialPdfBase64={pdfEditorBase64 || undefined}
+          initialPdfBase64={pdfEditorBase64 || generatedPdfDraft?.pdfBase64 || undefined}
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
-          initialDraft={generatedPdfDraft}
+          initialDraft={generatedPdfDraft?.pdfBase64 ? null : generatedPdfDraft}
+          signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : null}
+          businessProfile={businessProfile}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
         />

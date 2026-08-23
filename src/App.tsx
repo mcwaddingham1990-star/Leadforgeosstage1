@@ -3361,7 +3361,14 @@ Access to full financial telemetry is restricted.`;
     preSelectedCustomerId,
     setPreSelectedCustomerId,
     generatedPdfDraft,
-    setGeneratedPdfDraft
+    setGeneratedPdfDraft,
+    businessProfile: {
+      name: businessNames[0] || "",
+      phone: businessPhones[0] || "",
+      address: businessAddresses[0] || "",
+      email: businessId || "",
+      logo: businessLogos[0] || ""
+    }
   };
 
   const navTelemetryContextValue: NavTelemetryContextValue = {

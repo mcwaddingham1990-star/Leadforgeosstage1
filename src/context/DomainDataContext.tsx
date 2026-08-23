@@ -76,6 +76,8 @@ export interface DomainDataContextValue {
   setPreSelectedCustomerId: Dispatch<SetStateAction<string | undefined>>;
   generatedPdfDraft: GeneratedPdfDraft | null;
   setGeneratedPdfDraft: Dispatch<SetStateAction<GeneratedPdfDraft | null>>;
+  /** Real business profile (Settings -> Business Info), used to head every generated PDF and to place the HQ pin on the map. First location only -- multi-location businesses print/pin their primary address. */
+  businessProfile: { name: string; phone: string; address: string; email: string; logo: string };
 }
 
 export const DomainDataContext = createContext<DomainDataContextValue | undefined>(undefined);

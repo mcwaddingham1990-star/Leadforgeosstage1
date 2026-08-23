@@ -35,6 +35,8 @@ import {
   Users
 } from "lucide-react";
 import { CustomerPickerModal } from "./CustomerPickerModal";
+import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
+import type { DocumentItem } from "../types/domain";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -45,7 +47,7 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft, documents, setDocuments, businessProfile } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -107,9 +109,51 @@ export const EstimatesPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const generateEstimatePdf = (est: Estimate) => {
-    setGeneratedPdfDraft({filename:`${est.number}.pdf`,title:`Estimate ${est.number}`,sourceType:"Estimate",sourceId:est.id,customerName:est.customerName,representativeName:est.salesRep||loggedInUser?.name||"Company Representative",lines:[`Customer: ${est.customerName}`,`Company: ${est.company||"—"}`,`Created: ${est.createdDate}`,`Expires: ${est.expirationDate}`,`Status: ${est.status}`,`Estimated total: $${Number(est.amount||0).toLocaleString()}`,"",`Scope / Notes: ${est.notes||"—"}`]});
+  // Builds a real PDF from the actual estimate data right now (no signing
+  // required), saves it to the Documents Hub immediately, then opens the
+  // PDF Editor so the owner can review it and optionally capture
+  // signatures. This is the estimate's "Generate PDF" action everywhere it
+  // appears (create form, review screen).
+  const generateEstimatePdf = async (est: Estimate) => {
+    const matchedCustomer = customers.find(c => c.contact === est.customerName || c.company === est.company);
+    const bytes = await buildEstimatePdf(est, matchedCustomer, businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const docId = `doc_estimate_${est.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: `${est.number}.pdf`,
+      customer: est.customerName,
+      employee: loggedInUser?.name || "Staff Administrator",
+      vendor: "None",
+      job: "None",
+      type: "Estimates",
+      folder: "Estimates",
+      uploadedBy: loggedInUser?.name || "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: "Generated from the Estimates PDF Editor.",
+      tags: ["Estimate", "Generated"],
+      estimateId: est.id,
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    (newDoc as any).pdfBase64 = pdfBase64;
+    setDocuments(prev => [...prev, newDoc]);
+    setGeneratedPdfDraft({
+      filename: `${est.number}.pdf`,
+      title: `Estimate ${est.number}`,
+      sourceType: "Estimate",
+      sourceId: est.id,
+      customerName: est.customerName,
+      representativeName: est.salesRep || loggedInUser?.name || "Company Representative",
+      lines: [],
+      pdfBase64
+    });
     onNavigateToScreen("documents");
+    if (logOperationalEvent) logOperationalEvent("Estimate PDF Generated", `${est.number} for ${est.customerName}`, "📄");
   };
 
   const handleAddEstimate = (openPdf = false) => {
@@ -140,7 +184,7 @@ export const EstimatesPage: React.FC = () => {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
     }
     setIsAddModalOpen(false);
-    if (openPdf) generateEstimatePdf(newEst);
+    if (openPdf) void generateEstimatePdf(newEst);
   };
 
   const openViewModal = (est: Estimate) => {
@@ -176,7 +220,7 @@ export const EstimatesPage: React.FC = () => {
     }
     setSelectedEstimate(updated);
     setIsEditMode(false);
-    if (openPdf) generateEstimatePdf(updated);
+    if (openPdf) void generateEstimatePdf(updated);
     if (selectedEstimate.status !== "Accepted" && updated.status === "Accepted") {
       setConversionComplete(false);
       setIsConversionOpen(true);
@@ -346,12 +390,6 @@ export const EstimatesPage: React.FC = () => {
               <Download className="w-3.5 h-3.5" />
               Export
             </button>
-            <button
-              type="button"
-              disabled={!formCustomerName.trim()}
-              onClick={() => handleAddEstimate(true)}
-              className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300"
-            >Generate PDF</button>
             {onTakeSnapshot && (
               <button
                 onClick={() =>
@@ -637,7 +675,7 @@ export const EstimatesPage: React.FC = () => {
                 onClick={() => {
                   if (btn.label === "Generate PDF") {
                     const target = selectedEstimate || estimates[0];
-                    if (target) generateEstimatePdf(target);
+                    if (target) void generateEstimatePdf(target);
                     else triggerNotification("Create or select an estimate first.");
                   } else if (btn.label === "Convert to Job") {
                     if (convertibleEstimates.length === 0) {
@@ -948,6 +986,14 @@ export const EstimatesPage: React.FC = () => {
               >
                 Save Estimate
               </button>
+              <button
+                type="button"
+                disabled={!formCustomerName.trim()}
+                onClick={() => handleAddEstimate(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
+              >
+                Generate PDF
+              </button>
             </div>
           </div>
         </div>
@@ -1158,7 +1204,7 @@ export const EstimatesPage: React.FC = () => {
                   </button>
                 )}
                 {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit(true)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Generate PDF</button>}
-                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
+                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
               </div>
             </div>
           </div>

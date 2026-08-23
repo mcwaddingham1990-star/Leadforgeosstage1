@@ -22,6 +22,7 @@
     "firebase-admin": "^14.2.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.7.284",
     "plaid": "^45.0.0",
     "react": "^19.0.1",
