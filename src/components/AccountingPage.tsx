@@ -27,6 +27,8 @@ import {
   postRefundEntry,
   invoiceTotal
 } from "../lib/accountingEngine";
+import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
+import type { DocumentItem } from "../types/domain";
 import {
   LayoutDashboard,
   FileText,
@@ -599,7 +601,7 @@ function InvoicesTab({
   logOperationalEvent,
   loggedInUser
 }: any) {
-  const { setGeneratedPdfDraft } = useDomainData();
+  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
   const [customer, setCustomer] = useState("");
@@ -608,6 +610,7 @@ function InvoicesTab({
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
 
   const resetForm = () => {
     setCustomer("");
@@ -615,11 +618,50 @@ function InvoicesTab({
     setLineItems([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
   };
 
-  const generateInvoicePdf = (invoice: Invoice) => {
-    const subtotal=invoice.lineItems.reduce((sum,item)=>sum+item.quantity*item.unitPrice,0);
-    const total=invoiceTotal(invoice);
-    setGeneratedPdfDraft({filename:`${invoice.invoiceNumber}.pdf`,title:`Invoice ${invoice.invoiceNumber}`,sourceType:"Invoice",sourceId:invoice.id,customerName:invoice.customer,representativeName:loggedInUser?.name||loggedInUser?.email||"Company Representative",lines:[`Customer: ${invoice.customer}`,`Issued: ${invoice.issuedDate}`,`Due: ${invoice.dueDate}`,`Status: ${invoice.status}`,"",...invoice.lineItems.map(item=>`${item.description} — ${item.quantity} × ${fmt(item.unitPrice)} = ${fmt(item.quantity*item.unitPrice)}`),"",`Subtotal: ${fmt(subtotal)}`,`Tax (${invoice.taxRate}%): ${fmt(total-subtotal)}`,`Total: ${fmt(total)}`,`Amount paid: ${fmt(invoice.amountPaid)}`,`Balance due: ${fmt(invoiceBalanceDue(invoice))}`,"",`Notes: ${invoice.notes||"—"}`]});
+  // Builds a real PDF from the actual invoice data right now (no signing
+  // required), saves it to the Documents Hub immediately, then opens the
+  // PDF Editor for review/signing. This is the invoice's "Generate PDF"
+  // action everywhere it appears (create form, table row, review screen).
+  const generateInvoicePdf = async (invoice: Invoice) => {
+    const matchedCustomer = customers.find((c: any) => c.contact === invoice.customer || c.company === invoice.customer);
+    const bytes = await buildInvoicePdf(invoice, matchedCustomer, businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const docId = `doc_invoice_${invoice.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: `${invoice.invoiceNumber}.pdf`,
+      customer: invoice.customer,
+      employee: loggedInUser?.name || "Staff Administrator",
+      vendor: "None",
+      job: invoice.jobId || "None",
+      type: "Invoices",
+      folder: "Invoices",
+      uploadedBy: loggedInUser?.name || "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: "Generated from the Invoices PDF Editor.",
+      tags: ["Invoice", "Generated"],
+      estimateId: invoice.estimateId || "None",
+      invoiceId: invoice.id,
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    (newDoc as any).pdfBase64 = pdfBase64;
+    setDocuments((prev: DocumentItem[]) => [...prev, newDoc]);
+    setGeneratedPdfDraft({
+      filename: `${invoice.invoiceNumber}.pdf`,
+      title: `Invoice ${invoice.invoiceNumber}`,
+      sourceType: "Invoice",
+      sourceId: invoice.id,
+      customerName: invoice.customer,
+      representativeName: loggedInUser?.name || loggedInUser?.email || "Company Representative",
+      lines: [],
+      pdfBase64
+    });
     navigateToScreen("documents");
+    if (logOperationalEvent) logOperationalEvent("Invoice PDF Generated", `${invoice.invoiceNumber} for ${invoice.customer}`, "📄");
   };
 
   const handleCreate = (openPdf = false) => {
@@ -644,7 +686,7 @@ function InvoicesTab({
     setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoiceCreatedEntry(invoice, loggedInUser?.email)]);
     if (logOperationalEvent) logOperationalEvent("Invoice Created", `${invoice.invoiceNumber} for ${invoice.customer}: ${fmt(invoiceTotal(invoice))}`, "🧾");
     triggerNotification(`Invoice ${invoice.invoiceNumber} created for ${fmt(invoiceTotal(invoice))}.`);
-    if (openPdf) generateInvoicePdf(invoice);
+    if (openPdf) void generateInvoicePdf(invoice);
     resetForm();
     setIsCreating(false);
   };
@@ -784,7 +826,8 @@ function InvoicesTab({
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <button onClick={()=>generateInvoicePdf(inv)} className="mr-2 text-emerald-700 font-bold text-[10px] hover:underline cursor-pointer">Generate PDF</button>
+                  <button onClick={()=>setViewingInvoice(inv)} className="mr-2 text-[#315C9F] font-bold text-[10px] hover:underline cursor-pointer">View</button>
+                  <button onClick={()=>void generateInvoicePdf(inv)} className="mr-2 text-emerald-700 font-bold text-[10px] hover:underline cursor-pointer">Generate PDF</button>
                   {canEdit && invoiceBalanceDue(inv) > 0 && (
                     <button
                       onClick={() => {
@@ -870,8 +913,55 @@ function InvoicesTab({
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={() => setIsCreating(false)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold">Cancel</button>
-              <button onClick={() => handleCreate(true)} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">Generate PDF</button>
               <button onClick={() => handleCreate(false)} className="flex-1 py-2 bg-[#315C9F] text-white rounded-xl text-xs font-bold">Create Invoice</button>
+              <button onClick={() => handleCreate(true)} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">Generate PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingInvoice && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="font-black text-sm uppercase tracking-wider">Invoice {viewingInvoice.invoiceNumber}</h3>
+              <button onClick={() => setViewingInvoice(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="bg-[#EAF5FF] p-4 rounded-2xl border border-[#9EC8EF]/60 space-y-2">
+                <div className="flex justify-between">
+                  <div>
+                    <p className="font-bold text-[#1F3557] text-sm">{viewingInvoice.customer}</p>
+                    <p className="text-[#5E7393]">Issued {viewingInvoice.issuedDate} · Due {viewingInvoice.dueDate}</p>
+                  </div>
+                  <span className="px-2.5 py-0.5 h-fit bg-[#315C9F] text-white font-extrabold uppercase text-[9px] rounded-lg">{viewingInvoice.status}</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase font-bold text-[#5E7393]">Line items</p>
+                {viewingInvoice.lineItems.map(item => (
+                  <div key={item.id} className="flex justify-between border-b border-[#9EC8EF]/20 py-1">
+                    <span>{item.description} — {item.quantity} × {fmt(item.unitPrice)}</span>
+                    <span className="font-mono">{fmt(item.quantity * item.unitPrice)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-right space-y-1 pt-2 border-t border-slate-100">
+                <p>Subtotal: <span className="font-mono">{fmt(viewingInvoice.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))}</span></p>
+                <p>Tax ({viewingInvoice.taxRate}%): <span className="font-mono">{fmt(invoiceTotal(viewingInvoice) - viewingInvoice.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))}</span></p>
+                <p className="font-black text-[#1F3557]">Total: <span className="font-mono">{fmt(invoiceTotal(viewingInvoice))}</span></p>
+                <p>Balance due: <span className="font-mono font-bold">{fmt(invoiceBalanceDue(viewingInvoice))}</span></p>
+              </div>
+              {viewingInvoice.notes && (
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-[#5E7393]">Notes</p>
+                  <p className="bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl">{viewingInvoice.notes}</p>
+                </div>
+              )}
+            </div>
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-2 shrink-0">
+              <button onClick={() => setViewingInvoice(null)} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Close</button>
+              <button onClick={() => void generateInvoicePdf(viewingInvoice)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Generate PDF</button>
             </div>
           </div>
         </div>
