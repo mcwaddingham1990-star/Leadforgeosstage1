@@ -96,7 +96,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, generatedPdfDraft, setGeneratedPdfDraft, businessProfile } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -146,6 +146,32 @@ export const DocumentsPage: React.FC = () => {
     setIsPDFEditorOpen(true);
   }, [generatedPdfDraft]);
 
+  // "Collect Signatures" from a customer card -- open the PDF Editor
+  // straight to its file picker so the owner can choose the real document
+  // (from Device / Drive) they want signed, pre-filling that customer's
+  // name onto the default signer role.
+  useEffect(() => {
+    if (!pendingSignatureCapture) return;
+    setPdfEditorDocId(null);
+    setPdfEditorDocName("");
+    setPdfEditorBase64("");
+    setPdfEditorAutoOpenPicker(true);
+    setIsPDFEditorOpen(true);
+  }, [pendingSignatureCapture]);
+  const signatureCaptureHint = pendingSignatureCapture ? { customerName: pendingSignatureCapture.customerName } : null;
+
+  // Cross-navigation: "View Documents" from a customer card lands here
+  // already filtered to that customer's documents.
+  useEffect(() => {
+    if (!preSelectedCustomerId) return;
+    const match = customersList.find(c => c.id === preSelectedCustomerId);
+    if (match) {
+      setFilterCustomer(match.contact || match.company);
+      setShowAdvancedFilters(true);
+    }
+    setPreSelectedCustomerId(undefined);
+  }, [preSelectedCustomerId, customersList, setPreSelectedCustomerId]);
+
   // Documents hub tab
   type DocTab = 'all' | 'estimates' | 'invoices' | 'templates' | 'taxes' | 'signed';
   const [activeDocTab, setActiveDocTab] = useState<DocTab>('all');
@@ -153,6 +179,7 @@ export const DocumentsPage: React.FC = () => {
   const closePDFEditor = () => {
     setIsPDFEditorOpen(false);
     setGeneratedPdfDraft(null);
+    setPendingSignatureCapture(null);
   };
 
   // Dynamic directory lists for Create Folder action
@@ -241,7 +268,7 @@ export const DocumentsPage: React.FC = () => {
         const newDoc: DocumentItem = {
           id: docId,
           name: updatedName,
-          customer: generatedPdfDraft?.customerName || "None",
+          customer: generatedPdfDraft?.customerName || pendingSignatureCapture?.customerName || "None",
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
           job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
@@ -1640,7 +1667,7 @@ export const DocumentsPage: React.FC = () => {
           initialPdfBase64={pdfEditorBase64 || generatedPdfDraft?.pdfBase64 || undefined}
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
           initialDraft={generatedPdfDraft?.pdfBase64 ? null : generatedPdfDraft}
-          signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : null}
+          signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : signatureCaptureHint}
           businessProfile={businessProfile}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}

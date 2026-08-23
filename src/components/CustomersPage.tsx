@@ -40,7 +40,10 @@ import {
 } from "lucide-react";
 
 export type { Customer } from "../types/domain";
-import type { Customer } from "../types/domain";
+import type { Customer, DocumentItem } from "../types/domain";
+import type { ProjectCompletionPlan } from "../types/completion";
+import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
+import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 
 export interface CustomersPageProps {
   // NOTE: this page calls onOpenPlaceholder("estimates")/("scheduling", "icon")
@@ -57,7 +60,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setGeneratedPdfDraft } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
   const {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
@@ -65,7 +68,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     logOperationalEvent,
     triggerNotification
   } = useNavTelemetry();
-  const { loggedInUser } = useAuth();
+  const { loggedInUser, businessId } = useAuth();
+  // Real job-completion plans (summary, per-goal notes, the completing
+  // employee's name, materials used) -- same collection JobsPage feeds into
+  // ProjectCompletionTracking. Read-only here, just to fold real job notes
+  // into "Compile Documents."
+  const [completionPlans] = useFirestoreCollection<ProjectCompletionPlan>("project_completion_plans", businessId);
   const canCreateCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "edit");
   const canDeleteCustomer = hasPermission(loggedInUser?.granularPermissions, "customers", "delete");
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,15 +89,101 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const customers = propCustomers || localCustomers;
   const setCustomers = propSetCustomers || setLocalCustomers;
   const pendingCustomers = useMemo(() => customers.filter(customer => customer.pendingConfirmation), [customers]);
-  const compileCustomerDocuments = (customer: Customer) => {
-    const names=[customer.id,customer.contact,customer.company].filter(Boolean);
-    const customerEstimates=estimates.filter(item=>names.includes(item.customerName)||names.includes(item.company));
-    const customerInvoices=invoices.filter(item=>names.includes(item.customer));
-    const customerJobs=schedulingEvents.filter(item=>names.includes(item.customer)||item.customerId===customer.id);
-    const customerDocs=documents.filter(item=>names.includes(item.customer));
-    const lines=[`Customer: ${customer.contact}`,`Company: ${customer.company||"—"}`,`Phone: ${customer.phone||"—"}`,`Email: ${customer.email||"—"}`,`Address: ${customer.address||"—"}`,"",`Estimates (${customerEstimates.length}): ${customerEstimates.map(item=>item.number).join(", ")||"None"}`,`Invoices (${customerInvoices.length}): ${customerInvoices.map(item=>item.invoiceNumber).join(", ")||"None"}`,`Jobs (${customerJobs.length}): ${customerJobs.map(item=>item.jobNumber||item.id).join(", ")||"None"}`,`Documents (${customerDocs.length}): ${customerDocs.map(item=>item.name).join(", ")||"None"}`];
-    setGeneratedPdfDraft({filename:`${customer.company||customer.contact}-documents.pdf`,title:"Customer Document Summary",sourceType:"Customer",sourceId:customer.id,customerName:customer.contact||customer.company,representativeName:loggedInUser?.name||"Company Representative",lines});
+  // Real "Compile Documents": builds one actual merged PDF containing the
+  // customer's estimate(s), invoice(s), job planning/summary + the
+  // completing employee's notes and checklist, and any receipts/other
+  // documents on file -- not a text list of ID numbers.
+  const compileCustomerDocuments = async (customer: Customer) => {
+    const names = [customer.id, customer.contact, customer.company].filter(Boolean);
+    const customerEstimates = estimates.filter(item => names.includes(item.customerName) || names.includes(item.company));
+    const customerInvoices = invoices.filter(item => names.includes(item.customer));
+    const customerJobs = schedulingEvents.filter(item => names.includes(item.customer) || item.customerId === customer.id);
+    const customerDocs = documents.filter(item => names.includes(item.customer));
+    triggerNotification("Compiling documents into one PDF…");
+
+    const parts: Uint8Array[] = [];
+    parts.push(await buildCustomerProfilePdf(customer, { estimates: customerEstimates, invoices: customerInvoices }, businessProfile));
+
+    for (const est of customerEstimates) {
+      const savedDoc = customerDocs.find(d => d.estimateId === est.id && (d as any).pdfBase64);
+      parts.push(savedDoc ? base64ToBytes((savedDoc as any).pdfBase64) : await buildEstimatePdf(est, customer, businessProfile));
+    }
+    for (const inv of customerInvoices) {
+      const savedDoc = customerDocs.find(d => d.invoiceId === inv.id && (d as any).pdfBase64);
+      parts.push(savedDoc ? base64ToBytes((savedDoc as any).pdfBase64) : await buildInvoicePdf(inv, customer, businessProfile));
+    }
+    for (const job of customerJobs) {
+      const plan = completionPlans.find(p => p.jobId === job.id);
+      const sections: Array<{ heading?: string; body: string }> = [
+        { heading: "Job", body: `${job.title || job.jobNumber || job.id} — ${job.eventType}${job.customType ? ` (${job.customType})` : ""}\n${job.date} ${job.startTime}-${job.endTime} · Status: ${job.status}\nAssigned: ${job.assignedEmployee || "Unassigned"}` },
+        { heading: "Notes", body: job.notes || plan?.summary || "No notes on file." }
+      ];
+      if (job.checklist?.length) {
+        sections.push({ heading: "Completion checklist", body: job.checklist.map(c => `${c.completed ? "[x]" : "[ ]"} ${c.label}${c.completedBy ? ` — ${c.completedBy}${c.completedAt ? ` (${c.completedAt})` : ""}` : ""}`).join("\n") });
+      }
+      if (plan) {
+        if (plan.overallGoal) sections.push({ heading: "Overall goal", body: plan.overallGoal });
+        plan.goals.forEach(goal => {
+          const goalLines = [goal.instructions, goal.projectNotes, goal.issuesDuringCompletion ? `Issues: ${goal.issuesDuringCompletion}` : "", goal.lastEmployeeName ? `Completed by: ${goal.lastEmployeeName}` : ""].filter(Boolean).join("\n");
+          sections.push({ heading: `Goal: ${goal.title} (${goal.status})`, body: goalLines || "—" });
+          if (goal.materials.length) {
+            sections.push({ heading: `Materials used — ${goal.title}`, body: goal.materials.map(m => `${m.quantity} × ${m.inventoryItemName}${m.notes ? ` (${m.notes})` : ""}`).join("\n") });
+          }
+        });
+      }
+      parts.push(await buildTextDocumentPdf(`Job Summary — ${job.title || job.jobNumber || job.id}`, sections, businessProfile));
+    }
+    // Receipts and any other real document already on file for this
+    // customer/job that isn't one of the estimates/invoices already merged
+    // above (e.g. a photographed receipt saved with its own PDF).
+    const usedDocIds = new Set(parts.length ? customerDocs.filter(d => d.estimateId !== "None" && customerEstimates.some(e => e.id === d.estimateId)).map(d => d.id) : []);
+    for (const doc of customerDocs) {
+      if (usedDocIds.has(doc.id)) continue;
+      if (doc.estimateId && doc.estimateId !== "None" && customerEstimates.some(e => e.id === doc.estimateId)) continue;
+      if (doc.invoiceId && doc.invoiceId !== "None" && customerInvoices.some(i => i.id === doc.invoiceId)) continue;
+      const pdfBase64 = (doc as any).pdfBase64;
+      if (pdfBase64) parts.push(base64ToBytes(pdfBase64));
+    }
+
+    const merged = await mergePdfs(parts);
+    const pdfBase64 = bytesToBase64(merged);
+    const filename = `${(customer.company || customer.contact || "Customer").replace(/[\\/:*?"<>|]+/g, "-")}-compiled-documents.pdf`;
+    const docId = `doc_compiled_${customer.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: filename,
+      customer: customer.contact || customer.company,
+      employee: loggedInUser?.name || "Staff Administrator",
+      vendor: "None",
+      job: "None",
+      type: "Contracts",
+      folder: "Customers",
+      uploadedBy: loggedInUser?.name || "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(merged.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: `Compiled from ${customerEstimates.length} estimate(s), ${customerInvoices.length} invoice(s), ${customerJobs.length} job(s).`,
+      tags: ["Compiled", "Customer Package"],
+      estimateId: "None",
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    (newDoc as any).pdfBase64 = pdfBase64;
+    setDocuments(prev => [...prev, newDoc]);
+    setGeneratedPdfDraft({
+      filename,
+      title: "Compiled Customer Documents",
+      sourceType: "Customer",
+      sourceId: customer.id,
+      customerName: customer.contact || customer.company,
+      representativeName: loggedInUser?.name || "Company Representative",
+      lines: [],
+      pdfBase64
+    });
     onNavigateToScreen("documents");
+    if (logOperationalEvent) logOperationalEvent("Documents Compiled", `${filename} (${customerEstimates.length} estimates, ${customerInvoices.length} invoices, ${customerJobs.length} jobs)`, "📎");
   };
 
   useEffect(() => {
@@ -106,6 +200,21 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFileError, setImportFileError] = useState<string | null>(null);
   const [importPreviewList, setImportPreviewList] = useState<Customer[]>([]);
+
+  // Cross-navigation: opening Customers from an estimate/invoice/job's
+  // "Open Customer" link (or any other page) lands here with that
+  // customer's card already selected.
+  useEffect(() => {
+    if (!preSelectedCustomerId) return;
+    const match = customers.find(c => c.id === preSelectedCustomerId);
+    if (match) setSelectedCustomer(match);
+    setPreSelectedCustomerId(undefined);
+  }, [preSelectedCustomerId, customers, setPreSelectedCustomerId]);
+
+  const openCollectSignatures = (customer: Customer) => {
+    setPendingSignatureCapture({ customerName: customer.contact || customer.company });
+    onNavigateToScreen("documents");
+  };
 
   const handleExportCSV = () => {
     const headers = ["ID", "Company Name", "Contact Person", "Phone", "Email", "Address", "Open Jobs", "Outstanding Balance ($)", "Lifetime Value ($)", "Status", "Customer Type", "VIP Status"];
@@ -303,7 +412,54 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setIsEditModalOpen(true);
   };
 
-  const handleAddCustomer = () => {
+  // Builds a real PDF of the customer profile (contact info, account
+  // summary, estimates/invoices on file) right now, saves it to the
+  // Documents Hub, then opens the PDF Editor for review/signing.
+  const generateCustomerPdf = async (cust: Customer) => {
+    const customerEstimates = estimates.filter(item => [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.customerName) || [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.company));
+    const customerInvoices = invoices.filter(item => [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.customer));
+    const bytes = await buildCustomerProfilePdf(cust, { estimates: customerEstimates, invoices: customerInvoices }, businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const filename = `${(cust.company || cust.contact || "Customer").replace(/[\\/:*?"<>|]+/g, "-")}.pdf`;
+    const docId = `doc_customer_${cust.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: filename,
+      customer: cust.contact || cust.company,
+      employee: loggedInUser?.name || "Staff Administrator",
+      vendor: "None",
+      job: "None",
+      type: "Contracts",
+      folder: "Customers",
+      uploadedBy: loggedInUser?.name || "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: "Generated from the Customer PDF Editor.",
+      tags: ["Customer", "Generated"],
+      estimateId: "None",
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    (newDoc as any).pdfBase64 = pdfBase64;
+    setDocuments(prev => [...prev, newDoc]);
+    setGeneratedPdfDraft({
+      filename,
+      title: "Customer Record",
+      sourceType: "Customer",
+      sourceId: cust.id,
+      customerName: cust.contact || cust.company,
+      representativeName: loggedInUser?.name || "Company Representative",
+      lines: [],
+      pdfBase64
+    });
+    onNavigateToScreen("documents");
+    if (logOperationalEvent) logOperationalEvent("Customer PDF Generated", filename, "📄");
+  };
+
+  const handleAddCustomer = (openPdf = false) => {
     if (!formContact.trim()) return;
     if (!canCreateCustomer) {
       triggerNotification("You don't have permission to add customers.");
@@ -336,15 +492,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     if (logOperationalEvent) {
       logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤");
     }
+    if (openPdf) void generateCustomerPdf(newCust);
   };
 
-  const handleEditCustomer = () => {
+  const handleEditCustomer = (openPdf = false) => {
     if (!selectedCustomer) return;
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
-    
-    setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? {
-      ...c,
+    const updated: Customer = {
+      ...selectedCustomer,
       company: formCompany.trim() || formContact.trim() + " Inc",
       contact: formContact.trim(),
       phone: phoneStr,
@@ -354,13 +510,16 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       status: formStatus,
       isVIP: formIsVIP,
       pendingConfirmation: false
-    } : c));
+    };
+
+    setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? updated : c));
     setIsEditModalOpen(false);
     setSelectedCustomer(null);
 
     if (logOperationalEvent) {
       logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝");
     }
+    if (openPdf) void generateCustomerPdf(updated);
   };
 
   const handleDeleteCustomer = () => {
@@ -723,14 +882,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 Schedule Job
               </button>
               <button
-                onClick={() => onOpenPlaceholder("estimates")}
+                onClick={() => selectedCustomer && onNavigateToScreen("jobs", { customerId: selectedCustomer.id })}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <Briefcase className="w-3.5 h-3.5 text-[#1F3557]" />
                 View Jobs
               </button>
               <button
-                onClick={() => onOpenPlaceholder("estimates")}
+                onClick={() => selectedCustomer && onNavigateToScreen("accounting", { customerId: selectedCustomer.id })}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <CreditCard className="w-3.5 h-3.5 text-[#1F3557]" />
@@ -744,17 +903,24 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 Message Customer
               </button>
               <button
-                onClick={() => selectedCustomer && compileCustomerDocuments(selectedCustomer)}
+                onClick={() => selectedCustomer && void compileCustomerDocuments(selectedCustomer)}
                 className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <FileText className="w-3.5 h-3.5" /> Compile Documents
               </button>
               <button
-                onClick={() => onOpenPlaceholder("estimates")}
+                onClick={() => selectedCustomer && onNavigateToScreen("documents", { customerId: selectedCustomer.id })}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <FolderOpen className="w-3.5 h-3.5 text-[#1F3557]" />
                 View Documents
+              </button>
+              <button
+                onClick={() => selectedCustomer && openCollectSignatures(selectedCustomer)}
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#1F3557]" />
+                Collect Signatures
               </button>
             </div>
           </div>
@@ -1183,12 +1349,20 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               <button
                 type="button"
                 disabled={!formContact.trim()}
-                onClick={handleAddCustomer}
+                onClick={() => handleAddCustomer(false)}
                 className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                   formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                 }`}
               >
                 Save Customer
+              </button>
+              <button
+                type="button"
+                disabled={!formContact.trim()}
+                onClick={() => handleAddCustomer(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
+              >
+                Generate PDF
               </button>
             </div>
           </div>
@@ -1549,12 +1723,20 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                   <button
                     type="button"
                     disabled={!formContact.trim()}
-                    onClick={handleEditCustomer}
+                    onClick={() => handleEditCustomer(false)}
                     className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                       formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                     }`}
                   >
                     Save Changes
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!formContact.trim()}
+                    onClick={() => handleEditCustomer(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
+                  >
+                    Generate PDF
                   </button>
                 </div>
               </>

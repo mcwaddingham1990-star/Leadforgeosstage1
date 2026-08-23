@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, Briefcase, Calendar, Check, CheckCircle2, ChevronRight,
   ChevronDown, ClipboardCheck, Clock, DollarSign, Edit3, FileText, Filter, MapPin,
@@ -45,7 +45,7 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, setGeneratedPdfDraft } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -68,6 +68,14 @@ export const JobsPage: React.FC = () => {
     return [...options.values()].sort((a, b) => (a.contact || a.company).localeCompare(b.contact || b.company));
   }, [customers, schedulingEvents]);
   const [search, setSearch] = useState("");
+  // Cross-navigation: "View Jobs" from a customer card lands here already
+  // filtered to that customer's jobs.
+  useEffect(() => {
+    if (!preSelectedCustomerId) return;
+    const match = customers.find(c => c.id === preSelectedCustomerId);
+    if (match) setSearch(match.contact || match.company);
+    setPreSelectedCustomerId(undefined);
+  }, [preSelectedCustomerId, customers, setPreSelectedCustomerId]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");

@@ -1173,7 +1173,7 @@ export const EstimatesPage: React.FC = () => {
             </div>
 
             <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between shrink-0">
-              <div>
+              <div className="flex gap-2">
                 {!isEditMode && (
                   <button
                     onClick={() => setIsEditMode(true)}
@@ -1182,6 +1182,17 @@ export const EstimatesPage: React.FC = () => {
                     Edit Proposal
                   </button>
                 )}
+                {!isEditMode && (() => {
+                  const match = customers.find(c => c.contact === selectedEstimate.customerName || c.company === selectedEstimate.company);
+                  return (
+                    <button
+                      onClick={() => match ? onNavigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")}
+                      className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      Open Customer
+                    </button>
+                  );
+                })()}
               </div>
               <div className="flex gap-2">
                 <button

@@ -1166,6 +1166,7 @@ export default function App() {
   const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
+  const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string } | null>(null);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
   // Read-only mirror for the Dashboard's Messages summary card -- MessagesPage
@@ -3362,6 +3363,8 @@ Access to full financial telemetry is restricted.`;
     setPreSelectedCustomerId,
     generatedPdfDraft,
     setGeneratedPdfDraft,
+    pendingSignatureCapture,
+    setPendingSignatureCapture,
     businessProfile: {
       name: businessNames[0] || "",
       phone: businessPhones[0] || "",

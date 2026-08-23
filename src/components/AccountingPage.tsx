@@ -959,9 +959,17 @@ function InvoicesTab({
                 </div>
               )}
             </div>
-            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-2 shrink-0">
-              <button onClick={() => setViewingInvoice(null)} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Close</button>
-              <button onClick={() => void generateInvoicePdf(viewingInvoice)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Generate PDF</button>
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between gap-2 shrink-0">
+              {(() => {
+                const match = customers.find((c: any) => c.contact === viewingInvoice.customer || c.company === viewingInvoice.customer);
+                return (
+                  <button onClick={() => match ? navigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Open Customer</button>
+                );
+              })()}
+              <div className="flex gap-2">
+                <button onClick={() => setViewingInvoice(null)} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Close</button>
+                <button onClick={() => void generateInvoicePdf(viewingInvoice)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Generate PDF</button>
+              </div>
             </div>
           </div>
         </div>
