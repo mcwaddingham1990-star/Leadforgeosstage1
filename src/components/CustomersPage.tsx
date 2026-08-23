@@ -1889,7 +1889,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          onOpenPlaceholder("estimates");
+                          onNavigateToScreen("estimates", { customerId: selectedCustomer.id });
                           setSelectedCustomer(null);
                         }}
                         className="p-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-left text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
@@ -1898,6 +1898,31 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                         Create Estimate
                       </button>
                     </div>
+                    {onOpenAIAnalysis && (
+                      <div className="grid grid-cols-3 gap-2 pt-1">
+                        <button
+                          onClick={() => onOpenAIAnalysis("customers", `AI Estimate — ${selectedCustomer.contact || selectedCustomer.company}`, `Draft a proposed estimate for ${selectedCustomer.company || selectedCustomer.contact} (${selectedCustomer.type}, address: ${selectedCustomer.address || "on file"}). Base pricing/scope on this business's real past estimates for similar customers when available.`)}
+                          className="p-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-center text-[10px] font-bold rounded-xl flex flex-col items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          AI Estimate
+                        </button>
+                        <button
+                          onClick={() => onOpenAIAnalysis("customers", `AI Invoice — ${selectedCustomer.contact || selectedCustomer.company}`, `Draft a proposed invoice for ${selectedCustomer.company || selectedCustomer.contact}, using this customer's real open jobs/estimates and outstanding balance ($${selectedCustomer.outstandingBalance.toLocaleString()}) on file.`)}
+                          className="p-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-center text-[10px] font-bold rounded-xl flex flex-col items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          AI Invoice
+                        </button>
+                        <button
+                          onClick={() => onOpenAIAnalysis("customers", `AI Job Planning — ${selectedCustomer.contact || selectedCustomer.company}`, `Draft a job plan (scope, sequence of tasks, estimated duration, materials to prep) for ${selectedCustomer.company || selectedCustomer.contact} based on this customer's real job/estimate history on file.`)}
+                          className="p-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-center text-[10px] font-bold rounded-xl flex flex-col items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          AI Job Planning
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
