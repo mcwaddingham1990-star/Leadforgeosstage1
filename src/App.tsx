@@ -3498,12 +3498,13 @@ Access to full financial telemetry is restricted.`;
           <div className="w-full min-h-[100dvh] sm:min-h-0 flex flex-col items-center justify-center sm:py-6">
             
             {/* Aspect ratio bounding box for the login card */}
-            <div 
+            <div
               id="login-card-container"
               ref={containerRef}
-              className="relative max-w-[440px] aspect-[1440/3200] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
+              className="relative max-w-[440px] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
               style={{
                 width: "min(440px, calc(100% - 24px))",
+                aspectRatio: isDarkTheme ? "539 / 833" : "1440 / 3200",
                 backgroundImage: `url(${isDarkTheme ? darkLoginCard : CARD_BG_URL})`
               }}
             >
