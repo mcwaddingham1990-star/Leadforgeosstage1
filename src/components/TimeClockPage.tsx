@@ -60,10 +60,6 @@ export interface EmployeeClockState {
   id: string;
   name: string;
   title: string;
-  // Not a tracked real field yet (no crew/department assignment system
-  // exists) — left undefined rather than assigned a fabricated category.
-  department?: string;
-  crew?: string;
   hourlyRate: number;
   status: "Off Duty" | "Clocked In" | "On Break" | "Traveling" | "Working" | "Overtime" | "Clocked Out";
   currentJobId?: string;
@@ -72,6 +68,7 @@ export interface EmployeeClockState {
   assignedVehicle?: string;
   assignedRoute?: string;
   hoursToday: number;
+  hoursThisWeek: number;
   hoursThisPayPeriod: number;
   overtimeHours: number;
   approved: boolean;
@@ -118,7 +115,6 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   // Advanced filters state
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  const [filterCrew, setFilterCrew] = useState("All");
   const [filterDepartment, setFilterDepartment] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterJob, setFilterJob] = useState("All");
@@ -146,7 +142,6 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [manualType, setManualType] = useState<"Clock In" | "Clock Out" | "Break Start" | "Break End">("Clock In");
-  const [manualHours, setManualHours] = useState("8.0");
   const [manualTimeStr, setManualTimeStr] = useState("08:00 AM");
   const [manualJobId, setManualJobId] = useState("");
   const [manualRoute, setManualRoute] = useState("");
@@ -243,11 +238,13 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const employees: EmployeeClockState[] = useMemo(() => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const payPeriodStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
     const buildFromLogs = (email: string, name: string, title: string, hourlyRate: number): EmployeeClockState => {
       const myLogs = timeClockLogs.filter(l => l.employeeEmail === email);
       const hoursToday = computeHoursFromLogs(myLogs, todayStart);
+      const hoursThisWeek = computeHoursFromLogs(myLogs, weekStart);
       const hoursThisPayPeriod = computeHoursFromLogs(myLogs, payPeriodStart);
       const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
       return {
@@ -261,6 +258,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         assignedVehicle: lastLog?.vehicle,
         assignedRoute: lastLog?.route,
         hoursToday: parseFloat(hoursToday.toFixed(2)),
+        hoursThisWeek: parseFloat(hoursThisWeek.toFixed(2)),
         hoursThisPayPeriod: parseFloat(hoursThisPayPeriod.toFixed(2)),
         // Real, disclosed methodology: hours beyond 40 in the trailing
         // 14-day window count as overtime. No configured pay-period
@@ -304,7 +302,6 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   // Reset Filters helper
   const handleResetFilters = () => {
     setSearchQuery("");
-    setFilterCrew("All");
     setFilterDepartment("All");
     setFilterStatus("All");
     setFilterJob("All");
@@ -347,9 +344,9 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       if (activeSummaryFilter === "OnBreak" && emp.status !== "On Break") return false;
       if (activeSummaryFilter === "Overtime" && emp.overtimeHours === 0) return false;
 
-      // Dropdown filters
-      if (filterCrew !== "All" && emp.crew !== filterCrew) return false;
-      if (filterDepartment !== "All" && emp.department !== filterDepartment) return false;
+      // Dropdown filters -- filters by the employee's real role (there is
+      // no crew/department assignment system to filter on instead).
+      if (filterDepartment !== "All" && emp.title !== filterDepartment) return false;
       if (filterStatus !== "All" && emp.status !== filterStatus) return false;
       if (filterJob !== "All") {
         if (filterJob === "Unassigned" && emp.currentJobId) return false;
@@ -358,7 +355,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
       return true;
     });
-  }, [employees, searchQuery, activeSummaryFilter, filterCrew, filterDepartment, filterStatus, filterJob]);
+  }, [employees, searchQuery, activeSummaryFilter, filterDepartment, filterStatus, filterJob]);
 
   // Selected Employee object
   const selectedEmployee = useMemo(() => {
@@ -769,7 +766,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                 setShowFiltersPanel(!showFiltersPanel);
               }}
               className={`px-4 py-2.5 border rounded-xl text-xs uppercase font-extrabold tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
-                showFiltersPanel || filterCrew !== "All" || filterDepartment !== "All" || filterStatus !== "All" || filterJob !== "All"
+                showFiltersPanel || filterDepartment !== "All" || filterStatus !== "All" || filterJob !== "All"
                   ? "bg-[#315C9F] text-white border-[#315C9F]"
                   : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
               }`}
@@ -810,32 +807,16 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         {showFiltersPanel && (
           <div className="bg-white border border-slate-200 p-4 rounded-xl mt-3 grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
             <div className="space-y-1">
-              <label className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Crew Branch</label>
-              <select
-                value={filterCrew}
-                onChange={(e) => setFilterCrew(e.target.value)}
-                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-              >
-                <option value="All">All Crews</option>
-                <option value="Crew Alpha">Crew Alpha</option>
-                <option value="Crew Beta">Crew Beta</option>
-                <option value="Crew Gamma">Crew Gamma</option>
-                <option value="Office Staff">Office Staff</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Department</label>
+              <label className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Role</label>
               <select
                 value={filterDepartment}
                 onChange={(e) => setFilterDepartment(e.target.value)}
                 className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
               >
-                <option value="All">All Departments</option>
-                <option value="Field">Field Operations</option>
-                <option value="Dispatch">Dispatch Crew</option>
-                <option value="Office">Office Admin</option>
-                <option value="Management">Management</option>
+                <option value="All">All Roles</option>
+                {[...new Set(employees.map(e => e.title).filter(Boolean))].sort().map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
               </select>
             </div>
 
@@ -1118,8 +1099,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               </div>
               <div className="bg-[#F9FAFB] border border-slate-100 rounded-xl p-2.5 text-center">
                 <p className="text-[8.5px] font-black text-slate-400 uppercase">Weekly</p>
-                <p className="text-sm font-black font-mono text-slate-700 mt-1">{(selectedEmployee.hoursThisPayPeriod * 0.9).toFixed(2)}</p>
-                <p className="text-[8px] text-slate-400">hours est.</p>
+                <p className="text-sm font-black font-mono text-slate-700 mt-1">{selectedEmployee.hoursThisWeek.toFixed(2)}</p>
+                <p className="text-[8px] text-slate-400">hours</p>
               </div>
               <div className="bg-[#F9FAFB] border border-slate-100 rounded-xl p-2.5 text-center">
                 <p className="text-[8.5px] font-black text-slate-400 uppercase">Pay Period</p>
@@ -1481,30 +1462,19 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Action Type</label>
-                  <select
-                    value={manualType}
-                    onChange={(e) => setManualType(e.target.value as any)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl focus:outline-none font-medium text-slate-700"
-                  >
-                    <option value="Clock In">Clock In</option>
-                    <option value="Clock Out">Clock Out</option>
-                    <option value="Break Start">Break Start</option>
-                    <option value="Break End">Break End</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Accrued Hours Today</label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    value={manualHours}
-                    onChange={(e) => setManualHours(e.target.value)}
-                    className="w-full p-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none font-medium text-slate-700"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Action Type</label>
+                <select
+                  value={manualType}
+                  onChange={(e) => setManualType(e.target.value as any)}
+                  className="w-full p-2 bg-white border border-slate-200 rounded-xl focus:outline-none font-medium text-slate-700"
+                >
+                  <option value="Clock In">Clock In</option>
+                  <option value="Clock Out">Clock Out</option>
+                  <option value="Break Start">Break Start</option>
+                  <option value="Break End">Break End</option>
+                </select>
+                <p className="text-[9px] text-slate-400 font-medium pt-0.5">To credit a specific number of hours, add a Clock In and a Clock Out entry at the right times -- hours are always computed from real punch timestamps, never typed in directly.</p>
               </div>
 
               <div className="space-y-1">

@@ -447,7 +447,7 @@ export const RosterPage: React.FC = () => {
                 </details>}
                 <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <input type="checkbox" checked={requireTimeClockVerification} onChange={e => setRequireTimeClockVerification(e.target.checked)} className="mt-0.5" />
-                  <span><strong className="block text-[#1F3557]">Require owner/manager clock verification</strong><span className="text-[9px] text-slate-500">The employee cannot clock in or out until an owner or manager authenticates.</span></span>
+                  <span><strong className="block text-[#1F3557]">Require manager approval</strong><span className="text-[9px] text-slate-500">Every clock-in/out is marked pending until a manager reviews and approves it remotely, from their own device -- never by anyone entering credentials on this employee's device.</span></span>
                 </label>
                 <button disabled={!inviteMode || !inviteRoleId || (inviteMode === "custom" && !customRoleReady)} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
               </>
