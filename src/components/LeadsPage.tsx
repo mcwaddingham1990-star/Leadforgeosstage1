@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
+import { downloadCsv, parseCsv } from "../lib/csv";
 import { parseAddress } from "./StructuredAddressFields";
 import { useDomainActions } from "../hooks/useDomainActions";
 import { useDomainData } from "../context/DomainDataContext";
@@ -50,7 +51,9 @@ export const LeadsPage: React.FC = () => {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
-    navigateToScreen: onNavigateToScreen
+    navigateToScreen: onNavigateToScreen,
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>("All");
@@ -73,6 +76,51 @@ export const LeadsPage: React.FC = () => {
   const [formStatus, setFormStatus] = useState<Lead["status"]>("New");
   const [formEstimatedValue, setFormEstimatedValue] = useState<number>(0);
   const [formNotes, setFormNotes] = useState("");
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const LEAD_SOURCES = ["Google Business Profile", "Website", "Facebook", "Instagram", "Referral", "Phone Call", "Walk-In", "Manual Entry", "Other"];
+  const LEAD_STATUSES = ["New", "Contacted", "Qualified", "Estimate Sent", "Follow-Up Needed", "Won", "Lost", "Archived"];
+
+  const handleExportCSV = () => {
+    const headers = ["Name", "Company", "Phone", "Email", "Source", "Sales Rep", "Status", "Estimated Value", "Date Added", "Address", "Notes"];
+    const rows = filteredLeads.map(l => [l.name, l.company, l.phone, l.email, l.source, l.salesRep, l.status, l.estimatedValue, l.dateAdded, l.address || "", l.notes || ""]);
+    downloadCsv("leads_export.csv", headers, rows);
+    if (logOperationalEvent) logOperationalEvent("CSV Exported", `Exported ${filteredLeads.length} leads to CSV`, "📤");
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const rows = parseCsv(text);
+      if (!rows.length) { triggerNotification?.("That CSV file has no rows to import."); return; }
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const col = (name: string) => header.indexOf(name);
+      const iName = col("name"), iCompany = col("company"), iPhone = col("phone"), iEmail = col("email"), iSource = col("source"), iRep = col("sales rep"), iStatus = col("status"), iValue = col("estimated value"), iAddress = col("address"), iNotes = col("notes");
+      const today = new Date();
+      const imported: Lead[] = rows.slice(1).filter(r => r[iName]?.trim()).map(r => ({
+        id: "lead_" + Math.random().toString(36).substring(2, 9),
+        name: r[iName]?.trim() || "",
+        company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || "",
+        phone: iPhone >= 0 ? r[iPhone]?.trim() : "",
+        email: iEmail >= 0 ? r[iEmail]?.trim() : "",
+        source: (iSource >= 0 && LEAD_SOURCES.includes(r[iSource]?.trim())) ? r[iSource].trim() as Lead["source"] : "Manual Entry",
+        salesRep: (iRep >= 0 ? r[iRep]?.trim() : "") || "Unassigned",
+        status: (iStatus >= 0 && LEAD_STATUSES.includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Lead["status"] : "New",
+        estimatedValue: (iValue >= 0 ? Number(r[iValue]) : 0) || 0,
+        dateAdded: today.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
+        addedDaysAgo: 0,
+        address: iAddress >= 0 ? r[iAddress]?.trim() : "",
+        notes: iNotes >= 0 ? r[iNotes]?.trim() : ""
+      }));
+      if (!imported.length) { triggerNotification?.("No valid rows found -- make sure the CSV has a Name column."); return; }
+      if (setLeads) setLeads(prev => [...imported, ...prev]);
+      else setLocalLeads(prev => [...imported, ...prev]);
+      triggerNotification?.(`Imported ${imported.length} lead(s) from CSV.`);
+      if (logOperationalEvent) logOperationalEvent("CSV Imported", `Imported ${imported.length} leads from CSV`, "📥");
+    }).catch(() => triggerNotification?.("Couldn't read that CSV file."));
+    e.target.value = "";
+  };
 
   const openAddModal = () => {
     setFormName("");
@@ -314,14 +362,15 @@ export const LeadsPage: React.FC = () => {
               Add Lead
             </button>
             <button
-              onClick={() => onOpenPlaceholder("Import Leads Center", "📥")}
+              onClick={() => importInputRef.current?.click()}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Upload className="w-3.5 h-3.5" />
               Import Leads
             </button>
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCSV} />
             <button
-              onClick={() => onOpenPlaceholder("Export Leads Wizard", "📤")}
+              onClick={handleExportCSV}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />

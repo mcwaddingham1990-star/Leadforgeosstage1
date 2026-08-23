@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { useDomainActions } from "../hooks/useDomainActions";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -37,6 +37,7 @@ import {
 import { CustomerPickerModal } from "./CustomerPickerModal";
 import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
 import { composeEmail, composeSms } from "../lib/deviceHandoff";
+import { downloadCsv, parseCsv } from "../lib/csv";
 import type { DocumentItem } from "../types/domain";
 
 export type { Estimate } from "../types/domain";
@@ -99,6 +100,45 @@ export const EstimatesPage: React.FC = () => {
     });
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [recentRoster, employees]);
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportCSV = () => {
+    const headers = ["Number", "Customer", "Company", "Status", "Sales Rep", "Amount", "Created", "Expires", "Notes"];
+    const rows = filteredEstimates.map(e => [e.number, e.customerName, e.company, e.status, e.salesRep, e.amount, e.createdDate, e.expirationDate, e.notes || ""]);
+    downloadCsv("estimates_export.csv", headers, rows);
+    if (logOperationalEvent) logOperationalEvent("CSV Exported", `Exported ${filteredEstimates.length} estimates to CSV`, "📤");
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.text().then(text => {
+      const rows = parseCsv(text);
+      if (!rows.length) { triggerNotification("That CSV file has no rows to import."); return; }
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const col = (name: string) => header.indexOf(name);
+      const iCustomer = col("customer"), iCompany = col("company"), iStatus = col("status"), iRep = col("sales rep"), iAmount = col("amount"), iNotes = col("notes");
+      const imported: Estimate[] = rows.slice(1).filter(r => r[iCustomer]?.trim()).map(r => ({
+        id: "est_" + Math.random().toString(36).substring(2, 9),
+        number: "EST-2026-" + Math.floor(100 + Math.random() * 900),
+        customerName: r[iCustomer]?.trim() || "",
+        company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || `${r[iCustomer]?.trim()} Inc`,
+        status: (iStatus >= 0 && (["Draft","Pending","Sent","Viewed","Accepted","Declined","Expired","Completed"] as string[]).includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Estimate["status"] : "Draft",
+        salesRep: (iRep >= 0 ? r[iRep]?.trim() : "") || "Self",
+        amount: (iAmount >= 0 ? Number(r[iAmount]) : 0) || 0,
+        notes: iNotes >= 0 ? r[iNotes]?.trim() : "",
+        createdDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
+        expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
+      }));
+      if (!imported.length) { triggerNotification("No valid rows found -- make sure the CSV has a Customer column."); return; }
+      if (setEstimates) setEstimates(prev => [...imported, ...prev]);
+      else setLocalEstimates(prev => [...imported, ...prev]);
+      triggerNotification(`Imported ${imported.length} estimate(s) from CSV.`);
+      if (logOperationalEvent) logOperationalEvent("CSV Imported", `Imported ${imported.length} estimates from CSV`, "📥");
+    }).catch(() => triggerNotification("Couldn't read that CSV file."));
+    e.target.value = "";
+  };
 
   const openAddModal = () => {
     setFormCustomerName("");
@@ -378,14 +418,15 @@ export const EstimatesPage: React.FC = () => {
               New Estimate
             </button>
             <button
-              onClick={() => onOpenPlaceholder("Import Estimates Database", "📥")}
+              onClick={() => importInputRef.current?.click()}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Upload className="w-3.5 h-3.5" />
               Import
             </button>
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCSV} />
             <button
-              onClick={() => onOpenPlaceholder("Export Estimates Ledger", "📤")}
+              onClick={handleExportCSV}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
