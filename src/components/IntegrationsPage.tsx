@@ -126,281 +126,15 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     return false; // Employees only see configured view but cannot change setup
   }, [activeRole]);
 
-  // Initial list of 32 integrations requested
   const [integrations, setIntegrations] = useState<Integration[]>([
-    {
-      id: "google_business",
-      name: "Google Business Profile",
-      category: "Marketing",
-      developer: "Google",
-      apiType: "REST",
-      logo: "🏪",
-      description: "Synchronize customer reviews, business hours, and auto-import new search engine leads.",
-      connected: true,
-      lastSync: "2026-07-06 18:30",
-      aiEnabled: true,
-      aiMode: "ASSIST + APPROVAL",
-      apiUsage: { current: 1240, limit: 10000 },
-      scopes: ["gprofile.business.manage", "gprofile.reviews.read"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 15 Minutes",
-      apiKey: "AIzaSyD_gBusiness2026KeyX",
-      apiSecret: "sec_g_business_prod_99x",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/google_business",
-      redirectUri: "https://ownerslocal.local/oauth/google_business/callback"
-    },
-    {
-      id: "google_calendar",
-      name: "Google Calendar",
-      category: "Communication",
-      developer: "Google",
-      apiType: "REST",
-      logo: "📅",
-      description: "Bi-directional real-time schedule sync with corporate calendars and dispatch planners.",
-      connected: true,
-      lastSync: "2026-07-06 18:40",
-      aiEnabled: true,
-      aiMode: "AUTO",
-      apiUsage: { current: 4890, limit: 50000 },
-      scopes: ["calendar.events", "calendar.readonly"],
-      permissions: ["Owner", "Manager", "Technician"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "AIzaSyB_gCalendar2026KeyY",
-      apiSecret: "sec_g_cal_prod_44w",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/google_calendar",
-      redirectUri: "https://ownerslocal.local/oauth/google_calendar/callback"
-    },
-    {
-      id: "google_maps",
-      name: "Google Maps",
-      category: "Maps",
-      developer: "Google",
-      apiType: "REST",
-      logo: "🗺️",
-      description: "Optimized route rendering, traffic-aware dispatch timing, and employee live location vectors.",
-      connected: true,
-      lastSync: "2026-07-06 18:41",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 8900, limit: 100000 },
-      scopes: ["maps.routes.optimal", "maps.geocode"],
-      permissions: ["Owner", "Manager", "Technician", "Driver"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "AIzaSyC_gMaps2026KeyZ",
-      apiSecret: "sec_g_maps_prod_11a",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/google_maps",
-      redirectUri: "https://ownerslocal.local/oauth/google_maps/callback"
-    },
-    {
-      id: "google_drive",
-      name: "Google Drive",
-      category: "Storage",
-      developer: "Google",
-      apiType: "REST",
-      logo: "💾",
-      description: "Automatic backup of PDF estimates, service contracts, and site photographic surveys.",
-      connected: true,
-      lastSync: "2026-07-06 18:15",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 3120, limit: 20000 },
-      scopes: ["drive.files.create", "drive.readonly"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every Hour",
-      apiKey: "AIzaSyD_gDrive2026KeyW",
-      apiSecret: "sec_g_drive_prod_55q",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/google_drive",
-      redirectUri: "https://ownerslocal.local/oauth/google_drive/callback"
-    },
-    {
-      id: "gmail",
-      name: "Gmail",
-      category: "Communication",
-      developer: "Google",
-      apiType: "REST",
-      logo: "✉️",
-      description: "Auto-send estimate sheets, scheduling alerts, and invoice payment receipts to clients.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST",
-      apiUsage: { current: 0, limit: 15000 },
-      scopes: ["gmail.send", "gmail.modify"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/gmail",
-      redirectUri: "https://ownerslocal.local/oauth/gmail/callback"
-    },
-    {
-      id: "google_contacts",
-      name: "Google Contacts",
-      category: "CRM",
-      developer: "Google",
-      apiType: "REST",
-      logo: "👥",
-      description: "Import mobile customer directories and sync newly forged CRM leads automatically.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["contacts.readonly", "contacts.write"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Daily",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "google_analytics",
-      name: "Google Analytics",
-      category: "Marketing",
-      developer: "Google",
-      apiType: "REST",
-      logo: "📈",
-      description: "Track lead generation campaigns, website conversions, and click-to-call response rates.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 5000 },
-      scopes: ["analytics.readonly"],
-      permissions: ["Owner"],
-      syncFrequency: "Daily",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "google_ads",
-      name: "Google Ads",
-      category: "Marketing",
-      developer: "Google",
-      apiType: "REST",
-      logo: "🎯",
-      description: "Import phone call leads and map conversion actions directly back to service purchases.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 5000 },
-      scopes: ["ads.manage"],
-      permissions: ["Owner"],
-      syncFrequency: "Daily",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "facebook_business",
-      name: "Facebook Business",
-      category: "Marketing",
-      developer: "Facebook",
-      apiType: "REST",
-      logo: "📘",
-      description: "Import Meta Lead Generation Ad records, tracking ad expenditure and performance metrics.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 5000 },
-      scopes: ["ads_management", "business_management"],
-      permissions: ["Owner"],
-      syncFrequency: "Every Hour",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "facebook_messenger",
-      name: "Facebook Messenger",
-      category: "Communication",
-      developer: "Facebook",
-      apiType: "REST",
-      logo: "💬",
-      description: "Inject customer direct-messages directly into the OwnersLOCAL unified Message center.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["pages_messaging", "pages_read_engagement"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "instagram",
-      name: "Instagram",
-      category: "Marketing",
-      developer: "Facebook",
-      apiType: "REST",
-      logo: "📸",
-      description: "Auto-sync direct comments and customer visual requests into local dispatch threads.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["instagram_basic", "instagram_manage_messages"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 15 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "whatsapp_business",
-      name: "WhatsApp Business",
-      category: "Communication",
-      developer: "Facebook",
-      apiType: "REST",
-      logo: "🟢",
-      description: "Reach mobile clients on their primary chat medium with digital invoice triggers.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST + APPROVAL",
-      apiUsage: { current: 0, limit: 20000 },
-      scopes: ["whatsapp_business_messaging", "whatsapp_business_management"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "twilio",
-      name: "Twilio",
-      category: "Communication",
-      developer: "Twilio",
-      apiType: "REST",
-      logo: "📱",
-      description: "Secure virtual tracking phone numbers and trigger robust SMS automated customer confirmations.",
-      connected: true,
-      lastSync: "2026-07-06 18:40",
-      aiEnabled: true,
-      aiMode: "AUTO",
-      apiUsage: { current: 2840, limit: 15000 },
-      scopes: ["twilio.sms.send", "twilio.numbers.read"],
-      permissions: ["Owner", "Manager", "Technician"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "ACtwilioAccountSid2026X",
-      apiSecret: "sec_twilio_auth_token_9x",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/twilio",
-      redirectUri: ""
-    },
+    // The app's own modules (accounting, invoicing/payments intake, texting
+    // via device SMS, scheduling, messaging, documents) already cover what
+    // QuickBooks/Twilio/Slack/Zoom/Google Workspace/etc. would otherwise be
+    // connected for -- that's the point of the app, so those integrations
+    // were removed rather than left as more non-functional "Connect"
+    // buttons. Plaid (real bank-account linking, see PlaidConnectButton)
+    // and Stripe (real payment processing) are the two a business genuinely
+    // still needs a third party for.
     {
       id: "stripe",
       name: "Stripe",
@@ -409,392 +143,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       apiType: "REST",
       logo: "💳",
       description: "Accept card payments, send digital secure checkout links, and process job deposits.",
-      connected: true,
-      lastSync: "2026-07-06 18:41",
+      connected: false,
+      lastSync: "Never",
       aiEnabled: false,
       aiMode: "OFF",
-      apiUsage: { current: 3120, limit: 50000 },
+      apiUsage: { current: 0, limit: 50000 },
       scopes: ["charges.create", "invoices.send", "payment_intents.manage"],
       permissions: ["Owner", "Manager"],
       syncFrequency: "Every 5 Minutes",
-      apiKey: "sk_test_leadForgeStripe2026KeyX",
-      apiSecret: "whsec_stripe_signing_key_44y",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/stripe",
-      redirectUri: ""
-    },
-    {
-      id: "square",
-      name: "Square",
-      category: "Payments",
-      developer: "Square",
-      apiType: "REST",
-      logo: "🔲",
-      description: "Process in-person chip payments via hardware terminals synchronized to field tablet orders.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 25000 },
-      scopes: ["payments.write", "terminals.manage"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 15 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "quickbooks",
-      name: "QuickBooks",
-      category: "Accounting",
-      developer: "Intuit",
-      apiType: "REST",
-      logo: "💼",
-      description: "Translate operational invoices, employee billable hours, and job costing into ledger records.",
-      connected: true,
-      lastSync: "2026-07-06 18:00",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 1560, limit: 10000 },
-      scopes: ["accounting.transactions", "accounting.customers"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every Hour",
-      apiKey: "qb_auth_accessToken2026X",
-      apiSecret: "qb_client_secret_xyz112",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/quickbooks",
-      redirectUri: "https://ownerslocal.local/oauth/quickbooks/callback"
-    },
-    {
-      id: "xero",
-      name: "Xero",
-      category: "Accounting",
-      developer: "Xero",
-      apiType: "REST",
-      logo: "✖️",
-      description: "Alternative accounting bridge for synchronization of customer profiles, tax receipts, and asset rosters.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["xero.accounting.transactions", "xero.contacts"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every Hour",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "outlook",
-      name: "Outlook",
-      category: "Communication",
-      developer: "Microsoft",
-      apiType: "REST",
-      logo: "📬",
-      description: "Import Microsoft Exchange service inboxes into CRM threads to coordinate customer email responses.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST",
-      apiUsage: { current: 0, limit: 15000 },
-      scopes: ["mail.send", "mail.readwrite"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "microsoft365",
-      name: "Microsoft 365",
-      category: "Storage",
-      developer: "Microsoft",
-      apiType: "REST",
-      logo: "🏢",
-      description: "Access and generate Excel estimates or Word documents inside client folders.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["files.readwrite.all"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every Hour",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "dropbox",
-      name: "Dropbox",
-      category: "Storage",
-      developer: "Dropbox",
-      apiType: "REST",
-      logo: "📦",
-      description: "Sync PDF service sheets and technical blueprints into shared backup folders.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["files.metadata.read", "files.content.write"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Daily",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "onedrive",
-      name: "OneDrive",
-      category: "Storage",
-      developer: "Microsoft",
-      apiType: "REST",
-      logo: "☁️",
-      description: "Synchronize client site layout photos and diagnostic PDFs securely on the cloud.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["onedrive.readonly", "onedrive.write"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Daily",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "slack",
-      name: "Slack",
-      category: "Communication",
-      developer: "Slack",
-      apiType: "REST",
-      logo: "🟪",
-      description: "Deliver instant dispatcher alerts, employee clock status, and urgent job dispatches to internal channels.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST + APPROVAL",
-      apiUsage: { current: 0, limit: 15000 },
-      scopes: ["chat:write", "channels:read"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "zoom",
-      name: "Zoom",
-      category: "Communication",
-      developer: "Zoom",
-      apiType: "REST",
-      logo: "📹",
-      description: "Automate scheduling of live video consultations with estimators and remote inspectors.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 5000 },
-      scopes: ["meeting:write", "meeting:read"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every Hour",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "zapier",
-      name: "Zapier",
-      category: "Custom",
-      developer: "Zapier",
-      apiType: "REST",
-      logo: "🧡",
-      description: "Trigger multi-app workflow automations with standard inbound and outbound payload packets.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 50000 },
-      scopes: ["zapier.webhook.trigger"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/zapier",
-      redirectUri: ""
-    },
-    {
-      id: "make_com",
-      name: "Make.com",
-      category: "Custom",
-      developer: "Make",
-      apiType: "REST",
-      logo: "💜",
-      description: "Build robust scenario mappings with comprehensive custom module connections.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 50000 },
-      scopes: ["make.scenario.trigger"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/make",
-      redirectUri: ""
-    },
-    {
-      id: "webhook",
-      name: "Webhook",
-      category: "Custom",
-      developer: "Custom",
-      apiType: "REST",
-      logo: "🔗",
-      description: "Direct server-to-server HTTP request endpoints for custom OwnersLOCAL automation.",
-      connected: true,
-      lastSync: "2026-07-06 18:35",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 412, limit: 50000 },
-      scopes: ["webhook.incoming", "webhook.outgoing"],
-      permissions: ["Owner"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "wh_endpoint_signing_token_abc123",
-      apiSecret: "sec_webhook_secret_77u",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/custom_receiver",
-      redirectUri: ""
-    },
-    {
-      id: "openai",
-      name: "OpenAI",
-      category: "AI",
-      developer: "OpenAI",
-      apiType: "REST",
-      logo: "🤖",
-      description: "Use AI to organize client files and help draft messages.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: true,
-      aiMode: "ASSIST",
-      apiUsage: { current: 0, limit: 100000 },
-      scopes: ["chat.completions", "embeddings.create"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "gemini",
-      name: "Gemini",
-      category: "AI",
-      developer: "Google",
-      apiType: "REST",
-      logo: "✨",
-      description: "Underpin local AI assistant operations, auto-evaluating dispatch paths and estimator records.",
-      connected: true,
-      lastSync: "2026-07-06 18:41",
-      aiEnabled: true,
-      aiMode: "AUTO",
-      apiUsage: { current: 15302, limit: 500000 },
-      scopes: ["gemini.generateContent", "gemini.models.manage"],
-      permissions: ["Owner", "Manager"],
-      syncFrequency: "Every 5 Minutes",
-      apiKey: "AIzaSyGeminiAssistant2026KeyY",
-      apiSecret: "sec_gemini_prod_key_77r",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "claude",
-      name: "Claude",
-      category: "AI",
-      developer: "Anthropic",
-      apiType: "REST",
-      logo: "🦉",
-      description: "Alternative LLM core for intricate document drafting, checklist reviews, and compliance checks.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 100000 },
-      scopes: ["messages.create"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "anthropic",
-      name: "Anthropic",
-      category: "AI",
-      developer: "Anthropic",
-      apiType: "REST",
-      logo: "🌐",
-      description: "Connect another AI model for additional analysis.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 100000 },
-      scopes: ["anthropic.readonly"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "custom_rest",
-      name: "Custom REST API",
-      category: "Custom",
-      developer: "Custom",
-      apiType: "REST",
-      logo: "📡",
-      description: "Plug in your own customized server endpoint utilizing standard JSON REST payload guidelines.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 50000 },
-      scopes: ["api.read", "api.write"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      redirectUri: ""
-    },
-    {
-      id: "custom_graphql",
-      name: "Custom GraphQL API",
-      category: "Custom",
-      developer: "Custom",
-      apiType: "GraphQL",
-      logo: "📊",
-      description: "Define a tailored GraphQL schema interface to request specific fields from personal databases.",
-      connected: false,
-      lastSync: "Never",
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 50000 },
-      scopes: ["graphql.query", "graphql.mutation"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
@@ -825,10 +181,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   const [detailTab, setDetailTab] = useState<"overview" | "api_keys" | "webhooks" | "logs" | "ai_setup">("overview");
 
   // Add integration dialog state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newIntegrationName, setNewIntegrationName] = useState("");
-  const [newIntegrationCategory, setNewIntegrationCategory] = useState<Integration["category"]>("Custom");
-  const [newIntegrationDesc, setNewIntegrationDesc] = useState("");
 
   // AI Setup Dialog State
   const [isAiSetupOpen, setIsAiSetupOpen] = useState(false);
@@ -904,44 +256,11 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   }, [integrations, searchQuery, searchCategory, searchStatus, searchApi, searchDeveloper, selectedFilterCategory, activeSummaryFilter]);
 
   // Toggle Connection Handler
-  const handleToggleConnection = (id: string) => {
-    if (!isAuthorized) {
-      triggerNotification("🚫 Permissions denied: Only Owners or Managers can configure system integrations.");
-      return;
-    }
-    setIntegrations((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newConnected = !item.connected;
-          triggerNotification(
-            newConnected
-              ? `🔌 Connected to ${item.name} successfully!`
-              : `🛑 Disconnected ${item.name} integration.`
-          );
-          
-          // Log operational event
-          if (logOperationalEvent) {
-            logOperationalEvent(
-              newConnected ? "Connect Integration" : "Disconnect Integration",
-              `Service ${item.name} status updated to: ${newConnected ? "ACTIVE" : "INACTIVE"}`,
-              "🔗"
-            );
-          }
-
-          // Trigger Event Engine Sync side effects!
-          if (newConnected) {
-            triggerEventEngineSync(id);
-          }
-
-          return {
-            ...item,
-            connected: newConnected,
-            lastSync: newConnected ? new Date().toISOString().replace("T", " ").substring(0, 16) : "Never"
-          };
-        }
-        return item;
-      })
-    );
+  // Stripe is the only integration left, and there's no real Stripe OAuth
+  // backend wired up yet -- the toggle is shown greyed out/disabled rather
+  // than pretending a click actually connects anything.
+  const handleToggleConnection = (_id: string) => {
+    triggerNotification("A real Stripe connection isn't wired up yet.");
   };
 
   // Manual Sync -- none of these integrations have a real OAuth connection
@@ -986,46 +305,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
         return item;
       }));
     }, 400);
-  };
-
-  // Global Refresh All Handler
-  const handleRefreshAll = () => {
-    triggerNotification("🔄 Syncing all connected services...");
-    
-    // Simulate refreshing all connected integrations
-    setTimeout(() => {
-      let syncCount = 0;
-      setIntegrations((prev) =>
-        prev.map((item) => {
-          if (item.connected) {
-            syncCount++;
-            return {
-              ...item,
-              lastSync: new Date().toISOString().replace("T", " ").substring(0, 16)
-            };
-          }
-          return item;
-        })
-      );
-
-      // Add a fresh log
-      const currentDateStr = new Date().toISOString().substring(0, 10);
-      const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-      const newGlobalLog: SyncLogEntry = {
-        id: `log_global_${Date.now()}`,
-        date: currentDateStr,
-        time: timeStr,
-        integrationId: "global_engine",
-        integrationName: "Event Engine Router",
-        recordsUpdated: syncCount * 2,
-        warnings: 1,
-        errors: 0,
-        status: "Success",
-        message: `Global engine synchronized ${syncCount} active enterprise integrations.`
-      };
-      setSyncLogs((prev) => [newGlobalLog, ...prev]);
-      triggerNotification(`✅ Unified Event Engine updated. Refreshed ${syncCount} integrations!`);
-    }, 600);
   };
 
   // Open Details Modal Configuration
@@ -1076,53 +355,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     triggerNotification("📤 Exported system integration backup packet successfully!");
   };
 
-  // Add Custom Integration Form Handler
-  const handleCreateCustomIntegration = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newIntegrationName.trim()) return;
-
-    const newInt: Integration = {
-      id: `custom_${Date.now()}`,
-      name: newIntegrationName,
-      category: newIntegrationCategory,
-      developer: "Custom Client",
-      apiType: "REST",
-      logo: "📡",
-      description: newIntegrationDesc || "User specified REST endpoint mapped securely to OwnersLOCAL internal JSON schemas.",
-      connected: true,
-      lastSync: new Date().toISOString().replace("T", " ").substring(0, 16),
-      aiEnabled: false,
-      aiMode: "OFF",
-      apiUsage: { current: 0, limit: 10000 },
-      scopes: ["custom.api.access"],
-      permissions: ["Owner"],
-      syncFrequency: "Manual",
-      apiKey: "custom_key_temp_token_val_99",
-      apiSecret: "",
-      webhookUrl: "https://ownerslocal.api.local/webhooks/custom_" + newIntegrationName.toLowerCase().replace(/[^a-z]/g, ""),
-      redirectUri: ""
-    };
-
-    setIntegrations((prev) => [...prev, newInt]);
-    setIsAddModalOpen(false);
-    setNewIntegrationName("");
-    setNewIntegrationDesc("");
-    triggerNotification(`📡 Registered custom node '${newIntegrationName}' in enterprise grid!`);
-  };
-
-  // Test API keys handler inside details
-  const handleTestConnection = (id: string) => {
-    triggerNotification(`⚡ Sending ping signal to ${id} API servers...`);
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.15; // 85% success rate simulation
-      if (isSuccess) {
-        triggerNotification(`✅ Connection test passed! Response status: 200 OK.`);
-      } else {
-        triggerNotification(`❌ Connection test failed. Timeout or invalid authentication payload.`);
-      }
-    }, 800);
-  };
-
   return (
     <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">
       {/* TOP HEADER CARD */}
@@ -1146,14 +378,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
         {/* TOP BUTTON ACTIONS */}
         <div className="flex flex-wrap items-center gap-2">
           <PlaidConnectButton />
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-3 py-1.5 bg-[#315C9F] text-white hover:bg-[#254A84] rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Integration
-          </button>
-          
           <button
             onClick={() => setIsAiSetupOpen(true)}
             className="px-3 py-1.5 bg-indigo-550 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
@@ -1180,13 +404,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             Export Settings
           </button>
 
-          <button
-            onClick={handleRefreshAll}
-            className="px-3 py-1.5 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <RefreshCw className="h-3.5 w-3.5 animate-hover-spin" />
-            Refresh All
-          </button>
         </div>
       </div>
 
@@ -1457,18 +674,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Toggle Slider Switch */}
+                  {/* Toggle Slider Switch -- greyed out and disabled: no real backend to connect to yet */}
                   <button
+                    disabled
+                    title="A real Stripe connection isn't wired up yet"
                     onClick={() => handleToggleConnection(item.id)}
-                    className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      item.connected ? "bg-emerald-500" : "bg-slate-300"
-                    }`}
+                    className="relative inline-flex h-5 w-10 shrink-0 cursor-not-allowed opacity-40 rounded-full border border-transparent bg-slate-300 focus:outline-none"
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out mt-[1px] ${
-                        item.connected ? "translate-x-5" : "translate-x-0.5"
-                      }`}
-                    />
+                    <span className="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white shadow-xs mt-[1px]" />
                   </button>
                 </div>
 
@@ -1522,8 +735,10 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     </button>
                   ) : (
                     <button
+                      disabled
+                      title="A real Stripe connection isn't wired up yet"
                       onClick={() => handleToggleConnection(item.id)}
-                      className="px-2.5 py-1.5 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center"
+                      className="px-2.5 py-1.5 bg-slate-300 text-white rounded-xl text-[10.5px] font-bold font-sans cursor-not-allowed opacity-60 text-center"
                     >
                       Connect
                     </button>
@@ -1941,28 +1156,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE]/50">
-                    <button
-                      type="button"
-                      onClick={() => handleTestConnection(selectedIntegration.id)}
-                      className="px-3 py-1 bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] hover:bg-[#A1CEF4] rounded-lg text-xs font-bold font-sans cursor-pointer"
-                    >
-                      Test Connection
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedIntegration({
-                          ...selectedIntegration,
-                          apiKey: "AIzaSy_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
-                          apiSecret: "sec_" + Math.random().toString(36).substring(2, 12)
-                        });
-                        triggerNotification(`🔑 Keys rotated for ${selectedIntegration.name}. Click save to write changes.`);
-                      }}
-                      className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-lg text-xs font-bold font-sans cursor-pointer"
-                    >
-                      Rotate Keys
-                    </button>
+                  <div className="pt-2 border-t border-[#A9CDEE]/50">
+                    <p className="text-[10px] text-slate-500 font-sans font-medium">A real Stripe connection isn't wired up yet, so there's nothing to test or rotate keys against here.</p>
                   </div>
                 </div>
               )}
@@ -2104,35 +1299,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
               {/* MODAL BOTTOM BUTTONS */}
               <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE] text-xs">
-                {selectedIntegration.connected ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleToggleConnection(selectedIntegration.id);
-                      setSelectedIntegration({
-                        ...selectedIntegration,
-                        connected: false
-                      });
-                    }}
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold font-sans cursor-pointer"
-                  >
-                    Disconnect Integration
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleToggleConnection(selectedIntegration.id);
-                      setSelectedIntegration({
-                        ...selectedIntegration,
-                        connected: true
-                      });
-                    }}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-bold font-sans cursor-pointer"
-                  >
-                    Connect Integration
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled
+                  title="A real Stripe connection isn't wired up yet"
+                  className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-xl font-bold font-sans cursor-not-allowed"
+                >
+                  Connect Integration
+                </button>
 
                 <div className="flex items-center gap-2">
                   <button
@@ -2215,87 +1389,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
         </div>
       )}
 
-      {/* ADD INTEGRATION MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-[#000000]/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs">
-          <div className="bg-[#C7E3FB] max-w-md w-full rounded-3xl p-6 border border-[#A9CDEE] shadow-2xl space-y-4 text-left">
-            <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-3">
-              <h3 className="text-sm font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
-                Add Custom Integration Node
-              </h3>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="p-1 hover:bg-white/40 rounded-xl transition-colors cursor-pointer"
-              >
-                <X className="h-4 w-4 text-slate-600" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateCustomIntegration} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Custom Node / Service Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Acme Dispatch API"
-                  value={newIntegrationName}
-                  onChange={(e) => setNewIntegrationName(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Category
-                </label>
-                <select
-                  value={newIntegrationCategory}
-                  onChange={(e) => setNewIntegrationCategory(e.target.value as any)}
-                  className="w-full bg-white border border-[#A9CDEE] rounded-xl px-2.5 py-2 text-xs"
-                >
-                  <option value="Custom">Custom Node</option>
-                  <option value="Accounting">Accounting</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Communication">Communication</option>
-                  <option value="CRM">CRM</option>
-                  <option value="Payments">Payments</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Brief Functional Description
-                </label>
-                <textarea
-                  placeholder="What is this custom API endpoint used for?"
-                  value={newIntegrationDesc}
-                  onChange={(e) => setNewIntegrationDesc(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#A9CDEE]">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-[#315C9F] text-white hover:bg-[#254A84] rounded-xl font-bold cursor-pointer"
-                >
-                  Add Node
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
