@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
+import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
 
@@ -127,7 +128,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     employees,
     timeClockLogs
   } = useDomainData();
-  const { navigateToScreen: onNavigateToScreen, logOperationalEvent } = useNavTelemetry();
+  const { navigateToScreen: onNavigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
@@ -271,34 +272,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [filterCategory, setFilterCategory] = useState("All"); // All, Residential, Commercial
   const [filterTechStatus, setFilterTechStatus] = useState("All"); // All, Available, Traveling, Lunch, Offline, Clocked Out
 
-  // Performance simulation: 20,000+ markers cluster toggling
-  const [isPerformanceSimActive, setIsPerformanceSimActive] = useState(false);
   const [markerClusterActive, setMarkerClusterActive] = useState(true);
-  
-  // Generated Large Performance Nodes (Simulated 20K)
-  const simulatedLargeNodes = useMemo(() => {
-    if (!isPerformanceSimActive) return [];
-    // Generate 500 nodes for high performance smooth canvas rendering (virtualized count representation of 20,000 across DFW)
-    const list = [];
-    for (let i = 0; i < 500; i++) {
-      const id = `sim_node_${i}`;
-      const angle = (i * 137.5) * (Math.PI / 180);
-      const r = 0.08 * Math.sqrt(i); // spiral distribution centered in DFW
-      const lat = DFW_FALLBACK.lat + r * Math.sin(angle);
-      const lng = DFW_FALLBACK.lng + r * Math.cos(angle);
-      list.push({
-        id,
-        type: "Customer" as const,
-        title: `Simulated Client #${i * 40}`,
-        subtitle: `Cluster Node | Revenue: $${(Math.abs(Math.sin(i)) * 2500).toFixed(0)}`,
-        address: `DFW performance test node ${i + 1}`,
-        lat,
-        lng,
-        raw: { outstandingBalance: 0, lifetimeValue: 800, phone: "" }
-      });
-    }
-    return list;
-  }, [isPerformanceSimActive]);
 
   // Selected Pin State (Opens Right Inspector Panel)
   const [selectedPin, setSelectedPin] = useState<{
@@ -669,11 +643,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       raw: any;
     }> = [];
 
-    // 1. Add simulated massive nodes if toggled (for 20,000+ support simulation)
-    if (isPerformanceSimActive) {
-      simulatedLargeNodes.forEach(n => list.push(n));
-    }
-
     // 2. Add Offices & Warehouses
     fixedFacilities.forEach(f => list.push(f));
 
@@ -792,7 +761,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     }
 
     return list;
-  }, [customers, leads, estimates, schedulingEvents, activeTechnicians, vehicles, isPerformanceSimActive, simulatedLargeNodes, showCustomers, showLeads, showEstimates, showJobs, showTechnicians, showVehicles, geocodedCache]);
+  }, [customers, leads, estimates, schedulingEvents, activeTechnicians, vehicles, showCustomers, showLeads, showEstimates, showJobs, showTechnicians, showVehicles, geocodedCache]);
 
   // Apply Search Query & Filter Categories
   const filteredPins = useMemo(() => {
@@ -844,6 +813,27 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       return true;
     });
   }, [allPins, searchQuery, filterType, filterPriority, filterJobStatus, filterLeadStatus, filterTechStatus, filterCategory]);
+
+  // Real revenue heatmap -- one bubble per real customer pin, sized and
+  // positioned from that customer's actual lifetime value and geocoded
+  // location (same DFW-fallback projection as the SVG marker renderer
+  // below), not fixed decorative circles.
+  const revenueHeatBubbles = useMemo(() => {
+    const latCenter = DFW_FALLBACK.lat;
+    const lngCenter = DFW_FALLBACK.lng;
+    // Same coordinate space as the SVG fallback map's territory paths below
+    // (no viewBox on that <svg>, so these are raw pixel-ish units against
+    // its ~900x600 box, centered at 450/300).
+    return filteredPins
+      .filter(pin => pin.type === "Customer" && Number(pin.raw?.lifetimeValue) > 0)
+      .map(pin => {
+        const x = 450 + (pin.lng - lngCenter) * 1100;
+        const y = 300 - (pin.lat - latCenter) * 1200;
+        const value = Number(pin.raw.lifetimeValue) || 0;
+        return { id: pin.id, x, y, value };
+      });
+  }, [filteredPins]);
+  const maxHeatValue = Math.max(1, ...revenueHeatBubbles.map(b => b.value));
 
   // Live Simulated Movements of Technicians & Vehicles every few seconds
   useEffect(() => {
@@ -1222,25 +1212,52 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     }
   };
 
-  // Traveling Salesperson (TSP) dynamic route order optimization metrics
+  // Real haversine distance in miles between two geocoded points.
+  const haversineMiles = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+    const R = 3958.8;
+    const dLat = (b.lat - a.lat) * Math.PI / 180;
+    const dLng = (b.lng - a.lng) * Math.PI / 180;
+    const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  };
+
+  // Real route order + distance: a greedy nearest-neighbor tour starting
+  // from the business HQ (or the first selected stop if no HQ is geocoded
+  // yet) across the actually-selected, actually-geocoded job pins --
+  // mileage and drive time are computed from real coordinates, not random.
   const optimizedRouteSummary = useMemo(() => {
     const selectedJobs = filteredPins.filter(p => p.type === "Job" && selectedBasketIds.includes(p.id));
     if (selectedJobs.length < 2) return null;
 
-    // Simulate route optimization metrics
-    const mileage = selectedJobs.length * 4.2 + (Math.random() * 2);
-    const driveTime = Math.round(selectedJobs.length * 12 + (Math.random() * 5));
-    const fuelCost = (mileage * 0.42).toFixed(2);
-    const trafficDensity = Math.random() > 0.5 ? "Moderate Traffic" : "Clear Road Conditions";
+    const start = fixedFacilities[0] ? { lat: fixedFacilities[0].lat, lng: fixedFacilities[0].lng } : selectedJobs[0];
+    const remaining = [...selectedJobs];
+    let current = start;
+    let totalMiles = 0;
+    while (remaining.length) {
+      let nearestIndex = 0, nearestDist = Infinity;
+      remaining.forEach((job, idx) => {
+        const dist = haversineMiles(current, job);
+        if (dist < nearestDist) { nearestDist = dist; nearestIndex = idx; }
+      });
+      totalMiles += nearestDist;
+      current = remaining[nearestIndex];
+      remaining.splice(nearestIndex, 1);
+    }
+
+    // Straight-line distance undercounts real road distance -- a ~1.3x
+    // detour factor is a standard, honest approximation for surface streets.
+    const roadMiles = totalMiles * 1.3;
+    const driveTimeMinutes = Math.round((roadMiles / 30) * 60); // 30 mph average local driving speed
+    const fuelCost = (roadMiles * 0.42).toFixed(2); // IRS-adjacent per-mile operating cost estimate
 
     return {
-      mileage: mileage.toFixed(1),
-      driveTime,
+      mileage: roadMiles.toFixed(1),
+      driveTime: driveTimeMinutes,
       fuelCost,
-      trafficDensity,
       stopsCount: selectedJobs.length
     };
-  }, [filteredPins, selectedBasketIds]);
+  }, [filteredPins, selectedBasketIds, fixedFacilities]);
 
   // Apply One-click Dispatch Route updates to the system state
   const handleDispatchOptimizedRoute = () => {
@@ -1376,27 +1393,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           }`}
         >
           <Activity className="w-4 h-4" /> Revenue Heatmap Overlay
-        </button>
-
-        <button
-          id="btn_perf_sim"
-          onClick={() => {
-            setIsPerformanceSimActive(!isPerformanceSimActive);
-            if (logOperationalEvent) {
-              logOperationalEvent(
-                "Performance Mode",
-                isPerformanceSimActive ? "Returned to the standard map view." : "Loaded a 20,000-location performance test.",
-                "🚀"
-              );
-            }
-          }}
-          className={`px-4 py-2.5 font-extrabold rounded-xl text-[11px] uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 border ${
-            isPerformanceSimActive 
-              ? "bg-purple-600 border-purple-400 text-white shadow-[0_4px_12px_rgba(147,51,234,0.3)]" 
-              : "bg-slate-800/80 border-white/10 text-slate-300 hover:bg-slate-800"
-          }`}
-        >
-          <Zap className="w-4 h-4 text-yellow-300 animate-pulse" /> Test 20,000 Locations
         </button>
       </div>
     </div>
@@ -1872,13 +1868,20 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     );
                   })}
 
-                  {/* REVENUE HEATMAP GRADIENT BUBBLES */}
+                  {/* REVENUE HEATMAP GRADIENT BUBBLES -- one per real customer, sized by their actual lifetime value */}
                   {showRevenueHeatmap && (
                     <g opacity="0.45">
-                      {/* High value hubs in north, central & south */}
-                      <circle cx="480" cy="220" r="140" fill="url(#heat_radial_1)" />
-                      <circle cx="380" cy="380" r="110" fill="url(#heat_radial_2)" />
-                      <circle cx="620" cy="120" r="90" fill="url(#heat_radial_3)" />
+                      {revenueHeatBubbles.length === 0 ? (
+                        <text x="500" y="300" textAnchor="middle" fill="#94a3b8" fontSize="14">No customer revenue on file yet to map.</text>
+                      ) : revenueHeatBubbles.map(bubble => (
+                        <circle
+                          key={bubble.id}
+                          cx={bubble.x}
+                          cy={bubble.y}
+                          r={30 + (bubble.value / maxHeatValue) * 130}
+                          fill="url(#heat_radial_1)"
+                        />
+                      ))}
                     </g>
                   )}
 
@@ -1886,14 +1889,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     <radialGradient id="heat_radial_1" cx="50%" cy="50%" r="50%">
                       <stop offset="0%" stopColor="#ec4899" stopOpacity="0.8" />
                       <stop offset="100%" stopColor="#ec4899" stopOpacity="0" />
-                    </radialGradient>
-                    <radialGradient id="heat_radial_2" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.75" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                    </radialGradient>
-                    <radialGradient id="heat_radial_3" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor="#eab308" stopOpacity="0.6" />
-                      <stop offset="100%" stopColor="#eab308" stopOpacity="0" />
                     </radialGradient>
                   </defs>
                 </svg>
@@ -2094,8 +2089,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       <p className="text-sm font-extrabold text-emerald-400">${optimizedRouteSummary.fuelCost}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-slate-400 uppercase font-extrabold">Route Density</p>
-                      <p className="text-sm font-extrabold text-white truncate">{optimizedRouteSummary.trafficDensity}</p>
+                      <p className="text-[9px] text-slate-400 uppercase font-extrabold">Total Stops</p>
+                      <p className="text-sm font-extrabold text-white truncate">{optimizedRouteSummary.stopsCount}</p>
                     </div>
                   </div>
                 ) : (
@@ -2104,11 +2099,17 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </p>
                 )}
 
-                {/* Dynamic mass actions */}
+                {/* Real mass actions: hands off to the device's own mail
+                    app (all real recipients BCC'd) or opens one text thread
+                    per selected contact -- there's no browser API to send
+                    a real multi-recipient SMS blast, so this opens the
+                    first contact's thread and names the rest in the body. */}
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => {
-                      alert(`Broadcasting mass operational alert email to ${selectedBasketIds.length} clients!`);
+                      const recipients = filteredPins.filter(p => selectedBasketIds.includes(p.id)).map(p => p.raw?.customerEmail).filter(Boolean);
+                      if (!recipients.length) { triggerNotification?.("No email addresses on file for the selected jobs."); return; }
+                      composeEmail({ bcc: recipients, subject: "Job update" });
                     }}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-[10px] uppercase rounded-lg border border-white/5 cursor-pointer"
                   >
@@ -2116,7 +2117,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </button>
                   <button
                     onClick={() => {
-                      alert(`Broadcasting mass broadcast SMS notifications to ${selectedBasketIds.length} contacts!`);
+                      const recipients = filteredPins.filter(p => selectedBasketIds.includes(p.id)).map(p => p.raw?.customerPhone).filter(Boolean);
+                      if (!recipients.length) { triggerNotification?.("No phone numbers on file for the selected jobs."); return; }
+                      composeSms({ to: recipients[0], body: recipients.length > 1 ? `(also selected: ${recipients.slice(1).join(", ")})` : undefined });
                     }}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-[10px] uppercase rounded-lg border border-white/5 cursor-pointer"
                   >
@@ -2347,19 +2350,31 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     <p className="text-[10px] uppercase font-extrabold text-slate-400">Contact</p>
                     <div className="grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => alert(`Initiating direct voice bridge to phone line of ${selectedPin.title}`)}
+                        onClick={() => {
+                          const phone = selectedPin.raw?.phone || selectedPin.raw?.customerPhone;
+                          if (!phone) { triggerNotification?.("No phone number on file."); return; }
+                          callNumber(phone);
+                        }}
                         className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Phone className="w-3.5 h-3.5" /> Call Client
                       </button>
                       <button
-                        onClick={() => alert(`Launching dispatch SMS composer for ${selectedPin.title}`)}
+                        onClick={() => {
+                          const phone = selectedPin.raw?.phone || selectedPin.raw?.customerPhone;
+                          if (!phone) { triggerNotification?.("No phone number on file."); return; }
+                          composeSms({ to: phone });
+                        }}
                         className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Send className="w-3.5 h-3.5" /> SMS Text
                       </button>
                       <button
-                        onClick={() => alert(`Opening template email editor for ${selectedPin.title}`)}
+                        onClick={() => {
+                          const email = selectedPin.raw?.email || selectedPin.raw?.customerEmail;
+                          if (!email) { triggerNotification?.("No email address on file."); return; }
+                          composeEmail({ to: email });
+                        }}
                         className="px-3 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Mail className="w-3.5 h-3.5" /> Send Email

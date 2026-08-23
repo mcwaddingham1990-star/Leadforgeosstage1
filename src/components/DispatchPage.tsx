@@ -72,24 +72,6 @@ const STATUSES: Array<DispatchEvent["status"]> = [
   "Cancelled"
 ];
 
-// No preset/fake pins -- every real customer, employee, and vehicle name
-// gets a stable spot via the deterministic hash below instead.
-const MOCK_MAP_GRID: Record<string, { x: number; y: number; type: string; address?: string; role?: string }> = {};
-
-// Deterministic fallback grid position for a real name -- stable across
-// re-renders instead of jumping to a new random spot every time, while
-// still not claiming to be a real GPS location (that's what the actual
-// Google Map page is for).
-function deterministicGridPosition(key: string, minX: number, spreadX: number, minY: number, spreadY: number): { x: number; y: number } {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = key.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const xFrac = (Math.abs(hash) % 1000) / 1000;
-  const yFrac = (Math.abs(hash >> 3) % 1000) / 1000;
-  return { x: minX + xFrac * spreadX, y: minY + yFrac * spreadY };
-}
-
 export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -371,82 +353,6 @@ export const DispatchPage: React.FC = () => {
     setAssignType(type);
     setShowAssignModal(true);
   };
-
-  // Map Pins simulation list
-  const activePins = useMemo(() => {
-    // Collate jobs for the day and map employees / vehicles
-    const pins: Array<{
-      id: string;
-      label: string;
-      sublabel: string;
-      x: number;
-      y: number;
-      type: "job" | "employee" | "vehicle";
-      color: string;
-      meta?: any;
-    }> = [];
-
-    // 1. Add Jobs for current date
-    filteredEvents.forEach((evt) => {
-      const coord = MOCK_MAP_GRID[evt.customer as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(evt.customer, 30, 40, 20, 50);
-      pins.push({
-        id: evt.id,
-        label: evt.customer,
-        sublabel: `${evt.startTime} - ${evt.status}`,
-        x: coord.x,
-        y: coord.y,
-        type: "job",
-        color:
-          evt.status === "Completed"
-            ? "bg-green-500"
-            : evt.status === "Unassigned"
-            ? "bg-rose-500 animate-pulse"
-            : evt.status === "Working"
-            ? "bg-amber-500"
-            : "bg-blue-600",
-        meta: evt
-      });
-    });
-
-    // 2. Add some active Employees
-    AVAILABLE_TECHNICIANS.forEach((tech) => {
-      // Find if assigned today
-      const isAssigned = filteredEvents.some(e => e.assignedEmployee === tech);
-      if (isAssigned) {
-        const coord = MOCK_MAP_GRID[tech as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(tech, 15, 70, 15, 70);
-        pins.push({
-          id: `tech_${tech.replace(/\s+/g, "_")}`,
-          label: tech,
-          sublabel: "Technician Location",
-          x: coord.x,
-          y: coord.y,
-          type: "employee",
-          color: "bg-emerald-600 border border-white"
-        });
-      }
-    });
-
-    // 3. Add active Vehicles
-    AVAILABLE_VEHICLES.forEach((vehicle) => {
-      if (vehicle !== "None") {
-        const isUsed = filteredEvents.some(e => e.assignedVehicle === vehicle);
-        if (isUsed) {
-          const coord = MOCK_MAP_GRID[vehicle as keyof typeof MOCK_MAP_GRID] || deterministicGridPosition(vehicle, 20, 60, 20, 60);
-          pins.push({
-            id: `veh_${vehicle.replace(/\s+/g, "_")}`,
-            label: vehicle,
-            sublabel: "Active Fleet Tracker",
-            x: coord.x,
-            y: coord.y,
-            type: "vehicle",
-            color: "bg-yellow-500 text-black border border-slate-800"
-          });
-        }
-      }
-    });
-
-    return pins;
-  }, [filteredEvents]);
 
   // Navigate trigger helpers that direct to unbuilt page placeholders or active modules
   const handleNavigateToScreen = (targetId: string, alertText: string) => {
@@ -917,81 +823,50 @@ export const DispatchPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Hand: Shared Live Map (5 Columns) */}
+        {/* Right Hand: today's real dispatch summary, linking out to the
+            actual live map (Interactive Map & Routes) for real GPS pins --
+            no simulated positions or invented street names here. */}
         <div className="lg:col-span-5 flex flex-col gap-3 min-h-[350px]">
           <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <span>🗺️ Live Dispatch Map</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <span>🗺️ Today's Dispatch</span>
           </h3>
 
-          <div className="flex-1 bg-[#E3F3FF] border border-[#9EC8EF] rounded-2xl p-2 relative overflow-hidden flex flex-col justify-between shadow-inner">
-            
-            {/* Legend / Status HUD overlaid on Map */}
-            <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-xs p-2.5 rounded-xl border border-[#9EC8EF] shadow-sm text-[9.5px] max-w-xs flex flex-col gap-1.5 font-bold">
-              <span className="text-[8px] font-black uppercase text-[#5E7393] mb-0.5">Live Tracking HUD</span>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-500" /> <span>Urgent / Unassigned Job</span></div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-600" /> <span>Scheduled Job</span></div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-600" /> <span>Technician En Route/Active</span></div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-500" /> <span>Fleet Vehicle GPS</span></div>
+          <div className="flex-1 bg-[#E3F3FF] border border-[#9EC8EF] rounded-2xl p-4 flex flex-col gap-4 shadow-inner">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-white rounded-xl border border-[#9EC8EF] p-3">
+                <p className="text-xl font-black text-[#1F3557]">{filteredEvents.length}</p>
+                <p className="text-[9px] font-bold uppercase text-[#5E7393] mt-1">Jobs Today</p>
+              </div>
+              <div className="bg-white rounded-xl border border-[#9EC8EF] p-3">
+                <p className="text-xl font-black text-[#1F3557]">{AVAILABLE_TECHNICIANS.filter(tech => filteredEvents.some(e => e.assignedEmployee === tech)).length}</p>
+                <p className="text-[9px] font-bold uppercase text-[#5E7393] mt-1">Techs Assigned</p>
+              </div>
+              <div className="bg-white rounded-xl border border-[#9EC8EF] p-3">
+                <p className="text-xl font-black text-[#1F3557]">{filteredEvents.filter(e => e.status === "Unassigned").length}</p>
+                <p className="text-[9px] font-bold uppercase text-[#5E7393] mt-1">Unassigned</p>
+              </div>
             </div>
 
-            {/* Stylized Digital Map Grid Mockup */}
-            <div className="flex-1 relative w-full h-[320px] bg-[#121E36] rounded-xl overflow-hidden border border-[#A9CDEE]/50">
-              {/* Animated Map Streets Overlay Grid lines */}
-              <div className="absolute inset-0 opacity-15" style={{
-                backgroundImage: `radial-gradient(circle, #38BDF8 1px, transparent 1px), linear-gradient(to right, #38BDF8 1px, transparent 1px), linear-gradient(to bottom, #38BDF8 1px, transparent 1px)`,
-                backgroundSize: "24px 24px"
-              }} />
-
-              {/* Street Names Simulation Overlay */}
-              <div className="absolute top-1/4 left-10 text-[9px] font-mono uppercase text-slate-500 tracking-widest opacity-40">Industrial Pkwy</div>
-              <div className="absolute bottom-1/3 right-12 text-[9px] font-mono uppercase text-slate-500 tracking-widest opacity-40">Oakridge Lane</div>
-              <div className="absolute bottom-10 left-12 text-[9px] font-mono uppercase text-slate-500 tracking-widest opacity-40">Broadway Ave</div>
-
-              {/* Map Pins */}
-              {activePins.map((pin) => (
-                <div
-                  key={pin.id}
-                  onClick={() => {
-                    if (pin.type === "job" && pin.meta) {
-                      setSelectedEvent(pin.meta);
-                    } else {
-                      alert(`${pin.label} (${pin.sublabel}) is currently simulated in live regional transit.`);
-                    }
-                  }}
-                  style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
-                  className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
-                >
-                  {/* Pin Circle */}
-                  <div className={`w-3.5 h-3.5 rounded-full ${pin.color} border border-white shadow-md flex items-center justify-center transition-all group-hover:scale-130 relative`}>
-                    {pin.type === "vehicle" && <Truck className="w-2 h-2 text-slate-900" />}
-                    {pin.type === "employee" && <User className="w-2 h-2 text-white" />}
-                    
-                    {/* Ring for unassigned pulse */}
-                    {pin.meta?.status === "Unassigned" && (
-                      <span className="absolute -inset-1.5 rounded-full border border-rose-400 animate-ping opacity-60" />
-                    )}
-                  </div>
-
-                  {/* Popover on Hover */}
-                  <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-[#1F3557] text-white text-[9px] px-2 py-1 rounded-md border border-[#9EC8EF]/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-md">
-                    <p className="font-black leading-none">{pin.label}</p>
-                    <p className="font-mono text-[7px] text-[#A9CDEE] mt-0.5">{pin.sublabel}</p>
-                  </div>
-                </div>
+            <div className="bg-white rounded-xl border border-[#9EC8EF] divide-y divide-[#9EC8EF]/40 overflow-y-auto max-h-[220px]">
+              {filteredEvents.length === 0 ? (
+                <p className="text-center text-[10px] font-semibold text-[#5E7393] py-6">No jobs scheduled for this day.</p>
+              ) : filteredEvents.map(evt => (
+                <button key={evt.id} onClick={() => setSelectedEvent(evt)} className="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#EAF5FF] cursor-pointer">
+                  <span>
+                    <span className="block text-[11px] font-bold text-[#1F3557]">{evt.customer}</span>
+                    <span className="block text-[9px] font-semibold text-[#5E7393]">{evt.assignedEmployee || "Unassigned"} · {evt.startTime}</span>
+                  </span>
+                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${evt.status === "Unassigned" ? "bg-rose-100 text-rose-700" : evt.status === "Completed" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>{evt.status}</span>
+                </button>
               ))}
             </div>
 
-            {/* Simulated Live Route Stats Bar */}
-            <div className="mt-2 bg-[#EAF5FF] p-2 rounded-xl border border-[#9EC8EF]/60 text-[10px] font-semibold text-[#1F3557] flex items-center justify-between">
-              <span className="flex items-center gap-1"><Map className="w-3.5 h-3.5 text-[#315C9F]" /> <strong>Active Grid:</strong> Dallas–Fort Worth Operations</span>
-              <button
-                onClick={() => handleNavigateToScreen("routes", "Navigating to system routing grid.")}
-                className="text-[9px] font-black text-[#315C9F] uppercase tracking-wider hover:underline flex items-center gap-0.5"
-              >
-                Launch Route Optimizer <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
+            <button
+              onClick={() => handleNavigateToScreen("routes", "Opening the live map.")}
+              className="w-full py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Map className="w-3.5 h-3.5" /> Open Live Map <ChevronRight className="w-3 h-3" />
+            </button>
           </div>
         </div>
 
