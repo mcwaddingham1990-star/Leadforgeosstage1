@@ -80,11 +80,17 @@ export const SnapshotsPage: React.FC = () => {
   }, [snapshots, currentFolder, searchQuery]);
 
   const handleDownload = (snap: Snapshot) => {
-    // Generate simple mock JSON download representing the screenshot metrics
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snap, null, 2));
+    // Download the real captured photo when one exists -- only fall back to
+    // a metadata JSON export for snapshots that never had an image.
     const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", snap.filename.replace(".png", ".json"));
+    if (snap.image) {
+      downloadAnchor.setAttribute("href", snap.image);
+      downloadAnchor.setAttribute("download", snap.filename);
+    } else {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snap, null, 2));
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", snap.filename.replace(/\.(png|jpe?g)$/i, ".json"));
+    }
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();

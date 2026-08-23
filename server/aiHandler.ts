@@ -8,6 +8,8 @@ export interface AiAskRequest {
   isOwnerOrAdmin: boolean;
   conversation?: Array<{ role: "user" | "model"; text: string }>;
   query?: string;
+  /** Real owner-set preferences (tone, creativity, free-text style notes) from the AI Assistant's Config tab -- this is how the assistant "learns" the owner's voice/bidding style, applied to every request. */
+  styleGuidance?: string;
 }
 
 export interface AiAskResponse {
@@ -65,6 +67,7 @@ function buildSystemInstruction(req: AiAskRequest): string {
     redaction,
     req.businessSummary ? `Current business data summary for this screen:\n${req.businessSummary}` : "",
     req.customContext ? `Additional context: ${req.customContext}` : "",
+    req.styleGuidance ? `Owner-set style preferences -- follow these: ${req.styleGuidance}` : "",
     "Be concise, concrete, and reference the actual data provided rather than generic advice. Use markdown formatting (bold, bullet lists) sparingly for readability."
   ].filter(Boolean).join("\n\n");
 }

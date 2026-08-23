@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
+import { buildStyleGuidance } from "../lib/aiStyle";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Sparkles,
@@ -58,7 +59,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { recentAiActions, setRecentAiActions, customers, leads, schedulingEvents, employees, invoices, transactions } = useDomainData();
+  const { recentAiActions, setRecentAiActions, customers, leads, schedulingEvents, employees, invoices, transactions, aiKnowledgeBase, setAiKnowledgeBase } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -68,10 +69,14 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
   } = useNavTelemetry();
   const [activeTab, setActiveTab] = useState<"command" | "reports" | "config" | "insights" | "settings">("command");
   
-  // Local state for interactive configurations
-  const [selectedKBDoc, setSelectedKBDoc] = useState<string>("pricebook");
-  const [creativityLevel, setCreativityLevel] = useState<number>(70);
-  const [aiTone, setAiTone] = useState<string>("analytical");
+  // Real, persisted config (src/App.tsx auto-saves this to Firestore
+  // whenever it changes, and feeds it into every AI request as
+  // styleGuidance -- see resolveAiMode/buildStyleGuidance there).
+  const { selectedKBDoc, creativityLevel, aiTone, styleNotes } = aiKnowledgeBase;
+  const setSelectedKBDoc = (value: string) => setAiKnowledgeBase(prev => ({ ...prev, selectedKBDoc: value }));
+  const setCreativityLevel = (value: number) => setAiKnowledgeBase(prev => ({ ...prev, creativityLevel: value }));
+  const setAiTone = (value: string) => setAiKnowledgeBase(prev => ({ ...prev, aiTone: value }));
+  const setStyleNotes = (value: string) => setAiKnowledgeBase(prev => ({ ...prev, styleNotes: value }));
   const [showSaveToast, setShowSaveToast] = useState<boolean>(false);
 
   // Real reports generated on-demand from this account's actual data (session-local, not a fake pre-seeded library).
@@ -118,6 +123,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           pageName: "AI Assistant",
           isOwnerOrAdmin: true,
           businessSummary,
+          styleGuidance: buildStyleGuidance(aiKnowledgeBase),
           query: "Write a short operational audit report for the business owner covering current pipeline, staffing, and financial activity levels, using only the real figures given above. If a section has no data, say so plainly instead of inventing anything."
         })
       });
@@ -146,6 +152,10 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
     logOperationalEvent("AI Report Download", `Downloaded report: ${rep.title}`, "📥");
   };
 
+  // aiKnowledgeBase already lives in App.tsx and auto-saves to Firestore
+  // on every change (see the useEffect there) -- this button is just a
+  // clear, explicit confirmation that the current values are the saved
+  // ones, not a separate save path.
   const handleSaveConfig = () => {
     setShowSaveToast(true);
     logOperationalEvent("AI Config", "OwnersLOCAL Global AI Knowledge database and tone configs saved.", "⚙️");
@@ -450,6 +460,20 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       <option value="brutalist">Short and blunt — just the facts</option>
                       <option value="sales">Sales-minded — always closing</option>
                     </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Your bidding/writing style notes</label>
+                    <textarea
+                      value={styleNotes}
+                      onChange={(e) => setStyleNotes(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. Always round estimates to the nearest $50. Mention our 2-year warranty on every quote. Keep invoice notes short and professional, no exclamation points."
+                      className="w-full bg-[#EAF5FF] border border-[#9EC8EF] text-xs font-medium text-[#1F3557] rounded-xl px-3 py-2 focus:outline-none resize-none"
+                    />
+                    <p className="text-[9px] text-slate-400 font-sans font-semibold">
+                      Sent with every AI request so drafts, estimates, and answers actually follow your real preferences instead of a generic voice.
+                    </p>
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex justify-end">

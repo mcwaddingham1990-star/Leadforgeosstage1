@@ -887,6 +887,30 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       setPurchases(prev => [newPurchase, ...prev]);
     }
 
+    // Real receipt total -> real Materials expense, posted to the same
+    // ledger the manual "Log as Materials expense" checkbox uses. Only
+    // fires when the scan actually read a quantity and a unit cost --
+    // never a fabricated total.
+    const scannedTotal = scannedQty * scannedCost;
+    if (newItemChoice !== "ignore" && scannedTotal > 0) {
+      const itemName = matchedExistingItem?.name || aiSuggestions.name || "Scanned item";
+      void saveTransaction({
+        type: "expense",
+        source: "manual",
+        amount: scannedTotal,
+        description: `${itemName} (${scannedQty} ${aiSuggestions.unit || "units"} via AI receipt scan)`,
+        category: "Materials",
+        date: aiSuggestions.purchaseDate || today,
+        createdAt: new Date().toISOString(),
+        inventoryItemId: matchedExistingItem?.id,
+        ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
+      }).then(() => triggerToast(`Logged $${scannedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for ${itemName} as a Materials expense.`))
+        .catch(error => {
+          console.error("Inventory updated, but its expense could not be logged:", error);
+          triggerToast(`${itemName} was updated in inventory, but the expense did not post. Log it from Revenue when the connection recovers.`);
+        });
+    }
+
     const label = matchedExistingItem
       ? `Restocked ${matchedExistingItem.name}: +${scannedQty} units.`
       : newItemChoice === "new"

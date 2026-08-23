@@ -5,6 +5,7 @@ import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, Granu
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
 import type { GeneratedPdfDraft } from "./types/generatedPdf";
+import { buildStyleGuidance } from "./lib/aiStyle";
 import { postTransactionEntry } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
@@ -1568,7 +1569,34 @@ export default function App() {
     bulletins: "DEFAULT",
     snapshots: "DEFAULT",
   });
-  
+
+  // Real, persisted "what your assistant knows" config -- fed into every
+  // AI request's prompt (see buildBusinessSummary/openPageAIAnalysis) so
+  // the tone/creativity/style notes the owner sets on the AI Assistant
+  // page's Config tab actually change what comes back, and so it's still
+  // there after a reload instead of resetting to defaults.
+  const [aiKnowledgeBase, setAiKnowledgeBase] = useState<{
+    selectedKBDoc: string;
+    creativityLevel: number;
+    aiTone: string;
+    styleNotes: string;
+  }>({ selectedKBDoc: "pricebook", creativityLevel: 70, aiTone: "analytical", styleNotes: "" });
+  const aiSettingsLoadedRef = React.useRef(false);
+  const aiSettingsHydratingRef = React.useRef(false);
+
+  // Auto-persists globalAiSetting/moduleAiSettings/aiKnowledgeBase to this
+  // business's Firestore profile the moment any of them change -- this is
+  // the real save path "Save Changes" (AI Assistant Config tab), the
+  // global/per-module dropdowns (AI Assistant, Settings), and Owner
+  // Console's Pause/Resume AI button all share, instead of each holding
+  // its own throwaway local state.
+  useEffect(() => {
+    if (!businessId || !aiSettingsLoadedRef.current || aiSettingsHydratingRef.current) return;
+    const handle = setTimeout(() => {
+      setDoc(doc(db, "business_profiles", businessId), { globalAiSetting, moduleAiSettings, aiKnowledgeBase }, { merge: true }).catch(err => console.error("Error saving AI settings:", err));
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [businessId, globalAiSetting, moduleAiSettings, aiKnowledgeBase]);
 
   // Floating AI Widget UI States
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
@@ -1719,11 +1747,15 @@ export default function App() {
                 if (bizSnap.exists()) {
                   const bizData = bizSnap.data();
                   if (bizData.customCardTargets) setCustomCardTargets(bizData.customCardTargets);
+                  aiSettingsHydratingRef.current = true;
                   if (bizData.globalAiSetting) setGlobalAiSetting(bizData.globalAiSetting);
                   if (bizData.moduleAiSettings) setModuleAiSettings(bizData.moduleAiSettings);
+                  if (bizData.aiKnowledgeBase) setAiKnowledgeBase(prev => ({ ...prev, ...bizData.aiKnowledgeBase }));
+                  aiSettingsHydratingRef.current = false;
                   if (bizData.integrationStatuses) setIntegrationStatuses(bizData.integrationStatuses);
                   if (Array.isArray(bizData.selectedRoles) && bizData.selectedRoles.length) setSelectedRoles(normalizeSelectedRoles(bizData.selectedRoles));
                 }
+                aiSettingsLoadedRef.current = true;
                 
                 // Restore Time Clock state
                 // Bypass an old IndexedDB snapshot on re-login. A cached
@@ -1960,21 +1992,36 @@ export default function App() {
     setPendingDataAction(null);
   };
 
+  // Resolves what a given module (page) is actually allowed to do right
+  // now: the module's own dropdown wins when set, otherwise it inherits
+  // the global setting -- and the global setting itself is what Owner
+  // Console's Pause/Resume AI button controls (OFF).
+  const resolveAiMode = (pageId: string): "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO" => {
+    const moduleSetting = moduleAiSettings[pageId];
+    if (!moduleSetting || moduleSetting === "DEFAULT") return globalAiSetting;
+    return moduleSetting;
+  };
+
   const openPageAIAnalysis = (pageId: string, pageName: string, customContext?: string) => {
     setAiPageId(pageId);
     setAiPageName(pageName);
     const resolvedContext = customContext || "";
     setAiCustomContext(resolvedContext);
     setIsAIAnalysisOpen(true);
-    setAiIsLoading(true);
 
+    if (resolveAiMode(pageId) === "OFF") {
+      setAiMessages([{ sender: "ai", text: `The AI assistant is turned off for ${pageName} (Owner Console or the AI Assistant's module settings). Turn it back on to ask a question here.` }]);
+      return;
+    }
+
+    setAiIsLoading(true);
     const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
     const businessSummary = buildBusinessSummary(pageId);
 
     fetch("/api/ai/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageId, pageName, customContext: resolvedContext, businessSummary, isOwnerOrAdmin })
+      body: JSON.stringify({ pageId, pageName, customContext: resolvedContext, businessSummary, isOwnerOrAdmin, styleGuidance: buildStyleGuidance(aiKnowledgeBase) })
     })
       .then(async (res) => {
         const data = await res.json();
@@ -2035,6 +2082,10 @@ export default function App() {
   };
 
   const executeConfirmedAIMessage = (query: string) => {
+    if (resolveAiMode(aiPageId) === "OFF") {
+      setAiMessages(prev => [...prev, { sender: "ai", text: `The AI assistant is turned off for ${aiPageName}. Turn it back on in Owner Console or the AI Assistant's module settings.` }]);
+      return;
+    }
     setAiIsLoading(true);
     const isOwnerOrAdmin = (simulatedRole || loggedInUser?.role || "Owner") === "Owner" || (simulatedRole || loggedInUser?.role || "Owner") === "Admin";
     const conversation = aiMessages.map(m => ({ role: (m.sender === "user" ? "user" : "model") as "user" | "model", text: m.text }));
@@ -2048,7 +2099,8 @@ export default function App() {
         businessSummary: buildBusinessSummary(aiPageId),
         isOwnerOrAdmin,
         conversation,
-        query
+        query,
+        styleGuidance: buildStyleGuidance(aiKnowledgeBase)
       })
     })
       .then(async (res) => {
@@ -2412,6 +2464,9 @@ Access to full financial telemetry is restricted.`;
         companyLocations: [""],
         updatedAt: new Date().toISOString()
       });
+      // Brand-new account -- there are no existing AI settings to clobber,
+      // so it's safe to start persisting real changes right away.
+      aiSettingsLoadedRef.current = true;
       localStorage.removeItem("ownerslocalPendingOwnerSignup");
 
       let verificationEmailSent = false;
@@ -3365,6 +3420,10 @@ Access to full financial telemetry is restricted.`;
     setGeneratedPdfDraft,
     pendingSignatureCapture,
     setPendingSignatureCapture,
+    globalAiSetting,
+    setGlobalAiSetting,
+    aiKnowledgeBase,
+    setAiKnowledgeBase,
     businessProfile: {
       name: businessNames[0] || "",
       phone: businessPhones[0] || "",

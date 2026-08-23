@@ -183,7 +183,7 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents, employees, invoices, transactions } = useDomainData();
+  const { customers, setCustomers, schedulingEvents, setSchedulingEvents, recentAiActions, setRecentAiActions, leads, estimates, inventoryList, documents, employees, invoices, transactions, globalAiSetting, setGlobalAiSetting } = useDomainData();
   const { triggerNotification, navigateToScreen } = useNavTelemetry();
   // Check permission: Only accessible by Owner role
   const isAuthorized = activeRole === "Owner";
@@ -226,10 +226,13 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
   const [logsFilterLevel, setLogsFilterLevel] = useState<string>("all");
   const [logsSearch, setLogsSearch] = useState<string>("");
 
-  // AI Active state (local UI toggle only -- not wired to a real backend
-  // AI on/off switch; see feature flags note further down for the same
-  // caveat applied to the other decorative toggles in this file).
-  const [aiEngineRunning, setAiEngineRunning] = useState<boolean>(true);
+  // Real, persisted global AI on/off -- the same value the AI Assistant's
+  // Settings tab and Settings page read/write, and what every AI request
+  // (App.tsx openPageAIAnalysis/executeConfirmedAIMessage) actually checks
+  // before firing.
+  const aiEngineRunning = globalAiSetting !== "OFF";
+  const previousAiSettingRef = useRef<"ASSIST" | "ASSIST + APPROVAL" | "AUTO">("ASSIST");
+  if (globalAiSetting !== "OFF") previousAiSettingRef.current = globalAiSetting;
 
   // --- Event Node definition & placement for SVG flow diagram ---
   const EVENT_NODES: EventEngineNode[] = [
@@ -449,10 +452,14 @@ export const OwnerConsolePage: React.FC<OwnerConsolePageProps> = ({
     walkNextNode();
   };
 
-  // AI CONTROL TRIGGERS
+  // AI CONTROL TRIGGERS -- flips the real global AI setting every AI
+  // request in the app actually checks (App.tsx resolveAiMode), and
+  // restores whatever mode was active before pausing rather than always
+  // resetting to ASSIST.
   const handleToggleAiEngine = () => {
-    setAiEngineRunning(!aiEngineRunning);
-    triggerNotification(`🤖 Gemini AI Engine set to ${!aiEngineRunning ? "ENABLED" : "PAUSED"}`);
+    const next = aiEngineRunning ? "OFF" : previousAiSettingRef.current;
+    setGlobalAiSetting(next);
+    triggerNotification(`🤖 Gemini AI Engine set to ${next === "OFF" ? "PAUSED" : "ENABLED"}`);
   };
 
   // UNDO AI DECISION -- marks the underlying real recentAiActions entry as

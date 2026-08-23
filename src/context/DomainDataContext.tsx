@@ -81,6 +81,12 @@ export interface DomainDataContextValue {
   setPendingSignatureCapture: Dispatch<SetStateAction<{ customerName?: string } | null>>;
   /** Real business profile (Settings -> Business Info), used to head every generated PDF and to place the HQ pin on the map. First location only -- multi-location businesses print/pin their primary address. */
   businessProfile: { name: string; phone: string; address: string; email: string; logo: string };
+  /** The real, persisted global AI on/off + mode -- Owner Console's Pause/Resume AI button and the AI Assistant/Settings dropdowns all read and write this same value. */
+  globalAiSetting: "OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO";
+  setGlobalAiSetting: Dispatch<SetStateAction<"OFF" | "ASSIST" | "ASSIST + APPROVAL" | "AUTO">>;
+  /** Real, persisted "what your assistant knows" settings (tone, creativity, style notes) fed into every AI request's prompt. */
+  aiKnowledgeBase: { selectedKBDoc: string; creativityLevel: number; aiTone: string; styleNotes: string };
+  setAiKnowledgeBase: Dispatch<SetStateAction<{ selectedKBDoc: string; creativityLevel: number; aiTone: string; styleNotes: string }>>;
 }
 
 export const DomainDataContext = createContext<DomainDataContextValue | undefined>(undefined);
