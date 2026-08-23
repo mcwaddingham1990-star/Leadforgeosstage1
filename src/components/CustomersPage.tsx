@@ -44,6 +44,7 @@ import type { Customer, DocumentItem } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
+import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 
 export interface CustomersPageProps {
   // NOTE: this page calls onOpenPlaceholder("estimates")/("scheduling", "icon")
@@ -1809,21 +1810,31 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Contact Info */}
+                  {/* Contact Info -- tapping Call/Text/Email hands off to
+                      this device's real phone, messaging, or mail app. */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div className="space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
+                    <div className="space-y-1.5 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
                       <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Phone</span>
                       <span className="font-mono font-bold flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-[#315C9F]" />
-                        {selectedCustomer.phone}
+                        {selectedCustomer.phone || "—"}
                       </span>
+                      {selectedCustomer.phone && (
+                        <div className="flex gap-1.5 pt-0.5">
+                          <button onClick={() => callNumber(selectedCustomer.phone)} className="flex-1 px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Call</button>
+                          <button onClick={() => composeSms({ to: selectedCustomer.phone })} className="flex-1 px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Text</button>
+                        </div>
+                      )}
                     </div>
-                    <div className="space-y-1 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
+                    <div className="space-y-1.5 bg-[#EAF5FF]/40 p-3 rounded-2xl border border-[#9EC8EF]/30">
                       <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Email</span>
                       <span className="font-semibold truncate block flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 text-[#315C9F]" />
-                        {selectedCustomer.email}
+                        {selectedCustomer.email || "—"}
                       </span>
+                      {selectedCustomer.email && (
+                        <button onClick={() => composeEmail({ to: selectedCustomer.email })} className="w-full px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Email</button>
+                      )}
                     </div>
                     {(() => {
                       const ap = parseAddress(selectedCustomer.address || "");

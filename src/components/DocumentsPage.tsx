@@ -1886,32 +1886,6 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    const [, name = "", email = ""] = shareRecipient.split("|");
-                    if (!email) return triggerNotification("Choose a contact with an email address first.");
-                    localStorage.setItem(`ownerslocal_email_draft_${shareDocItem.id}`, JSON.stringify({ to: email, name, documentId: shareDocItem.id, subject: shareDocItem.name, savedAt: new Date().toISOString() }));
-                    triggerNotification(`Email draft saved for ${name}.`);
-                  }}
-                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
-                >
-                  <Mail className="w-5 h-5 text-violet-600" />
-                  <span className="text-[10px] font-black uppercase mt-1">Draft Email</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    const [, name = "", , phone = ""] = shareRecipient.split("|");
-                    if (!phone) return triggerNotification("Choose a contact with a mobile number first.");
-                    localStorage.setItem(`ownerslocal_text_draft_${shareDocItem.id}`, JSON.stringify({ to: phone, name, documentId: shareDocItem.id, body: `Please review ${shareDocItem.name}`, savedAt: new Date().toISOString() }));
-                    triggerNotification(`Text draft saved for ${name}.`);
-                  }}
-                  className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
-                >
-                  <MessageCircle className="w-5 h-5 text-orange-600" />
-                  <span className="text-[10px] font-black uppercase mt-1">Draft Text</span>
-                </button>
-
-                <button
-                  onClick={() => {
                     // No real public document-hosting/share-link backend
                     // exists yet, so there is nothing real to link to —
                     // copying a URL that resolves nowhere would be worse

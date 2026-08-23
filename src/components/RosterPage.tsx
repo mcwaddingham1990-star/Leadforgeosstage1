@@ -8,6 +8,7 @@ import { MODULE_CATALOG } from "./RolePermissionEditorModal";
 import { defaultGranularFromModuleList, GranularPermissions, getPermissionFlags, PermissionAction } from "../types/permissions";
 import { Search, UserPlus, Edit3, X, Copy, Shield, Phone, Mail, MapPin } from "lucide-react";
 import type { EmployeeRecord } from "../types/domain";
+import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { isManagerRole } from "../lib/notificationsService";
 
 function genInviteCode(role: string): string {
@@ -299,6 +300,13 @@ export const RosterPage: React.FC = () => {
                 <div className="flex items-center justify-between pt-2 border-t border-[#9EC8EF]/30">
                   <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${statusColor(status)}`}>{status}</span>
                   {emp.hourlyRate > 0 && <span className="text-[10px] font-bold text-[#1F3557]">${emp.hourlyRate}/hr</span>}
+                </div>
+
+                {/* Real device handoff -- opens this device's phone/messaging/mail app. */}
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  <button disabled={!emp.phone} onClick={() => callNumber(emp.phone)} className="px-2 py-1 bg-white hover:bg-[#EAF5FF] disabled:opacity-40 disabled:cursor-not-allowed border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Call</button>
+                  <button disabled={!emp.phone} onClick={() => composeSms({ to: emp.phone })} className="px-2 py-1 bg-white hover:bg-[#EAF5FF] disabled:opacity-40 disabled:cursor-not-allowed border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Text</button>
+                  <button onClick={() => composeEmail({ to: emp.email })} className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Email</button>
                 </div>
               </div>
             );
