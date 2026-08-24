@@ -108,6 +108,11 @@ export interface ScanReceiptResponse {
   quantity: number | null;
   unit: string | null;
   unitCost: number | null;
+  /** The receipt's own printed total (including tax), read directly rather
+   *  than inferred from quantity × unitCost -- many receipts never print a
+   *  clean per-unit price, so this is the number the logged expense should
+   *  actually be based on. */
+  total: number | null;
   category: string | null;
   manufacturer: string | null;
   purchaseDate: string | null;
@@ -125,6 +130,7 @@ const RECEIPT_SCHEMA = {
     quantity: { type: Type.NUMBER, nullable: true },
     unit: { type: Type.STRING, nullable: true },
     unitCost: { type: Type.NUMBER, nullable: true },
+    total: { type: Type.NUMBER, nullable: true },
     category: { type: Type.STRING, nullable: true },
     manufacturer: { type: Type.STRING, nullable: true },
     purchaseDate: { type: Type.STRING, nullable: true },
@@ -153,6 +159,7 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
             text: [
               "This image is a photo of an inventory receipt, packing slip, or product label/barcode for a local service business (plumbing/HVAC/electrical supplies).",
               "Extract only what you can actually read in the image. Do not guess or fabricate values.",
+              "If this is a receipt, also read its printed total amount (including tax) into `total` -- this is the number actually printed at the bottom of the receipt, separate from any per-unit price. Do not compute it yourself from quantity or unitCost.",
               "If a field isn't visible or legible, set it to null. Set unreadable=true only if the image doesn't contain a legible receipt/label at all."
             ].join(" ")
           }
@@ -170,7 +177,7 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { name: null, vendor: null, sku: null, barcode: null, quantity: null, unit: null, unitCost: null, category: null, manufacturer: null, purchaseDate: null, unreadable: true };
+    return { name: null, vendor: null, sku: null, barcode: null, quantity: null, unit: null, unitCost: null, total: null, category: null, manufacturer: null, purchaseDate: null, unreadable: true };
   }
 
   return {
@@ -181,6 +188,7 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
     quantity: parsed.quantity ?? null,
     unit: parsed.unit ?? null,
     unitCost: parsed.unitCost ?? null,
+    total: parsed.total ?? null,
     category: parsed.category ?? null,
     manufacturer: parsed.manufacturer ?? null,
     purchaseDate: parsed.purchaseDate ?? null,

@@ -58,6 +58,10 @@ export interface ScannedReceipt {
   quantity: number | null;
   unit: string | null;
   unitCost: number | null;
+  /** The receipt's own printed total (including tax) -- read directly, not
+   *  computed from quantity × unitCost, since many receipts never print a
+   *  clean per-unit price. This is what the logged expense should use. */
+  total: number | null;
   category: string | null;
   manufacturer: string | null;
   purchaseDate: string | null;
@@ -824,7 +828,13 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     }
 
     const scannedQty = aiSuggestions.quantity ?? 0;
-    const scannedCost = aiSuggestions.unitCost ?? 0;
+    // Prefer the receipt's own printed total for the actual expense/purchase
+    // amount -- quantity × unitCost is only a fallback estimate for receipts
+    // where no clean total was legible, since many receipts never print a
+    // clean per-unit price at all (a lump line total, tax, multiple items).
+    const receiptTotal = aiSuggestions.total ?? null;
+    const scannedCost = aiSuggestions.unitCost ?? (receiptTotal != null && scannedQty > 0 ? receiptTotal / scannedQty : 0);
+    const scannedTotal = receiptTotal ?? (scannedQty * scannedCost);
     const today = new Date().toISOString().slice(0, 10);
 
     if (matchedExistingItem) {
@@ -882,16 +892,15 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         date: aiSuggestions.purchaseDate || today,
         employee: loggedInUser?.name || "Unknown",
         itemsPurchased: `${aiSuggestions.name || "Scanned item"} (${scannedQty})`,
-        totalCost: scannedQty * scannedCost
+        totalCost: scannedTotal
       };
       setPurchases(prev => [newPurchase, ...prev]);
     }
 
     // Real receipt total -> real Materials expense, posted to the same
     // ledger the manual "Log as Materials expense" checkbox uses. Only
-    // fires when the scan actually read a quantity and a unit cost --
-    // never a fabricated total.
-    const scannedTotal = scannedQty * scannedCost;
+    // fires when the scan actually read a real total (printed on the
+    // receipt) or enough to compute one -- never a fabricated amount.
     if (newItemChoice !== "ignore" && scannedTotal > 0) {
       const itemName = matchedExistingItem?.name || aiSuggestions.name || "Scanned item";
       void saveTransaction({
@@ -2331,7 +2340,14 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       <span className="text-[9px] text-slate-400 block font-bold">Unit Cost</span>
                       <span className="font-mono text-slate-800 font-black">{aiSuggestions.unitCost != null ? `$${aiSuggestions.unitCost.toFixed(2)}` : "Not detected"}</span>
                     </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-bold">Receipt Total</span>
+                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.total != null ? `$${aiSuggestions.total.toFixed(2)}` : "Not detected"}</span>
+                    </div>
                   </div>
+                  {aiSuggestions.total == null && (aiSuggestions.quantity == null || aiSuggestions.unitCost == null) && (
+                    <p className="text-[10px] text-amber-700 font-sans font-semibold">No total, quantity, or unit cost was legible — confirming this will update inventory but won't log a Materials expense. Log it manually from Revenue if needed.</p>
+                  )}
                 </div>
 
                 <div className="flex gap-2 justify-end pt-2">
