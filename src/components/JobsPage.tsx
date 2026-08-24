@@ -284,7 +284,8 @@ export const JobsPage: React.FC = () => {
     />}
     {completionJob && businessId && <ProjectCompletionTracking
       job={completionJob} plan={completionPlans.find(plan=>plan.jobId===completionJob.id)}
-      businessId={businessId} actor={actor} canManage={canManageCompletion} inventory={inventoryList}
+      businessId={businessId} actor={actor} canManage={canManageCompletion}
+      canCreate={canManageCompletion || isAssignedWorker(completionJob)} inventory={inventoryList}
       setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={()=>setCompletionJobId(null)} notify={triggerNotification}
     />}
   </div>;

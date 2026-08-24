@@ -100,7 +100,8 @@ service cloud.firestore {
     match /project_completion_plans/{jobId} {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
-        && request.resource.data.jobId == jobId && canManageProjectCompletion(request.resource.data.businessId);
+        && request.resource.data.jobId == jobId
+        && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId));
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
         && canManageProjectCompletion(resource.data.businessId);
       allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
