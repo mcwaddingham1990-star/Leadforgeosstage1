@@ -3453,7 +3453,7 @@ Access to full financial telemetry is restricted.`;
     <EventEngineEffects />
     {isLoggedIn && <UniversalAIIntake />}
     <div
-      className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : isDarkTheme ? 'login-theme-dark-basic' : 'login-theme-light-basic'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
+      className={`min-h-screen ${isLoggedIn ? (isDarkTheme ? 'bg-[#050f1a]' : 'bg-[#F5FAFF]') : isDarkTheme ? 'login-theme-dark-basic' : 'login-theme-light-basic'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
       style={!isLoggedIn ? { backgroundImage: `url(${isDarkTheme ? darkLoginBackground : lightLoginBackground})` } : undefined}
     >
       {!authReady && (
