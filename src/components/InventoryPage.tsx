@@ -51,21 +51,27 @@ import {
 import { SchedulingEvent } from "./SchedulingPage";
 import { postTransactionEntry } from "../lib/accountingEngine";
 
-export interface ScannedReceipt {
+export interface ScannedLineItem {
   name: string | null;
-  vendor: string | null;
   sku: string | null;
   barcode: string | null;
   quantity: number | null;
   unit: string | null;
   unitCost: number | null;
-  /** The receipt's own printed total (including tax) -- read directly, not
-   *  computed from quantity × unitCost, since many receipts never print a
-   *  clean per-unit price. This is what the logged expense should use. */
-  total: number | null;
   category: string | null;
   manufacturer: string | null;
+}
+
+export interface ScannedReceipt {
+  vendor: string | null;
   purchaseDate: string | null;
+  /** One entry per distinct line item on the receipt (or a single entry for
+   *  a plain product label/barcode). */
+  items: ScannedLineItem[];
+  /** The receipt's own printed total (including tax) -- read directly, not
+   *  computed by summing items, since many receipts never print a clean
+   *  per-item price. This is what the logged expense should use. */
+  total: number | null;
   unreadable: boolean;
 }
 
@@ -196,9 +202,13 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
   // Snapshot AI Camera — real OCR via Gemini vision (POST /api/ai/scan-receipt), not simulated.
   const [isSnapshotAIModalOpen, setIsSnapshotAIModalOpen] = useState(false);
-  const [snapshotStage, setSnapshotStage] = useState<"camera" | "processing" | "review" | "no_match_choice">("camera");
+  const [snapshotStage, setSnapshotStage] = useState<"camera" | "processing" | "review">("camera");
   const [aiSuggestions, setAiSuggestions] = useState<ScannedReceipt | null>(null);
-  const [newItemChoice, setNewItemChoice] = useState<"new" | "ignore" | null>(null);
+  // Per-item "add to inventory" checkbox, indexed to aiSuggestions.items. All checked by default.
+  const [selectedScanItems, setSelectedScanItems] = useState<boolean[]>([]);
+  // Whether to also post the receipt's total as a Materials expense -- separate from which
+  // items get tracked into inventory, since the money was spent either way.
+  const [logScanExpense, setLogScanExpense] = useState(true);
   const [ocrError, setOcrError] = useState<string | null>(null);
 
   // Barcode / QR Scanner Simulator Modal
@@ -798,12 +808,17 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Scan failed");
-      if (data.unreadable) {
-        setOcrError("Couldn't read a receipt or label in that photo. Try a clearer, well-lit shot of the item's label, barcode, or receipt.");
+      const scanned = data as ScannedReceipt;
+      if (scanned.unreadable || !scanned.items?.length) {
+        setOcrError(scanned.unreadable
+          ? "Couldn't read a receipt or label in that photo. Try a clearer, well-lit shot of the item's label, barcode, or receipt."
+          : "No items could be read on that receipt. Try a clearer, well-lit shot.");
         setSnapshotStage("camera");
         return;
       }
-      setAiSuggestions(data as ScannedReceipt);
+      setAiSuggestions(scanned);
+      setSelectedScanItems(scanned.items.map(() => true));
+      setLogScanExpense(true);
       setSnapshotStage("review");
     } catch (err) {
       setOcrError(err instanceof Error ? err.message : "Scan failed. Make sure GEMINI_API_KEY is configured on the server.");
@@ -811,125 +826,124 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     }
   };
 
-  const matchedExistingItem = useMemo(() => {
-    if (!aiSuggestions) return null;
-    return inventoryList.find(i =>
-      (!!aiSuggestions.barcode && i.barcode === aiSuggestions.barcode) ||
-      (!!aiSuggestions.sku && i.sku === aiSuggestions.sku)
+  const findInventoryMatch = (item: ScannedLineItem) =>
+    inventoryList.find(i =>
+      (!!item.barcode && i.barcode === item.barcode) ||
+      (!!item.sku && i.sku === item.sku)
     ) || null;
-  }, [aiSuggestions, inventoryList]);
+
+  // The receipt's own printed total is preferred for the expense amount;
+  // summing quantity × unitCost per line is only a fallback for receipts
+  // where no clean total was legible.
+  const scanReceiptTotal = (receipt: ScannedReceipt) =>
+    receipt.total ?? receipt.items.reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitCost ?? 0), 0);
+
+  const toggleAllScanItems = (checked: boolean) => {
+    if (!aiSuggestions) return;
+    setSelectedScanItems(aiSuggestions.items.map(() => checked));
+  };
 
   const handleApproveAISuggestion = () => {
     if (!aiSuggestions) return;
-
-    if (!matchedExistingItem && !newItemChoice) {
-      setSnapshotStage("no_match_choice");
-      return;
-    }
-
-    const scannedQty = aiSuggestions.quantity ?? 0;
-    // Prefer the receipt's own printed total for the actual expense/purchase
-    // amount -- quantity × unitCost is only a fallback estimate for receipts
-    // where no clean total was legible, since many receipts never print a
-    // clean per-unit price at all (a lump line total, tax, multiple items).
-    const receiptTotal = aiSuggestions.total ?? null;
-    const scannedCost = aiSuggestions.unitCost ?? (receiptTotal != null && scannedQty > 0 ? receiptTotal / scannedQty : 0);
-    const scannedTotal = receiptTotal ?? (scannedQty * scannedCost);
     const today = new Date().toISOString().slice(0, 10);
+    const updatedNames: string[] = [];
 
-    if (matchedExistingItem) {
-      const updated = {
-        ...matchedExistingItem,
-        quantity: matchedExistingItem.quantity + scannedQty,
-        quantityHistory: [
-          {
-            date: today,
-            type: "AI Receipt Scan",
-            amount: scannedQty,
-            previous: matchedExistingItem.quantity,
-            current: matchedExistingItem.quantity + scannedQty,
-            notes: aiSuggestions.vendor ? `Scanned at ${aiSuggestions.vendor}` : "Scanned via camera OCR"
-          },
-          ...matchedExistingItem.quantityHistory
-        ]
-      };
-      setInventoryList(prev => prev.map(i => (i.id === matchedExistingItem.id ? updated : i)));
-    } else if (newItemChoice === "new") {
-      const newItem: InventoryItem = {
-        id: `ai_${Date.now()}`,
-        name: aiSuggestions.name || "Unnamed scanned item",
-        category: aiSuggestions.category || "Uncategorized",
-        vendor: aiSuggestions.vendor || "",
-        manufacturer: aiSuggestions.manufacturer || "",
-        sku: aiSuggestions.sku || "",
-        barcode: aiSuggestions.barcode || "",
-        qrCode: "",
-        description: "Added from a scanned receipt/label photo",
-        quantity: scannedQty,
-        unit: aiSuggestions.unit || "pcs",
-        minQuantity: 5,
-        maxQuantity: Math.max(scannedQty * 2, 10),
-        location: "Warehouse A",
-        unitCost: scannedCost,
-        sellingPrice: scannedCost * 1.5,
-        notes: "Created via camera OCR scan",
-        photo: "📦",
-        isFavorite: false,
-        lastUpdated: new Date().toLocaleTimeString(),
-        quantityHistory: [{ date: today, type: "AI Scanned New", amount: scannedQty, previous: 0, current: scannedQty, notes: "Created from scanned receipt/label" }],
-        purchaseHistory: [],
-        usageHistory: []
-      };
-      setInventoryList(prev => [...prev, newItem]);
-    }
-    // newItemChoice === "ignore": no inventory mutation, but still log the purchase below if cost data was scanned.
+    aiSuggestions.items.forEach((item, index) => {
+      if (!selectedScanItems[index]) return;
+      const scannedQty = item.quantity ?? 0;
+      const scannedCost = item.unitCost ?? 0;
+      const match = findInventoryMatch(item);
 
-    if (newItemChoice !== "ignore") {
-      const newPurchase: PurchaseRecord = {
-        id: `P-${Math.floor(100 + Math.random() * 900)}`,
-        vendor: aiSuggestions.vendor || "Unknown vendor",
-        receiptNumber: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
-        date: aiSuggestions.purchaseDate || today,
-        employee: loggedInUser?.name || "Unknown",
-        itemsPurchased: `${aiSuggestions.name || "Scanned item"} (${scannedQty})`,
-        totalCost: scannedTotal
-      };
-      setPurchases(prev => [newPurchase, ...prev]);
-    }
+      if (match) {
+        setInventoryList(prev => prev.map(i => i.id === match.id ? {
+          ...i,
+          quantity: i.quantity + scannedQty,
+          quantityHistory: [
+            {
+              date: today,
+              type: "AI Receipt Scan",
+              amount: scannedQty,
+              previous: i.quantity,
+              current: i.quantity + scannedQty,
+              notes: aiSuggestions.vendor ? `Scanned at ${aiSuggestions.vendor}` : "Scanned via camera OCR"
+            },
+            ...i.quantityHistory
+          ]
+        } : i));
+        updatedNames.push(match.name);
+      } else {
+        const newItem: InventoryItem = {
+          id: `ai_${Date.now()}_${index}`,
+          name: item.name || "Unnamed scanned item",
+          category: item.category || "Uncategorized",
+          vendor: aiSuggestions.vendor || "",
+          manufacturer: item.manufacturer || "",
+          sku: item.sku || "",
+          barcode: item.barcode || "",
+          qrCode: "",
+          description: "Added from a scanned receipt/label photo",
+          quantity: scannedQty,
+          unit: item.unit || "pcs",
+          minQuantity: 5,
+          maxQuantity: Math.max(scannedQty * 2, 10),
+          location: "Warehouse A",
+          unitCost: scannedCost,
+          sellingPrice: scannedCost * 1.5,
+          notes: "Created via camera OCR scan",
+          photo: "📦",
+          isFavorite: false,
+          lastUpdated: new Date().toLocaleTimeString(),
+          quantityHistory: [{ date: today, type: "AI Scanned New", amount: scannedQty, previous: 0, current: scannedQty, notes: "Created from scanned receipt/label" }],
+          purchaseHistory: [],
+          usageHistory: []
+        };
+        setInventoryList(prev => [...prev, newItem]);
+        updatedNames.push(newItem.name);
+      }
+    });
 
-    // Real receipt total -> real Materials expense, posted to the same
-    // ledger the manual "Log as Materials expense" checkbox uses. Only
-    // fires when the scan actually read a real total (printed on the
-    // receipt) or enough to compute one -- never a fabricated amount.
-    if (newItemChoice !== "ignore" && scannedTotal > 0) {
-      const itemName = matchedExistingItem?.name || aiSuggestions.name || "Scanned item";
+    // The purchase log and expense reflect the whole receipt regardless of
+    // which items were checked for inventory tracking -- that money was
+    // spent either way.
+    const receiptTotal = scanReceiptTotal(aiSuggestions);
+    const newPurchase: PurchaseRecord = {
+      id: `P-${Math.floor(100 + Math.random() * 900)}`,
+      vendor: aiSuggestions.vendor || "Unknown vendor",
+      receiptNumber: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
+      date: aiSuggestions.purchaseDate || today,
+      employee: loggedInUser?.name || "Unknown",
+      itemsPurchased: aiSuggestions.items.map(item => `${item.name || "Item"} (${item.quantity ?? 0})`).join(", "),
+      totalCost: receiptTotal
+    };
+    setPurchases(prev => [newPurchase, ...prev]);
+
+    if (logScanExpense && receiptTotal > 0) {
+      const vendorName = aiSuggestions.vendor || "Scanned receipt";
+      const itemCount = aiSuggestions.items.length;
       void saveTransaction({
         type: "expense",
         source: "manual",
-        amount: scannedTotal,
-        description: `${itemName} (${scannedQty} ${aiSuggestions.unit || "units"} via AI receipt scan)`,
+        amount: receiptTotal,
+        description: `${vendorName} (${itemCount} item${itemCount === 1 ? "" : "s"} via AI receipt scan)`,
         category: "Materials",
         date: aiSuggestions.purchaseDate || today,
         createdAt: new Date().toISOString(),
-        inventoryItemId: matchedExistingItem?.id,
         ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
-      }).then(() => triggerToast(`Logged $${scannedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} for ${itemName} as a Materials expense.`))
+      }).then(() => triggerToast(`Logged $${receiptTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`))
         .catch(error => {
           console.error("Inventory updated, but its expense could not be logged:", error);
-          triggerToast(`${itemName} was updated in inventory, but the expense did not post. Log it from Revenue when the connection recovers.`);
+          triggerToast("Inventory was updated, but the expense did not post. Log it from Revenue when the connection recovers.");
         });
     }
 
-    const label = matchedExistingItem
-      ? `Restocked ${matchedExistingItem.name}: +${scannedQty} units.`
-      : newItemChoice === "new"
-      ? `Added new item from scan: ${aiSuggestions.name || "Unnamed item"}.`
-      : "Scan discarded — no changes made.";
+    const label = updatedNames.length
+      ? `Updated inventory: ${updatedNames.join(", ")}.`
+      : "No items were added to inventory.";
 
     setIsSnapshotAIModalOpen(false);
     setSnapshotStage("camera");
     setAiSuggestions(null);
-    setNewItemChoice(null);
+    setSelectedScanItems([]);
     triggerToast(label);
   };
 
@@ -2298,57 +2312,72 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
               </div>
             )}
 
-            {snapshotStage === "review" && aiSuggestions && (
+            {snapshotStage === "review" && aiSuggestions && (() => {
+              const receiptTotal = scanReceiptTotal(aiSuggestions);
+              const allChecked = aiSuggestions.items.length > 0 && selectedScanItems.every(Boolean);
+              return (
               <div className="space-y-4 text-xs text-slate-600 font-semibold">
                 <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-2 text-[11px] font-sans font-medium">
                   <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-bold text-indigo-800 block">Scan complete</span>
-                    {matchedExistingItem ? (
-                      <>This matches an existing item — <strong className="text-slate-800">{matchedExistingItem.name}</strong> ({matchedExistingItem.quantity} on hand). Confirming will add stock to it.</>
-                    ) : (
-                      <>No existing inventory item matched this barcode/SKU. Review the fields below — anything the scan couldn't read is shown as "Not detected".</>
-                    )}
+                    <span className="font-bold text-indigo-800 block">Scan complete — {aiSuggestions.items.length} item{aiSuggestions.items.length === 1 ? "" : "s"} found</span>
+                    <span>{aiSuggestions.vendor || "Vendor not detected"}{aiSuggestions.purchaseDate ? ` · ${aiSuggestions.purchaseDate}` : ""}</span>
                   </div>
                 </div>
 
-                <div className="bg-[#F5FAFF] border border-[#A9CDEE]/50 p-4 rounded-xl space-y-3">
-                  <h4 className="text-[10px] uppercase font-bold text-[#342D7E] tracking-wider border-b border-[#A9CDEE]/30 pb-1.5">Extracted From Photo</h4>
+                <div className="bg-[#F5FAFF] border border-[#A9CDEE]/50 rounded-xl overflow-hidden">
+                  <label className="flex items-center gap-2.5 p-3 border-b border-[#A9CDEE]/40 bg-[#E3F3FF] cursor-pointer">
+                    <input type="checkbox" checked={allChecked} onChange={e => toggleAllScanItems(e.target.checked)} className="w-4 h-4 accent-[#4A9BFF]" />
+                    <span className="text-[11px] font-black text-[#1F3557] uppercase tracking-wide">Add all items to inventory</span>
+                  </label>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2.5 gap-x-4">
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Item Name</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.name || "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Category</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.category || "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Vendor</span>
-                      <span className="text-slate-800 font-black">{aiSuggestions.vendor || "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">SKU</span>
-                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.sku || "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Quantity</span>
-                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.quantity != null ? `+${aiSuggestions.quantity} ${aiSuggestions.unit || "units"}` : "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Unit Cost</span>
-                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.unitCost != null ? `$${aiSuggestions.unitCost.toFixed(2)}` : "Not detected"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] text-slate-400 block font-bold">Receipt Total</span>
-                      <span className="font-mono text-slate-800 font-black">{aiSuggestions.total != null ? `$${aiSuggestions.total.toFixed(2)}` : "Not detected"}</span>
-                    </div>
+                  <div className="divide-y divide-[#A9CDEE]/30">
+                    {aiSuggestions.items.map((item, index) => {
+                      const match = findInventoryMatch(item);
+                      const lineCost = item.unitCost != null ? item.unitCost : null;
+                      return (
+                        <label key={index} className="flex items-start gap-2.5 p-3 cursor-pointer hover:bg-white/60">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedScanItems[index]}
+                            onChange={e => setSelectedScanItems(prev => prev.map((v, i) => i === index ? e.target.checked : v))}
+                            className="w-4 h-4 mt-0.5 accent-[#4A9BFF] shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                              <span className="text-slate-800 font-black">
+                                {item.quantity != null ? `${item.quantity} × ` : ""}{item.name || "Unnamed item"}
+                              </span>
+                              <span className="font-mono text-slate-800 font-black">{lineCost != null ? `$${lineCost.toFixed(2)} ea` : "Cost not detected"}</span>
+                            </div>
+                            <div className="text-[9.5px] text-slate-400 font-medium mt-0.5">
+                              {item.sku ? `SKU ${item.sku}` : "No SKU detected"}
+                              {match ? ` · Restocks existing "${match.name}" (${match.quantity} on hand)` : " · Will be added as a new item"}
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
-                  {aiSuggestions.total == null && (aiSuggestions.quantity == null || aiSuggestions.unitCost == null) && (
-                    <p className="text-[10px] text-amber-700 font-sans font-semibold">No total, quantity, or unit cost was legible — confirming this will update inventory but won't log a Materials expense. Log it manually from Revenue if needed.</p>
-                  )}
+
+                  <div className="flex items-center justify-between p-3 border-t border-[#A9CDEE]/40 bg-[#E3F3FF]">
+                    <span className="text-[10px] uppercase font-bold text-[#5E7393] tracking-wide">Receipt Total</span>
+                    <span className="font-mono text-sm text-[#1F3557] font-black">{receiptTotal > 0 ? `$${receiptTotal.toFixed(2)}` : "Not detected"}</span>
+                  </div>
                 </div>
+
+                <label className="flex items-start gap-2.5 p-3 bg-white border border-[#A9CDEE]/60 rounded-xl cursor-pointer">
+                  <input type="checkbox" checked={logScanExpense} onChange={e => setLogScanExpense(e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#4A9BFF]" />
+                  <span>
+                    <span className="text-slate-800 font-black block">
+                      {receiptTotal > 0 ? `Log $${receiptTotal.toFixed(2)} to Materials expenses` : "Log this receipt as a Materials expense"}
+                    </span>
+                    <span className="text-[9.5px] text-slate-400 font-medium">Posts to Accounting and reduces revenue, regardless of which items above are added to inventory.</span>
+                  </span>
+                </label>
+                {receiptTotal <= 0 && (
+                  <p className="text-[10px] text-amber-700 font-sans font-semibold">No receipt total or per-item costs were legible — confirming will update inventory but won't log an expense. Log it manually from Revenue if needed.</p>
+                )}
 
                 <div className="flex gap-2 justify-end pt-2">
                   <button
@@ -2356,7 +2385,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       setIsSnapshotAIModalOpen(false);
                       setSnapshotStage("camera");
                       setAiSuggestions(null);
-                      setNewItemChoice(null);
+                      setSelectedScanItems([]);
                       triggerToast("Inventory update canceled.");
                     }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold"
@@ -2364,7 +2393,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); }}
+                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); setSelectedScanItems([]); }}
                     className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold"
                   >
                     Retake Photo
@@ -2377,83 +2406,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                   </button>
                 </div>
               </div>
-            )}
-
-            {snapshotStage === "no_match_choice" && aiSuggestions && (
-              <div className="space-y-4 text-xs text-slate-600 font-semibold">
-
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <strong className="text-amber-800 font-black uppercase text-[10.5px] block">No inventory match found</strong>
-                    <p className="text-[11px] font-sans font-medium text-slate-600">
-                      "{aiSuggestions.name || "This item"}" doesn't match any existing item's SKU or barcode. Choose what to do:
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-white border border-[#A9CDEE]/60 rounded-xl space-y-3">
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-xl cursor-pointer">
-                      <input
-                        type="radio"
-                        name="new_item_choice"
-                        checked={newItemChoice === "new"}
-                        onChange={() => setNewItemChoice("new")}
-                        className="w-4 h-4 text-blue-500"
-                      />
-                      <div>
-                        <strong className="text-slate-800 text-[11px] block">Add New Inventory Item</strong>
-                        <span className="text-[9.5px] text-slate-400 font-medium">Add "{aiSuggestions.name || "this item"}" as a new inventory entry with the scanned details.</span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 hover:border-blue-400 rounded-xl cursor-pointer">
-                      <input
-                        type="radio"
-                        name="new_item_choice"
-                        checked={newItemChoice === "ignore"}
-                        onChange={() => setNewItemChoice("ignore")}
-                        className="w-4 h-4 text-blue-500"
-                      />
-                      <div>
-                        <strong className="text-slate-800 text-[11px] block">Ignore / Cancel</strong>
-                        <span className="text-[9.5px] text-slate-400 font-medium">Don't add anything to inventory.</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      setIsSnapshotAIModalOpen(false);
-                      setSnapshotStage("camera");
-                      setAiSuggestions(null);
-                      setNewItemChoice(null);
-                      triggerToast("Inventory update canceled.");
-                    }}
-                    className="px-4 py-2 bg-slate-100 text-rose-600 rounded-lg font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => { setSnapshotStage("review"); setNewItemChoice(null); }}
-                    className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg"
-                  >
-                    Back
-                  </button>
-                  <button
-                    disabled={!newItemChoice}
-                    onClick={handleApproveAISuggestion}
-                    className="px-5 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white font-bold rounded-lg disabled:opacity-50"
-                  >
-                    Confirm
-                  </button>
-                </div>
-
-              </div>
-            )}
+              );
+            })()}
 
           </div>
         </div>

@@ -100,40 +100,53 @@ export interface ScanReceiptRequest {
   mimeType: string;
 }
 
-export interface ScanReceiptResponse {
+export interface ScannedLineItem {
   name: string | null;
-  vendor: string | null;
   sku: string | null;
   barcode: string | null;
   quantity: number | null;
   unit: string | null;
   unitCost: number | null;
+  category: string | null;
+  manufacturer: string | null;
+}
+
+export interface ScanReceiptResponse {
+  vendor: string | null;
+  purchaseDate: string | null;
+  /** One entry per distinct line item on the receipt/packing slip (or a
+   *  single entry for a plain product label/barcode). */
+  items: ScannedLineItem[];
   /** The receipt's own printed total (including tax), read directly rather
    *  than inferred from quantity × unitCost -- many receipts never print a
    *  clean per-unit price, so this is the number the logged expense should
    *  actually be based on. */
   total: number | null;
-  category: string | null;
-  manufacturer: string | null;
-  purchaseDate: string | null;
   /** True if the model could not confidently read a real inventory receipt/label from the image. */
   unreadable: boolean;
 }
 
-const RECEIPT_SCHEMA = {
+const LINE_ITEM_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     name: { type: Type.STRING, nullable: true },
-    vendor: { type: Type.STRING, nullable: true },
     sku: { type: Type.STRING, nullable: true },
     barcode: { type: Type.STRING, nullable: true },
     quantity: { type: Type.NUMBER, nullable: true },
     unit: { type: Type.STRING, nullable: true },
     unitCost: { type: Type.NUMBER, nullable: true },
-    total: { type: Type.NUMBER, nullable: true },
     category: { type: Type.STRING, nullable: true },
-    manufacturer: { type: Type.STRING, nullable: true },
+    manufacturer: { type: Type.STRING, nullable: true }
+  }
+};
+
+const RECEIPT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    vendor: { type: Type.STRING, nullable: true },
     purchaseDate: { type: Type.STRING, nullable: true },
+    items: { type: Type.ARRAY, items: LINE_ITEM_SCHEMA },
+    total: { type: Type.NUMBER, nullable: true },
     unreadable: { type: Type.BOOLEAN }
   },
   required: ["unreadable"]
@@ -158,8 +171,10 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
           {
             text: [
               "This image is a photo of an inventory receipt, packing slip, or product label/barcode for a local service business (plumbing/HVAC/electrical supplies).",
+              "If this is a receipt or packing slip with multiple distinct line items, extract EACH one as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer). If it's a single product label/barcode, return exactly one entry in `items`.",
               "Extract only what you can actually read in the image. Do not guess or fabricate values.",
-              "If this is a receipt, also read its printed total amount (including tax) into `total` -- this is the number actually printed at the bottom of the receipt, separate from any per-unit price. Do not compute it yourself from quantity or unitCost.",
+              "If this is a receipt, also read its printed total amount (including tax) into `total` -- this is the number actually printed at the bottom of the receipt, separate from any per-item price. Do not compute it yourself by summing items.",
+              "Also extract the vendor/store name and the purchase date if visible.",
               "If a field isn't visible or legible, set it to null. Set unreadable=true only if the image doesn't contain a legible receipt/label at all."
             ].join(" ")
           }
@@ -177,21 +192,27 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { name: null, vendor: null, sku: null, barcode: null, quantity: null, unit: null, unitCost: null, total: null, category: null, manufacturer: null, purchaseDate: null, unreadable: true };
+    return { vendor: null, purchaseDate: null, items: [], total: null, unreadable: true };
   }
 
+  const items = Array.isArray(parsed.items)
+    ? parsed.items.map((item: Partial<ScannedLineItem>) => ({
+        name: item?.name ?? null,
+        sku: item?.sku ?? null,
+        barcode: item?.barcode ?? null,
+        quantity: item?.quantity ?? null,
+        unit: item?.unit ?? null,
+        unitCost: item?.unitCost ?? null,
+        category: item?.category ?? null,
+        manufacturer: item?.manufacturer ?? null
+      }))
+    : [];
+
   return {
-    name: parsed.name ?? null,
     vendor: parsed.vendor ?? null,
-    sku: parsed.sku ?? null,
-    barcode: parsed.barcode ?? null,
-    quantity: parsed.quantity ?? null,
-    unit: parsed.unit ?? null,
-    unitCost: parsed.unitCost ?? null,
-    total: parsed.total ?? null,
-    category: parsed.category ?? null,
-    manufacturer: parsed.manufacturer ?? null,
     purchaseDate: parsed.purchaseDate ?? null,
+    items,
+    total: parsed.total ?? null,
     unreadable: parsed.unreadable ?? false
   };
 }
