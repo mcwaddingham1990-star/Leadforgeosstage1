@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Camera, Keyboard, X, AlertTriangle, Loader2, DollarSign } from "lucide-react";
 import { Transaction } from "../types/domain";
+import { downscaleImageToBase64 } from "../lib/imageCompression";
 
 interface LogTransactionModalProps {
   type: "income" | "expense";
@@ -54,47 +55,42 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     setMode("form");
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1] || "";
-      setMode("processing");
-      setScanError(null);
-      try {
-        const res = await fetch("/api/ai/scan-financial-document", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Scan failed");
-        setSource("ai_scan");
-        if (data.unreadable) {
-          setScanError(`Couldn't read a real ${type === "income" ? "check" : "receipt"} in that photo — the fields below are blank, fill in what you know.`);
-          setAmount("");
-          setDescription("");
-        } else {
-          setAmount(data.amount != null ? String(data.amount) : "");
-          setDescription(data.counterpartyName || "");
-        }
-        setCategory("");
-        setDate(data.date || todayStr());
-        setMode("form");
-      } catch (err) {
-        setScanError(err instanceof Error ? err.message : "Scan failed. Make sure GEMINI_API_KEY is configured on the server.");
-        setSource("manual");
+    setMode("processing");
+    setScanError(null);
+    try {
+      const { base64, mimeType } = await downscaleImageToBase64(file);
+      const res = await fetch("/api/ai/scan-financial-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mimeType })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scan failed");
+      setSource("ai_scan");
+      if (data.unreadable) {
+        setScanError(`Couldn't read a real ${type === "income" ? "check" : "receipt"} in that photo — the fields below are blank, fill in what you know.`);
         setAmount("");
         setDescription("");
-        setCategory("");
-        setDate(todayStr());
-        setMode("form");
+      } else {
+        setAmount(data.amount != null ? String(data.amount) : "");
+        setDescription(data.counterpartyName || "");
       }
-    };
-    reader.readAsDataURL(file);
+      setCategory("");
+      setDate(data.date || todayStr());
+      setMode("form");
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Scan failed. Make sure GEMINI_API_KEY is configured on the server.");
+      setSource("manual");
+      setAmount("");
+      setDescription("");
+      setCategory("");
+      setDate(todayStr());
+      setMode("form");
+    }
   };
 
   const handleSave = async (e?: React.FormEvent) => {

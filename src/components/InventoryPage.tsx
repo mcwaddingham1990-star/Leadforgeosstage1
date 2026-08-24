@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { hasPermission } from "../types/permissions";
+import { downscaleImageToBase64 } from "../lib/imageCompression";
 import {
   Search,
   Plus,
@@ -773,15 +774,14 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
 
   const handleLocalCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1] || "";
-      runCameraAI(base64, file.type);
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
+    if (!file) return;
+    downscaleImageToBase64(file)
+      .then(({ base64, mimeType }) => runCameraAI(base64, mimeType))
+      .catch(() => {
+        setOcrError("Couldn't process that photo. Try again with a clearer, well-lit shot.");
+        setSnapshotStage("camera");
+      });
   };
 
   // Real OCR via Gemini vision (server-side, see server/aiHandler.ts handleScanReceipt).
