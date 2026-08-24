@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { postBillCreatedEntry } from "../lib/accountingEngine";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
+import { downscaleImageToBase64 } from "../lib/imageCompression";
 
 type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
 type Fields = Record<string, string | number | boolean | null>;
@@ -60,8 +61,8 @@ export function UniversalAIIntake() {
     if (!file) return;
     setStage("scanning");
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
-      const response = await fetch("/api/ai/scan-business-record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: dataUrl.split(",")[1], mimeType: file.type || "image/jpeg", preferredRecordType: recordType === "unknown" ? undefined : recordType }) });
+      const { base64, mimeType } = await downscaleImageToBase64(file);
+      const response = await fetch("/api/ai/scan-business-record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: base64, mimeType, preferredRecordType: recordType === "unknown" ? undefined : recordType }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to scan this record");
       if (result.unreadable) throw new Error("AI could not read a completed business record in that image.");
