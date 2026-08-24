@@ -3512,7 +3512,10 @@ Access to full financial telemetry is restricted.`;
                 // 100px off the bottom.
                 height: `${Math.max(200, cardWidth * (3200 / 1440) - 200)}px`,
                 backgroundImage: `url(${isDarkTheme ? darkLoginCard : lightLoginCard})`,
-                backgroundSize: "100% 100%"
+                // Slight overscan + centering so the browser's rounded-corner
+                // clip never reveals a subpixel seam at the image's edge.
+                backgroundSize: "101% 101%",
+                backgroundPosition: "center"
               }}
             >
               {/* Inner glassmorphic shading overlay */}
