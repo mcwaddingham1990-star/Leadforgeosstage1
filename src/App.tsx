@@ -3887,7 +3887,7 @@ Access to full financial telemetry is restricted.`;
                       style={{
                         padding: `${20 * scale}px ${16 * scale}px`,
                       }}
-                      className="absolute inset-0 bg-[#f5f8ff] flex flex-col justify-between overflow-hidden select-none"
+                      className="login-onboarding-card absolute inset-0 bg-[#f5f8ff] flex flex-col justify-between overflow-hidden select-none"
                     >
                       {/* Subtle decorative glowing backgrounds inside card */}
                       <div className="absolute top-0 right-0 w-24 h-24 bg-blue-400/10 blur-xl rounded-full pointer-events-none" />

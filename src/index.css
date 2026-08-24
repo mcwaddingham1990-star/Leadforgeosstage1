@@ -641,6 +641,32 @@ select option {
   color: #ffffff !important;
 }
 
+/* Onboarding card (Create Your Business step 1) -- matches the workspace
+   dashboard's own dark-basic card palette. The generic input/label/button
+   rules above already cover most of this form's fields; these fill the
+   remaining gaps (the card's own background, badges, dividers, and the
+   white icon tile) that those rules don't touch. */
+.login-theme-dark-basic .login-onboarding-card {
+  background-color: #0c1d2e !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="bg-white"] {
+  background-color: #081522 !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="bg-blue-50"] {
+  background-color: rgba(20, 93, 255, 0.16) !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="border-blue-100"],
+.login-theme-dark-basic .login-onboarding-card [class~="border-blue-200"] {
+  border-color: rgba(65, 119, 168, .58) !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="border-slate-200/50"],
+.login-theme-dark-basic .login-onboarding-card [class~="border-slate-200"] {
+  border-color: #1c3042 !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="text-blue-700"] {
+  color: #7cc2ff !important;
+}
+
 /* Dark Mode Dynamic
    Inherits the complete Dark Mode Basic coverage, then adds the energetic
    electric-blue glass treatment shown in the approved reference. */
