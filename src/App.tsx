@@ -3504,7 +3504,12 @@ Access to full financial telemetry is restricted.`;
               className="relative max-w-[440px] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
               style={{
                 width: "min(440px, calc(100% - 24px))",
-                aspectRatio: "1440 / 3200",
+                // Same width formula as before ("keep the sides") -- height
+                // is the full 1440:3200 ratio at the actual measured width
+                // (cardWidth, already tracked via ResizeObserver for the
+                // scale factor below), minus a flat 100px off the top and
+                // 100px off the bottom.
+                height: `${Math.max(200, cardWidth * (3200 / 1440) - 200)}px`,
                 backgroundImage: `url(${isDarkTheme ? darkLoginCard : CARD_BG_URL})`,
                 backgroundSize: isDarkTheme ? "100% 100%" : undefined
               }}
@@ -3521,7 +3526,7 @@ Access to full financial telemetry is restricted.`;
                   {!isDarkTheme && (
                     <div
                       style={{
-                        top: "11.65%",
+                        top: "8.0%",
                         left: "8%",
                         width: "84%",
                         aspectRatio: "734 / 302"
@@ -3551,7 +3556,7 @@ Access to full financial telemetry is restricted.`;
 
                   {/* CONTINUE WITH GOOGLE BUTTON */}
                   <div 
-                    style={{ top: "27.2%", left: "11%", width: "78%", height: "4.5%" }}
+                    style={{ top: "29.43%", left: "11%", width: "78%", height: "4.5%" }}
                     className="absolute"
                   >
                     <button
@@ -3591,11 +3596,11 @@ Access to full financial telemetry is restricted.`;
 
                   {/* SEPARATOR - OR SIGN IN WITH PASSWORD */}
                   <div 
-                    style={{ top: "34.7625%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                    style={{ top: "34.87%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
                     className="absolute flex items-center justify-between"
                   >
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
-                    <span 
+                    <span
                       style={{
                         letterSpacing: "0.12em",
                         ...getFontSize(10.5)
@@ -3612,7 +3617,7 @@ Access to full financial telemetry is restricted.`;
                     
                     {/* BUSINESS EMAIL FIELD */}
                     <div 
-                      style={{ top: "38.14375%", left: "11%", width: "78%" }}
+                      style={{ top: "37.96%", left: "11%", width: "78%" }}
                       className="absolute"
                     >
                       <label 
@@ -3653,7 +3658,7 @@ Access to full financial telemetry is restricted.`;
 
                     {/* PASSWORD FIELD */}
                     <div 
-                      style={{ top: "48.0625%", left: "11%", width: "78%" }}
+                      style={{ top: "48.05%", left: "11%", width: "78%" }}
                       className="absolute"
                     >
                       <div 
@@ -3740,7 +3745,7 @@ Access to full financial telemetry is restricted.`;
 
                     {/* SIGN IN GENERATED GLOWING BUTTON */}
                     <div 
-                      style={{ top: "58.2%", left: "11%", width: "78%", height: "4.5%" }}
+                      style={{ top: "61.16%", left: "11%", width: "78%", height: "4.5%" }}
                       className="absolute flex items-center"
                     >
                       <button
@@ -3770,7 +3775,7 @@ Access to full financial telemetry is restricted.`;
                   {/* DYNAMIC OR SIGN UP LINK */}
                   <div 
                     style={{ 
-                      top: "62.333%", 
+                      top: "66.6%",
                       left: "11%", 
                       width: "78%", 
                       height: "3.5%",
@@ -3798,7 +3803,7 @@ Access to full financial telemetry is restricted.`;
 
                   {/* SEPARATOR - FIELD SERVICE LOG IN */}
                   <div 
-                    style={{ top: "67.68%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                    style={{ top: "71.05%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
                     className="absolute flex items-center justify-between"
                   >
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
@@ -3816,7 +3821,7 @@ Access to full financial telemetry is restricted.`;
 
                   {/* INVITE CODE SECTION */}
                   <div 
-                    style={{ top: "72.204%", left: "11%", width: "54%" }}
+                    style={{ top: "74.13%", left: "11%", width: "54%" }}
                     className="absolute"
                   >
                     <label 
@@ -3857,7 +3862,7 @@ Access to full financial telemetry is restricted.`;
 
                   {/* GO GENERATED GLOWING BUTTON */}
                   <div 
-                    style={{ top: "74.454%", left: "68%", width: "21%", height: "4.5%" }}
+                    style={{ top: "76.38%", left: "68%", width: "21%", height: "4.5%" }}
                     className="absolute"
                   >
                     <button
