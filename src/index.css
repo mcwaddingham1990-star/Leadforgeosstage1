@@ -564,6 +564,14 @@ select option {
   color: var(--dark-text) !important;
 }
 
+/* Light Mode Basic login page background. */
+.login-theme-light-basic {
+  background-color: #edf4fa !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+}
+
 /* Dark Mode Basic login. Uses the existing dark login assets; the light logo
    is deliberately omitted in App.tsx until the dedicated dark logo arrives. */
 .login-theme-dark-basic {

@@ -137,6 +137,7 @@ import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
 import darkLoginBackground from "../Src/Assets/Login/Darkloginbg.png";
 import darkLoginCard from "../Src/Assets/Login/Darkmodecard.png";
 import lightLoginCard from "../Src/Assets/Login/Lightmodecard.png";
+import lightLoginBackground from "../Src/Assets/Login/Lightloginbg.png";
 
 const validPersonName = (value: unknown): string => {
   const name = typeof value === "string" ? value.trim() : "";
@@ -3452,8 +3453,8 @@ Access to full financial telemetry is restricted.`;
     <EventEngineEffects />
     {isLoggedIn && <UniversalAIIntake />}
     <div
-      className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : isDarkTheme ? 'login-theme-dark-basic' : 'bg-[#edf4fa]'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
-      style={!isLoggedIn && isDarkTheme ? { backgroundImage: `url(${darkLoginBackground})` } : undefined}
+      className={`min-h-screen ${isLoggedIn ? 'bg-[#F5FAFF]' : isDarkTheme ? 'login-theme-dark-basic' : 'login-theme-light-basic'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
+      style={!isLoggedIn ? { backgroundImage: `url(${isDarkTheme ? darkLoginBackground : lightLoginBackground})` } : undefined}
     >
       {!authReady && (
         <div className="fixed inset-0 z-[100] bg-[#edf4fa] flex items-center justify-center">
