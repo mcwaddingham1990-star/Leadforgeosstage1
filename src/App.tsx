@@ -5165,7 +5165,7 @@ Access to full financial telemetry is restricted.`;
             {/* AI ASSISTANT BUTTON - lives below the card now, not clipped inside it */}
             {currentView === "login" && (
               <div
-                style={{ marginTop: `${28 * scale}px` }}
+                style={{ marginTop: `${14 * scale}px` }}
                 className="flex items-center justify-center pointer-events-auto"
               >
                 <button

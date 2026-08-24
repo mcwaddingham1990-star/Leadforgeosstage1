@@ -564,24 +564,28 @@ select option {
   color: var(--dark-text) !important;
 }
 
-/* Light Mode Basic login page background. Tiled at a fixed, smaller size
-   instead of `cover` -- cover was stretching the starfield art to fill the
-   whole scrollable page height, blowing up individual stars/streaks so the
-   pattern's actual detail barely showed. */
+/* Light Mode Basic login page background. `background-attachment: fixed`
+   sizes the cover against the viewport itself instead of the page's full
+   scrollable content height (which is taller than one screen once the AI
+   button below the card is included) -- without this, cover was scaling
+   against that taller box and zooming the art in far more than a single
+   screen actually needs. */
 .login-theme-light-basic {
   background-color: #edf4fa !important;
-  background-position: top center !important;
-  background-repeat: repeat !important;
-  background-size: 360px auto !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+  background-attachment: fixed !important;
 }
 
 /* Dark Mode Basic login. Uses the existing dark login assets; the light logo
    is deliberately omitted in App.tsx until the dedicated dark logo arrives. */
 .login-theme-dark-basic {
   background-color: #020a13 !important;
-  background-position: top center !important;
-  background-repeat: repeat !important;
-  background-size: 360px auto !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+  background-attachment: fixed !important;
   color: #f4f7fb !important;
   color-scheme: dark !important;
 }
