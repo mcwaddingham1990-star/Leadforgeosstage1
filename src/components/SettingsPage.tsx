@@ -46,6 +46,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
+import { ONBOARDING_ROLE_TEMPLATES } from "./RosterPage";
 import { defaultGranularFromModuleList } from "../types/permissions";
 import type { SelectedRole, WorkspaceTheme } from "../App";
 
@@ -268,7 +269,7 @@ export default function SettingsPage({
     });
     recentRoster.forEach(entry => {
       const status = String(entry.status || "active").toLowerCase();
-      if (["inactive", "deactivated", "revoked", "deleted"].includes(status)) return;
+      if (["inactive", "deactivated", "revoked", "deleted", "pending"].includes(status)) return;
       const name = String(entry.name || "").trim().toLowerCase();
       if (name) activePeople.add(name);
     });
@@ -684,21 +685,47 @@ export default function SettingsPage({
   };
 
   // Invite Roster User Form
-  const handleInviteUser = (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.name.trim() || !newUser.email.trim()) {
       triggerNotification("❌ Please fill out Name and Email before generating.");
       return;
     }
+    if (!businessId) {
+      triggerNotification("Missing business account — please sign in again.");
+      return;
+    }
     const cleanName = newUser.name.trim();
     const prefix = newUser.role === "Owner" ? "OWNER" : newUser.role === "Office Manager" ? "MGR" : "TECH";
     const randomCode = `${prefix}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const template = ONBOARDING_ROLE_TEMPLATES.find(([, roleName]) => roleName === newUser.role);
+    const permissions = template?.[2] || ["jobs", "timeclock", "messages", "documents"];
+    const granularPermissions = defaultGranularFromModuleList(permissions, newUser.role === "Owner" ? "delete" : "edit");
+
+    // Persist the invite to Firestore — this is the record the employee's
+    // invite-code login screen actually looks up. Without this write, a
+    // code shown here would never be redeemable.
+    try {
+      await setDoc(doc(db, "employee_invites", randomCode), {
+        code: randomCode,
+        role: newUser.role,
+        businessEmail: businessId,
+        permissions,
+        granularPermissions,
+        status: "pending",
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Error generating invite:", err);
+      triggerNotification("Couldn't generate an invite code — check your connection and try again.");
+      return;
+    }
 
     const rosterEntry = {
       name: cleanName,
       role: newUser.role,
       code: randomCode,
-      status: "Active"
+      status: "Pending"
     };
 
     setRecentRoster(prev => [...prev, rosterEntry]);
@@ -1087,7 +1114,11 @@ export default function SettingsPage({
                             <p className="text-[9.5px] text-slate-400 font-mono tracking-wider">{user.role} • {user.code}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[9px] font-bold rounded">
+                            <span className={`px-2 py-0.5 text-[9px] font-bold rounded border ${
+                              user.status.toLowerCase() === "pending"
+                                ? "bg-amber-50 text-amber-600 border-amber-100"
+                                : "bg-emerald-50 text-emerald-600 border-emerald-100"
+                            }`}>
                               {user.status}
                             </span>
                             <button

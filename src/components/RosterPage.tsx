@@ -20,7 +20,7 @@ function genInviteCode(role: string): string {
 type InviteRole = { id: string; name: string; permissions: string[]; modulePermissions: GranularPermissions; isCustom?: boolean };
 type InviteMode = "" | "select" | "custom";
 
-const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
+export const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
   ["owner", "Owner", MODULE_CATALOG.map(m => m.id)],
   ["general_manager", "General Manager", ["customers","leads","estimates","jobs","scheduling","dispatch","routes","inventory","documents","messages","timeclock","ai_assistant","settings"]],
   ["office_manager", "Office Manager", ["dashboard","revenue","accounting","customers","leads","estimates","invoices","scheduling","dispatch","routes","jobs","timeclock","inventory","documents","pdf_editor","esign","messages","roster","training","reports","settings"]],
