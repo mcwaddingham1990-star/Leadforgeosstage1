@@ -8,11 +8,46 @@
  * so this trades unnecessary pixels for a payload that's actually safe to
  * hold in memory and send over the network.
  */
-export function downscaleImageToBase64(
+export async function downscaleImageToBase64(
   file: File,
-  maxDimension = 1800,
-  quality = 0.82
+  maxDimension = 1600,
+  quality = 0.8
 ): Promise<{ base64: string; mimeType: string }> {
+  // createImageBitmap's resize options let the browser's native decoder
+  // produce an already-downscaled bitmap directly -- it never has to hold
+  // the full multi-megapixel decode in memory the way drawing a full-size
+  // <img> to canvas does. This is the safer path on a memory-constrained
+  // phone; fall back to the <img>-based approach only if unsupported.
+  try {
+    const bitmap = await createImageBitmap(file, {
+      resizeWidth: maxDimension,
+      resizeQuality: "medium"
+    });
+    try {
+      return encodeBitmapToBase64(bitmap, quality);
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    return downscaleViaImageElement(file, maxDimension, quality);
+  }
+}
+
+function encodeBitmapToBase64(bitmap: ImageBitmap, quality: number): { base64: string; mimeType: string } {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not process that photo.");
+  context.drawImage(bitmap, 0, 0);
+  const mimeType = "image/jpeg";
+  const dataUrl = canvas.toDataURL(mimeType, quality);
+  const base64 = dataUrl.split(",")[1] || "";
+  if (!base64) throw new Error("Could not process that photo.");
+  return { base64, mimeType };
+}
+
+function downscaleViaImageElement(file: File, maxDimension: number, quality: number): Promise<{ base64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
