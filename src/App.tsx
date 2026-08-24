@@ -3525,8 +3525,8 @@ Access to full financial telemetry is restricted.`;
               {currentView === "login" ? (
                 <>
                   {/* CONTINUE WITH GOOGLE BUTTON */}
-                  <div 
-                    style={{ top: "29.43%", left: "11%", width: "78%", height: "4.5%" }}
+                  <div
+                    style={{ top: "20.0%", left: "6%", width: "88%", height: `${50 * scale}px` }}
                     className="absolute"
                   >
                     <button
@@ -3565,8 +3565,8 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   {/* SEPARATOR - OR SIGN IN WITH PASSWORD */}
-                  <div 
-                    style={{ top: "34.87%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                  <div
+                    style={{ top: "29.0%", left: "6%", width: "88%", gap: `${8 * scale}px` }}
                     className="absolute flex items-center justify-between"
                   >
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
@@ -3586,25 +3586,25 @@ Access to full financial telemetry is restricted.`;
                   <form onSubmit={handlePasswordSignIn}>
                     
                     {/* BUSINESS EMAIL FIELD */}
-                    <div 
-                      style={{ top: "37.96%", left: "11%", width: "78%" }}
+                    <div
+                      style={{ top: "33.35%", left: "6%", width: "88%" }}
                       className="absolute"
                     >
-                      <label 
+                      <label
                         style={{
                           letterSpacing: "0.05em",
-                          marginBottom: `${4 * scale}px`,
+                          marginBottom: `${6 * scale}px`,
                           ...getFontSize(11.5)
                         }}
                         className="block font-bold text-blue-900/80"
                       >
                         BUSINESS EMAIL
                       </label>
-                      <div 
-                        style={{ height: `${46 * scale}px` }}
+                      <div
+                        style={{ height: `${50 * scale}px` }}
                         className="relative w-full"
                       >
-                        <div 
+                        <div
                           style={{ left: `${14 * scale}px` }}
                           className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
                         >
@@ -3627,15 +3627,15 @@ Access to full financial telemetry is restricted.`;
                     </div>
 
                     {/* PASSWORD FIELD */}
-                    <div 
-                      style={{ top: "48.05%", left: "11%", width: "78%" }}
+                    <div
+                      style={{ top: "45.53%", left: "6%", width: "88%" }}
                       className="absolute"
                     >
-                      <div 
-                        style={{ marginBottom: `${4 * scale}px` }}
+                      <div
+                        style={{ marginBottom: `${6 * scale}px` }}
                         className="flex items-center justify-between"
                       >
-                        <label 
+                        <label
                           style={{
                             letterSpacing: "0.05em",
                             ...getFontSize(11.5)
@@ -3653,11 +3653,11 @@ Access to full financial telemetry is restricted.`;
                           Forgot?
                         </button>
                       </div>
-                      <div 
-                        style={{ height: `${46 * scale}px` }}
+                      <div
+                        style={{ height: `${50 * scale}px` }}
                         className="relative w-full"
                       >
-                        <div 
+                        <div
                           style={{ left: `${14 * scale}px` }}
                           className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
                         >
@@ -3691,8 +3691,8 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* REMEMBER ME CHECKBOX */}
-                      <div 
-                        style={{ marginTop: `${5 * scale}px`, gap: `${6 * scale}px` }}
+                      <div
+                        style={{ marginTop: `${8 * scale}px`, gap: `${6 * scale}px` }}
                         className="flex items-center select-none"
                       >
                         <input
@@ -3714,8 +3714,8 @@ Access to full financial telemetry is restricted.`;
                     </div>
 
                     {/* SIGN IN GENERATED GLOWING BUTTON */}
-                    <div 
-                      style={{ top: "61.16%", left: "11%", width: "78%", height: "4.5%" }}
+                    <div
+                      style={{ top: "61.16%", left: "6%", width: "88%", height: `${50 * scale}px` }}
                       className="absolute flex items-center"
                     >
                       <button
@@ -3731,8 +3731,8 @@ Access to full financial telemetry is restricted.`;
                     </div>
 
                     {loginError && (
-                      <div 
-                        style={{ top: "54.1%", left: "11%", width: "78%" }}
+                      <div
+                        style={{ top: "52.5%", left: "6%", width: "88%" }}
                         className="absolute text-rose-600 font-bold text-[10px] sm:text-[11px] leading-tight flex items-center gap-1.5 bg-rose-50/95 py-1 px-2 border border-rose-200/50 rounded-lg shadow-sm"
                       >
                         <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
@@ -3743,12 +3743,11 @@ Access to full financial telemetry is restricted.`;
                   </form>
 
                   {/* DYNAMIC OR SIGN UP LINK */}
-                  <div 
-                    style={{ 
-                      top: "66.6%",
-                      left: "11%", 
-                      width: "78%", 
-                      height: "3.5%",
+                  <div
+                    style={{
+                      top: "70.16%",
+                      left: "6%",
+                      width: "88%",
                     }}
                     className="absolute flex items-center justify-center"
                   >
@@ -3772,8 +3771,8 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   {/* SEPARATOR - FIELD SERVICE LOG IN */}
-                  <div 
-                    style={{ top: "71.05%", left: "11%", width: "78%", gap: `${8 * scale}px` }}
+                  <div
+                    style={{ top: "74.76%", left: "6%", width: "88%", gap: `${8 * scale}px` }}
                     className="absolute flex items-center justify-between"
                   >
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
@@ -3790,25 +3789,25 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   {/* INVITE CODE SECTION */}
-                  <div 
-                    style={{ top: "74.13%", left: "11%", width: "54%" }}
+                  <div
+                    style={{ top: "79.11%", left: "6%", width: "61%" }}
                     className="absolute"
                   >
-                    <label 
+                    <label
                       style={{
                         letterSpacing: "0.03em",
-                        marginBottom: `${4 * scale}px`,
+                        marginBottom: `${6 * scale}px`,
                         ...getFontSize(10.5)
                       }}
                       className="block font-bold text-blue-900/80"
                     >
                       ENTER EMPLOYEE INVITE CODE
                     </label>
-                    <div 
-                      style={{ height: `${46 * scale}px` }}
+                    <div
+                      style={{ height: `${50 * scale}px` }}
                       className="relative w-full"
                     >
-                      <div 
+                      <div
                         style={{ left: `${14 * scale}px` }}
                         className="absolute top-1/2 -translate-y-1/2 text-blue-800/50 pointer-events-none"
                       >
@@ -3831,8 +3830,8 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   {/* GO GENERATED GLOWING BUTTON */}
-                  <div 
-                    style={{ top: "76.38%", left: "68%", width: "21%", height: "4.5%" }}
+                  <div
+                    style={{ top: "82.3%", left: "70%", width: "24%", height: `${50 * scale}px` }}
                     className="absolute"
                   >
                     <button
@@ -3849,63 +3848,36 @@ Access to full financial telemetry is restricted.`;
                   </div>
 
                   {/* FOOTER NAV LINKS */}
-                  <div 
-                    style={{ 
-                      bottom: "13.5%", 
-                      left: "11%", 
-                      width: "78%",
-                      gap: `${16 * scale}px`
+                  <div
+                    style={{
+                      bottom: "6%",
+                      left: "6%",
+                      width: "88%",
+                      gap: `${24 * scale}px`
                     }}
                     className="absolute flex items-center justify-center text-blue-700 font-sans"
                   >
-                    <button 
+                    <button
                       onClick={() => setCurrentView("placeholder_help")}
-                      style={{ gap: `${4 * scale}px`, ...getFontSize(12.5) }}
+                      style={{ gap: `${5 * scale}px`, ...getFontSize(13.5) }}
                       className="flex items-center font-bold hover:text-blue-900 transition-colors cursor-pointer"
                     >
-                      <HelpCircle style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                      <HelpCircle style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
                       <span>Need Help?</span>
                     </button>
-                    
-                    <div style={{ height: `${12 * scale}px` }} className="w-[1px] bg-blue-300" />
-                    
-                    <button 
+
+                    <div style={{ height: `${14 * scale}px` }} className="w-[1px] bg-blue-300" />
+
+                    <button
                       onClick={() => setCurrentView("placeholder_privacy")}
-                      style={{ gap: `${4 * scale}px`, ...getFontSize(12.5) }}
+                      style={{ gap: `${5 * scale}px`, ...getFontSize(13.5) }}
                       className="flex items-center font-bold hover:text-blue-900 transition-colors cursor-pointer"
                     >
-                      <Shield style={{ width: `${16 * scale}px`, height: `${16 * scale}px` }} />
+                      <Shield style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
                       <span>Privacy Policy</span>
                     </button>
                   </div>
 
-                  {/* AI BUTTONS ON THE BOTTOM OF THE BLUE BACKGROUND */}
-                  <div 
-                    style={{ 
-                      bottom: "5.5%", 
-                      left: "11%", 
-                      width: "78%"
-                    }}
-                    className="absolute flex items-center justify-center pointer-events-auto"
-                  >
-                    {/* AI ASSISTANT BUTTON */}
-                    <button
-                      type="button"
-                      onClick={() => setIsFloatingAiOpen(true)}
-                      style={{
-                        padding: `${6 * scale}px ${10 * scale}px`,
-                        borderRadius: `${10 * scale}px`,
-                        ...getFontSize(10)
-                      }}
-                      className="flex items-center gap-1.5 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:scale-105 active:scale-[0.98] border border-blue-300/30 transition-all cursor-pointer"
-                    >
-                      <span className="relative flex" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}>
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${6 * scale}px`, height: `${6 * scale}px` }}></span>
-                      </span>
-                      <span>Owner's AI</span>
-                    </button>
-                  </div>
                 </>
               ) : (
                 <>
@@ -5190,11 +5162,36 @@ Access to full financial telemetry is restricted.`;
 
             </div>
 
+            {/* AI ASSISTANT BUTTON - lives below the card now, not clipped inside it */}
+            {currentView === "login" && (
+              <div
+                style={{ marginTop: `${28 * scale}px` }}
+                className="flex items-center justify-center pointer-events-auto"
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsFloatingAiOpen(true)}
+                  style={{
+                    padding: `${8 * scale}px ${14 * scale}px`,
+                    borderRadius: `${12 * scale}px`,
+                    ...getFontSize(11.5)
+                  }}
+                  className="flex items-center gap-2 bg-gradient-to-r from-[#1F3557] to-[#315C9F] text-white font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:scale-105 active:scale-[0.98] border border-blue-300/30 transition-all cursor-pointer"
+                >
+                  <span className="relative flex" style={{ width: `${7 * scale}px`, height: `${7 * scale}px` }}>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${7 * scale}px`, height: `${7 * scale}px` }}></span>
+                  </span>
+                  <span>Owner's AI</span>
+                </button>
+              </div>
+            )}
+
           </div>
         ) : (
-          
+
           /* VIEW 2: THE INTERACTIVE SHOWCASE OPERATING SYSTEM */
-          <div 
+          <div
             style={{
               borderRadius: "24px"
             }}
