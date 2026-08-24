@@ -3501,7 +3501,7 @@ Access to full financial telemetry is restricted.`;
             <div
               id="login-card-container"
               ref={containerRef}
-              className="relative max-w-[440px] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] border border-blue-200/20 bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]"
+              className={`relative max-w-[440px] rounded-[32px] sm:rounded-[44px] overflow-hidden shadow-[0_20px_50px_rgba(8,112,184,0.2)] ${isDarkTheme ? "" : "border border-blue-200/20"} bg-cover bg-center select-none transition-transform duration-500 ease-out hover:scale-[1.015] focus-within:scale-[1.015]`}
               style={{
                 width: "min(440px, calc(100% - 24px))",
                 // Same width formula as before ("keep the sides") -- height
@@ -3511,7 +3511,7 @@ Access to full financial telemetry is restricted.`;
                 // 100px off the bottom.
                 height: `${Math.max(200, cardWidth * (3200 / 1440) - 200)}px`,
                 backgroundImage: `url(${isDarkTheme ? darkLoginCard : CARD_BG_URL})`,
-                backgroundSize: isDarkTheme ? "100% 100%" : undefined
+                backgroundSize: "100% 100%"
               }}
             >
               {/* Inner glassmorphic shading overlay */}
