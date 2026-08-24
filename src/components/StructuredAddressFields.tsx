@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 
 export interface AddressParts {
   street: string;
@@ -41,8 +41,26 @@ export function StructuredAddressFields({
   className = "",
   inputClassName = "w-full bg-white border border-[#A9CDEE] rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#315C9F]"
 }: StructuredAddressFieldsProps) {
-  const parts = parseAddress(value);
-  const update = (patch: Partial<AddressParts>) => onChange(formatAddress({ ...parts, ...patch }));
+  // Local, untrimmed copy of the three fields -- `value` is a single trimmed,
+  // comma-joined string, so deriving the input's displayed value straight from
+  // it on every render would erase a trailing space the instant it's typed
+  // (format -> trim -> reparse, every keystroke). Keep local state as the
+  // source of truth for display, and only re-sync it from `value` when that
+  // string changed for a reason other than our own last edit.
+  const [local, setLocal] = useState<AddressParts>(() => parseAddress(value));
+  const prevValueRef = useRef(value);
+  if (prevValueRef.current !== value) {
+    prevValueRef.current = value;
+    if (formatAddress(local) !== value) {
+      setLocal(parseAddress(value));
+    }
+  }
+  const update = (patch: Partial<AddressParts>) => {
+    const next = { ...local, ...patch };
+    setLocal(next);
+    onChange(formatAddress(next));
+  };
+  const parts = local;
 
   return (
     <fieldset className={`space-y-2 ${className}`}>
