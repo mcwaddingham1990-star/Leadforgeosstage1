@@ -83,6 +83,51 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
   const [reportsList, setReportsList] = useState<Array<{ id: string; title: string; date: string; content: string }>>([]);
   const [isCompilingReport, setIsCompilingReport] = useState(false);
 
+  // The page's own header says "Ask it anything" but nothing on this page
+  // ever collected a question -- the five tabs are all read-only dashboards
+  // (activity log, reports, config, settings). This is the real, direct
+  // question box that was missing.
+  const [askInput, setAskInput] = useState("");
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
+
+  const handleAskQuestion = async () => {
+    const question = askInput.trim();
+    if (!question || askLoading) return;
+    setAskLoading(true);
+    setAskAnswer(null);
+    const businessSummary = [
+      `Customers on file: ${customers.length}.`,
+      `Open leads: ${leads.length}.`,
+      `Scheduling events on file: ${schedulingEvents.length}.`,
+      `Employees on roster: ${employees.length}.`,
+      `Invoices on file: ${invoices.length}.`,
+      `Logged transactions: ${transactions.length}.`
+    ].join(" ");
+    try {
+      const res = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pageId: "ai_assistant",
+          pageName: "AI Assistant",
+          isOwnerOrAdmin: activeRole === "Owner" || activeRole === "Admin",
+          businessSummary,
+          styleGuidance: buildStyleGuidance(aiKnowledgeBase),
+          query: question
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI request failed");
+      setAskAnswer(data.text || "No response.");
+      logOperationalEvent("AI Question Asked", question, "💬");
+    } catch (err) {
+      setAskAnswer(`⚠️ Couldn't reach the AI right now: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setAskLoading(false);
+    }
+  };
+
   // Real weekly rollup of the actual AI action ledger -- no fabricated telemetry.
   const chartsData = useMemo(() => {
     const days: { key: string; name: string }[] = [];
@@ -204,6 +249,33 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
           <Sparkles className="w-3.5 h-3.5" />
           <span>Save Snapshot</span>
         </button>
+      </div>
+
+      {/* ASK A QUESTION -- the direct query input the header promises but the tabs below never provided */}
+      <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          <input
+            type="text"
+            value={askInput}
+            onChange={e => setAskInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleAskQuestion()}
+            placeholder="Ask about your business -- e.g. 'Which customers are past due?'"
+            className="flex-1 text-xs bg-white border border-[#9EC8EF] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+          />
+          <button
+            onClick={handleAskQuestion}
+            disabled={!askInput.trim() || askLoading}
+            className="px-5 py-3 bg-[#1F3557] hover:bg-[#162740] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {askLoading ? "Asking…" : "Ask"}
+          </button>
+        </div>
+        {askAnswer && (
+          <div className="bg-white border border-[#9EC8EF]/60 rounded-2xl p-4 text-xs leading-relaxed text-slate-700 whitespace-pre-line">
+            {askAnswer}
+          </div>
+        )}
       </div>
 
       {/* NAVIGATION TABS BAR */}
