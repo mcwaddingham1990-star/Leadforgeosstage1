@@ -243,6 +243,11 @@ export interface ScanBusinessRecordResponse {
   recordType: "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
   confidence: number;
   fields: Record<string, string | number | boolean | null>;
+  /** Populated only when recordType is material_expense or inventory and the
+   *  photo is a receipt/packing slip with multiple distinct line items --
+   *  one entry per item, so the client can offer a per-item review instead
+   *  of collapsing everything into a single flat record. */
+  items?: ScannedLineItem[];
   unreadable: boolean;
 }
 
@@ -278,6 +283,7 @@ const BUSINESS_RECORD_SCHEMA = {
         notes: { type: Type.STRING, nullable: true }
       }
     },
+    items: { type: Type.ARRAY, items: LINE_ITEM_SCHEMA },
     unreadable: { type: Type.BOOLEAN }
   },
   required: ["recordType", "confidence", "fields", "unreadable"]
@@ -296,6 +302,7 @@ export async function handleScanBusinessRecord(req: ScanBusinessRecordRequest): 
         "Use bill only for a service/provider obligation. Use material_expense for materials, equipment, fuel, tools, supplies, inventory purchases, and similar operational costs. Use payroll for wages, salaries, pay stubs, or payroll reports. Use financial only when none of those specific financial destinations applies.",
         preferred ? `The user opened the scanner for ${preferred}; prefer that type only when the document supports it.` : "",
         "Extract only legible values. Never invent missing data. Use YYYY-MM-DD for dates. Put extracted values in the matching fields object and null for anything not visible.",
+        "If recordType is material_expense or inventory and this is a receipt or packing slip with multiple distinct purchased items, also extract each one as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer) and put the receipt's own printed total (including tax) into fields.totalCost -- read the total directly, don't compute it by summing items. Leave `items` empty for anything that isn't a multi-item receipt/packing slip.",
         "This output will be shown to a human for correction before it can be saved."
       ].filter(Boolean).join(" ") }
     ] }],
@@ -303,10 +310,23 @@ export async function handleScanBusinessRecord(req: ScanBusinessRecordRequest): 
   });
   try {
     const parsed = JSON.parse(response.text ?? "{}");
+    const items = Array.isArray(parsed.items)
+      ? parsed.items.map((item: Partial<ScannedLineItem>) => ({
+          name: item?.name ?? null,
+          sku: item?.sku ?? null,
+          barcode: item?.barcode ?? null,
+          quantity: item?.quantity ?? null,
+          unit: item?.unit ?? null,
+          unitCost: item?.unitCost ?? null,
+          category: item?.category ?? null,
+          manufacturer: item?.manufacturer ?? null
+        }))
+      : undefined;
     return {
       recordType: parsed.recordType ?? "unknown",
       confidence: Number(parsed.confidence) || 0,
       fields: parsed.fields && typeof parsed.fields === "object" ? parsed.fields : {},
+      ...(items?.length ? { items } : {}),
       unreadable: parsed.unreadable ?? false
     };
   } catch {

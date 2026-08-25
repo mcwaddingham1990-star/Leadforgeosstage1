@@ -7,6 +7,8 @@ import { postBillCreatedEntry } from "../lib/accountingEngine";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
+import type { ScannedLineItem } from "../types/scannedReceipt";
+import type { InventoryItem } from "../types/domain";
 
 type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
 type Fields = Record<string, string | number | boolean | null>;
@@ -42,21 +44,30 @@ export function UniversalAIIntake() {
   const { loggedInUser, businessId } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [stage, setStage] = useState<"choose" | "scanning" | "review">("choose");
+  const [stage, setStage] = useState<"choose" | "scanning" | "review" | "review_items">("choose");
   const [recordType, setRecordType] = useState<RecordType>("unknown");
   const [fields, setFields] = useState<Fields>({});
   const [confidence, setConfidence] = useState(0);
+  // Populated instead of `fields` when a scan comes back as a multi-item
+  // receipt/packing slip (recordType material_expense/inventory) -- reviewed
+  // as a per-item checklist rather than one flat record.
+  const [scannedItems, setScannedItems] = useState<ScannedLineItem[]>([]);
+  const [selectedItems, setSelectedItems] = useState<boolean[]>([]);
+  const [logItemsExpense, setLogItemsExpense] = useState(true);
+  const [scanVendor, setScanVendor] = useState<string | null>(null);
+  const [scanDate, setScanDate] = useState<string | null>(null);
+  const [scanTotal, setScanTotal] = useState<number | null>(null);
 
   useEffect(() => {
     const handler = (event: Event) => {
       const preferred = (event as CustomEvent<{ recordType?: RecordType }>).detail?.recordType || "unknown";
-      setRecordType(preferred); setFields({}); setStage("choose"); setOpen(true);
+      setRecordType(preferred); setFields({}); setScannedItems([]); setSelectedItems([]); setStage("choose"); setOpen(true);
     };
     window.addEventListener("ownerslocal:ai-intake", handler);
     return () => window.removeEventListener("ownerslocal:ai-intake", handler);
   }, []);
 
-  const close = () => { setOpen(false); setStage("choose"); setFields({}); };
+  const close = () => { setOpen(false); setStage("choose"); setFields({}); setScannedItems([]); setSelectedItems([]); };
   const scan = async (file?: File) => {
     if (!file) return;
     setStage("scanning");
@@ -66,10 +77,106 @@ export function UniversalAIIntake() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to scan this record");
       if (result.unreadable) throw new Error("AI could not read a completed business record in that image.");
-      setRecordType(result.recordType || recordType); setFields(Object.fromEntries(Object.entries(result.fields || {}).filter(([, value]) => value !== null && value !== ""))); setConfidence(Number(result.confidence) || 0); setStage("review");
+      const resolvedType = result.recordType || recordType;
+      setRecordType(resolvedType);
+      setConfidence(Number(result.confidence) || 0);
+      if ((resolvedType === "material_expense" || resolvedType === "inventory") && Array.isArray(result.items) && result.items.length) {
+        setScannedItems(result.items);
+        setSelectedItems(result.items.map(() => true));
+        setLogItemsExpense(true);
+        setScanVendor(result.fields?.payee || result.fields?.company || null);
+        setScanDate(result.fields?.date || result.fields?.dueDate || null);
+        setScanTotal(result.fields?.totalCost != null ? Number(result.fields.totalCost) : null);
+        setStage("review_items");
+      } else {
+        setFields(Object.fromEntries(Object.entries(result.fields || {}).filter(([, value]) => value !== null && value !== "")));
+        setStage("review");
+      }
     } catch (error) {
       triggerNotification(error instanceof Error ? error.message : "AI scan failed. Manual entry is still available."); setStage("choose");
     }
+  };
+
+  const findInventoryMatch = (item: ScannedLineItem) =>
+    data.inventoryList.find(i => (!!item.barcode && i.barcode === item.barcode) || (!!item.sku && i.sku === item.sku)) || null;
+
+  const itemsTotal = scannedItems.reduce((sum, item) => sum + (item.quantity ?? 0) * (item.unitCost ?? 0), 0);
+  const scanReceiptTotal = scanTotal ?? itemsTotal;
+
+  const saveItemizedScan = () => {
+    const createdAt = new Date().toISOString();
+    const todayStr = today();
+    const updatedNames: string[] = [];
+
+    scannedItems.forEach((item, index) => {
+      if (!selectedItems[index]) return;
+      const scannedQty = item.quantity ?? 0;
+      const scannedCost = item.unitCost ?? 0;
+      const match = findInventoryMatch(item);
+
+      if (match) {
+        data.setInventoryList(prev => prev.map(i => i.id === match.id ? {
+          ...i,
+          quantity: i.quantity + scannedQty,
+          quantityHistory: [
+            { date: todayStr, type: "AI Snapshot Scan", amount: scannedQty, previous: i.quantity, current: i.quantity + scannedQty, notes: scanVendor ? `Scanned at ${scanVendor}` : "Scanned via AI Snapshot" },
+            ...i.quantityHistory
+          ]
+        } : i));
+        updatedNames.push(match.name);
+      } else {
+        const newItem: InventoryItem = {
+          id: id("ai_inv"),
+          name: item.name || "Unnamed scanned item",
+          category: item.category || "Uncategorized",
+          vendor: scanVendor || "",
+          manufacturer: item.manufacturer || "",
+          sku: item.sku || "",
+          barcode: item.barcode || "",
+          qrCode: "",
+          description: "Added from a scanned receipt/label photo",
+          quantity: scannedQty,
+          unit: item.unit || "pcs",
+          minQuantity: 5,
+          maxQuantity: Math.max(scannedQty * 2, 10),
+          location: "Warehouse A",
+          unitCost: scannedCost,
+          sellingPrice: scannedCost * 1.5,
+          notes: "Created via AI Snapshot scan",
+          photo: "📦",
+          isFavorite: false,
+          lastUpdated: new Date().toLocaleTimeString(),
+          quantityHistory: [{ date: todayStr, type: "AI Scanned New", amount: scannedQty, previous: 0, current: scannedQty, notes: "Created from scanned receipt/label" }],
+          purchaseHistory: [],
+          usageHistory: []
+        };
+        data.setInventoryList(prev => [...prev, newItem]);
+        updatedNames.push(newItem.name);
+      }
+    });
+
+    if (logItemsExpense && scanReceiptTotal > 0) {
+      const vendorName = scanVendor || "Scanned receipt";
+      const itemCount = scannedItems.length;
+      void data.saveTransaction({
+        type: "expense",
+        source: "ai_scan",
+        amount: scanReceiptTotal,
+        description: `${vendorName} (${itemCount} item${itemCount === 1 ? "" : "s"} via AI Snapshot)`,
+        category: "Materials",
+        date: scanDate || todayStr,
+        createdAt,
+        ...(loggedInUser?.email ? { createdBy: loggedInUser.email } : {})
+      }).then(() => triggerNotification(`Logged $${scanReceiptTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as a Materials expense.`))
+        .catch(error => {
+          console.error("Inventory updated, but its expense could not be logged:", error);
+          triggerNotification("Inventory was updated, but the expense did not post. Log it manually from Revenue when the connection recovers.");
+        });
+    }
+
+    logOperationalEvent?.("AI Intake Saved", `Itemized receipt scan reviewed and saved (${updatedNames.length} item${updatedNames.length === 1 ? "" : "s"})`, "🤖");
+    triggerNotification(updatedNames.length ? `Updated inventory: ${updatedNames.join(", ")}.` : "No items were added to inventory.");
+    close();
   };
 
   const save = async () => {
@@ -122,7 +229,16 @@ export function UniversalAIIntake() {
       const category = recordType === "material_expense" ? "Material Expenses" : recordType === "payroll" ? "Payroll" : canonicalFinancialCategory(fields.category);
       if (category === "Bills") return triggerNotification("Service/provider obligations must be saved as a Bill so they remain linked to the provider.");
       if (!category) return triggerNotification("Choose Material / Operational Expense, Payroll Record, or enter a recognized category before saving.");
-      data.setTransactions(prev => [...prev, { id: id("txn"), type: "expense", source: "ai_scan", amount, description: String(fields.description || fields.serviceProvided || fields.payee || labels[recordType]), category, date: String(fields.date || fields.dueDate || today()), createdAt, createdBy: actor } as any]);
+      // Goes through saveTransaction (not a raw setTransactions push) so a
+      // matching journal entry is posted -- without one this expense would
+      // never actually reduce revenue on the Accounting/Revenue pages, since
+      // those are computed from journal entries, not the transactions list.
+      try {
+        await data.saveTransaction({ type: "expense", source: "ai_scan", amount, description: String(fields.description || fields.serviceProvided || fields.payee || labels[recordType]), category, date: String(fields.date || fields.dueDate || today()), createdAt, createdBy: actor });
+      } catch (error) {
+        console.error("AI intake expense save failed", error);
+        return triggerNotification("Couldn't save this expense. Check the connection and try again.");
+      }
     } else {
       triggerNotification("Choose Bill, Customer, Lead, Estimate, or Inventory before saving this reviewed record."); return;
     }
@@ -136,5 +252,50 @@ export function UniversalAIIntake() {
     {stage === "choose" && <div className="mt-5 space-y-4"><label className="block text-[10px] font-black uppercase text-slate-500">Record destination<select value={recordType} onChange={e => setRecordType(e.target.value as RecordType)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs normal-case"><option value="unknown">Auto-detect from document</option>{Object.entries(labels).filter(([key]) => key !== "unknown").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => scan(e.target.files?.[0])} /><button onClick={() => inputRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50 p-7 text-violet-700"><FileUp className="mx-auto mb-2 w-7 h-7" /><span className="text-xs font-black">Photograph or upload completed form</span></button><button onClick={() => { setFields({ ...presetFields[recordType] }); setStage("review"); }} className="w-full rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2.5 text-xs font-bold text-[#315C9F] flex justify-center gap-2"><PencilLine className="w-4 h-4" /> Use editable preset form</button><p className="text-center text-[9px] text-slate-500">Manual entry inside every module remains available.</p></div>}
     {stage === "scanning" && <div className="py-14 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-violet-600" /><p className="mt-3 text-xs font-bold text-[#1F3557]">Reading and classifying the form…</p></div>}
     {stage === "review" && <div className="mt-4 space-y-3"><div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] text-amber-900"><strong>Owner review required.</strong> Correct every field below before saving. AI confidence: {Math.round(confidence * 100)}%.</div><label className="block text-[9px] font-black uppercase text-slate-500">Save to<select value={recordType} onChange={e => setRecordType(e.target.value as RecordType)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs normal-case">{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>{Object.entries(fields).map(([key, value]) => <label key={key} className="block"><span className="text-[9px] font-bold uppercase text-slate-500">{key.replace(/([A-Z])/g, " $1")}</span><input value={String(value ?? "")} onChange={e => setFields(prev => ({ ...prev, [key]: typeof value === "number" ? Number(e.target.value) : typeof value === "boolean" ? e.target.value === "true" : e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs" /></label>)}<button onClick={() => setFields(prev => ({ ...prev, [`field${Object.keys(prev).length + 1}`]: "" }))} className="text-[10px] font-bold text-[#315C9F]">+ Add missing field</button><div className="flex gap-2 pt-2"><button onClick={() => setStage("choose")} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-xs font-bold text-slate-600">Back</button><button onClick={save} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white flex justify-center gap-2"><Check className="w-4 h-4" /> Review Complete — Save</button></div></div>}
+    {stage === "review_items" && <div className="mt-4 space-y-3 text-xs">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] text-amber-900"><strong>Owner review required.</strong> {scannedItems.length} item{scannedItems.length === 1 ? "" : "s"} found — {scanVendor || "vendor not detected"}{scanDate ? ` · ${scanDate}` : ""}. AI confidence: {Math.round(confidence * 100)}%.</div>
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <label className="flex items-center gap-2.5 p-3 border-b border-slate-200 bg-slate-50 cursor-pointer">
+          <input type="checkbox" checked={scannedItems.length > 0 && selectedItems.every(Boolean)} onChange={e => setSelectedItems(scannedItems.map(() => e.target.checked))} className="w-4 h-4 accent-violet-600" />
+          <span className="text-[11px] font-black text-[#1F3557] uppercase tracking-wide">Add all items to inventory</span>
+        </label>
+        <div className="divide-y divide-slate-100">
+          {scannedItems.map((item, index) => {
+            const match = findInventoryMatch(item);
+            return (
+              <label key={index} className="flex items-start gap-2.5 p-3 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" checked={!!selectedItems[index]} onChange={e => setSelectedItems(prev => prev.map((v, i) => i === index ? e.target.checked : v))} className="w-4 h-4 mt-0.5 accent-violet-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-slate-800 font-black">{item.quantity != null ? `${item.quantity} × ` : ""}{item.name || "Unnamed item"}</span>
+                    <span className="font-mono text-slate-800 font-black">{item.unitCost != null ? `$${item.unitCost.toFixed(2)} ea` : "Cost not detected"}</span>
+                  </div>
+                  <div className="text-[9.5px] text-slate-400 font-medium mt-0.5">
+                    {item.sku ? `SKU ${item.sku}` : "No SKU detected"}
+                    {match ? ` · Restocks existing "${match.name}" (${match.quantity} on hand)` : " · Will be added as a new item"}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between p-3 border-t border-slate-200 bg-slate-50">
+          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wide">Receipt Total</span>
+          <span className="font-mono text-sm text-[#1F3557] font-black">{scanReceiptTotal > 0 ? `$${scanReceiptTotal.toFixed(2)}` : "Not detected"}</span>
+        </div>
+      </div>
+      <label className="flex items-start gap-2.5 p-3 bg-white border border-slate-200 rounded-xl cursor-pointer">
+        <input type="checkbox" checked={logItemsExpense} onChange={e => setLogItemsExpense(e.target.checked)} className="w-4 h-4 mt-0.5 accent-violet-600" />
+        <span>
+          <span className="text-slate-800 font-black block">{scanReceiptTotal > 0 ? `Log $${scanReceiptTotal.toFixed(2)} to Materials expenses` : "Log this receipt as a Materials expense"}</span>
+          <span className="text-[9.5px] text-slate-400 font-medium">Posts to Accounting and reduces revenue, regardless of which items above are added to inventory.</span>
+        </span>
+      </label>
+      {scanReceiptTotal <= 0 && <p className="text-[10px] text-amber-700 font-semibold">No receipt total or per-item costs were legible — confirming will update inventory but won't log an expense.</p>}
+      <div className="flex gap-2 pt-2">
+        <button onClick={() => setStage("choose")} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-xs font-bold text-slate-600">Back</button>
+        <button onClick={saveItemizedScan} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white flex justify-center gap-2"><Check className="w-4 h-4" /> Confirm & Update Ledger</button>
+      </div>
+    </div>}
   </div></div>;
 }
