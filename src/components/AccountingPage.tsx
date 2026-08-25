@@ -519,21 +519,38 @@ function InvoicesTab({
   logOperationalEvent,
   loggedInUser
 }: any) {
-  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile } = useDomainData();
+  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
   const [customer, setCustomer] = useState("");
   const [dueInDays, setDueInDays] = useState(30);
   const [taxRate, setTaxRate] = useState<number>(salesTaxRates.find((r: any) => r.isDefault)?.rate || 0);
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
+  const [linkedEstimateId, setLinkedEstimateId] = useState("");
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+
+  // Accepted estimates not already linked to another invoice -- the pool
+  // Accounting's "Pending Revenue" tile draws from. Without a real link
+  // here, an invoice created for that same work (even fully paid, AR $0)
+  // never clears its estimate out of that pending total.
+  const invoicedEstimateIds = new Set(invoices.map((i: Invoice) => i.estimateId).filter(Boolean));
+  const linkableEstimates = estimates.filter((e: any) => e.status === "Accepted" && !invoicedEstimateIds.has(e.id));
 
   const resetForm = () => {
     setCustomer("");
     setDueInDays(30);
     setLineItems([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
+    setLinkedEstimateId("");
+  };
+
+  const applyLinkedEstimate = (estimateId: string) => {
+    setLinkedEstimateId(estimateId);
+    const est = estimates.find((e: any) => e.id === estimateId);
+    if (!est) return;
+    setCustomer(est.customerName || est.company || "");
+    setLineItems([{ id: genId("li"), description: `Estimate ${est.number}`, quantity: 1, unitPrice: est.amount || 0 }]);
   };
 
   // Builds a real PDF from the actual invoice data right now (no signing
@@ -606,7 +623,8 @@ function InvoicesTab({
       status: "sent",
       amountPaid: 0,
       createdAt: new Date().toISOString(),
-      createdBy: loggedInUser?.email
+      createdBy: loggedInUser?.email,
+      estimateId: linkedEstimateId || undefined
     };
     setInvoices((prev: Invoice[]) => [...prev, invoice]);
     setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoiceCreatedEntry(invoice, loggedInUser?.email)]);
@@ -780,6 +798,18 @@ function InvoicesTab({
               <button onClick={() => setIsCreating(false)}><X className="w-4 h-4 text-slate-400" /></button>
             </div>
             <div className="space-y-3 text-xs">
+              {linkableEstimates.length > 0 && (
+                <div>
+                  <label className="text-[9px] uppercase text-slate-400 font-bold">Link to accepted estimate (optional)</label>
+                  <select value={linkedEstimateId} onChange={e => applyLinkedEstimate(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1">
+                    <option value="">No linked estimate</option>
+                    {linkableEstimates.map((e: any) => (
+                      <option key={e.id} value={e.id}>{e.number} · {e.customerName} · {fmt(e.amount || 0)}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[9.5px] text-slate-400">Linking clears this estimate off the Accounting dashboard's Pending Revenue once this invoice is created -- otherwise it stays counted as pending even after this invoice is paid.</p>
+                </div>
+              )}
               <div>
                 <label className="text-[9px] uppercase text-slate-400 font-bold">Customer</label>
                 <select value={customer} onChange={e => setCustomer(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 mt-1">
