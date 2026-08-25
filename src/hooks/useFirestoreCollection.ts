@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
 import { syncArrayToFirestore, subscribeToCollection, subscribeToCollectionByField, fetchCollectionFromServer } from "../lib/firestoreService";
 import { emitCollectionEvent } from "../lib/eventBus";
+import { emitSyncError } from "../lib/syncErrorBus";
 import { db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
@@ -61,6 +62,10 @@ export function useFirestoreCollection<T extends WithId>(
     emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
     void syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId).catch(error => {
       console.error(`Failed to sync ${collectionName}; keeping the local change visible.`, error);
+      // The change stays visible/editable locally, but it was never actually
+      // written -- without this, the user has no way to know it will vanish
+      // the next time the page reloads and re-subscribes to real server data.
+      emitSyncError(`Couldn't save your ${humanizeCollectionName(collectionName)} change: ${error instanceof Error ? error.message : "unknown error"}. It won't be saved if you reload.`);
     });
   };
 
@@ -131,6 +136,10 @@ export function useFirestoreCollection<T extends WithId>(
   };
 
   return [items, setItems, refresh];
+}
+
+function humanizeCollectionName(collectionName: string): string {
+  return collectionName.replace(/_/g, " ");
 }
 
 // These fields are persistence metadata added on write and deliberately

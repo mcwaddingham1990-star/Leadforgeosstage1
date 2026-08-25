@@ -297,6 +297,12 @@ export const DocumentsPage: React.FC = () => {
       }
     });
 
+    // A signer committing their portion mid-session needs the Documents list
+    // to pick up the new lock/status right away without booting the drafter
+    // out of the editor (they may still be waiting on other signers, or
+    // about to finalize) -- see SelfieSaveEditor's commitParty.
+    if (metaProperties?.keepEditorOpen) return;
+
     closePDFEditor();
     triggerNotification(`💾 Saved changes to: ${updatedName}`);
     if (logOperationalEvent) {
@@ -827,18 +833,22 @@ export const DocumentsPage: React.FC = () => {
       customer: resolvedCustomer || "None",
       employee: uName,
       vendor: resolvedVendor || "None",
-      job: "Job #1024",
+      // No real OCR/AI extraction runs here (see the comment above in
+      // runCameraSnapshotAI) -- leave job/estimate/invoice unresolved and the
+      // document unsigned, same as customer/vendor, rather than fabricating a
+      // link to an unrelated job or a signature that was never captured.
+      job: "None",
       type: scannedDocType,
       uploadedBy: "Owner's AI Scanner",
       date: new Date().toISOString().slice(0, 10),
       size: "240 KB",
-      status: scannedDocType === "Contracts" ? "Signed" : "Signed",
+      status: "Unsigned",
       isFavorite: false,
       isArchived: false,
       notes: `Scanned and generated via Snapshot AI Scanner. Automatically categorized under ${scannedDocType}.`,
       tags: ["AI Scanned", scannedDocType.replace("s", "")],
-      estimateId: scannedDocType === "Estimates" ? "E-1084" : "None",
-      invoiceId: scannedDocType === "Invoices" ? "I-2049" : "None",
+      estimateId: "None",
+      invoiceId: "None",
       lastModified: "Just now"
     };
 

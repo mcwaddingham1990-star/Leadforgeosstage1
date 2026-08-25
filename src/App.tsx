@@ -131,6 +131,7 @@ import {
   INITIAL_SNAPSHOTS
 } from "./initialData";
 import { validateConnection } from "./lib/firestoreService";
+import { onSyncError } from "./lib/syncErrorBus";
 import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
 import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
@@ -1248,6 +1249,10 @@ export default function App() {
     transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
+  // Lets other pages deep-link into a specific Settings sub-section (e.g.
+  // Roster's "Manage Roles" button) instead of dead-ending in an alert/toast
+  // telling the user to go find it themselves.
+  const [preSelectedSettingsSection, setPreSelectedSettingsSection] = useState<string | undefined>(undefined);
 
   // Test connection on boot
   useEffect(() => {
@@ -1753,7 +1758,21 @@ export default function App() {
               // Also, restore their settings from the business profile!
               const businessId = isEmployee ? profileData.businessEmail : user.email;
               if (businessId) {
-                const bizSnap = await getDoc(doc(db, "business_profiles", businessId));
+                // Business profile and clock state don't depend on each
+                // other -- fetch them concurrently instead of one after the
+                // other so reload doesn't sit on the "Restoring secure
+                // session" overlay any longer than the slower of the two.
+                const clockStateRef = doc(db, "timeclock_states", user.email || "");
+                const [bizSnap, clockSnap] = await Promise.all([
+                  getDoc(doc(db, "business_profiles", businessId)),
+                  // Bypass an old IndexedDB snapshot on re-login. A cached
+                  // clock marker can otherwise win the race against live logs
+                  // and stay wrong until a full page refresh.
+                  getDocFromServer(clockStateRef).catch(serverReadError => {
+                    console.warn("Fresh clock-state read failed; falling back to the local cache.", serverReadError);
+                    return getDoc(clockStateRef);
+                  })
+                ]);
                 if (bizSnap.exists()) {
                   const bizData = bizSnap.data();
                   if (bizData.customCardTargets) setCustomCardTargets(bizData.customCardTargets);
@@ -1766,19 +1785,7 @@ export default function App() {
                   if (Array.isArray(bizData.selectedRoles) && bizData.selectedRoles.length) setSelectedRoles(normalizeSelectedRoles(bizData.selectedRoles));
                 }
                 aiSettingsLoadedRef.current = true;
-                
-                // Restore Time Clock state
-                // Bypass an old IndexedDB snapshot on re-login. A cached
-                // clock marker can otherwise win the race against live logs
-                // and stay wrong until a full page refresh.
-                const clockStateRef = doc(db, "timeclock_states", user.email || "");
-                let clockSnap;
-                try {
-                  clockSnap = await getDocFromServer(clockStateRef);
-                } catch (serverReadError) {
-                  console.warn("Fresh clock-state read failed; falling back to the local cache.", serverReadError);
-                  clockSnap = await getDoc(clockStateRef);
-                }
+
                 if (clockSnap.exists()) {
                   const clockData = clockSnap.data();
                   setIsClockedIn(clockData.isClockedIn ?? false);
@@ -2375,6 +2382,14 @@ Access to full financial telemetry is restricted.`;
     }, 4000);
   };
 
+  // Surface a real, user-facing warning whenever any Firestore-backed
+  // collection's optimistic local write actually fails to save -- previously
+  // the failure was only console.error'd, so the change looked saved for the
+  // rest of the session and then silently vanished on the next reload.
+  useEffect(() => {
+    return onSyncError((message) => triggerNotification(message));
+  }, []);
+
   const openPlaceholderPage = (label: string, icon: string) => {
     setActiveScreen({
       id: "placeholder_screen",
@@ -2389,9 +2404,10 @@ Access to full financial telemetry is restricted.`;
   // row, dropdown, card) should route through this so "many roads lead to the
   // same record" behaves identically everywhere, instead of each page call
   // site redefining its own copy of this logic.
-  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string }) => {
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => {
     setPreSelectedCustomerId(params?.customerId ?? undefined);
     setPreSelectedDate(params?.date ?? undefined);
+    setPreSelectedSettingsSection(params?.section ?? undefined);
     const matched = OS_SCREENS.find(s => s.id === screenId);
     if (matched) {
       setActiveScreen(matched);
@@ -6237,6 +6253,7 @@ Access to full financial telemetry is restricted.`;
                   ) : activeScreen.id === "settings" ? (
                     
                     <SettingsPage
+                      initialSection={preSelectedSettingsSection}
                       businessNames={businessNames}
                       setBusinessNames={setBusinessNames}
                       businessPhones={businessPhones}

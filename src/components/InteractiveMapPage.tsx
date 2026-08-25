@@ -567,7 +567,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     leads.forEach(l => {
-      const addr = l.address || "Dallas, TX";
+      const addr = l.address || "";
+      if (!addr) return;
       const cacheKey = `lead_${l.id}_${addr}`;
       if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -585,7 +586,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     });
 
     schedulingEvents.forEach(evt => {
-      const addr = evt.customerAddress || evt.location || "Dallas, TX";
+      const linkedCustomer = evt.customerId ? customers.find(customer => customer.id === evt.customerId) : undefined;
+      const addr = evt.customerAddress || evt.location || linkedCustomer?.address || "";
+      if (!addr) return;
       const cacheKey = `evt_${evt.id}_${addr}`;
       if (!geocodedCache[cacheKey] && !pendingGeocodes.current.has(cacheKey)) {
         addressesToGeocode.push({ key: cacheKey, address: addr });
@@ -649,7 +652,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 3. Customers (Blue)
     if (showCustomers) {
       customers.forEach(c => {
-        const addressStr = c.address || "Dallas, TX";
+        // A customer with no address on file has no real location -- pin them
+        // in a fabricated city instead of just leaving them off the map, and
+        // the marker looks legitimate while pointing nowhere near them.
+        if (!c.address) return;
+        const addressStr = c.address;
         const cacheKey = `cust_${c.id}_${addressStr}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(addressStr, c.id);
         list.push({
@@ -668,7 +675,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 4. Leads (Purple)
     if (showLeads) {
       leads.forEach(l => {
-        const address = l.address || l.company || l.name || "Dallas, TX";
+        const address = l.address || "";
+        if (!address) return;
         const cacheKey = `lead_${l.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, l.id);
         list.push({
@@ -689,6 +697,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       estimates.forEach(e => {
         const linkedCustomer = customers.find(customer => customer.contact === e.customerName || customer.company === e.company || customer.company === e.customerName);
         const address = e.address || linkedCustomer?.address || "";
+        if (!address) return;
         const cacheKey = `est_${e.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, e.id);
         list.push({
@@ -707,7 +716,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     // 6. Jobs (from schedulingEvents with eventType === "Job") (Orange)
     if (showJobs) {
       schedulingEvents.forEach(evt => {
-        const address = evt.customerAddress || evt.location || "Dallas, TX";
+        const linkedCustomer = evt.customerId ? customers.find(customer => customer.id === evt.customerId) : undefined;
+        const address = evt.customerAddress || evt.location || linkedCustomer?.address || "";
+        if (!address) return;
         const cacheKey = `evt_${evt.id}_${address}`;
         const coords = geocodedCache[cacheKey] || geocodeAddress(address, evt.id);
         list.push({

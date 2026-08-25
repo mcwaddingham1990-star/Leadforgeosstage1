@@ -80,6 +80,8 @@ export interface SettingsPageProps {
   setSelectedRoles: React.Dispatch<React.SetStateAction<SelectedRole[]>>;
   workspaceTheme: WorkspaceTheme;
   setWorkspaceTheme: (theme: WorkspaceTheme) => void;
+  /** Deep-links straight to a category (e.g. "roles") instead of the default Company tab -- see navigateToScreen's `section` param. */
+  initialSection?: string;
 }
 
 // Initial defaults for fields not in parent state. Generic system-behavior
@@ -250,7 +252,8 @@ export default function SettingsPage({
   selectedRoles,
   setSelectedRoles,
   workspaceTheme,
-  setWorkspaceTheme
+  setWorkspaceTheme,
+  initialSection
 }: SettingsPageProps) {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -322,7 +325,13 @@ export default function SettingsPage({
 
   // Search filter for settings
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("company");
+  const [activeCategory, setActiveCategory] = useState(initialSection || "company");
+
+  // A deep-link (e.g. Roster's "Manage Roles" button) can arrive while this
+  // page is already mounted, when the initial useState above won't re-run.
+  useEffect(() => {
+    if (initialSection) setActiveCategory(initialSection);
+  }, [initialSection]);
 
   // AI recommendations popup state
   const [showAiRecs, setShowAiRecs] = useState(false);

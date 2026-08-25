@@ -54,7 +54,7 @@ import { StructuredAddressFields } from "./StructuredAddressFields";
 
 export const RosterPage: React.FC = () => {
   const { employees, setEmployees, timeClockLogs } = useDomainData();
-  const { triggerNotification, logOperationalEvent } = useNavTelemetry();
+  const { triggerNotification, logOperationalEvent, navigateToScreen } = useNavTelemetry();
   const { loggedInUser, businessId } = useAuth();
 
   const [search, setSearch] = useState("");
@@ -320,7 +320,7 @@ export const RosterPage: React.FC = () => {
           <span>Permissions are managed by role, not per person — configure what each role can access.</span>
         </div>
         <button
-          onClick={() => triggerNotification("Open Settings → Roles to configure permissions.")}
+          onClick={() => navigateToScreen("settings", { section: "roles" })}
           className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-white border border-[#9EC8EF] text-[#315C9F] text-[10.5px] font-bold rounded-xl uppercase whitespace-nowrap cursor-pointer"
         >
           Manage Roles
