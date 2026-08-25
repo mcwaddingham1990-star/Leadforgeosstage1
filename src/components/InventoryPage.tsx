@@ -488,11 +488,19 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       const matchesLegacyDescription = description === normalizedName || (!!normalizedVendor && description === normalizedVendor);
       return matchesLegacyDescription && Math.abs(transaction.amount - previousInventoryValue) < 0.01;
     });
+    // Editing an item must never post an expense unless the user opted in via
+    // the "log as expense" checkbox — otherwise routine quantity/cost
+    // corrections silently corrupt the books (see release blocker #1).
+    const editShouldLogExpense = isEditMode
+      && formLogExpense
+      && MATERIAL_EXPENSE_CATEGORIES.has(formCategory);
     // Records edited before inventory expenses were linked need one catch-up entry.
     // Once linked, later edits post only the increase instead of duplicating the full value.
-    const expenseToLog = isEditMode && !hasExistingInventoryExpense
-      ? Math.round(Math.max(0, newInventoryValue) * 100) / 100
-      : inventoryValueIncrease;
+    const expenseToLog = editShouldLogExpense
+      ? (!hasExistingInventoryExpense
+        ? Math.round(Math.max(0, newInventoryValue) * 100) / 100
+        : inventoryValueIncrease)
+      : 0;
 
     const logInventoryExpense = (amount: number) => {
       const now = new Date();
@@ -620,6 +628,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setFormPhoto(item.photo);
     setFormIsFavorite(item.isFavorite);
     setFormCustomFields(item.customFields || []);
+    setFormLogExpense(false);
     setIsEditMode(true);
     setIsAddPopupOpen(true);
     setIsDetailsPopupOpen(false);
@@ -1815,7 +1824,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     Save to Favorite Materials
                   </label>
 
-                  {!isEditMode && MATERIAL_EXPENSE_CATEGORIES.has(formCategory) && (
+                  {MATERIAL_EXPENSE_CATEGORIES.has(formCategory) && (
                     <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                       <input
                         checked={formLogExpense}
@@ -1823,7 +1832,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                         type="checkbox"
                         className="w-4 h-4 rounded text-blue-500 border-slate-300"
                       />
-                      Also log purchase as a Materials expense
+                      {isEditMode ? "Also log this change as a Materials expense" : "Also log purchase as a Materials expense"}
                     </label>
                   )}
 

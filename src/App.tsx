@@ -1159,7 +1159,13 @@ export default function App() {
     { normalize: (item) => ({ ...item, id: item.id || item.code }) }
   );
   const [bulletins, setBulletins] = useFirestoreCollection<any>("bulletins", businessId);
-  const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId);
+  const [notifications, setNotifications] = useFirestoreCollection<any>("notifications", businessId, {
+    // Firestore denies the whole listen request unless the query itself
+    // guarantees every result satisfies the security rule, and reads are
+    // scoped to `resource.data.recipientEmail == request.auth.token.email`
+    // (see firestore.rules) -- so this must filter by recipientEmail too.
+    extraFilter: { field: "recipientEmail", value: loggedInUser?.email }
+  });
   const [recentAiActions, setRecentAiActions] = useFirestoreCollection<any>("recent_ai_actions", businessId);
   const [snapshots, setSnapshots] = useFirestoreCollection<any>("snapshots", businessId);
   const [revenueEvents, setRevenueEvents] = useFirestoreCollection<RevenueEvent>("revenue_events", businessId);

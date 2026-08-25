@@ -20,7 +20,7 @@ type WithId = { id?: string };
 export function useFirestoreCollection<T extends WithId>(
   collectionName: string,
   businessId: string | undefined,
-  options?: { normalize?: (item: T) => T; tenantField?: string }
+  options?: { normalize?: (item: T) => T; tenantField?: string; extraFilter?: { field: string; value: string | undefined } }
 ): [T[], Dispatch<SetStateAction<T[]>>, () => Promise<void>] {
   const [items, _setItems] = useState<T[]>([]);
   const itemsRef = useRef<T[]>([]);
@@ -64,8 +64,16 @@ export function useFirestoreCollection<T extends WithId>(
     });
   };
 
+  const extraFilterField = options?.extraFilter?.field;
+  const extraFilterValue = options?.extraFilter?.value;
+
   useEffect(() => {
-    if (!businessId) {
+    // When an extraFilter is configured (e.g. notifications' recipientEmail),
+    // its value must be known before subscribing -- querying with `undefined`
+    // throws, and querying without it would ask Firestore for documents the
+    // security rules won't allow the whole list to return (permission-denied,
+    // listener dies, collection looks permanently empty).
+    if (!businessId || (extraFilterField && !extraFilterValue)) {
       collectionItemsRef.current = [];
       compatibilityItemsRef.current = [];
       pendingItemsRef.current.clear();
@@ -92,7 +100,7 @@ export function useFirestoreCollection<T extends WithId>(
     const handleError = collectionName === "time_clock_logs" ? () => publish() : undefined;
     const unsubscribe = options?.tenantField && options.tenantField !== "businessId"
       ? subscribeToCollectionByField(collectionName, options.tenantField, businessId, handleDocs, handleError)
-      : subscribeToCollection(collectionName, businessId, handleDocs, handleError);
+      : subscribeToCollection(collectionName, businessId, handleDocs, handleError, extraFilterField ? { field: extraFilterField, value: extraFilterValue as string } : undefined);
     const unsubscribeCompatibility = collectionName === "time_clock_logs"
       ? onSnapshot(doc(db, "business_profiles", businessId), snapshot => {
           const stored = snapshot.data()?.timeClockLogs || {};
@@ -108,7 +116,7 @@ export function useFirestoreCollection<T extends WithId>(
       unsubscribeCompatibility?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionName, businessId]);
+  }, [collectionName, businessId, extraFilterField, extraFilterValue]);
 
   // A live onSnapshot listener that hits a permission-denied/unavailable
   // error terminates for good rather than retrying — this gives the UI a

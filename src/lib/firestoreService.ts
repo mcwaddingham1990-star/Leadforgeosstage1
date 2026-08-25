@@ -128,16 +128,23 @@ export async function syncArrayToFirestore(
 }
 
 /**
- * Subscribes to a Firestore collection filtered by businessId.
+ * Subscribes to a Firestore collection filtered by businessId, optionally
+ * narrowed by one extra equality filter (e.g. `notifications` also scopes
+ * reads to `recipientEmail` -- the security rule requires it, and Firestore
+ * denies the entire listen request if the query doesn't already guarantee
+ * every possible result satisfies the rule).
  */
 export function subscribeToCollection(
   collectionName: string,
   businessId: string,
   onUpdate: (data: any[]) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
+  extraFilter?: { field: string; value: string }
 ) {
-  const q = query(collection(db, collectionName), where("businessId", "==", businessId));
-  
+  const constraints = [where("businessId", "==", businessId)];
+  if (extraFilter) constraints.push(where(extraFilter.field, "==", extraFilter.value));
+  const q = query(collection(db, collectionName), ...constraints);
+
   return onSnapshot(
     q,
     (snapshot) => {
