@@ -66,7 +66,7 @@ import {
 type AccountingTab =
   | "dashboard"
   | "invoices"
-  | "bills"
+  | "expenses"
   | "vendors"
   | "banking"
   | "chart_of_accounts"
@@ -80,7 +80,7 @@ type AccountingTab =
 const TABS: Array<{ id: AccountingTab; label: string; icon: React.ReactNode }> = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
   { id: "invoices", label: "Invoices", icon: <FileText className="w-3.5 h-3.5" /> },
-  { id: "bills", label: "Bills", icon: <Receipt className="w-3.5 h-3.5" /> },
+  { id: "expenses", label: "Expenses", icon: <Receipt className="w-3.5 h-3.5" /> },
   { id: "vendors", label: "Service Providers", icon: <Users className="w-3.5 h-3.5" /> },
   { id: "banking", label: "Banking", icon: <Landmark className="w-3.5 h-3.5" /> },
   { id: "chart_of_accounts", label: "Chart of Accounts", icon: <BookOpen className="w-3.5 h-3.5" /> },
@@ -332,13 +332,14 @@ export const AccountingPage: React.FC = () => {
         />
       )}
 
-      {activeTab === "bills" && (
-        <BillsTab
+      {activeTab === "expenses" && (
+        <ExpensesTab
           bills={bills}
           setBills={setBills}
           setJournalEntries={setJournalEntries}
           vendors={vendors}
           setVendors={setVendors}
+          transactions={transactions}
           canEdit={canEdit}
           triggerNotification={triggerNotification}
           logOperationalEvent={logOperationalEvent}
@@ -999,6 +1000,97 @@ function InvoicesTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// EXPENSES (Bills + Fuel + everything else logged as an expense transaction --
+// Materials, Equipment, Tools, Payroll, Office Supplies, etc. -- previously
+// only visible rolled up into Reports/AI Insights totals, never as a browsable
+// list of its own.)
+// ============================================================================
+type ExpensesSubTab = "all" | "bills" | "fuel";
+const EXPENSES_SUB_TABS: Array<{ id: ExpensesSubTab; label: string }> = [
+  { id: "all", label: "All Expenses" },
+  { id: "bills", label: "Bills" },
+  { id: "fuel", label: "Fuel" }
+];
+
+function ExpensesTab({ bills, setBills, setJournalEntries, vendors, setVendors, transactions, canEdit, triggerNotification, logOperationalEvent, loggedInUser }: any) {
+  const [subTab, setSubTab] = useState<ExpensesSubTab>("all");
+  const expenseTxns = useMemo(() => transactions.filter((t: any) => t.type === "expense"), [transactions]);
+  const fuelTxns = useMemo(() => expenseTxns.filter((t: any) => String(t.category || "").toLowerCase() === "fuel"), [expenseTxns]);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-black text-[#1F3557] uppercase">Expenses</h3>
+        <p className="text-[10px] text-[#5E7393]">Bills, fuel, materials, and every other operating cost</p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {EXPENSES_SUB_TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSubTab(t.id)}
+            className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold uppercase tracking-wide transition-all cursor-pointer ${
+              subTab === t.id ? "bg-[#315C9F] text-white shadow-sm" : "bg-[#EAF5FF] text-[#1F3557] hover:bg-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab === "bills" && (
+        <BillsTab
+          bills={bills}
+          setBills={setBills}
+          setJournalEntries={setJournalEntries}
+          vendors={vendors}
+          setVendors={setVendors}
+          canEdit={canEdit}
+          triggerNotification={triggerNotification}
+          logOperationalEvent={logOperationalEvent}
+          loggedInUser={loggedInUser}
+        />
+      )}
+      {subTab === "fuel" && <ExpenseTransactionsTable rows={fuelTxns} emptyLabel="No fuel expenses logged yet." />}
+      {subTab === "all" && <ExpenseTransactionsTable rows={expenseTxns} emptyLabel="No expenses logged yet." />}
+    </div>
+  );
+}
+
+function ExpenseTransactionsTable({ rows, emptyLabel }: { rows: any[]; emptyLabel: string }) {
+  const sorted = useMemo(() => [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [rows]);
+  return (
+    <div className="bg-[#C7E3FA] rounded-2xl border border-[#9EC8EF] shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-xs">
+          <thead>
+            <tr className="bg-[#EAF5FF] text-[10px] font-bold text-[#1F3557] uppercase">
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Description</th>
+              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Source</th>
+              <th className="px-4 py-3 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#9EC8EF]/30">
+            {sorted.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">{emptyLabel}</td></tr>
+            )}
+            {sorted.map(t => (
+              <tr key={t.id}>
+                <td className="px-4 py-3">{t.date}</td>
+                <td className="px-4 py-3 font-bold text-[#1F3557]">{t.description}</td>
+                <td className="px-4 py-3">{t.category || "Uncategorized"}</td>
+                <td className="px-4 py-3 text-[10px] uppercase text-[#5E7393]">{t.source === "ai_scan" ? "AI Scan" : t.source === "manual" ? "Manual" : t.source}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold text-rose-600">{fmt(t.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
