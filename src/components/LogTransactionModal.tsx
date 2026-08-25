@@ -2,6 +2,8 @@ import React, { useRef, useState } from "react";
 import { Camera, Keyboard, X, AlertTriangle, Loader2, DollarSign } from "lucide-react";
 import { Transaction } from "../types/domain";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
+import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
+import { useDomainData } from "../context/DomainDataContext";
 
 interface LogTransactionModalProps {
   type: "income" | "expense";
@@ -29,12 +31,16 @@ const INCOME_CATEGORIES = ["Job Payment", "Check Deposit", "Deposit", "Refund", 
  * user confirming the form, typed or scanned.
  */
 export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTransactionModalProps) {
+  const { setDocuments } = useDomainData();
   const [mode, setMode] = useState<Mode>("choose");
   const [source, setSource] = useState<"manual" | "ai_scan">("manual");
   const [scanError, setScanError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // The downscaled photo behind the current scan, kept around so it can be
+  // filed into Documents > Snapshots once the user actually confirms a save.
+  const [scannedPhoto, setScannedPhoto] = useState<{ base64: string; mimeType: string } | null>(null);
 
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -63,6 +69,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     setScanError(null);
     try {
       const { base64, mimeType } = await downscaleImageToBase64(file);
+      setScannedPhoto({ base64, mimeType });
       const res = await fetch("/api/ai/scan-financial-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,6 +117,16 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
         createdAt: new Date().toISOString(),
         createdBy
       });
+      if (scannedPhoto && scannedPhoto.base64.length <= SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) {
+        setDocuments(prev => [buildScanSnapshotDocument({
+          photoBase64: scannedPhoto.base64,
+          mimeType: scannedPhoto.mimeType,
+          vendor: description.trim(),
+          date,
+          docType: type === "income" ? "Checks" : "Receipts",
+          uploadedBy: createdBy
+        }), ...prev]);
+      }
     } catch (err) {
       console.error(`Error saving ${type}:`, err);
       setSaveError(`Couldn't save this ${label.toLowerCase()}. Please try again.`);

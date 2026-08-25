@@ -7,10 +7,22 @@ import { postBillCreatedEntry } from "../lib/accountingEngine";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
+import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
 import type { ScannedLineItem } from "../types/scannedReceipt";
 import type { InventoryItem } from "../types/domain";
 
 type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
+
+/** Which Snapshots subfolder a scanned record type files its original photo
+ *  under. Types not listed here (customer/lead/estimate/address/onboarding)
+ *  aren't receipts/invoices/bills/checks, so no photo is saved for them. */
+const SNAPSHOT_DOC_TYPE: Partial<Record<RecordType, "Receipts" | "Invoices" | "Bills" | "Checks">> = {
+  bill: "Bills",
+  material_expense: "Receipts",
+  financial: "Receipts",
+  payroll: "Checks",
+  inventory: "Receipts"
+};
 type Fields = Record<string, string | number | boolean | null>;
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -57,22 +69,40 @@ export function UniversalAIIntake() {
   const [scanVendor, setScanVendor] = useState<string | null>(null);
   const [scanDate, setScanDate] = useState<string | null>(null);
   const [scanTotal, setScanTotal] = useState<number | null>(null);
+  // The downscaled photo behind the current scan, kept around so it can be
+  // filed into Documents > Snapshots once the user actually confirms a save
+  // -- not saved for a scan that gets canceled, or for record types that
+  // aren't a receipt/invoice/bill/check (customer, lead, estimate, etc.).
+  const [scannedPhoto, setScannedPhoto] = useState<{ base64: string; mimeType: string } | null>(null);
 
   useEffect(() => {
     const handler = (event: Event) => {
       const preferred = (event as CustomEvent<{ recordType?: RecordType }>).detail?.recordType || "unknown";
-      setRecordType(preferred); setFields({}); setScannedItems([]); setSelectedItems([]); setStage("choose"); setOpen(true);
+      setRecordType(preferred); setFields({}); setScannedItems([]); setSelectedItems([]); setScannedPhoto(null); setStage("choose"); setOpen(true);
     };
     window.addEventListener("ownerslocal:ai-intake", handler);
     return () => window.removeEventListener("ownerslocal:ai-intake", handler);
   }, []);
 
-  const close = () => { setOpen(false); setStage("choose"); setFields({}); setScannedItems([]); setSelectedItems([]); };
+  const close = () => { setOpen(false); setStage("choose"); setFields({}); setScannedItems([]); setSelectedItems([]); setScannedPhoto(null); };
+  const saveSnapshotPhoto = (params: { vendor?: string | null; date?: string | null }) => {
+    const docType = SNAPSHOT_DOC_TYPE[recordType];
+    if (!docType || !scannedPhoto || scannedPhoto.base64.length > SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) return;
+    data.setDocuments(prev => [buildScanSnapshotDocument({
+      photoBase64: scannedPhoto.base64,
+      mimeType: scannedPhoto.mimeType,
+      vendor: params.vendor,
+      date: params.date,
+      docType,
+      uploadedBy: loggedInUser?.name
+    }), ...prev]);
+  };
   const scan = async (file?: File) => {
     if (!file) return;
     setStage("scanning");
     try {
       const { base64, mimeType } = await downscaleImageToBase64(file);
+      setScannedPhoto({ base64, mimeType });
       const response = await fetch("/api/ai/scan-business-record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: base64, mimeType, preferredRecordType: recordType === "unknown" ? undefined : recordType }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to scan this record");
@@ -174,6 +204,7 @@ export function UniversalAIIntake() {
         });
     }
 
+    saveSnapshotPhoto({ vendor: scanVendor, date: scanDate });
     logOperationalEvent?.("AI Intake Saved", `Itemized receipt scan reviewed and saved (${updatedNames.length} item${updatedNames.length === 1 ? "" : "s"})`, "🤖");
     triggerNotification(updatedNames.length ? `Updated inventory: ${updatedNames.join(", ")}.` : "No items were added to inventory.");
     close();
@@ -242,6 +273,10 @@ export function UniversalAIIntake() {
     } else {
       triggerNotification("Choose Bill, Customer, Lead, Estimate, or Inventory before saving this reviewed record."); return;
     }
+    saveSnapshotPhoto({
+      vendor: String(fields.payee || fields.company || fields.name || "") || null,
+      date: String(fields.date || fields.dueDate || "") || null
+    });
     logOperationalEvent?.("AI Intake Saved", `${labels[recordType]} reviewed by owner before save`, "🤖");
     triggerNotification(`${labels[recordType]} reviewed and saved.`); close();
   };

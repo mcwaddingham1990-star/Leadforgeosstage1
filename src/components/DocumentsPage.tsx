@@ -66,7 +66,10 @@ export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; subfolders: stri
   { id: "Customer Notes", icon: "🗒️", subfolders: ["Customer Notes"] },
   { id: "Employees", icon: "👤", subfolders: ["Employee Files"] },
   { id: "Taxes", icon: "🏛️", subfolders: ["Tax Documents"] },
-  { id: "Expenses/Receipts", icon: "🧾", subfolders: ["Expenses", "Receipts"] }
+  { id: "Expenses/Receipts", icon: "🧾", subfolders: ["Expenses", "Receipts"] },
+  // Original photos captured by every AI scan flow (receipts, invoices,
+  // bills, checks) -- auto-filed here, never manually uploaded.
+  { id: "Snapshots", icon: "📸", subfolders: ["Receipts", "Invoices", "Bills", "Checks"] }
 ];
 
 /**

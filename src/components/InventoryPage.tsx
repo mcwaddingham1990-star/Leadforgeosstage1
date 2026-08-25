@@ -5,6 +5,7 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { hasPermission } from "../types/permissions";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
+import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
 import {
   Search,
   Plus,
@@ -130,7 +131,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     transactions,
     setTransactions,
     setJournalEntries,
-    saveTransaction
+    saveTransaction,
+    setDocuments
   } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -189,6 +191,10 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   // items get tracked into inventory, since the money was spent either way.
   const [logScanExpense, setLogScanExpense] = useState(true);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  // The downscaled photo behind the current scan, kept around so it can be
+  // filed into Documents > Snapshots once the user actually confirms -- not
+  // saved for a scan that gets canceled or retaken.
+  const [scannedPhoto, setScannedPhoto] = useState<{ base64: string; mimeType: string } | null>(null);
 
   // Barcode / QR Scanner Simulator Modal
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
@@ -766,7 +772,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     e.target.value = "";
     if (!file) return;
     downscaleImageToBase64(file)
-      .then(({ base64, mimeType }) => runCameraAI(base64, mimeType))
+      .then(({ base64, mimeType }) => { setScannedPhoto({ base64, mimeType }); runCameraAI(base64, mimeType); })
       .catch(() => {
         setOcrError("Couldn't process that photo. Try again with a clearer, well-lit shot.");
         setSnapshotStage("camera");
@@ -915,6 +921,17 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         });
     }
 
+    if (scannedPhoto && scannedPhoto.base64.length <= SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) {
+      setDocuments(prev => [buildScanSnapshotDocument({
+        photoBase64: scannedPhoto.base64,
+        mimeType: scannedPhoto.mimeType,
+        vendor: aiSuggestions.vendor,
+        date: aiSuggestions.purchaseDate || today,
+        docType: "Receipts",
+        uploadedBy: loggedInUser?.name
+      }), ...prev]);
+    }
+
     const label = updatedNames.length
       ? `Updated inventory: ${updatedNames.join(", ")}.`
       : "No items were added to inventory.";
@@ -923,6 +940,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setSnapshotStage("camera");
     setAiSuggestions(null);
     setSelectedScanItems([]);
+    setScannedPhoto(null);
     triggerToast(label);
   };
 
@@ -2365,6 +2383,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       setSnapshotStage("camera");
                       setAiSuggestions(null);
                       setSelectedScanItems([]);
+                      setScannedPhoto(null);
                       triggerToast("Inventory update canceled.");
                     }}
                     className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold"
@@ -2372,7 +2391,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                     Cancel
                   </button>
                   <button
-                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); setSelectedScanItems([]); }}
+                    onClick={() => { setSnapshotStage("camera"); setAiSuggestions(null); setSelectedScanItems([]); setScannedPhoto(null); }}
                     className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg font-bold"
                   >
                     Retake Photo
