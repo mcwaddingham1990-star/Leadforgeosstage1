@@ -7609,8 +7609,8 @@ Access to full financial telemetry is restricted.`;
       {isLoggedIn && createPortal(
       <div
         id="floating-ai-widget"
-        className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
-        style={aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
+        className={`fixed z-40 select-none ${isFloatingAiOpen && aiWidgetPos ? "" : "bottom-6 right-6"}`}
+        style={isFloatingAiOpen && aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
       >
 
         {/* Toggle Trigger Pill (drag by pressing and moving) */}

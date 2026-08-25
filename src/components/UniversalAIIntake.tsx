@@ -282,14 +282,14 @@ export function UniversalAIIntake() {
     triggerNotification(`${labels[recordType]} reviewed and saved.`); close();
   };
 
-  // Bottom-right, stacked below the Owner's AI chat widget's default dock
-  // (bottom-24 right-6) so the two floating buttons sit in the same corner
-  // without overlapping. Portaled straight to document.body so position:fixed
-  // is always relative to the real viewport, not trapped by some ancestor --
+  // Bottom-right, side by side with the Owner's AI chat widget's fixed dock
+  // (bottom-6 right-6) -- offset left just enough to clear that pill without
+  // overlapping it. Portaled straight to document.body so position:fixed is
+  // always relative to the real viewport, not trapped by some ancestor --
   // it has to stay pinned to the screen corner no matter how far the page
   // underneath scrolls.
   if (!open) return createPortal(
-    <button onClick={() => setOpen(true)} className="fixed bottom-5 right-6 z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"><Camera className="w-4 h-4" /> Snapshot</button>,
+    <button onClick={() => setOpen(true)} className="fixed bottom-6 right-[210px] z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"><Camera className="w-4 h-4" /> Snapshot</button>,
     document.body
   );
   return createPortal(
