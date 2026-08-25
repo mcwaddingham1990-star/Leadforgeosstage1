@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
@@ -1606,6 +1607,7 @@ export default function App() {
   // "use the default bottom-right dock." Persisted so it stays wherever the
   // owner last dragged it, across reloads, and clamped to the viewport so it
   // can never end up stuck off-screen or covering something unreachable.
+  const aiWidgetViewportInset = useVisualViewportBottomRight();
   const [aiWidgetPos, setAiWidgetPos] = useState<{ x: number; y: number } | null>(() => {
     try {
       const saved = localStorage.getItem("ownersLocalOS_aiWidgetPos");
@@ -7609,8 +7611,12 @@ Access to full financial telemetry is restricted.`;
       {isLoggedIn && createPortal(
       <div
         id="floating-ai-widget"
-        className={`fixed z-40 select-none ${isFloatingAiOpen && aiWidgetPos ? "" : "bottom-6 right-6"}`}
-        style={isFloatingAiOpen && aiWidgetPos ? { left: aiWidgetPos.x, top: aiWidgetPos.y } : undefined}
+        className="fixed z-40 select-none"
+        style={
+          isFloatingAiOpen && aiWidgetPos
+            ? { left: aiWidgetPos.x, top: aiWidgetPos.y }
+            : { bottom: 24 + aiWidgetViewportInset.bottom, right: 24 + aiWidgetViewportInset.right }
+        }
       >
 
         {/* Toggle Trigger Pill (drag by pressing and moving) */}

@@ -8,6 +8,7 @@ import { postBillCreatedEntry } from "../lib/accountingEngine";
 import { db } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
+import { useVisualViewportBottomRight } from "../hooks/useVisualViewportBottomRight";
 import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
 import type { ScannedLineItem } from "../types/scannedReceipt";
 import type { InventoryItem } from "../types/domain";
@@ -56,6 +57,7 @@ export function UniversalAIIntake() {
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
   const { loggedInUser, businessId } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
+  const viewportInset = useVisualViewportBottomRight();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<"choose" | "scanning" | "review" | "review_items">("choose");
   const [recordType, setRecordType] = useState<RecordType>("unknown");
@@ -289,7 +291,11 @@ export function UniversalAIIntake() {
   // it has to stay pinned to the screen corner no matter how far the page
   // underneath scrolls.
   if (!open) return createPortal(
-    <button onClick={() => setOpen(true)} className="fixed bottom-6 right-[210px] z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"><Camera className="w-4 h-4" /> Snapshot</button>,
+    <button
+      onClick={() => setOpen(true)}
+      className="fixed z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"
+      style={{ bottom: 24 + viewportInset.bottom, right: 210 + viewportInset.right }}
+    ><Camera className="w-4 h-4" /> Snapshot</button>,
     document.body
   );
   return createPortal(
