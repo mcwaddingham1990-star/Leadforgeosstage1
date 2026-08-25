@@ -196,12 +196,19 @@ export const JobsPage: React.FC = () => {
     setModal(null);
   };
 
+  // Native window.confirm() blocks the JS main thread until dismissed -- in
+  // some embedded/automated contexts it never gets dismissed, which reads as
+  // the whole page freezing. Route confirmations through in-app UI instead.
+  const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
+
   const deleteJob = (job: SchedulingEvent) => {
     if (!canDelete) return triggerNotification("Only an Owner, General Manager, or Admin can delete jobs.");
-    if (!window.confirm(`Delete ${displayNumber(job)}? This cannot be undone.`)) return;
-    setSchedulingEvents(prev => prev.filter(j => j.id !== job.id));
-    setSelectedId(null);
-    logOperationalEvent("Job Deleted", `${displayNumber(job)} deleted`, "🗑️");
+    requestConfirm(`Delete ${displayNumber(job)}? This cannot be undone.`, () => {
+      setSchedulingEvents(prev => prev.filter(j => j.id !== job.id));
+      setSelectedId(null);
+      logOperationalEvent("Job Deleted", `${displayNumber(job)} deleted`, "🗑️");
+    });
   };
 
   const addTask = () => {
@@ -288,6 +295,7 @@ export const JobsPage: React.FC = () => {
       canCreate={canManageCompletion || isAssignedWorker(completionJob)} inventory={inventoryList}
       setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={()=>setCompletionJobId(null)} notify={triggerNotification}
     />}
+    {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
   </div>;
 };
 

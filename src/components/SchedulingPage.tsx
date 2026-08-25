@@ -98,8 +98,14 @@ export const SchedulingPage: React.FC = () => {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
     navigateToScreen: onNavigateToScreen,
-    logOperationalEvent
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
+  // Native window.alert()/confirm() block the JS main thread until dismissed
+  // -- in some embedded/automated contexts they never get dismissed, which
+  // reads as the whole page freezing. Route confirmations through in-app UI.
+  const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
   // Navigation states
   const [currentDate, setCurrentDate] = useState<Date>(() => {
     if (preSelectedDate) {
@@ -431,7 +437,7 @@ export const SchedulingPage: React.FC = () => {
 
     // Permission Guard
     if (!isHighPrivilege) {
-      alert(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can create or edit events. Your current role is '${activeRole}'.`);
+      triggerNotification(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can create or edit events. Your current role is '${activeRole}'.`);
       return;
     }
 
@@ -452,7 +458,7 @@ export const SchedulingPage: React.FC = () => {
     }
 
     if (!customerName) {
-      alert("Please select or enter a customer name.");
+      triggerNotification("Please select or enter a customer name.");
       return;
     }
 
@@ -538,7 +544,7 @@ export const SchedulingPage: React.FC = () => {
   const handleOpenEditForm = (evt: SchedulingEvent) => {
     // Check permission
     if (!isHighPrivilege) {
-      alert(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can edit event times/dates.`);
+      triggerNotification(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can edit event times/dates.`);
       return;
     }
 
@@ -615,7 +621,7 @@ export const SchedulingPage: React.FC = () => {
                        activeRole.toLowerCase() === "dispatcher";
 
     if (!isAssigned) {
-      alert("Role Permission Error: You can only update the status of events assigned directly to you.");
+      triggerNotification("Role Permission Error: You can only update the status of events assigned directly to you.");
       return;
     }
 
@@ -631,7 +637,7 @@ export const SchedulingPage: React.FC = () => {
 
   const handleDuplicateEvent = (evt: SchedulingEvent) => {
     if (!isHighPrivilege) {
-      alert("Permission Restricted: Duplicate is only available to coordinators.");
+      triggerNotification("Permission Restricted: Duplicate is only available to coordinators.");
       return;
     }
     const dup: SchedulingEvent = {
@@ -648,20 +654,20 @@ export const SchedulingPage: React.FC = () => {
 
   const handleDeleteEvent = (evtId: string) => {
     if (!isHighPrivilege) {
-      alert("Permission Restricted: Deletion is only available to managers/schedulers.");
+      triggerNotification("Permission Restricted: Deletion is only available to managers/schedulers.");
       return;
     }
     const match = events.find(e => e.id === evtId);
     if (!match) return;
 
-    if (confirm(`Are you sure you want to delete this scheduled event for '${match.customer}'?`)) {
+    requestConfirm(`Are you sure you want to delete this scheduled event for '${match.customer}'?`, () => {
       setEvents(prev => prev.filter(e => e.id !== evtId));
       if (logOperationalEvent) {
         logOperationalEvent("Event Deleted", `Removed event for ${match.customer} on ${match.date}`, "🗑️");
       }
       setIsDetailsOpen(false);
       setSelectedEvent(null);
-    }
+    });
   };
 
   // Helper colors for events
@@ -1845,6 +1851,18 @@ export const SchedulingPage: React.FC = () => {
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {confirmState && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e => e.target === e.currentTarget && setConfirmState(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
+              <button onClick={() => { const run = confirmState.onConfirm; setConfirmState(null); run(); }} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button>
+            </div>
           </div>
         </div>
       )}

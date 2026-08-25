@@ -357,6 +357,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     }
   };
 
+  // Native window.confirm() blocks the JS main thread until dismissed -- in
+  // some embedded/automated contexts it never gets dismissed, which reads as
+  // the whole page freezing. Route confirmations through in-app UI instead.
+  const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
+
   // Actions
   const handleRefresh = () => {
     triggerToast("Inventory cache successfully updated!");
@@ -754,13 +760,14 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
       setIsDetailsPopupOpen(true);
       triggerToast(`Barcode recognized! Loaded ${found.name}`);
     } else {
-      if (window.confirm(`Product SKU/Code "${scanInputCode}" was not found in inventory. Add it as a new inventory item?`)) {
+      const code = scanInputCode;
+      requestConfirm(`Product SKU/Code "${code}" was not found in inventory. Add it as a new inventory item?`, () => {
         setIsScannerModalOpen(false);
         resetForm();
-        setFormSku(scanInputCode);
-        setFormBarcode(scanInputCode);
+        setFormSku(code);
+        setFormBarcode(code);
         setIsAddPopupOpen(true);
-      }
+      });
     }
     setScanInputCode("");
   };
@@ -2777,6 +2784,18 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
           </div>
         </div>
       </div>
+
+      {confirmState && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e => e.target === e.currentTarget && setConfirmState(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
+              <button onClick={() => { const run = confirmState.onConfirm; setConfirmState(null); run(); }} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
