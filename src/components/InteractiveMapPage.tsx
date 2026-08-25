@@ -1905,8 +1905,22 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 {filteredPins.map(pin => {
                   const latCenter = DFW_FALLBACK.lat;
                   const lngCenter = DFW_FALLBACK.lng;
-                  const x = 50 + (pin.lng - lngCenter) * 1100;
-                  const y = 50 - (pin.lat - latCenter) * 1200;
+                  // These pins are positioned with CSS `left/top: X%`, so x/y
+                  // must be 0-100. The territory polygons above project into
+                  // raw SVG pixel units against an ~1000x640 canvas (450,300
+                  // center, *1100/*1200 scale) -- reusing that same pixel-space
+                  // formula here (with a 50,50 center instead of 450,300) fed
+                  // a pixel-scaled number straight into a percentage, so any
+                  // address more than a couple miles from DFW_FALLBACK blew
+                  // past 0-100 and got clamped to the 5%/95% screen edge
+                  // instead of landing near its real relative position.
+                  // Dividing by the same assumed canvas size converts it to
+                  // a percentage on the same geographic scale as the
+                  // territory shapes, so pins land inside them correctly.
+                  const CANVAS_W = 1000;
+                  const CANVAS_H = 640;
+                  const x = ((450 + (pin.lng - lngCenter) * 1100) / CANVAS_W) * 100;
+                  const y = ((300 - (pin.lat - latCenter) * 1200) / CANVAS_H) * 100;
 
                   // Bound percentages inside visible viewport
                   const posX = Math.max(5, Math.min(x, 95));

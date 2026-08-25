@@ -28,6 +28,7 @@ import {
   invoiceTotal
 } from "../lib/accountingEngine";
 import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms } from "../lib/deviceHandoff";
 import type { DocumentItem } from "../types/domain";
 import {
@@ -565,7 +566,15 @@ function InvoicesTab({
       invoiceId: invoice.id,
       lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
     };
-    (newDoc as any).pdfBase64 = pdfBase64;
+    // A PDF that would push this Firestore document over the ~1 MiB cap
+    // fails the write silently (see MAX_INLINE_BASE64_LENGTH) -- skip
+    // attaching the bytes rather than lose the whole record, so the invoice
+    // still shows up in Documents even if it can't be re-opened inline later.
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
     setDocuments((prev: DocumentItem[]) => [...prev, newDoc]);
     setGeneratedPdfDraft({
       filename: `${invoice.invoiceNumber}.pdf`,

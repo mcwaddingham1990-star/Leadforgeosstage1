@@ -44,6 +44,7 @@ import type { Customer, DocumentItem } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 
 export interface CustomersPageProps {
@@ -171,7 +172,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       invoiceId: "None",
       lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
     };
-    (newDoc as any).pdfBase64 = pdfBase64;
+    // A merged PDF (multiple estimates/invoices/jobs) that would push this
+    // Firestore document over the ~1 MiB cap fails the write silently (see
+    // MAX_INLINE_BASE64_LENGTH) -- skip attaching the bytes rather than lose
+    // the whole record, so it still shows up in Documents.
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification("This compiled PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
     setDocuments(prev => [...prev, newDoc]);
     setGeneratedPdfDraft({
       filename,
@@ -444,7 +453,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       invoiceId: "None",
       lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
     };
-    (newDoc as any).pdfBase64 = pdfBase64;
+    // A PDF that would push this Firestore document over the ~1 MiB cap
+    // fails the write silently (see MAX_INLINE_BASE64_LENGTH) -- skip
+    // attaching the bytes rather than lose the whole record, so it still
+    // shows up in Documents even if it can't be re-opened inline later.
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
     setDocuments(prev => [...prev, newDoc]);
     setGeneratedPdfDraft({
       filename,
