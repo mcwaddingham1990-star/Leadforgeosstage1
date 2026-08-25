@@ -59,8 +59,7 @@ import {
   Building,
   Trash2,
   ClipboardList,
-  ScrollText,
-  Camera
+  ScrollText
 } from "lucide-react";
 
 type AccountingTab =
@@ -1026,7 +1025,7 @@ function ExpensesTab({ bills, setBills, setJournalEntries, vendors, setVendors, 
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Expenses</h3>
-        <p className="text-[10px] text-[#5E7393]">Bills, fuel, materials, and every other operating cost</p>
+        <p className="text-[10px] text-[#5E7393]">Bills, fuel, materials, and every other operating cost. Scan a receipt, invoice, bill, or check with the Snapshot button in the bottom-right corner -- it works from any screen.</p>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {EXPENSES_SUB_TABS.map(t => (
@@ -1210,9 +1209,6 @@ function BillsTab({ bills, setBills, setJournalEntries, vendors, setVendors, can
         </div>
         {canEdit && (
           <div className="flex flex-wrap justify-end gap-2">
-            <button onClick={() => window.dispatchEvent(new CustomEvent("ownerslocal:ai-intake", { detail: { recordType: "bill" } }))} className="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer shadow-sm">
-              <Camera className="w-3.5 h-3.5" /> AI Snapshot
-            </button>
             <button onClick={() => setIsCreating(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
               <Plus className="w-3.5 h-3.5" /> Enter Manually
             </button>
