@@ -5218,11 +5218,20 @@ Access to full financial telemetry is restricted.`;
           /* VIEW 2: THE INTERACTIVE SHOWCASE OPERATING SYSTEM */
           <div
             style={{
-              borderRadius: "24px"
+              borderRadius: "24px",
+              // Dark Mode Dynamic uses the real starscape art (the same asset
+              // as the dynamic login backgrounds) instead of a CSS-simulated
+              // starfield -- set here rather than in index.css since a CSS
+              // background-image can't reference a bundled/hashed asset URL.
+              ...(workspaceTheme === "dark-dynamic" ? {
+                backgroundImage: `url(${darkLoginBackground})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center"
+              } : {})
             }}
             className={`w-full h-[calc(100vh-100px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
           >
-            
+
             {/* COLLAPSIBLE LEFT NAV MENU */}
             <div 
               style={{
