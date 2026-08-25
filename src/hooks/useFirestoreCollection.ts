@@ -60,12 +60,21 @@ export function useFirestoreCollection<T extends WithId>(
     itemsRef.current = normalizedNext;
     _setItems(normalizedNext);
     emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
-    void syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId).catch(error => {
-      console.error(`Failed to sync ${collectionName}; keeping the local change visible.`, error);
-      // The change stays visible/editable locally, but it was never actually
-      // written -- without this, the user has no way to know it will vanish
-      // the next time the page reloads and re-subscribes to real server data.
-      emitSyncError(`Couldn't save your ${humanizeCollectionName(collectionName)} change: ${error instanceof Error ? error.message : "unknown error"}. It won't be saved if you reload.`);
+    void syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId).catch(async firstError => {
+      // A transient network blip (the exact kind seen around sign-up/reload)
+      // shouldn't need a user-visible failure -- retry once before treating
+      // this as a real, reportable failure.
+      console.warn(`Sync of ${collectionName} failed once; retrying.`, firstError);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      try {
+        await syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId);
+      } catch (secondError) {
+        console.error(`Failed to sync ${collectionName} after a retry; keeping the local change visible.`, secondError);
+        // The change stays visible/editable locally, but it was never actually
+        // written -- without this, the user has no way to know it will vanish
+        // the next time the page reloads and re-subscribes to real server data.
+        emitSyncError(`Couldn't save your ${humanizeCollectionName(collectionName)} change: ${secondError instanceof Error ? secondError.message : "unknown error"}. It won't be saved if you reload.`);
+      }
     });
   };
 

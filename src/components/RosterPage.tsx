@@ -320,7 +320,10 @@ export const RosterPage: React.FC = () => {
           <span>Permissions are managed by role, not per person — configure what each role can access.</span>
         </div>
         <button
-          onClick={() => navigateToScreen("settings", { section: "roles" })}
+          onClick={() => {
+            navigateToScreen("settings", { section: "roles" });
+            triggerNotification("Opening Settings → Roles…");
+          }}
           className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-white border border-[#9EC8EF] text-[#315C9F] text-[10.5px] font-bold rounded-xl uppercase whitespace-nowrap cursor-pointer"
         >
           Manage Roles
