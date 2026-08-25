@@ -1642,7 +1642,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       : "bg-slate-800/70 border-white/5 text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <FitMapToPins pins={filteredPins} />
                   {type === "All" ? "🌍 All Layers" : `${type}s`}
                 </button>
               ))}
@@ -1768,6 +1767,12 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   onCameraChanged={(e) => handleMapCameraChanged(e?.detail?.center)}
                   style={{ width: "100%", height: "100%", borderRadius: "24px" }}
                 >
+                  {/* useMap() only resolves inside this Map's own subtree --
+                      this was previously rendered from a filter-chip button
+                      well outside the APIProvider/Map tree entirely, so it
+                      threw "failed to retrieve APIProviderContext" and never
+                      actually fit the camera to the pins. */}
+                  <FitMapToPins pins={filteredPins} />
                   {/* Standard markers do not require a cloud Map ID and are
                       substantially more reliable on mobile browsers. */}
                   {filteredPins.map(pin => (
