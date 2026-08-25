@@ -87,7 +87,8 @@ export const DispatchPage: React.FC = () => {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
     navigateToScreen: onNavigateToScreen,
-    logOperationalEvent
+    logOperationalEvent,
+    triggerNotification
   } = useNavTelemetry();
   // Current Selected Date in Dispatch view - Defaults to "2026-07-05" (Today in system context)
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -443,7 +444,7 @@ export const DispatchPage: React.FC = () => {
                 if (firstUnassigned) {
                   openAssignModal(firstUnassigned, "technician");
                 } else {
-                  alert("No unassigned jobs found on this day to allocate. Modify a job below directly.");
+                  triggerNotification("No unassigned jobs found on this day to allocate. Modify a job below directly.");
                 }
               }}
               disabled={!hasWriteAccess}
@@ -463,7 +464,7 @@ export const DispatchPage: React.FC = () => {
                 if (firstUnassigned) {
                   openAssignModal(firstUnassigned, "crew");
                 } else {
-                  alert("No unassigned jobs found on this day. Select a job in the list to dispatch.");
+                  triggerNotification("No unassigned jobs found on this day. Select a job in the list to dispatch.");
                 }
               }}
               disabled={!hasWriteAccess}
@@ -483,7 +484,7 @@ export const DispatchPage: React.FC = () => {
                 if (firstUnassigned) {
                   openAssignModal(firstUnassigned, "vehicle");
                 } else {
-                  alert("Select a job below to modify vehicle allocation.");
+                  triggerNotification("Select a job below to modify vehicle allocation.");
                 }
               }}
               disabled={!hasWriteAccess}
@@ -503,7 +504,7 @@ export const DispatchPage: React.FC = () => {
                 if (firstAssigned) {
                   openAssignModal(firstAssigned, "all");
                 } else {
-                  alert("No active dispatches available for reassignment.");
+                  triggerNotification("No active dispatches available for reassignment.");
                 }
               }}
               disabled={!hasWriteAccess}
@@ -670,11 +671,11 @@ export const DispatchPage: React.FC = () => {
                   // Direct to roster or set filter
                   setFilterEmployee("All");
                   setActiveSummaryFilter("All");
-                  alert(`There are ${stats.techsAvailable} technicians without any assignment on ${selectedDate}.`);
+                  triggerNotification(`There are ${stats.techsAvailable} technicians without any assignment on ${selectedDate}.`);
                 } else if (card.id === "CrewsAvailable") {
                   setFilterCrew("All");
                   setActiveSummaryFilter("All");
-                  alert(`There are ${stats.crewsAvailable} crews with zero scheduled events on ${selectedDate}.`);
+                  triggerNotification(`There are ${stats.crewsAvailable} crews with zero scheduled events on ${selectedDate}.`);
                 } else {
                   setActiveSummaryFilter(isSelected ? "All" : card.id);
                 }
@@ -964,7 +965,7 @@ export const DispatchPage: React.FC = () => {
                 <button
                   onClick={() => {
                     if (!hasWriteAccess) {
-                      alert("Permission denied. Ask owner/dispatcher.");
+                      triggerNotification("Permission denied. Ask owner/dispatcher.");
                       return;
                     }
                     setTempEmployee(selectedEvent.assignedEmployee);
