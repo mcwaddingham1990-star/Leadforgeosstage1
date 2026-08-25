@@ -135,6 +135,7 @@ export const MessagesPage: React.FC = () => {
           });
         } catch (err) {
           console.error("Error saving conversation:", err);
+          triggerRealTimeNotification(`Message failed to save: ${err instanceof Error ? err.message : "unknown error"}. It will disappear on reload.`);
         }
       }
     }
@@ -145,6 +146,7 @@ export const MessagesPage: React.FC = () => {
           await deleteDoc(doc(db, "conversations", item.id));
         } catch (err) {
           console.error("Error deleting conversation:", err);
+          triggerRealTimeNotification(`Failed to delete conversation: ${err instanceof Error ? err.message : "unknown error"}`);
         }
       }
     }
