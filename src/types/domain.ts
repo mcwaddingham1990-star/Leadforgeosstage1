@@ -70,6 +70,7 @@ export interface Estimate {
   expirationDate: string;
   notes?: string;
   address?: string;
+  phone?: string;
 }
 
 export interface InventoryItem {

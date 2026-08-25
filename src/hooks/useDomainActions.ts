@@ -92,7 +92,7 @@ export function useDomainActions() {
       startTime: schedule?.startTime || "09:00",
       endTime: schedule?.endTime || "12:00",
       customer: estimate.customerName,
-      customerPhone: matchedCustomer?.phone || "",
+      customerPhone: matchedCustomer?.phone || estimate.phone || "",
       customerEmail: matchedCustomer?.email || "",
       customerAddress: matchedCustomer?.address || estimate.address || "",
       // No real rule exists yet for which employee should get an
@@ -172,7 +172,7 @@ export function useDomainActions() {
    * the CRM immediately. If a matching customer already exists (by name or
    * company) nothing is written — the existing record wins.
    */
-  const upsertPotentialCustomer = (customerName: string, company?: string) => {
+  const upsertPotentialCustomer = (customerName: string, company?: string, phone?: string, address?: string) => {
     const trimmedName = customerName.trim();
     if (!trimmedName) return;
     const alreadyExists = customers.some(
@@ -184,9 +184,9 @@ export function useDomainActions() {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
       company: company?.trim() || trimmedName + " Inc",
       contact: trimmedName,
-      phone: "",
+      phone: phone?.trim() || "",
       email: "",
-      address: "",
+      address: address?.trim() || "",
       openJobs: 0,
       outstandingBalance: 0,
       lifetimeValue: 0,

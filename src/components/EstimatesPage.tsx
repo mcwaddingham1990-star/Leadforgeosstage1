@@ -81,6 +81,8 @@ export const EstimatesPage: React.FC = () => {
   // Form states
   const [formCustomerName, setFormCustomerName] = useState("");
   const [formCompany, setFormCompany] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formAddress, setFormAddress] = useState("");
   const [formAmount, setFormAmount] = useState<number>(0);
   const [formStatus, setFormStatus] = useState<Estimate["status"]>("Draft");
   const [formSalesRep, setFormSalesRep] = useState("");
@@ -144,6 +146,8 @@ export const EstimatesPage: React.FC = () => {
   const openAddModal = () => {
     setFormCustomerName("");
     setFormCompany("");
+    setFormPhone("");
+    setFormAddress("");
     setFormAmount(0);
     setFormStatus("Draft");
     setFormSalesRep("Self");
@@ -217,6 +221,8 @@ export const EstimatesPage: React.FC = () => {
       salesRep: formSalesRep.trim() || "Self",
       amount: Number(formAmount) || 0,
       notes: formNotes.trim(),
+      address: formAddress.trim() || undefined,
+      phone: formPhone.trim() || undefined,
       createdDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
     };
@@ -227,9 +233,13 @@ export const EstimatesPage: React.FC = () => {
       setLocalEstimates(prev => [newEst, ...prev]);
     }
     // Auto-create a "Potential" customer in the CRM if this person isn't
-    // already in the system. When the estimate is accepted the status
-    // upgrades to "Active" automatically via approveEstimateToJob.
-    upsertPotentialCustomer(newEst.customerName, newEst.company);
+    // already in the system, carrying over whatever phone/address was
+    // captured here -- previously this always created a blank-contact
+    // customer, so converting the estimate to a job later always left
+    // customerPhone/customerAddress empty on that job no matter what.
+    // When the estimate is accepted the status upgrades to "Active"
+    // automatically via approveEstimateToJob.
+    upsertPotentialCustomer(newEst.customerName, newEst.company, newEst.phone, newEst.address);
     if (logOperationalEvent) {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
     }
@@ -241,6 +251,8 @@ export const EstimatesPage: React.FC = () => {
     setSelectedEstimate(est);
     setFormCustomerName(est.customerName);
     setFormCompany(est.company || "");
+    setFormPhone(est.phone || "");
+    setFormAddress(est.address || "");
     setFormAmount(est.amount);
     setFormStatus(est.status);
     setFormSalesRep(est.salesRep);
@@ -254,6 +266,8 @@ export const EstimatesPage: React.FC = () => {
       ...selectedEstimate,
       customerName: formCustomerName.trim(),
       company: formCompany.trim(),
+      phone: formPhone.trim() || undefined,
+      address: formAddress.trim() || undefined,
       amount: Number(formAmount) || 0,
       status: formStatus,
       salesRep: formSalesRep.trim(),
@@ -968,9 +982,33 @@ export const EstimatesPage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Phone</label>
+                  <input
+                    type="tel"
+                    value={formPhone}
+                    onChange={e => setFormPhone(e.target.value)}
+                    placeholder="e.g. (555) 123-4567"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Job Site Address</label>
+                  <input
+                    type="text"
+                    value={formAddress}
+                    onChange={e => setFormAddress(e.target.value)}
+                    placeholder="e.g. 123 Main St, Dallas, TX"
+                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                  />
+                </div>
+              </div>
+              <p className="text-[9.5px] text-slate-400 -mt-1">Carries through automatically if this estimate is later converted to a job.</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
                   <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount ($) *</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={formAmount || ""}
                     onChange={e => setFormAmount(Number(e.target.value))}
                     placeholder="e.g. 12500"
@@ -1057,6 +1095,8 @@ export const EstimatesPage: React.FC = () => {
           onSelect={(c) => {
             setFormCustomerName(c.contact || c.company);
             setFormCompany(c.company);
+            setFormPhone(c.phone || "");
+            setFormAddress(c.address || "");
             setIsCustomerPickerOpen(false);
           }}
         />
@@ -1098,10 +1138,31 @@ export const EstimatesPage: React.FC = () => {
                     
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase font-bold text-[#5E7393]">Company / Account Name</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={formCompany}
                         onChange={e => setFormCompany(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Phone</label>
+                      <input
+                        type="tel"
+                        value={formPhone}
+                        onChange={e => setFormPhone(e.target.value)}
+                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Job Site Address</label>
+                      <input
+                        type="text"
+                        value={formAddress}
+                        onChange={e => setFormAddress(e.target.value)}
                         className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                       />
                     </div>
