@@ -98,7 +98,6 @@ const addDays = (dateStr: string, days: number) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
-const daysBetween = (a: string, b: string) => Math.floor((new Date(a).getTime() - new Date(b).getTime()) / 86400000);
 const genId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 function invoiceBalanceDue(inv: Invoice): number {
@@ -230,37 +229,14 @@ export const AccountingPage: React.FC = () => {
   const openInvoices = useMemo(() => invoices.filter(i => i.status !== "paid" && i.status !== "void"), [invoices]);
   const openBills = useMemo(() => bills.filter(b => b.status !== "paid" && b.status !== "void"), [bills]);
 
-  const arAging = useMemo(() => {
-    const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0 };
-    const today = todayStr();
-    for (const inv of openInvoices) {
-      const bal = invoiceBalanceDue(inv);
-      if (bal <= 0) continue;
-      const overdue = daysBetween(today, inv.dueDate) * -1;
-      if (overdue <= 0) buckets.current += bal;
-      else if (overdue <= 30) buckets.d30 += bal;
-      else if (overdue <= 60) buckets.d60 += bal;
-      else if (overdue <= 90) buckets.d90 += bal;
-      else buckets.d90plus += bal;
-    }
-    return buckets;
-  }, [openInvoices]);
-
-  const apAging = useMemo(() => {
-    const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0 };
-    const today = todayStr();
-    for (const bill of openBills) {
-      const bal = billBalanceDue(bill);
-      if (bal <= 0) continue;
-      const overdue = daysBetween(today, bill.dueDate) * -1;
-      if (overdue <= 0) buckets.current += bal;
-      else if (overdue <= 30) buckets.d30 += bal;
-      else if (overdue <= 60) buckets.d60 += bal;
-      else if (overdue <= 90) buckets.d90 += bal;
-      else buckets.d90plus += bal;
-    }
-    return buckets;
-  }, [openBills]);
+  // Cash actually collected/spent so far, split from what's still open --
+  // invoicesPaid + arBalance (unpaid) always equals total invoiced;
+  // expensesPaid + apBalance (outstanding) always equals total expensed.
+  const invoicesPaid = useMemo(() => invoices.reduce((s, i) => s + i.amountPaid, 0), [invoices]);
+  const expensesPaid = useMemo(
+    () => transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0) + bills.reduce((s, b) => s + b.amountPaid, 0),
+    [transactions, bills]
+  );
 
   if (!canEdit && !hasPermission(loggedInUser?.granularPermissions, "accounting", "view")) {
     return (
@@ -302,14 +278,10 @@ export const AccountingPage: React.FC = () => {
       {activeTab === "dashboard" && (
         <DashboardTab
           cashBalance={cashBalance}
+          invoicesPaid={invoicesPaid}
           arBalance={arBalance}
+          expensesPaid={expensesPaid}
           apBalance={apBalance}
-          totalRevenue={totalRevenue}
-          totalExpenses={totalExpenses}
-          netIncome={netIncome}
-          pendingRevenue={pendingRevenue}
-          arAging={arAging}
-          apAging={apBalance > 0 ? apAging : apAging}
           openInvoiceCount={openInvoices.length}
           openBillCount={openBills.length}
         />
@@ -429,66 +401,33 @@ export const AccountingPage: React.FC = () => {
 // ============================================================================
 // DASHBOARD
 // ============================================================================
-function AgingBar({ label, buckets }: { label: string; buckets: { current: number; d30: number; d60: number; d90: number; d90plus: number } }) {
-  const total = buckets.current + buckets.d30 + buckets.d60 + buckets.d90 + buckets.d90plus;
-  return (
-    <div className="bg-white/70 border border-[#9EC8EF]/40 rounded-2xl p-3.5 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase font-black text-[#5E7393]">{label}</span>
-        <span className="text-xs font-black text-[#1F3557]">{fmt(total)}</span>
-      </div>
-      <div className="grid grid-cols-5 gap-1 text-center">
-        {[
-          { l: "Current", v: buckets.current },
-          { l: "1-30", v: buckets.d30 },
-          { l: "31-60", v: buckets.d60 },
-          { l: "61-90", v: buckets.d90 },
-          { l: "90+", v: buckets.d90plus }
-        ].map(b => (
-          <div key={b.l} className="bg-[#EAF5FF] rounded-lg py-1.5">
-            <p className="text-[8px] text-[#5E7393] font-bold uppercase">{b.l}</p>
-            <p className="text-[10px] font-black text-[#1F3557]">{fmt(b.v)}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function DashboardTab({
   cashBalance,
+  invoicesPaid,
   arBalance,
+  expensesPaid,
   apBalance,
-  totalRevenue,
-  totalExpenses,
-  netIncome,
-  pendingRevenue,
-  arAging,
-  apAging,
   openInvoiceCount,
   openBillCount
 }: {
   cashBalance: number;
+  invoicesPaid: number;
   arBalance: number;
+  expensesPaid: number;
   apBalance: number;
-  totalRevenue: number;
-  totalExpenses: number;
-  netIncome: number;
-  pendingRevenue: number;
-  arAging: { current: number; d30: number; d60: number; d90: number; d90plus: number };
-  apAging: { current: number; d30: number; d60: number; d90: number; d90plus: number };
   openInvoiceCount: number;
   openBillCount: number;
 }) {
   const cards = [
-    { label: "Cash Balance", val: cashBalance, icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-    { label: "Accounts Receivable", val: arBalance, icon: FileText, color: "text-blue-600", bg: "bg-blue-500/10", sub: `${openInvoiceCount} open invoice${openInvoiceCount === 1 ? "" : "s"}` },
-    { label: "Accounts Payable", val: apBalance, icon: Receipt, color: "text-rose-600", bg: "bg-rose-500/10", sub: `${openBillCount} open bill${openBillCount === 1 ? "" : "s"}` },
-    { label: "Net Income (All Time)", val: netIncome, icon: netIncome >= 0 ? TrendingUp : TrendingDown, color: netIncome >= 0 ? "text-emerald-600" : "text-rose-600", bg: netIncome >= 0 ? "bg-emerald-500/10" : "bg-rose-500/10" }
+    { label: "Current Balance", val: cashBalance, icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { label: "Invoices Paid", val: invoicesPaid, icon: CreditCard, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { label: "Unpaid Invoices", val: arBalance, icon: FileText, color: "text-blue-600", bg: "bg-blue-500/10", sub: `${openInvoiceCount} open invoice${openInvoiceCount === 1 ? "" : "s"}` },
+    { label: "Expenses Paid", val: expensesPaid, icon: Receipt, color: "text-rose-600", bg: "bg-rose-500/10" },
+    { label: "Outstanding Expenses", val: apBalance, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-500/10", sub: `${openBillCount} open bill${openBillCount === 1 ? "" : "s"}` }
   ];
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {cards.map(c => (
           <div key={c.label} className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
@@ -501,29 +440,6 @@ function DashboardTab({
             {c.sub && <p className="text-[9px] text-[#5E7393] font-semibold mt-0.5">{c.sub}</p>}
           </div>
         ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
-          <p className="text-[10px] font-bold text-[#5E7393] uppercase">Revenue (All Time)</p>
-          <p className="text-lg font-black text-emerald-600 mt-1">{fmt(totalRevenue)}</p>
-        </div>
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
-          <p className="text-[10px] font-bold text-[#5E7393] uppercase">Expenses (All Time)</p>
-          <p className="text-lg font-black text-rose-600 mt-1">{fmt(totalExpenses)}</p>
-        </div>
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm">
-          <p className="text-[10px] font-bold text-[#5E7393] uppercase flex items-center gap-1">
-            Pending Revenue <AlertTriangle className="w-3 h-3 text-amber-500" />
-          </p>
-          <p className="text-lg font-black text-amber-600 mt-1">{fmt(pendingRevenue)}</p>
-          <p className="text-[8.5px] text-[#5E7393] font-medium mt-0.5">Accepted estimates not yet invoiced — not counted in revenue yet</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <AgingBar label="Accounts Receivable Aging" buckets={arAging} />
-        <AgingBar label="Accounts Payable Aging" buckets={apAging} />
       </div>
     </div>
   );
