@@ -486,7 +486,24 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       }
       setShowClockInModal(false);
     } catch (error) {
-      triggerLocalNotification(error instanceof Error ? error.message : "Clock-in could not be saved.");
+      const message = error instanceof Error ? error.message : "Clock-in could not be saved.";
+      if (message.includes("already clocked in")) {
+        // clockInTransaction found a backend active_shifts record this
+        // device's local time_clock_logs didn't know about (e.g. a clock-in
+        // that landed but never synced down here). Without this, the button
+        // stays stuck on "Clock In" forever -- every retry hits the same
+        // error, with only an easy-to-miss toast as feedback and no way to
+        // recover except an admin repair tool nothing in the UI calls.
+        // Trust the backend and reflect the real state instead, so the
+        // employee can proceed to Clock Out normally, which cleans up the
+        // stale record.
+        setIsClockedIn(true);
+        setClockInTime(timeStr);
+        triggerLocalNotification("You're already clocked in from an earlier session — showing Clock Out instead.");
+        setShowClockInModal(false);
+      } else {
+        triggerLocalNotification(message);
+      }
     } finally {
       setPunchPending(false);
     }
