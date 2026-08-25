@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Camera, Check, FileUp, Loader2, PencilLine, X } from "lucide-react";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -281,11 +282,18 @@ export function UniversalAIIntake() {
     triggerNotification(`${labels[recordType]} reviewed and saved.`); close();
   };
 
-  // Bottom-LEFT, deliberately opposite the Owner's AI chat widget (which
-  // docks bottom-right by default, and is user-draggable) so the two
-  // floating buttons can never overlap or cover each other on a small screen.
-  if (!open) return <button onClick={() => setOpen(true)} className="fixed bottom-5 left-5 z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"><Camera className="w-4 h-4" /> Snapshot</button>;
-  return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"><div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+  // Bottom-right, stacked below the Owner's AI chat widget's default dock
+  // (bottom-24 right-6) so the two floating buttons sit in the same corner
+  // without overlapping. Portaled straight to document.body so position:fixed
+  // is always relative to the real viewport, not trapped by some ancestor --
+  // it has to stay pinned to the screen corner no matter how far the page
+  // underneath scrolls.
+  if (!open) return createPortal(
+    <button onClick={() => setOpen(true)} className="fixed bottom-5 right-6 z-40 rounded-full bg-violet-600 px-4 py-3 text-xs font-black text-white shadow-xl hover:bg-violet-700 flex items-center gap-2"><Camera className="w-4 h-4" /> Snapshot</button>,
+    document.body
+  );
+  return createPortal(
+  <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"><div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
     <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-black uppercase text-[#1F3557]">Snapshot</h3><p className="mt-1 text-[10px] text-slate-500">Photograph or upload a receipt, invoice, bill, check, or completed form -- the AI figures out what it is and where it goes. Nothing saves until you review it.</p></div><button onClick={close}><X className="w-5 h-5 text-slate-400" /></button></div>
     {stage === "choose" && <div className="mt-5 space-y-4"><label className="block text-[10px] font-black uppercase text-slate-500">Record destination<select value={recordType} onChange={e => setRecordType(e.target.value as RecordType)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs normal-case"><option value="unknown">Auto-detect from document</option>{Object.entries(labels).filter(([key]) => key !== "unknown").map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => scan(e.target.files?.[0])} /><button onClick={() => inputRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50 p-7 text-violet-700"><FileUp className="mx-auto mb-2 w-7 h-7" /><span className="text-xs font-black">Photograph or upload completed form</span></button><button onClick={() => { setFields({ ...presetFields[recordType] }); setStage("review"); }} className="w-full rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2.5 text-xs font-bold text-[#315C9F] flex justify-center gap-2"><PencilLine className="w-4 h-4" /> Use editable preset form</button><p className="text-center text-[9px] text-slate-500">Manual entry inside every module remains available.</p></div>}
     {stage === "scanning" && <div className="py-14 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-violet-600" /><p className="mt-3 text-xs font-bold text-[#1F3557]">Reading and classifying the form…</p></div>}
@@ -335,5 +343,7 @@ export function UniversalAIIntake() {
         <button onClick={saveItemizedScan} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-black text-white flex justify-center gap-2"><Check className="w-4 h-4" /> Confirm & Update Ledger</button>
       </div>
     </div>}
-  </div></div>;
+  </div></div>,
+  document.body
+  );
 }

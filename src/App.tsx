@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
@@ -7601,7 +7602,11 @@ Access to full financial telemetry is restricted.`;
         </div>
       )}
 
-      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it */}
+      {/* GLOBAL FLOATING AI WIDGET -- draggable; remembers where the owner last left it.
+          Portaled straight to document.body so position:fixed is always relative to the
+          real viewport, never trapped by some ancestor's transform/overflow -- it must
+          stay pinned to the screen corner no matter how far the page underneath scrolls. */}
+      {isLoggedIn && createPortal(
       <div
         id="floating-ai-widget"
         className={`fixed z-40 select-none ${aiWidgetPos ? "" : "bottom-24 right-6"}`}
@@ -8009,7 +8014,9 @@ Access to full financial telemetry is restricted.`;
           </div>
         )}
 
-      </div>
+      </div>,
+      document.body
+      )}
 
       {/* FLOATING SUCCESS/WARNING NOTIFICATIONS SYSTEM */}
       {showNotification && (
