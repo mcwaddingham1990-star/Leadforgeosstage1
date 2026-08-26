@@ -891,6 +891,116 @@ const DynamicFieldList: React.FC<DynamicFieldListProps> = ({
   );
 };
 
+interface DynamicAddressFieldListProps {
+  label: string;
+  items: string[];
+  setter: React.Dispatch<React.SetStateAction<string[]>>;
+  scale: number;
+  error?: string;
+}
+
+// Same add/remove/local-echo pattern as DynamicFieldList above, but each row
+// is a full StructuredAddressFields (Street Address / City, State / ZIP)
+// instead of one free-text input -- for a list of real, separately
+// geocodable locations rather than an arbitrary label like "Seattle HQ".
+const DynamicAddressFieldList: React.FC<DynamicAddressFieldListProps> = ({
+  label,
+  items,
+  setter,
+  scale,
+  error
+}) => {
+  const [localItems, setLocalItems] = useState<{ id: string; value: string }[]>(() =>
+    items.map(val => ({ id: Math.random().toString(36).substring(2, 9), value: val }))
+  );
+
+  const prevItemsRef = React.useRef(items);
+  if (prevItemsRef.current !== items) {
+    prevItemsRef.current = items;
+    const prevValues = localItems.map(p => p.value);
+    if (JSON.stringify(prevValues) !== JSON.stringify(items)) {
+      setLocalItems(
+        items.map((val, idx) => {
+          const existingId = localItems[idx]?.id || Math.random().toString(36).substring(2, 9);
+          return { id: existingId, value: val };
+        })
+      );
+    }
+  }
+
+  const handleAdd = () => {
+    const newItem = { id: Math.random().toString(36).substring(2, 9), value: "" };
+    const updated = [...localItems, newItem];
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const handleChange = (index: number, newValue: string) => {
+    const updated = [...localItems];
+    updated[index] = { ...updated[index], value: newValue };
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const handleRemove = (index: number) => {
+    if (localItems.length <= 1) return;
+    const updated = localItems.filter((_, i) => i !== index);
+    setLocalItems(updated);
+    setter(updated.map(x => x.value));
+  };
+
+  const getFontSize = (baseSize: number) => ({ fontSize: `${Math.max(10, Math.round(baseSize * scale))}px` });
+
+  return (
+    <div className="space-y-1.5 mb-4">
+      <div className="flex items-center justify-between px-1">
+        <label style={getFontSize(11)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider">
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={handleAdd}
+          style={{ padding: `${3 * scale}px ${8 * scale}px`, borderRadius: `${6 * scale}px`, ...getFontSize(10) }}
+          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold flex items-center gap-1 transition-colors cursor-pointer border border-blue-200/50 animate-fade-in"
+        >
+          <span>+ Add</span>
+        </button>
+      </div>
+      <div className="space-y-2.5">
+        {localItems.map((item, idx) => (
+          <div key={item.id} className="flex gap-1.5 items-start">
+            <div className="flex-1">
+              <StructuredAddressFields
+                label={localItems.length > 1 ? `Location ${idx + 1}` : "Location"}
+                value={item.value}
+                onChange={(value) => handleChange(idx, value)}
+                compact
+              />
+            </div>
+            {localItems.length > 1 && (
+              <button
+                type="button"
+                onClick={() => handleRemove(idx)}
+                style={{ width: `${30 * scale}px`, height: `${30 * scale}px`, borderRadius: `${8 * scale}px`, marginTop: `${18 * scale}px` }}
+                className="hover:bg-rose-50 text-rose-500 hover:text-rose-700 font-bold transition-colors cursor-pointer flex items-center justify-center text-xs shrink-0 border border-transparent hover:border-rose-100"
+                title="Remove this location"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {error && (
+        <p className="text-rose-600 font-bold text-[10.5px] mt-1 pl-1 flex items-center gap-1 animate-pulse">
+          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0 animate-ping" />
+          <span>{error}</span>
+        </p>
+      )}
+    </div>
+  );
+};
+
 const DAILY_VIEW_OPTIONS = [
   { value: "revenue", label: "📊 Company Revenue Graph" },
   { value: "leads", label: "🎯 Active Leads Count" },
@@ -3422,9 +3532,9 @@ Access to full financial telemetry is restricted.`;
   };
 
   const renderDynamicField = (
-    label: string, 
-    items: string[], 
-    setter: React.Dispatch<React.SetStateAction<string[]>>, 
+    label: string,
+    items: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
     placeholder: string
   ) => {
     return (
@@ -3433,6 +3543,22 @@ Access to full financial telemetry is restricted.`;
         items={items}
         setter={setter}
         placeholder={placeholder}
+        scale={scale}
+        error={onboardingErrors[label.toLowerCase()]}
+      />
+    );
+  };
+
+  const renderDynamicAddressList = (
+    label: string,
+    items: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    return (
+      <DynamicAddressFieldList
+        label={label}
+        items={items}
+        setter={setter}
         scale={scale}
         error={onboardingErrors[label.toLowerCase()]}
       />
@@ -4047,7 +4173,7 @@ Access to full financial telemetry is restricted.`;
                           onChange={(value) => setBusinessAddresses(prev => [value, ...prev.slice(1)])}
                         />
                         {renderDynamicField("business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
-                        {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Seattle HQ")}
+                        {renderDynamicAddressList("company locations (optional)", companyLocations, setCompanyLocations)}
                         <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-[10px] leading-relaxed text-blue-950">
                           <p className="flex items-center gap-1.5 font-black uppercase tracking-wide">
                             <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600" />
