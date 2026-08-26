@@ -245,5 +245,13 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && request.resource != null && request.resource.data.email == request.auth.token.email;
       allow read, delete: if isAuthenticated() && resource.data.email == request.auth.token.email;
     }
+
+    // Missed Call Text-Back companion app settings: one settings doc per
+    // business, keyed by businessId (the owner's email, same tenant key used
+    // everywhere else). Written from the OwnersLocal web app, read by the
+    // separate Android companion app signed into this same Firebase project.
+    match /missed_call_settings/{businessId} {
+      allow read, write: if isAuthenticated() && isBusinessMember(businessId);
+    }
   }
 }
