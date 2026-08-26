@@ -12,6 +12,8 @@ import { postTransactionEntry } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
 import { setDemoMode, isDemoMode, DEMO_USER_EMAIL } from "./lib/demoMode";
 import { buildDemoData } from "./demoData";
+import { PAGE_TUTORIALS } from "./pageTutorials";
+import { PageTutorialPopup } from "./components/PageTutorialPopup";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1090,6 +1092,41 @@ export default function App() {
   useEffect(() => {
     sessionStorage.setItem("ownerslocal_active_screen", activeScreen.id);
   }, [activeScreen]);
+
+  // First-visit page tutorials -- shows a short orientation popup the first
+  // time a given person's account ever lands on a given sidebar page, then
+  // never again. "Seen" is tracked per real person (loggedInUser.email, not
+  // businessId) directly in localStorage rather than as React state, so
+  // there's no separate hydration step that could race the very first
+  // render after login/demo entry.
+  const [activeTutorialId, setActiveTutorialId] = useState<string | null>(null);
+  const tutorialStorageKey = loggedInUser?.email ? `ownerslocal_tutorials_seen:${loggedInUser.email}` : null;
+
+  useEffect(() => {
+    if (!isLoggedIn || !tutorialStorageKey || !PAGE_TUTORIALS[activeScreen.id]) return;
+    let seen: string[] = [];
+    try {
+      seen = JSON.parse(localStorage.getItem(tutorialStorageKey) || "[]");
+    } catch { /* treat unreadable state as unseen */ }
+    if (Array.isArray(seen) && seen.includes(activeScreen.id)) return;
+    setActiveTutorialId(activeScreen.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScreen.id, isLoggedIn, tutorialStorageKey]);
+
+  const dismissActiveTutorial = () => {
+    if (!activeTutorialId) return;
+    if (tutorialStorageKey) {
+      try {
+        const seen: string[] = JSON.parse(localStorage.getItem(tutorialStorageKey) || "[]");
+        const next = Array.isArray(seen) ? seen : [];
+        if (!next.includes(activeTutorialId)) next.push(activeTutorialId);
+        localStorage.setItem(tutorialStorageKey, JSON.stringify(next));
+      } catch {
+        localStorage.setItem(tutorialStorageKey, JSON.stringify([activeTutorialId]));
+      }
+    }
+    setActiveTutorialId(null);
+  };
 
   // Dashboard & Operational Interactive states
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -7471,6 +7508,11 @@ Access to full financial telemetry is restricted.`;
         >
           by Stuffapp
         </div>
+      )}
+
+      {/* FIRST-VISIT PAGE TUTORIAL */}
+      {activeTutorialId && PAGE_TUTORIALS[activeTutorialId] && (
+        <PageTutorialPopup tutorial={PAGE_TUTORIALS[activeTutorialId]} onDismiss={dismissActiveTutorial} />
       )}
 
       {/* CAMERA SHUTTER SNAPSHOT FLASH SIMULATION */}
