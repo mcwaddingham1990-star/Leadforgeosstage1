@@ -84,7 +84,8 @@ import {
   Bell,
   BellRing,
   Menu,
-  Sliders
+  Sliders,
+  PhoneMissed
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -121,6 +122,7 @@ import SettingsPage from "./components/SettingsPage";
 import { StructuredAddressFields } from "./components/StructuredAddressFields";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
+import { MissedCallTextBackPage } from "./components/MissedCallTextBackPage";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
 import {
   INITIAL_DASHBOARD_LEADS,
@@ -430,6 +432,7 @@ const OS_SCREENS = [
   { id: "bulletins", label: "Bulletins", url: "", icon: "📌", top: "77%", bottom: "82%" },
   { id: "snapshots", label: "Snapshots Folder", url: "", icon: "📸", top: "82%", bottom: "87%" },
   { id: "notifications", label: "Notifications", url: "", icon: "🔔", top: "82%", bottom: "87%" },
+  { id: "missed_call_textback", label: "Missed Call Text-Back", url: "", icon: "📵", top: "82%", bottom: "87%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
@@ -760,6 +763,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Camera className={className} />;
     case "notifications":
       return <Bell className={className} />;
+    case "missed_call_textback":
+      return <PhoneMissed className={className} />;
     default:
       return <BrandIcon className={className} />;
   }
@@ -1420,6 +1425,12 @@ export default function App() {
     // Always allow notifications to be viewed by everyone
     if (!perms.includes("notifications")) {
       perms.push("notifications");
+    }
+
+    // Always allow Missed Call Text-Back settings to be viewed by everyone
+    // (the page itself restricts editing to Owner/Manager roles).
+    if (!perms.includes("missed_call_textback")) {
+      perms.push("missed_call_textback");
     }
 
     // Allow revenue & accounting for specific management/accounting roles
@@ -7353,6 +7364,10 @@ Access to full financial telemetry is restricted.`;
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
                     />
+
+                  ) : activeScreen.id === "missed_call_textback" ? (
+
+                    <MissedCallTextBackPage />
 
                   ) : (
                     
