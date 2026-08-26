@@ -1427,12 +1427,6 @@ export default function App() {
       perms.push("notifications");
     }
 
-    // Always allow Missed Call Text-Back settings to be viewed by everyone
-    // (the page itself restricts editing to Owner/Manager roles).
-    if (!perms.includes("missed_call_textback")) {
-      perms.push("missed_call_textback");
-    }
-
     // Allow revenue & accounting for specific management/accounting roles
     const highPrivilegeRoles = ["Owner", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"];
     if (highPrivilegeRoles.includes(activeRole)) {
