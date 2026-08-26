@@ -5583,8 +5583,19 @@ Access to full financial telemetry is restricted.`;
                     )}
                   </div>
 
-                  {/* Actions Block: Notification Bell + Redo Onboarding Trigger + Sign out */}
+                  {/* Actions Block: Help + Notification Bell + Redo Onboarding Trigger + Sign out */}
                   <div className={`flex items-center gap-1.5 ${isSidebarCollapsed ? "flex-col w-full mt-1.5" : ""}`}>
+                    {/* Help button -- reopens this page's tutorial popup on demand, whether or not it's been seen before */}
+                    {PAGE_TUTORIALS[activeScreen.id] && (
+                      <button
+                        onClick={() => setActiveTutorialId(activeScreen.id)}
+                        className="p-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[#315C9F] transition-all cursor-pointer flex items-center justify-center"
+                        title={`Help: ${activeScreen.label}`}
+                      >
+                        <HelpCircle className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     {/* Notification bell button */}
                     <button
                       onClick={() => setShowNotificationPanel(!showNotificationPanel)}
