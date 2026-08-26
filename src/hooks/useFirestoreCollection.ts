@@ -3,6 +3,7 @@ import { syncArrayToFirestore, subscribeToCollection, subscribeToCollectionByFie
 import { emitCollectionEvent } from "../lib/eventBus";
 import { db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import { isDemoMode } from "../lib/demoMode";
 
 type WithId = { id?: string };
 
@@ -59,6 +60,7 @@ export function useFirestoreCollection<T extends WithId>(
     itemsRef.current = normalizedNext;
     _setItems(normalizedNext);
     emitDiffEvents(collectionName, normalizedPrev, normalizedNext);
+    if (isDemoMode()) return;
     void syncArrayToFirestore(collectionName, normalizedPrev, normalizedNext, businessId).catch(error => {
       console.error(`Failed to sync ${collectionName}; keeping the local change visible.`, error);
     });
@@ -73,6 +75,11 @@ export function useFirestoreCollection<T extends WithId>(
       _setItems([]);
       return;
     }
+    // Demo mode is a fixed local dataset seeded by the caller (App.tsx) --
+    // never a real business server-side, so there's nothing to subscribe
+    // to and nothing to sync. Skipping the listener also avoids a
+    // permission-denied error/console spam for every one of these hooks.
+    if (isDemoMode()) return;
     collectionItemsRef.current = [];
     compatibilityItemsRef.current = [];
     pendingItemsRef.current.clear();
@@ -116,7 +123,7 @@ export function useFirestoreCollection<T extends WithId>(
   // already dead, without triggering the two-way sync-to-Firestore writes
   // that the returned setItems performs.
   const refresh = async () => {
-    if (!businessId) return;
+    if (!businessId || isDemoMode()) return;
     const fresh = (await fetchCollectionFromServer(collectionName, businessId, options?.tenantField)) as T[];
     collectionItemsRef.current = options?.normalize ? fresh.map(options.normalize) : fresh;
     publish();

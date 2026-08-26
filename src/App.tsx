@@ -10,6 +10,8 @@ import type { GeneratedPdfDraft } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
 import { postTransactionEntry } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
+import { setDemoMode, isDemoMode, DEMO_USER_EMAIL } from "./lib/demoMode";
+import { buildDemoData } from "./demoData";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1119,7 +1121,7 @@ export default function App() {
   const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId || isDemoMode()) return;
     let cancelled = false;
     getDoc(doc(db, "business_profiles", businessId)).then(snapshot => {
       if (cancelled) return;
@@ -2692,6 +2694,56 @@ Access to full financial telemetry is restricted.`;
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Demo Mode: a fully offline walkthrough for anyone who just wants to
+  // click around without creating a real account. Skips Firebase auth
+  // entirely, drops straight into the dashboard as a demo Owner, and
+  // seeds every collection with stock data. useFirestoreCollection checks
+  // isDemoMode() (src/lib/demoMode.ts) to never touch real Firestore.
+  const handleViewDemo = () => {
+    setDemoMode(true);
+    setWorkspaceTheme("dark-basic");
+    localStorage.setItem("ownerslocal_workspace_theme", workspaceThemeSettingValue("dark-basic"));
+    setLoggedInUser({
+      email: DEMO_USER_EMAIL,
+      role: "Owner",
+      permissions: MODULE_CATALOG.map(m => m.id),
+      granularPermissions: fullAccessGranular(MODULE_CATALOG.map(m => m.id)),
+      isEmployee: false,
+      name: "Demo Owner",
+      goals: "",
+      businessEmail: DEMO_USER_EMAIL
+    });
+    setIsLoggedIn(true);
+    setActiveScreen(OS_SCREENS[0]);
+
+    const demo = buildDemoData();
+    setCustomers(demo.customers);
+    setLeads(demo.leads);
+    setEstimates(demo.estimates);
+    setSchedulingEvents(demo.schedulingEvents);
+    setInventoryList(demo.inventoryList);
+    setDocuments(demo.documents);
+    setRecentRoster(demo.recentRoster);
+    setBulletins(demo.bulletins);
+    setNotifications(demo.notifications);
+    setRecentAiActions(demo.recentAiActions);
+    setSnapshots(demo.snapshots);
+    setRevenueEvents(demo.revenueEvents);
+    setEmployees(demo.employees);
+    setTimeClockLogs(demo.timeClockLogs);
+    setTransactions(demo.transactions);
+    setInvoices(demo.invoices);
+    setBills(demo.bills);
+    setVendors(demo.vendors);
+    setBankAccounts(demo.bankAccounts);
+    setRecurringTransactions(demo.recurringTransactions);
+    setMileageLogs(demo.mileageLogs);
+    setBudgets(demo.budgets);
+    setSalesTaxRates(demo.salesTaxRates);
+
+    triggerNotification("Welcome to the Owners Local OS demo! Every page is loaded with sample data — nothing here is real or saved.");
   };
 
   // Real Google OAuth via Firebase Auth. This used to be a fake account
@@ -5183,6 +5235,32 @@ Access to full financial telemetry is restricted.`;
                     <span className="relative inline-flex rounded-full bg-emerald-500" style={{ width: `${7 * scale}px`, height: `${7 * scale}px` }}></span>
                   </span>
                   <span>Owner's AI</span>
+                </button>
+              </div>
+            )}
+
+            {currentView === "login" && (
+              <div
+                style={{ marginTop: `${10 * scale}px` }}
+                className="flex items-center justify-center pointer-events-auto"
+              >
+                <button
+                  type="button"
+                  onClick={handleViewDemo}
+                  style={{
+                    padding: `${7 * scale}px ${14 * scale}px`,
+                    borderRadius: `${12 * scale}px`,
+                    ...getFontSize(10.5)
+                  }}
+                  className={`flex items-center gap-1.5 font-black uppercase tracking-wider border transition-all cursor-pointer active:scale-[0.98] ${
+                    isDarkTheme
+                      ? "bg-white/5 hover:bg-white/10 text-blue-100 border-blue-300/30"
+                      : "bg-white/40 hover:bg-white/70 text-[#1F3557] border-blue-200/60"
+                  }`}
+                  title="Skip sign-in and explore a fully populated sample business"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>View Demo</span>
                 </button>
               </div>
             )}
