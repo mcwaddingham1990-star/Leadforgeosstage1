@@ -4005,14 +4005,11 @@ Access to full financial telemetry is restricted.`;
                       </div>
                     </div>
                   ) : currentView === "placeholder_team_setup" ? (
-                    <div 
+                    <div
                       style={{
                         padding: `${18 * scale}px ${16 * scale}px`,
-                        backgroundImage: `url("https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Step1step2blank.png")`,
-                        backgroundSize: "cover",
-                        backgroundPosition: "center"
                       }}
-                      className="absolute inset-0 flex flex-col justify-between overflow-hidden select-none"
+                      className="login-onboarding-card absolute inset-0 bg-[#f5f8ff] flex flex-col justify-between overflow-hidden select-none"
                     >
                       {/* Subtle floating glow effects inside card */}
                       <div className="absolute top-0 right-0 w-24 h-24 bg-blue-400/10 blur-xl rounded-full pointer-events-none" />

@@ -606,7 +606,10 @@ select option {
 .login-theme-dark-basic #login-card-container [class~="text-slate-900"],
 .login-theme-dark-basic #login-card-container [class~="text-slate-800"],
 .login-theme-dark-basic #login-card-container [class~="text-slate-700"],
-.login-theme-dark-basic #login-card-container [class~="text-[#342D7E]"] {
+.login-theme-dark-basic #login-card-container [class~="text-[#342D7E]"],
+.login-theme-dark-basic #login-card-container [class~="text-blue-950"],
+.login-theme-dark-basic #login-card-container [class~="text-blue-900"],
+.login-theme-dark-basic #login-card-container [class~="text-blue-800"] {
   color: #f4f7fb !important;
 }
 .login-theme-dark-basic #login-card-container p,
@@ -652,8 +655,20 @@ select option {
 .login-theme-dark-basic .login-onboarding-card [class~="bg-white"] {
   background-color: #081522 !important;
 }
-.login-theme-dark-basic .login-onboarding-card [class~="bg-blue-50"] {
+.login-theme-dark-basic .login-onboarding-card [class~="bg-blue-50"],
+.login-theme-dark-basic .login-onboarding-card [class~="bg-blue-50/50"] {
   background-color: rgba(20, 93, 255, 0.16) !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="bg-slate-50"],
+.login-theme-dark-basic .login-onboarding-card [class~="bg-slate-100"] {
+  background-color: #0c1d2e !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="bg-purple-50"] {
+  background-color: rgba(168, 85, 247, 0.16) !important;
+}
+.login-theme-dark-basic .login-onboarding-card [class~="bg-rose-50/90"],
+.login-theme-dark-basic .login-onboarding-card [class~="bg-rose-100"] {
+  background-color: rgba(244, 63, 94, 0.16) !important;
 }
 .login-theme-dark-basic .login-onboarding-card [class~="border-blue-100"],
 .login-theme-dark-basic .login-onboarding-card [class~="border-blue-200"] {
@@ -683,6 +698,83 @@ select option {
     radial-gradient(circle at 82% 8%, rgba(0, 173, 255, .12), transparent 27%),
     repeating-linear-gradient(128deg, transparent 0 32px, rgba(26, 100, 255, .035) 33px, transparent 35px) !important;
   background-attachment: fixed !important;
+  color: #eaf2ff !important;
+  color-scheme: dark !important;
+}
+
+/* The "inherits Dark Mode Basic" claim above only ever held for cards,
+   buttons and inputs -- panels that lack both a rounded* and a border*
+   class (e.g. plain toolbar strips) and the many components still carrying
+   the original light-mode hex/slate utility classes were left untouched,
+   rendering as light-on-light or dark-text-on-dark. Give Dynamic the same
+   blanket background/text coverage Basic already has. */
+.workspace-theme.theme-dark-dynamic [class~="bg-white"],
+.workspace-theme.theme-dark-dynamic [class~="bg-slate-50"],
+.workspace-theme.theme-dark-dynamic [class~="bg-slate-100"],
+.workspace-theme.theme-dark-dynamic [class~="bg-gray-50"],
+.workspace-theme.theme-dark-dynamic [class~="bg-gray-100"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#F5FAFF]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#EAF5FF]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#E3F3FF]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#C7E3FA]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#BDDDF8]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#BCD8F0]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#E1EFFD]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#F5FAFF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#EAF5FF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#E3F3FF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#C7E3FA]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#BDDDF8]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#D5EAFF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#EBF5FF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#F8FBFF]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#F9FAFB]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#f0f6ff]"],
+.workspace-theme.theme-dark-dynamic [class*="bg-[#f5f8ff]"] {
+  background-color: var(--dynamic-surface) !important;
+  background-image: none !important;
+}
+.workspace-theme.theme-dark-dynamic [class~="bg-slate-200"],
+.workspace-theme.theme-dark-dynamic [class~="bg-blue-50"],
+.workspace-theme.theme-dark-dynamic [class~="bg-blue-100"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#A9CDEE]"],
+.workspace-theme.theme-dark-dynamic [class~="bg-[#A9CDEF]"] {
+  background-color: var(--dynamic-surface-raised) !important;
+  background-image: none !important;
+}
+.workspace-theme.theme-dark-dynamic :is(div, section, article, main, aside, header, footer, form, table, thead, tbody)[class*="bg-[#"]:not([class*="text-white"]) {
+  background-color: var(--dynamic-surface) !important;
+  background-image: none !important;
+}
+
+/* Primary and secondary typography still carrying legacy light-mode colors. */
+.workspace-theme.theme-dark-dynamic text,
+.workspace-theme.theme-dark-dynamic h1,
+.workspace-theme.theme-dark-dynamic h2,
+.workspace-theme.theme-dark-dynamic h3,
+.workspace-theme.theme-dark-dynamic h4,
+.workspace-theme.theme-dark-dynamic h5,
+.workspace-theme.theme-dark-dynamic h6,
+.workspace-theme.theme-dark-dynamic th,
+.workspace-theme.theme-dark-dynamic [class~="text-slate-900"],
+.workspace-theme.theme-dark-dynamic [class~="text-slate-800"],
+.workspace-theme.theme-dark-dynamic [class~="text-slate-700"],
+.workspace-theme.theme-dark-dynamic [class~="text-gray-900"],
+.workspace-theme.theme-dark-dynamic [class~="text-[#1F3557]"],
+.workspace-theme.theme-dark-dynamic [class~="text-[#342D7E]"] {
+  color: #f4f7fb !important;
+}
+.workspace-theme.theme-dark-dynamic p,
+.workspace-theme.theme-dark-dynamic span,
+.workspace-theme.theme-dark-dynamic label,
+.workspace-theme.theme-dark-dynamic td,
+.workspace-theme.theme-dark-dynamic [class~="text-slate-400"],
+.workspace-theme.theme-dark-dynamic [class~="text-slate-500"],
+.workspace-theme.theme-dark-dynamic [class~="text-slate-600"],
+.workspace-theme.theme-dark-dynamic [class~="text-gray-400"],
+.workspace-theme.theme-dark-dynamic [class~="text-gray-500"],
+.workspace-theme.theme-dark-dynamic [class~="text-[#5E7393]"] {
+  color: #a9bdd6 !important;
 }
 
 /* Main shell and navigation carry the strongest ambient energy. */
