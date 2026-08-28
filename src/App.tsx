@@ -142,6 +142,141 @@ import darkLoginCard from "../Src/Assets/Login/Darkmodecard.png";
 import lightLoginCard from "../Src/Assets/Login/Lightmodecard.png";
 import lightLoginBackground from "../Src/Assets/Login/Lightloginbg.png";
 
+type PrivacyPolicySection = { heading: string; paragraphs: string[] };
+
+const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
+  {
+    heading: "Owner's Local Privacy Policy",
+    paragraphs: [
+      "Effective Date: August 28, 2026",
+      "This Privacy Policy explains how Owner's Local, operated by Stuff App (collectively, \"Owner's Local,\" \"we,\" \"us,\" or \"our\"), handles information when you visit ownerslocal.com or use the Owner's Local website, web application, mobile application, demo, or related services (collectively, the \"Service\")."
+    ]
+  },
+  {
+    heading: "1. Our Commitment",
+    paragraphs: [
+      "Your business data is not our product. We do not sell or rent your personal information or business data, and we do not use it for unrelated advertising. The founder does not routinely open, read, or review customers' sensitive information. Access may occur only when reasonably necessary to provide support you request, investigate fraud or security problems, maintain or repair the Service, enforce our agreements, or comply with law.",
+      "Owner's Local is an independently conceived, developed, and privately funded Texas business platform created by Matthew through Stuff App. Its design is informed by direct experience owning and operating local service businesses and working in tile installation, lawn maintenance, landscaping, remodeling, contracting, construction-related trades, field operations, customer service, and business management.",
+      "That experience shaped Owner's Local as a practical operating system for small and locally owned service companies rather than a collection of disconnected, single-purpose tools. The Service is designed to connect leads and customer records with estimates, accepted jobs, scheduling, dispatch, routes and maps, job progress, invoices and payments, revenue, bills and expenses, accounting and banking functions, inventory, documents and electronic signatures, employee onboarding, training, roles and permissions, timekeeping, payroll calculations, team communications, reports, AI-assisted data entry, integrations, and missed-call text-back where supported.",
+      "Owner's Local exists to help working owners and their teams manage operations through one coordinated system while retaining control of their business information. Consistent with that purpose, personal information and business data are processed only to operate, secure, support, and improve the Service—not to create a separate data-selling business.",
+      "The founder of Owner's Local believes that independent workers, family-owned companies, and small and middle-class businesses deserve technology that serves them—not technology that studies, exploits, or controls them. Owner's Local stands with the individual against unnecessary surveillance, invasive data collection, and the concentration of information and power in the hands of large technology companies.",
+      "The platform is built on a straightforward principle: business owners should remain in control of their operations, their customer relationships, and their information. Customer data will never be treated as a product for sale, and technology should help local businesses become stronger and more independent—not make them dependent on the companies providing it."
+    ]
+  },
+  {
+    heading: "2. Information Processed Through the Service",
+    paragraphs: [
+      "Depending on how you use the Service, the following categories may be processed:",
+      "• Account and login information: Name, email address, phone number, account identifier, authentication records, device information, IP address, and login or security events.",
+      "• Business and app data: Company details; customer, lead, estimate, job, schedule, invoice, inventory, document, employee, time-clock, payroll-calculation, message, and other information you choose to enter or upload.",
+      "• Payment and transaction information: Subscription status, amount, date, payment status, refunds, disputes, and limited payment identifiers. Full card or bank credentials are collected and processed by Stripe, not stored directly by Owner's Local.",
+      "• Technical and usage information: Browser or device type, operating system, diagnostic logs, crash information, feature interactions, approximate location derived from an IP address, and cookies or similar technologies necessary to operate and secure the Service.",
+      "• Support communications: Information you provide when requesting help, reporting an error, or contacting us.",
+      "Do not submit Social Security numbers, complete bank credentials, protected health information, or other highly sensitive information unless a feature clearly requires it and the Service expressly indicates that it is supported."
+    ]
+  },
+  {
+    heading: "3. Stripe Handles Payment Information",
+    paragraphs: [
+      "Stripe provides our payment-processing infrastructure. When you enter payment information, Stripe collects and processes that information under Stripe's own terms and privacy practices.",
+      "Stripe may process card or bank details, billing information, transaction information, device and network information, fraud signals, refunds, and disputes.",
+      "Owner's Local receives only the payment and account information reasonably needed to confirm access, maintain billing records, provide support, and address refunds or disputes. We do not directly store your full payment-card number, security code, or online-banking credentials.",
+      "Stripe's privacy policy is available at: https://stripe.com/privacy"
+    ]
+  },
+  {
+    heading: "4. Firebase Handles Login Information and App Data",
+    paragraphs: [
+      "Google Firebase provides infrastructure used for authentication and storage or processing of app data.",
+      "Firebase Authentication processes login and account information and may process IP addresses, device or browser information, and security events. Firebase services also store or process the business and app data you submit so the Service can function.",
+      "Google processes this information under its Firebase terms, data-processing terms, and privacy and security practices.",
+      "Firebase privacy and security information is available at: https://firebase.google.com/support/privacy"
+    ]
+  },
+  {
+    heading: "5. How Information Is Used",
+    paragraphs: [
+      "Information is processed only as reasonably necessary to:",
+      "• Create, authenticate, and secure accounts.",
+      "• Provide and maintain the Service and requested features.",
+      "• Save, synchronize, display, and organize app data.",
+      "• Process payments, confirm subscriptions, and address billing errors, refunds, fraud, chargebacks, or disputes.",
+      "• Provide customer support and respond to requests.",
+      "• Diagnose errors, prevent abuse, improve reliability, and protect users and the Service.",
+      "• Communicate operational, security, billing, or material policy updates.",
+      "• Comply with law, court orders, or valid governmental requests and protect legal rights."
+    ]
+  },
+  {
+    heading: "6. When Information May Be Disclosed",
+    paragraphs: [
+      "We do not sell personal information or business data.",
+      "Information may be disclosed only:",
+      "• To service providers that help operate the Service, including Stripe, Google/Firebase, hosting, email, analytics, security, and support providers, subject to their applicable agreements.",
+      "• At your direction or with your consent, including when you invite employees or share information through the Service.",
+      "• When required by law or valid legal process.",
+      "• When reasonably necessary to investigate fraud, abuse, security incidents, or threats to rights or safety.",
+      "• As part of a merger, financing, acquisition, reorganization, bankruptcy, or sale of assets, subject to appropriate confidentiality and any notice required by law."
+    ]
+  },
+  {
+    heading: "7. Data Retention",
+    paragraphs: [
+      "We retain information only as long as reasonably necessary to provide the Service, maintain legitimate business and security records, resolve disputes, enforce agreements, and comply with legal, tax, accounting, or payment obligations.",
+      "Stripe and Google/Firebase maintain information according to their own retention practices. Backup copies and transaction or security records may remain for a limited period after account deletion."
+    ]
+  },
+  {
+    heading: "8. Security",
+    paragraphs: [
+      "We use reasonable administrative, technical, and organizational safeguards appropriate to the nature of the information processed.",
+      "Payment data is handled through Stripe, and account and app data are handled through Firebase.",
+      "No online system is completely secure, and we cannot guarantee absolute security. You are responsible for using a strong, unique password, protecting your devices, and limiting account access to authorized users."
+    ]
+  },
+  {
+    heading: "9. Your Choices and Rights",
+    paragraphs: [
+      "You may review or update certain information in your account.",
+      "You may request access, correction, deletion, or a copy of personal information by contacting The.Owner@ownerslocal.com.",
+      "We may need to verify your identity and may retain information where required or permitted by law.",
+      "Depending on where you live, you may have additional privacy rights, including the right to appeal a denied privacy request. We will not discriminate against you for exercising a legally protected privacy right.",
+      "You may control optional device permissions through your device settings. Disabling a permission may prevent the related feature from working."
+    ]
+  },
+  {
+    heading: "10. Children",
+    paragraphs: [
+      "The Service is intended for business users age 18 or older and is not directed to children under 13.",
+      "We do not knowingly collect personal information directly from children under 13. Contact us if you believe a child provided information to the Service without appropriate authorization."
+    ]
+  },
+  {
+    heading: "11. Third-Party Links and Services",
+    paragraphs: [
+      "The Service may link to or integrate with third-party products.",
+      "Their privacy practices are governed by their own policies, and Owner's Local is not responsible for their independent practices."
+    ]
+  },
+  {
+    heading: "12. Changes to This Policy",
+    paragraphs: [
+      "We may update this Privacy Policy as the Service changes.",
+      "We will post the revised policy with a new effective date and provide any additional notice required by law.",
+      "Continued use after the effective date of a revision means the revised policy applies, to the extent permitted by law."
+    ]
+  },
+  {
+    heading: "13. Contact",
+    paragraphs: [
+      "For privacy questions or requests, contact:",
+      "Owner's Local / Stuff App",
+      "Email: The.Owner@ownerslocal.com",
+      "Dallas–Fort Worth, Texas, United States"
+    ]
+  }
+];
+
 const validPersonName = (value: unknown): string => {
   const name = typeof value === "string" ? value.trim() : "";
   return name && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) ? name : "";
@@ -4656,9 +4791,30 @@ Access to full financial telemetry is restricted.`;
                           </a>
                         </div>
                       ) : (
-                        <div className="text-center space-y-2 animate-fade-in px-4">
-                          <h1 style={{ letterSpacing: "0.15em", fontSize: `${Math.max(16, Math.round(28 * scale))}px` }} className="font-sans font-bold text-blue-900 uppercase opacity-40">Privacy</h1>
-                          <p style={getFontSize(12)} className="text-blue-500/60 font-medium font-sans max-w-[80%] mx-auto">Privacy Policy document will be loaded here.</p>
+                        <div className="relative z-10 w-full max-w-sm mt-10 max-h-[85%] rounded-3xl border border-blue-100 bg-white/95 shadow-xl backdrop-blur animate-fade-in flex flex-col overflow-hidden">
+                          <div className="shrink-0 px-5 pt-6 pb-3 border-b border-blue-100 text-center">
+                            <Shield className="mx-auto h-8 w-8 text-blue-600" />
+                            <h1 className="mt-2 text-sm font-black text-blue-950 uppercase tracking-wide">Owner's Local Privacy Policy</h1>
+                            <p className="mt-1 text-[10px] font-semibold text-slate-400">Effective Date: August 28, 2026</p>
+                          </div>
+                          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 text-left space-y-3 text-[10.5px] leading-relaxed text-slate-600 scrollbar-thin scrollbar-thumb-blue-200/50">
+                            {OWNERS_LOCAL_PRIVACY_POLICY.map((section, i) => (
+                              <div key={i}>
+                                <p className="font-black text-blue-950 uppercase tracking-wide text-[10.5px] mb-1">{section.heading}</p>
+                                {section.paragraphs.map((paragraph, j) => (
+                                  <p key={j} className="mb-1.5 font-semibold whitespace-pre-line">{paragraph}</p>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="shrink-0 px-5 py-3 border-t border-blue-100 text-center">
+                            <a
+                              href="mailto:The.Owner@ownerslocal.com"
+                              className="text-[10px] font-bold text-blue-600 hover:text-blue-800"
+                            >
+                              The.Owner@ownerslocal.com · Dallas–Fort Worth, Texas
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>
