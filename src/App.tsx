@@ -146,20 +146,20 @@ type PrivacyPolicySection = { heading: string; paragraphs: string[] };
 
 const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
   {
-    heading: "Owner's Local Privacy Policy",
+    heading: "Owner'sLOCAL Privacy Policy",
     paragraphs: [
       "Effective Date: August 28, 2026",
-      "This Privacy Policy explains how Owner's Local, operated by Stuff App (collectively, \"Owner's Local,\" \"we,\" \"us,\" or \"our\"), handles information when you visit ownerslocal.com or use the Owner's Local website, web application, mobile application, demo, or related services (collectively, the \"Service\")."
+      "This Privacy Policy explains how Owner'sLOCAL, operated by Stuffapp (collectively, \"Owner'sLOCAL,\" \"we,\" \"us,\" or \"our\"), handles information when you visit ownerslocal.com or use the Owner'sLOCAL website, web application, mobile application, demo, or related services (collectively, the \"Service\")."
     ]
   },
   {
     heading: "1. Our Commitment",
     paragraphs: [
       "Your business data is not our product. We do not sell or rent your personal information or business data, and we do not use it for unrelated advertising. The founder does not routinely open, read, or review customers' sensitive information. Access may occur only when reasonably necessary to provide support you request, investigate fraud or security problems, maintain or repair the Service, enforce our agreements, or comply with law.",
-      "Owner's Local is an independently conceived, developed, and privately funded Texas business platform created by Matthew through Stuff App. Its design is informed by direct experience owning and operating local service businesses and working in tile installation, lawn maintenance, landscaping, remodeling, contracting, construction-related trades, field operations, customer service, and business management.",
-      "That experience shaped Owner's Local as a practical operating system for small and locally owned service companies rather than a collection of disconnected, single-purpose tools. The Service is designed to connect leads and customer records with estimates, accepted jobs, scheduling, dispatch, routes and maps, job progress, invoices and payments, revenue, bills and expenses, accounting and banking functions, inventory, documents and electronic signatures, employee onboarding, training, roles and permissions, timekeeping, payroll calculations, team communications, reports, AI-assisted data entry, integrations, and missed-call text-back where supported.",
-      "Owner's Local exists to help working owners and their teams manage operations through one coordinated system while retaining control of their business information. Consistent with that purpose, personal information and business data are processed only to operate, secure, support, and improve the Service—not to create a separate data-selling business.",
-      "The founder of Owner's Local believes that independent workers, family-owned companies, and small and middle-class businesses deserve technology that serves them—not technology that studies, exploits, or controls them. Owner's Local stands with the individual against unnecessary surveillance, invasive data collection, and the concentration of information and power in the hands of large technology companies.",
+      "Owner'sLOCAL is an independently conceived, developed, and privately funded Texas business platform created by Matthew through Stuffapp. Its design is informed by direct experience owning and operating local service businesses and working in tile installation, lawn maintenance, landscaping, remodeling, contracting, construction-related trades, field operations, customer service, and business management.",
+      "That experience shaped Owner'sLOCAL as a practical operating system for small and locally owned service companies rather than a collection of disconnected, single-purpose tools. The Service is designed to connect leads and customer records with estimates, accepted jobs, scheduling, dispatch, routes and maps, job progress, invoices and payments, revenue, bills and expenses, accounting and banking functions, inventory, documents and electronic signatures, employee onboarding, training, roles and permissions, timekeeping, payroll calculations, team communications, reports, AI-assisted data entry, integrations, and missed-call text-back where supported.",
+      "Owner'sLOCAL exists to help working owners and their teams manage operations through one coordinated system while retaining control of their business information. Consistent with that purpose, personal information and business data are processed only to operate, secure, support, and improve the Service—not to create a separate data-selling business.",
+      "The founder of Owner'sLOCAL believes that independent workers, family-owned companies, and small and middle-class businesses deserve technology that serves them—not technology that studies, exploits, or controls them. Owner'sLOCAL stands with the individual against unnecessary surveillance, invasive data collection, and the concentration of information and power in the hands of large technology companies.",
       "The platform is built on a straightforward principle: business owners should remain in control of their operations, their customer relationships, and their information. Customer data will never be treated as a product for sale, and technology should help local businesses become stronger and more independent—not make them dependent on the companies providing it."
     ]
   },
@@ -169,7 +169,7 @@ const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
       "Depending on how you use the Service, the following categories may be processed:",
       "• Account and login information: Name, email address, phone number, account identifier, authentication records, device information, IP address, and login or security events.",
       "• Business and app data: Company details; customer, lead, estimate, job, schedule, invoice, inventory, document, employee, time-clock, payroll-calculation, message, and other information you choose to enter or upload.",
-      "• Payment and transaction information: Subscription status, amount, date, payment status, refunds, disputes, and limited payment identifiers. Full card or bank credentials are collected and processed by Stripe, not stored directly by Owner's Local.",
+      "• Payment and transaction information: Subscription status, amount, date, payment status, refunds, disputes, and limited payment identifiers. Full card or bank credentials are collected and processed by Stripe, not stored directly by Owner'sLOCAL.",
       "• Technical and usage information: Browser or device type, operating system, diagnostic logs, crash information, feature interactions, approximate location derived from an IP address, and cookies or similar technologies necessary to operate and secure the Service.",
       "• Support communications: Information you provide when requesting help, reporting an error, or contacting us.",
       "Do not submit Social Security numbers, complete bank credentials, protected health information, or other highly sensitive information unless a feature clearly requires it and the Service expressly indicates that it is supported."
@@ -180,7 +180,7 @@ const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
     paragraphs: [
       "Stripe provides our payment-processing infrastructure. When you enter payment information, Stripe collects and processes that information under Stripe's own terms and privacy practices.",
       "Stripe may process card or bank details, billing information, transaction information, device and network information, fraud signals, refunds, and disputes.",
-      "Owner's Local receives only the payment and account information reasonably needed to confirm access, maintain billing records, provide support, and address refunds or disputes. We do not directly store your full payment-card number, security code, or online-banking credentials.",
+      "Owner'sLOCAL receives only the payment and account information reasonably needed to confirm access, maintain billing records, provide support, and address refunds or disputes. We do not directly store your full payment-card number, security code, or online-banking credentials.",
       "Stripe's privacy policy is available at: https://stripe.com/privacy"
     ]
   },
@@ -255,7 +255,7 @@ const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
     heading: "11. Third-Party Links and Services",
     paragraphs: [
       "The Service may link to or integrate with third-party products.",
-      "Their privacy practices are governed by their own policies, and Owner's Local is not responsible for their independent practices."
+      "Their privacy practices are governed by their own policies, and Owner'sLOCAL is not responsible for their independent practices."
     ]
   },
   {
@@ -270,7 +270,271 @@ const OWNERS_LOCAL_PRIVACY_POLICY: PrivacyPolicySection[] = [
     heading: "13. Contact",
     paragraphs: [
       "For privacy questions or requests, contact:",
-      "Owner's Local / Stuff App",
+      "Owner'sLOCAL / Stuffapp",
+      "Email: The.Owner@ownerslocal.com",
+      "Dallas–Fort Worth, Texas, United States"
+    ]
+  }
+];
+
+const OWNERS_LOCAL_USER_AGREEMENT: PrivacyPolicySection[] = [
+  {
+    heading: "Owner'sLOCAL User Agreement",
+    paragraphs: [
+      "Effective Date: August 28, 2026",
+      "This User Agreement (\"Agreement\") is a binding contract between you and Owner'sLOCAL, operated by Stuffapp (\"Owner'sLOCAL,\" \"we,\" \"us,\" or \"our\").",
+      "It governs your access to and use of ownerslocal.com and the Owner'sLOCAL website, web application, mobile application, demo, downloads, and related services (collectively, the \"Service\").",
+      "BY CREATING AN ACCOUNT, PURCHASING ACCESS, DOWNLOADING OR INSTALLING AN APPLICATION, OR USING THE SERVICE, YOU AGREE TO THIS AGREEMENT AND THE PRIVACY POLICY.",
+      "IF YOU DO NOT AGREE, DO NOT PURCHASE OR USE THE SERVICE.",
+      "YOU MUST BE AT LEAST 18 YEARS OLD AND LEGALLY ABLE TO ENTER A CONTRACT."
+    ]
+  },
+  {
+    heading: "1. Owner'sLOCAL, Its Purpose, and the Scope of the Service",
+    paragraphs: [
+      "Owner'sLOCAL is an independently created and privately funded Texas software platform developed by Matthew through Stuffapp.",
+      "The platform is based on practical experience owning, operating, and working within local service businesses, including tile installation, lawn maintenance, landscaping, remodeling, contracting, construction-related work, field-service operations, customer service, and business management.",
+      "It was developed to give small-business owners and authorized employees a unified way to manage business operations that would otherwise require multiple unrelated products, subscriptions, accounts, and data systems.",
+      "The Service may include:",
+      "• Customer-relationship and lead management.",
+      "• Estimates and bids.",
+      "• Conversion of accepted work into customers and jobs.",
+      "• Scheduling and dispatch.",
+      "• Route planning and maps.",
+      "• Location-based functions.",
+      "• Customer and job-progress tools.",
+      "• Invoices and payments.",
+      "• Revenue tracking.",
+      "• Bills, material expenses, and service expenses.",
+      "• Accounting records.",
+      "• Banking connections or imports.",
+      "• Financial reports and graphs.",
+      "• Inventory.",
+      "• Document creation and PDF tools.",
+      "• Electronic signatures and signer-verification features.",
+      "• Employee invitations and onboarding.",
+      "• Training.",
+      "• Roles and permissions.",
+      "• Timekeeping and payroll calculations.",
+      "• Team messaging.",
+      "• Dashboards and reports.",
+      "• AI-assisted intake and Snapshot data extraction.",
+      "• Integrations.",
+      "• Missed-call text-back for supported Android or VoIP numbers.",
+      "Available functions may differ by version, subscription, device, operating system, telephone service, integration status, or development stage.",
+      "A feature description does not guarantee that every feature is available in every version or at all times.",
+      "Owner'sLOCAL is intended to support landscapers, lawn-care businesses, house-cleaning companies, contractors, remodelers, and other local or field-service businesses.",
+      "Owner'sLOCAL is a software tool. It is not a partner, employer, payroll provider, bank, accountant, attorney, insurer, licensed trade professional, telecommunications carrier, or guarantor of a user's business results.",
+      "Its independent origin and continuing development do not reduce any nonwaivable legal right, but users acknowledge that the Service may be revised, expanded, repaired, or refined as the privately developed platform grows."
+    ]
+  },
+  {
+    heading: "2. Account Access and Responsibility",
+    paragraphs: [
+      "You must provide accurate account and billing information and keep it current.",
+      "You are responsible for protecting your credentials and devices, assigning appropriate employee permissions, and all activity occurring through your account unless caused by our breach of this Agreement.",
+      "Notify us promptly of suspected unauthorized access.",
+      "You may use the Service only for lawful business purposes.",
+      "You may not:",
+      "• Misuse the Service.",
+      "• Interfere with its operation.",
+      "• Bypass access or payment controls.",
+      "• Introduce malicious code.",
+      "• Scrape or reverse engineer the Service except where applicable law expressly permits it.",
+      "• Access another customer's information without authorization.",
+      "• Use the Service to violate another person's rights."
+    ]
+  },
+  {
+    heading: "3. Your Data and Legal Responsibilities",
+    paragraphs: [
+      "You retain ownership of information and content you submit through the Service (\"Your Data\").",
+      "You grant us and our service providers a limited, nonexclusive license to host, process, transmit, back up, and display Your Data only as reasonably necessary to provide, secure, support, and improve the Service, comply with law, and enforce this Agreement.",
+      "You represent that you have the rights and legally required notices, permissions, and consents to enter and process Your Data, including customer and employee information.",
+      "You are responsible for your:",
+      "• Business records.",
+      "• Employment practices.",
+      "• Payroll decisions.",
+      "• Taxes.",
+      "• Estimates.",
+      "• Contracts.",
+      "• Invoices.",
+      "• Signatures.",
+      "• Routes.",
+      "• Safety procedures.",
+      "• Permits.",
+      "• Licenses.",
+      "• Insurance.",
+      "• Legal compliance.",
+      "The Service is a business tool and is not legal, tax, accounting, payroll, employment, financial, or other professional advice."
+    ]
+  },
+  {
+    heading: "4. Third-Party Services",
+    paragraphs: [
+      "Stripe handles payment processing and related financial transaction records.",
+      "Google Firebase handles authentication and app-data infrastructure.",
+      "Other third-party services and integrations may be offered.",
+      "Third-party services are governed by their own terms and may experience independent outages, changes, or errors.",
+      "We are not responsible for third-party products or events outside our reasonable control, except to the extent liability cannot legally be excluded."
+    ]
+  },
+  {
+    heading: "5. Prices, Subscriptions, and Authorization",
+    paragraphs: [
+      "Prices, billing periods, included features, and taxes are shown at checkout or in the applicable offer.",
+      "By submitting a payment method, you authorize Stripe and Owner'sLOCAL to charge the disclosed amount, including recurring charges if the checkout page clearly identifies a subscription.",
+      "You are responsible for canceling a recurring subscription before the next renewal date through the method provided in the Service or by contacting support.",
+      "Cancellation stops future renewals but does not retroactively refund prior charges."
+    ]
+  },
+  {
+    heading: "6. Refund Policy—Transactions Generally Final",
+    paragraphs: [
+      "EXCEPT WHERE A REFUND IS REQUIRED BY LAW OR EXPRESSLY STATED BELOW, ALL TRANSACTIONS ARE FINAL.",
+      "Purchasing access causes digital services, account access, infrastructure, and payment-processing obligations to be provided or incurred immediately.",
+      "For that reason, we cannot issue refunds merely because a user:",
+      "• Changes their mind.",
+      "• Decides they do not like the Service.",
+      "• No longer needs the Service.",
+      "• Expected an unadvertised feature.",
+      "• Failed to cancel before renewal.",
+      "• Did not fully use the available features.",
+      "A refund may be considered in the following limited situations:",
+      "A. Completely Inoperable Service — If a verified defect makes the purchased Service completely inoperable for you and we cannot restore materially usable access within a reasonable time after you report it and cooperate with reasonable troubleshooting, we may provide a full or proportional refund as required by law or determined appropriate under the circumstances.",
+      "B. Accidental Purchase With No Use — If you accidentally purchase access and never log in to or use the purchased Service, contact us promptly. We will review the request and may issue a refund in our discretion after confirming that the account was not accessed or used. This is not a guaranteed refund.",
+      "C. Duplicate Charge or Payment Error — We will investigate verified duplicate charges, incorrect amounts, or other payment-processing errors and correct them when confirmed.",
+      "To request help with a payment error or refund, email The.Owner@ownerslocal.com with: the email address associated with the account, the transaction date, the transaction amount, and a brief explanation of the problem.",
+      "Do not email full payment-card or bank-account numbers.",
+      "Nothing in this policy limits refund or cancellation rights that cannot legally be waived."
+    ]
+  },
+  {
+    heading: "7. Beta Features, Changes, and Availability",
+    paragraphs: [
+      "The Service may contain beta, preview, experimental, or developing features.",
+      "We may add, change, suspend, or discontinue features, integrations, or supported devices.",
+      "We do not promise uninterrupted or error-free operation or that every feature will always remain available.",
+      "We will not materially reduce prepaid access without providing a reasonable substitute, account credit, proportional refund, or other remedy where required by law."
+    ]
+  },
+  {
+    heading: "8. Electronic Signatures and Records",
+    paragraphs: [
+      "If the Service offers electronic-signature or document features, you are responsible for:",
+      "• Deciding whether the feature is appropriate for a particular transaction.",
+      "• Obtaining signer consent.",
+      "• Verifying signer identity.",
+      "• Preserving final records.",
+      "• Complying with applicable law.",
+      "We do not guarantee that any document or signature will be enforceable in every jurisdiction or circumstance.",
+      "Download and retain copies of important final documents."
+    ]
+  },
+  {
+    heading: "9. Suspension and Termination",
+    paragraphs: [
+      "We may suspend or terminate access when reasonably necessary to address:",
+      "• Nonpayment.",
+      "• Fraud.",
+      "• Security risks.",
+      "• Unlawful conduct.",
+      "• Abuse.",
+      "• A material breach of this Agreement.",
+      "• Threats to the Service or others.",
+      "When practical, we will provide notice and an opportunity to cure.",
+      "You may stop using the Service at any time.",
+      "Sections that by their nature should survive—including payment obligations, ownership, disclaimers, liability limits, indemnity, and dispute terms—survive termination."
+    ]
+  },
+  {
+    heading: "10. Intellectual Property",
+    paragraphs: [
+      "The Service, software, designs, branding, workflows, documentation, and other materials provided by us are owned by Owner'sLOCAL, Stuffapp, or their licensors and are protected by law.",
+      "This Agreement gives you a limited, revocable, nontransferable right to use the Service for your internal lawful business operations during your authorized access.",
+      "It does not transfer ownership or permit resale, copying, or creation of a competing derivative service."
+    ]
+  },
+  {
+    heading: "11. Disclaimer of Warranties",
+    paragraphs: [
+      "TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SERVICE IS PROVIDED \"AS IS\" AND \"AS AVAILABLE.\"",
+      "OWNER'SLOCAL DISCLAIMS ALL EXPRESS OR IMPLIED WARRANTIES, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, RELIABILITY, AND RESULTS.",
+      "WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, COMPLETELY SECURE, OR SUITABLE FOR EVERY BUSINESS.",
+      "Some jurisdictions do not allow certain warranty exclusions, so some exclusions may not apply to you."
+    ]
+  },
+  {
+    heading: "12. Limitation of Liability",
+    paragraphs: [
+      "TO THE MAXIMUM EXTENT PERMITTED BY LAW, OWNER'SLOCAL, STUFFAPP, THE FOUNDER, AND THEIR AFFILIATES, CONTRACTORS, AND SERVICE PROVIDERS WILL NOT BE LIABLE FOR: INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES; LOST PROFITS, REVENUE, BUSINESS, GOODWILL, OR DATA; BUSINESS INTERRUPTION; OR THE COST OF SUBSTITUTE SERVICES.",
+      "This limitation applies to damages arising from or related to the Service or this Agreement, even if we were advised that such damages were possible.",
+      "TO THE MAXIMUM EXTENT PERMITTED BY LAW, THEIR TOTAL AGGREGATE LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THE SERVICE OR THIS AGREEMENT WILL NOT EXCEED THE GREATER OF: (A) THE AMOUNT YOU PAID OWNER'SLOCAL FOR THE SERVICE DURING THE SIX MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM; OR (B) $100.",
+      "These limits do not apply to liability that cannot legally be limited, and they apply regardless of the legal theory asserted."
+    ]
+  },
+  {
+    heading: "13. Indemnification",
+    paragraphs: [
+      "To the maximum extent permitted by law, you agree to defend, indemnify, and hold harmless Owner'sLOCAL, Stuffapp, the founder, and their affiliates and contractors from third-party claims, damages, penalties, and reasonable costs arising from:",
+      "• Your Data.",
+      "• Your misuse of the Service.",
+      "• Your violation of law or another person's rights.",
+      "• Your customer or employment relationships.",
+      "• Your material breach of this Agreement.",
+      "This obligation does not apply to the extent a claim was caused by our own negligence, willful misconduct, or violation of law."
+    ]
+  },
+  {
+    heading: "14. Dispute Resolution and Individual Arbitration",
+    paragraphs: [
+      "Please contact The.Owner@ownerslocal.com first and provide a description of the dispute and requested resolution.",
+      "The parties agree to attempt in good faith to resolve the dispute informally for 30 days after written notice.",
+      "If the dispute is not resolved, either party may bring an individual claim in a court that qualifies as small-claims court.",
+      "Any other dispute arising from or relating to this Agreement or the Service will be resolved by binding individual arbitration under the Federal Arbitration Act and the Consumer Arbitration Rules of the American Arbitration Association (\"AAA\"), unless applicable law prohibits arbitration.",
+      "Arbitration may occur by video, telephone, written submissions, or in person in the Texas county where you reside, unless the parties agree otherwise.",
+      "Owner'sLOCAL will pay arbitration fees to the extent required by the AAA rules or applicable law.",
+      "NO CLASS ACTIONS OR JURY TRIALS",
+      "TO THE MAXIMUM EXTENT PERMITTED BY LAW, YOU AND OWNER'SLOCAL WAIVE THE RIGHT TO A JURY TRIAL AND AGREE TO BRING CLAIMS ONLY IN AN INDIVIDUAL CAPACITY.",
+      "CLAIMS MAY NOT BE BROUGHT AS A PLAINTIFF OR CLASS MEMBER IN A CLASS, CONSOLIDATED, COLLECTIVE, OR REPRESENTATIVE ACTION.",
+      "You may opt out of arbitration by emailing The.Owner@ownerslocal.com within 30 days after first accepting this Agreement.",
+      "Your opt-out notice must include: your name, your account email address, and an unambiguous statement that you opt out of arbitration.",
+      "Opting out will not affect your account.",
+      "If the arbitration or class-waiver provision is found unenforceable for a particular claim, that claim may proceed in a court of competent jurisdiction, and the remaining provisions remain effective."
+    ]
+  },
+  {
+    heading: "15. Texas Law",
+    paragraphs: [
+      "This Agreement is governed by the laws of the State of Texas, without regard to conflict-of-law rules, except that the Federal Arbitration Act governs the arbitration provision.",
+      "For any dispute permitted to proceed in court, the parties consent to the state or federal courts serving the Texas county in which Owner'sLOCAL has its principal place of business, unless applicable consumer law requires another location."
+    ]
+  },
+  {
+    heading: "16. Changes to This Agreement",
+    paragraphs: [
+      "We may update this Agreement to reflect Service, legal, or operational changes.",
+      "We will post the revised version and provide additional notice of material changes where required.",
+      "Changes apply prospectively from their effective date.",
+      "Continued use after that date constitutes acceptance to the extent permitted by law."
+    ]
+  },
+  {
+    heading: "17. General Terms",
+    paragraphs: [
+      "This Agreement and the Privacy Policy are the entire agreement concerning the Service unless a separate signed agreement applies.",
+      "If part of this Agreement is unenforceable, it will be enforced to the maximum lawful extent and the remainder will continue.",
+      "Our failure to enforce a provision is not a waiver.",
+      "You may not transfer this Agreement without our written consent.",
+      "We may transfer it as part of a merger, reorganization, financing, sale, or transfer of the Service.",
+      "Headings are for convenience only."
+    ]
+  },
+  {
+    heading: "18. Contact",
+    paragraphs: [
+      "For account help, payment errors, or refund requests, contact:",
+      "Owner'sLOCAL / Stuffapp",
       "Email: The.Owner@ownerslocal.com",
       "Dallas–Fort Worth, Texas, United States"
     ]
@@ -4018,12 +4282,12 @@ Access to full financial telemetry is restricted.`;
                     className="absolute flex items-center justify-center text-blue-700 font-sans"
                   >
                     <button
-                      onClick={() => setCurrentView("placeholder_help")}
+                      onClick={() => setCurrentView("placeholder_agreement")}
                       style={{ gap: `${5 * scale}px`, ...getFontSize(13.5) }}
                       className="flex items-center font-bold hover:text-blue-900 transition-colors cursor-pointer"
                     >
-                      <HelpCircle style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
-                      <span>Need Help?</span>
+                      <FileText style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} />
+                      <span>User Agreement</span>
                     </button>
 
                     <div style={{ height: `${14 * scale}px` }} className="w-[1px] bg-blue-300" />
@@ -4775,48 +5039,41 @@ Access to full financial telemetry is restricted.`;
                         <span>Back</span>
                       </button>
 
-                      {currentView === "placeholder_help" ? (
-                        <div className="relative z-10 w-full max-w-sm rounded-3xl border border-blue-100 bg-white/90 p-6 text-center shadow-xl backdrop-blur animate-fade-in">
-                          <HelpCircle className="mx-auto h-10 w-10 text-blue-600" />
-                          <h1 className="mt-3 text-lg font-black text-blue-950">Need Help?</h1>
-                          <p style={getFontSize(12)} className="mt-2 font-semibold leading-relaxed text-slate-600">
-                            Get ahold of me and I’ll personally help you figure it out.
-                          </p>
-                          <a
-                            href="mailto:The.Owner@ownerslocal.com"
-                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-bold text-white shadow-md hover:bg-blue-700"
-                          >
-                            <Mail className="h-4 w-4" />
-                            The.Owner@ownerslocal.com
-                          </a>
-                        </div>
-                      ) : (
-                        <div className="relative z-10 w-full max-w-sm mt-10 max-h-[85%] rounded-3xl border border-blue-100 bg-white/95 shadow-xl backdrop-blur animate-fade-in flex flex-col overflow-hidden">
-                          <div className="shrink-0 px-5 pt-6 pb-3 border-b border-blue-100 text-center">
-                            <Shield className="mx-auto h-8 w-8 text-blue-600" />
-                            <h1 className="mt-2 text-sm font-black text-blue-950 uppercase tracking-wide">Owner's Local Privacy Policy</h1>
-                            <p className="mt-1 text-[10px] font-semibold text-slate-400">Effective Date: August 28, 2026</p>
+                      {(() => {
+                        const isAgreement = currentView === "placeholder_agreement";
+                        const docTitle = isAgreement ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy";
+                        const docIcon = isAgreement
+                          ? <FileText className="mx-auto h-8 w-8 text-blue-600" />
+                          : <Shield className="mx-auto h-8 w-8 text-blue-600" />;
+                        const docSections = isAgreement ? OWNERS_LOCAL_USER_AGREEMENT : OWNERS_LOCAL_PRIVACY_POLICY;
+                        return (
+                          <div className="relative z-10 w-full max-w-sm mt-10 max-h-[85%] rounded-3xl border border-blue-100 bg-white/95 shadow-xl backdrop-blur animate-fade-in flex flex-col overflow-hidden">
+                            <div className="shrink-0 px-5 pt-6 pb-3 border-b border-blue-100 text-center">
+                              {docIcon}
+                              <h1 className="mt-2 text-sm font-black text-blue-950 uppercase tracking-wide">{docTitle}</h1>
+                              <p className="mt-1 text-[10px] font-semibold text-slate-400">Effective Date: August 28, 2026</p>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 text-left space-y-3 text-[10.5px] leading-relaxed text-slate-600 scrollbar-thin scrollbar-thumb-blue-200/50">
+                              {docSections.map((section, i) => (
+                                <div key={i}>
+                                  <p className="font-black text-blue-950 uppercase tracking-wide text-[10.5px] mb-1">{section.heading}</p>
+                                  {section.paragraphs.map((paragraph, j) => (
+                                    <p key={j} className="mb-1.5 font-semibold whitespace-pre-line">{paragraph}</p>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="shrink-0 px-5 py-3 border-t border-blue-100 text-center">
+                              <a
+                                href="mailto:The.Owner@ownerslocal.com"
+                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800"
+                              >
+                                The.Owner@ownerslocal.com · Dallas–Fort Worth, Texas
+                              </a>
+                            </div>
                           </div>
-                          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 text-left space-y-3 text-[10.5px] leading-relaxed text-slate-600 scrollbar-thin scrollbar-thumb-blue-200/50">
-                            {OWNERS_LOCAL_PRIVACY_POLICY.map((section, i) => (
-                              <div key={i}>
-                                <p className="font-black text-blue-950 uppercase tracking-wide text-[10.5px] mb-1">{section.heading}</p>
-                                {section.paragraphs.map((paragraph, j) => (
-                                  <p key={j} className="mb-1.5 font-semibold whitespace-pre-line">{paragraph}</p>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="shrink-0 px-5 py-3 border-t border-blue-100 text-center">
-                            <a
-                              href="mailto:The.Owner@ownerslocal.com"
-                              className="text-[10px] font-bold text-blue-600 hover:text-blue-800"
-                            >
-                              The.Owner@ownerslocal.com · Dallas–Fort Worth, Texas
-                            </a>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
 
