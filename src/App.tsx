@@ -21,8 +21,10 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect
 } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
 import { 
   Mail, 
   Lock, 
@@ -2733,7 +2735,16 @@ Access to full financial telemetry is restricted.`;
     setLoginMethod("google");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      if (Capacitor.isNativePlatform()) {
+        // signInWithPopup needs real multi-window support, which Capacitor's
+        // Android WebView doesn't have -- it just silently fails/hangs there.
+        // signInWithRedirect navigates the WebView itself instead, which it
+        // does support; the onAuthStateChanged listener above picks up the
+        // result the same way either way.
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (err: any) {
       console.error("Google sign in error:", err);
       if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
