@@ -21,8 +21,10 @@ import {
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect
 } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
 import { 
   Mail, 
   Lock, 
@@ -84,7 +86,8 @@ import {
   Bell,
   BellRing,
   Menu,
-  Sliders
+  Sliders,
+  PhoneMissed
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -121,6 +124,7 @@ import SettingsPage from "./components/SettingsPage";
 import { StructuredAddressFields } from "./components/StructuredAddressFields";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
+import { MissedCallTextBackPage } from "./components/MissedCallTextBackPage";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
 import {
   INITIAL_DASHBOARD_LEADS,
@@ -829,6 +833,7 @@ const OS_SCREENS = [
   { id: "bulletins", label: "Bulletins", url: "", icon: "📌", top: "77%", bottom: "82%" },
   { id: "snapshots", label: "Snapshots Folder", url: "", icon: "📸", top: "82%", bottom: "87%" },
   { id: "notifications", label: "Notifications", url: "", icon: "🔔", top: "82%", bottom: "87%" },
+  { id: "missed_call_textback", label: "Missed Call Text-Back", url: "", icon: "📵", top: "82%", bottom: "87%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
@@ -1159,6 +1164,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Camera className={className} />;
     case "notifications":
       return <Bell className={className} />;
+    case "missed_call_textback":
+      return <PhoneMissed className={className} />;
     default:
       return <BrandIcon className={className} />;
   }
@@ -3127,7 +3134,16 @@ Access to full financial telemetry is restricted.`;
     setLoginMethod("google");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      if (Capacitor.isNativePlatform()) {
+        // signInWithPopup needs real multi-window support, which Capacitor's
+        // Android WebView doesn't have -- it just silently fails/hangs there.
+        // signInWithRedirect navigates the WebView itself instead, which it
+        // does support; the onAuthStateChanged listener above picks up the
+        // result the same way either way.
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (err: any) {
       console.error("Google sign in error:", err);
       if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
@@ -7766,6 +7782,10 @@ Access to full financial telemetry is restricted.`;
                       dashboardLeads={dashboardLeads}
                       setDashboardLeads={setDashboardLeads}
                     />
+
+                  ) : activeScreen.id === "missed_call_textback" ? (
+
+                    <MissedCallTextBackPage />
 
                   ) : (
                     

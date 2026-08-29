@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -38,7 +40,9 @@ import {
   Layers,
   BookOpen,
   Wifi,
-  HelpCircle
+  HelpCircle,
+  Copy,
+  RotateCw
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 import { Customer } from "./CustomersPage";
@@ -100,7 +104,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   dashboardLeads,
   setDashboardLeads
 }) => {
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const {
     schedulingEvents,
@@ -155,6 +159,27 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       apiSecret: "",
       webhookUrl: "",
       redirectUri: ""
+    },
+    {
+      id: "website_lead_form",
+      name: "Website Lead Capture Form",
+      category: "Marketing",
+      developer: "OwnersLOCAL",
+      apiType: "REST",
+      logo: "📝",
+      description: "Copy-paste embed code for your own business website. Every submission creates a real Lead here automatically.",
+      connected: true,
+      lastSync: "N/A",
+      aiEnabled: false,
+      aiMode: "OFF",
+      apiUsage: { current: 0, limit: 0 },
+      scopes: [],
+      permissions: ["Owner", "Manager"],
+      syncFrequency: "Manual",
+      apiKey: "",
+      apiSecret: "",
+      webhookUrl: "",
+      redirectUri: ""
     }
   ]);
 
@@ -184,6 +209,113 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
   // AI Setup Dialog State
   const [isAiSetupOpen, setIsAiSetupOpen] = useState(false);
+
+  // Website Lead Capture Form: a per-business embed token stored on the
+  // business's own profile doc, not a new collection -- the same doc every
+  // other business-level setting already lives on.
+  const [webFormToken, setWebFormToken] = useState<string>("");
+  const [isLoadingWebFormToken, setIsLoadingWebFormToken] = useState(true);
+  const [isGeneratingWebFormToken, setIsGeneratingWebFormToken] = useState(false);
+  const [webFormCopySuccess, setWebFormCopySuccess] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) {
+      setIsLoadingWebFormToken(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "business_profiles", businessId));
+        if (!cancelled) setWebFormToken(snap.exists() ? (snap.data().webFormToken || "") : "");
+      } catch (err) {
+        console.error("Error loading website lead form token:", err);
+      } finally {
+        if (!cancelled) setIsLoadingWebFormToken(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
+
+  const handleGenerateWebFormToken = async () => {
+    if (!businessId) return;
+    if (webFormToken && !window.confirm(
+      "Regenerating breaks the embed code already pasted into your website -- you'll need to replace it there with the new one. Continue?"
+    )) {
+      return;
+    }
+    setIsGeneratingWebFormToken(true);
+    try {
+      const token = (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/-/g, "");
+      await setDoc(doc(db, "business_profiles", businessId), { webFormToken: token }, { merge: true });
+      setWebFormToken(token);
+      triggerNotification("📝 Website lead form embed code generated.");
+    } catch (err) {
+      console.error("Error generating website lead form token:", err);
+      triggerNotification("Couldn't generate the embed code -- check your connection and try again.");
+    } finally {
+      setIsGeneratingWebFormToken(false);
+    }
+  };
+
+  const webLeadFormEndpoint = `${typeof window !== "undefined" ? window.location.origin : ""}/api/leads/submit-web-form`;
+
+  const webLeadFormEmbedSnippet = useMemo(() => {
+    if (!webFormToken) return "";
+    return `<!-- OwnersLOCAL Lead Capture Form -->
+<form id="ownerslocal-lead-form" style="max-width:420px;display:flex;flex-direction:column;gap:10px;font-family:sans-serif;">
+  <input name="name" placeholder="Full Name" required style="padding:10px;border:1px solid #ccc;border-radius:6px;">
+  <input name="phone" placeholder="Phone" style="padding:10px;border:1px solid #ccc;border-radius:6px;">
+  <input name="email" type="email" placeholder="Email" style="padding:10px;border:1px solid #ccc;border-radius:6px;">
+  <input name="company" placeholder="Company (optional)" style="padding:10px;border:1px solid #ccc;border-radius:6px;">
+  <textarea name="notes" placeholder="What do you need help with?" rows="3" style="padding:10px;border:1px solid #ccc;border-radius:6px;"></textarea>
+  <!-- Honeypot: real visitors never see this field; leave it in place as-is. -->
+  <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true">
+  <button type="submit" style="padding:10px;border:none;border-radius:6px;background:#315C9F;color:#fff;font-weight:bold;cursor:pointer;">Send</button>
+  <p id="ownerslocal-lead-form-status" style="font-size:13px;"></p>
+</form>
+<script>
+(function () {
+  var form = document.getElementById("ownerslocal-lead-form");
+  var status = document.getElementById("ownerslocal-lead-form-status");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var data = Object.fromEntries(new FormData(form).entries());
+    data.token = "${webFormToken}";
+    status.textContent = "Sending...";
+    fetch("${webLeadFormEndpoint}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (result.ok) {
+          status.textContent = "Thanks! We'll be in touch shortly.";
+          form.reset();
+        } else {
+          status.textContent = result.error || "Something went wrong -- please try again.";
+        }
+      })
+      .catch(function () {
+        status.textContent = "Something went wrong -- please try again.";
+      });
+  });
+})();
+</script>`;
+  }, [webFormToken, webLeadFormEndpoint]);
+
+  const handleCopyWebFormSnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(webLeadFormEmbedSnippet);
+      setWebFormCopySuccess(true);
+      setTimeout(() => setWebFormCopySuccess(false), 2000);
+    } catch {
+      triggerNotification("Couldn't copy automatically -- select the code and copy it manually.");
+    }
+  };
 
   // Computations for summary card counts
   const summaryCounts = useMemo(() => {
@@ -674,15 +806,19 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Toggle Slider Switch -- greyed out and disabled: no real backend to connect to yet */}
-                  <button
-                    disabled
-                    title="A real Stripe connection isn't wired up yet"
-                    onClick={() => handleToggleConnection(item.id)}
-                    className="relative inline-flex h-5 w-10 shrink-0 cursor-not-allowed opacity-40 rounded-full border border-transparent bg-slate-300 focus:outline-none"
-                  >
-                    <span className="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white shadow-xs mt-[1px]" />
-                  </button>
+                  {/* Toggle Slider Switch -- greyed out and disabled: no real backend to connect to yet.
+                      Not shown for native (non-OAuth) features like the lead capture form, which
+                      have nothing to "connect" -- they're always available. */}
+                  {item.id !== "website_lead_form" && (
+                    <button
+                      disabled
+                      title={`A real ${item.name} connection isn't wired up yet`}
+                      onClick={() => handleToggleConnection(item.id)}
+                      className="relative inline-flex h-5 w-10 shrink-0 cursor-not-allowed opacity-40 rounded-full border border-transparent bg-slate-300 focus:outline-none"
+                    >
+                      <span className="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white shadow-xs mt-[1px]" />
+                    </button>
+                  )}
                 </div>
 
                 <p className="text-[11px] text-slate-600 font-medium font-sans leading-relaxed min-h-12">
@@ -725,7 +861,15 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   >
                     Configure
                   </button>
-                  {item.connected ? (
+                  {item.id === "website_lead_form" ? (
+                    <button
+                      onClick={() => handleOpenConfigure(item)}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Get Embed Code
+                    </button>
+                  ) : item.connected ? (
                     <button
                       onClick={() => handleSyncNow(item.id)}
                       className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1"
@@ -736,7 +880,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   ) : (
                     <button
                       disabled
-                      title="A real Stripe connection isn't wired up yet"
+                      title={`A real ${item.name} connection isn't wired up yet`}
                       onClick={() => handleToggleConnection(item.id)}
                       className="px-2.5 py-1.5 bg-slate-300 text-white rounded-xl text-[10.5px] font-bold font-sans cursor-not-allowed opacity-60 text-center"
                     >
@@ -746,16 +890,22 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1">
-                  <span>API: {item.apiType} format</span>
-                  <button
-                    onClick={() => {
-                      handleOpenConfigure(item);
-                      setDetailTab("logs");
-                    }}
-                    className="hover:underline text-[#315C9F]"
-                  >
-                    View Logs ({syncLogs.filter(l => l.integrationId === item.id).length})
-                  </button>
+                  {item.id === "website_lead_form" ? (
+                    <span>Native OwnersLOCAL feature -- no API keys needed</span>
+                  ) : (
+                    <>
+                      <span>API: {item.apiType} format</span>
+                      <button
+                        onClick={() => {
+                          handleOpenConfigure(item);
+                          setDetailTab("logs");
+                        }}
+                        className="hover:underline text-[#315C9F]"
+                      >
+                        View Logs ({syncLogs.filter(l => l.integrationId === item.id).length})
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -996,15 +1146,19 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
               </button>
             </div>
 
-            {/* Modal Internal Tabs */}
+            {/* Modal Internal Tabs -- the lead capture form is a native feature with no API
+                keys, webhooks, sync logs, or AI mode to configure, so it only gets Overview. */}
             <div className="flex border-b border-[#A9CDEE] gap-1 pb-px text-xs">
-              {[
-                { key: "overview", label: "Overview" },
-                { key: "api_keys", label: "API Keys & Auth" },
-                { key: "webhooks", label: "Webhooks Config" },
-                { key: "logs", label: "Recent Sync logs" },
-                { key: "ai_setup", label: "AI Setup Node" }
-              ].map((mTab) => (
+              {(selectedIntegration.id === "website_lead_form"
+                ? [{ key: "overview", label: "Overview" }]
+                : [
+                    { key: "overview", label: "Overview" },
+                    { key: "api_keys", label: "API Keys & Auth" },
+                    { key: "webhooks", label: "Webhooks Config" },
+                    { key: "logs", label: "Recent Sync logs" },
+                    { key: "ai_setup", label: "AI Setup Node" }
+                  ]
+              ).map((mTab) => (
                 <button
                   key={mTab.key}
                   type="button"
@@ -1022,7 +1176,79 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
             <form onSubmit={handleSaveIntegrationConfig} className="space-y-4">
               {/* OVERVIEW TAB */}
-              {detailTab === "overview" && (
+              {detailTab === "overview" && selectedIntegration.id === "website_lead_form" ? (
+                <div className="space-y-4 bg-[#E3F3FF] p-4 rounded-xl border border-[#A9CDEE]/60 text-xs text-left">
+                  <div>
+                    <h4 className="text-[11px] font-extrabold text-[#342D7E] uppercase tracking-wider mb-2">
+                      How this works
+                    </h4>
+                    <ol className="list-decimal list-inside space-y-1.5 text-slate-600 font-sans leading-relaxed">
+                      <li>Click <strong>Generate Embed Code</strong> below (only needs to be done once).</li>
+                      <li>Copy the code block and paste it into your own business website's HTML, wherever you want the contact form to appear (works in Wix, Squarespace, WordPress custom HTML blocks, or any hand-coded site).</li>
+                      <li>When a visitor submits it, it's sent straight to your OwnersLocal account -- no email, no manual entry.</li>
+                      <li>A new record appears in your <strong>Leads</strong> page automatically, tagged <span className="font-mono">Source: Website</span> and <span className="font-mono">Status: New</span>.</li>
+                      <li>From there it's a normal Lead -- convert it to an Estimate, then a Job, then an Invoice exactly like any lead you entered by hand. Nothing about this form limits or tags it differently once it lands in your pipeline.</li>
+                    </ol>
+                  </div>
+
+                  <div className="p-3 bg-[#F5FAFF] border border-[#A9CDEE]/50 rounded-lg text-[10.5px] leading-relaxed text-slate-600">
+                    <span className="font-bold text-slate-800 uppercase text-[9.5px] tracking-wider block mb-1">
+                      Good to know
+                    </span>
+                    The form works from any website, not just one -- paste the same code on multiple
+                    sites if you have them. Regenerating the code invalidates whatever's currently
+                    pasted anywhere, so only do that if the old code was compromised or you're
+                    starting over.
+                  </div>
+
+                  {isLoadingWebFormToken ? (
+                    <p className="text-slate-500 font-sans">Loading…</p>
+                  ) : !webFormToken ? (
+                    <button
+                      type="button"
+                      onClick={handleGenerateWebFormToken}
+                      disabled={isGeneratingWebFormToken}
+                      className="px-4 py-2 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-xs font-bold font-sans cursor-pointer shadow-sm disabled:opacity-50"
+                    >
+                      {isGeneratingWebFormToken ? "Generating…" : "Generate Embed Code"}
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase text-slate-500">
+                          Your embed code
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCopyWebFormSnippet}
+                            className="px-2.5 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10px] font-bold font-sans cursor-pointer flex items-center gap-1"
+                          >
+                            <Copy className="h-3 w-3" />
+                            {webFormCopySuccess ? "Copied!" : "Copy"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleGenerateWebFormToken}
+                            disabled={isGeneratingWebFormToken}
+                            className="px-2.5 py-1 bg-[#F5FAFF] hover:bg-[#E3F3FF] text-slate-600 border border-[#A9CDEE] rounded-lg text-[10px] font-bold font-sans cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <RotateCw className="h-3 w-3" />
+                            Regenerate
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        readOnly
+                        value={webLeadFormEmbedSnippet}
+                        rows={10}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-lg text-[10px] font-mono text-slate-700"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : detailTab === "overview" ? (
                 <div className="space-y-3 bg-[#E3F3FF] p-4 rounded-xl border border-[#A9CDEE]/60">
                   <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                     <div>
@@ -1098,7 +1324,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* API KEYS TAB */}
               {detailTab === "api_keys" && (

@@ -42,7 +42,8 @@ export const MODULE_CATALOG: Array<{ id: string; label: string }> = [
   { id: "marketing", label: "Marketing" },
   { id: "reports", label: "Reports" },
   { id: "ai_assistant", label: "AI Assistant" },
-  { id: "settings", label: "Settings" }
+  { id: "settings", label: "Settings" },
+  { id: "missed_call_textback", label: "Missed Call Text-Back" }
 ];
 
 function derivePermissionsList(modulePermissions: GranularPermissions): string[] {

@@ -6,6 +6,7 @@ import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScan
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 import { sendPushToRecipients } from './server/pushNotifications';
+import { handleWebLeadFormSubmit, WebLeadFormSubmission } from './server/webLeadFormHandler';
 import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +107,26 @@ app.post('/api/jobs/process-recurring', async (req, res) => {
     res.status(result.configured ? 200 : 503).json(result.configured ? result : { ...result, error: 'Firebase Admin is not configured' });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Recurring processing failed' });
+  }
+});
+
+// Embeddable website lead-capture form: submitted from a business's own
+// external website, so it has to accept requests from any origin (there's
+// no OwnersLocal login on that page to prove tenancy -- the embed token
+// does that instead) and answer a CORS preflight.
+app.options('/api/leads/submit-web-form', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+app.post('/api/leads/submit-web-form', async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  try {
+    const result = await handleWebLeadFormSubmit(req.body as WebLeadFormSubmission);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Lead form submission failed' });
   }
 });
 
