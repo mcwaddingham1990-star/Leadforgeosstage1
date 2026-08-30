@@ -241,8 +241,9 @@ export const LeadsPage: React.FC = () => {
 
   const handleCreateEstimate = () => {
     if (!selectedLead) return;
-    createEstimateFromLead(selectedLead.id);
+    const newEstimate = createEstimateFromLead(selectedLead.id);
     setSelectedLead(null);
+    if (newEstimate) onNavigateToScreen("estimates", { estimateId: newEstimate.id });
   };
 
   const leads = propsLeads || localLeads;

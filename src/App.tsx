@@ -1655,6 +1655,7 @@ export default function App() {
     transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
+  const [preSelectedEstimateId, setPreSelectedEstimateId] = useState<string | undefined>(undefined);
   // Lets other pages deep-link into a specific Settings sub-section (e.g.
   // Roster's "Manage Roles" button) instead of dead-ending in an alert/toast
   // telling the user to go find it themselves.
@@ -2810,10 +2811,11 @@ Access to full financial telemetry is restricted.`;
   // row, dropdown, card) should route through this so "many roads lead to the
   // same record" behaves identically everywhere, instead of each page call
   // site redefining its own copy of this logic.
-  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => {
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string; estimateId?: string }) => {
     setPreSelectedCustomerId(params?.customerId ?? undefined);
     setPreSelectedDate(params?.date ?? undefined);
     setPreSelectedSettingsSection(params?.section ?? undefined);
+    setPreSelectedEstimateId(params?.estimateId ?? undefined);
     const matched = OS_SCREENS.find(s => s.id === screenId);
     if (matched) {
       setActiveScreen(matched);
@@ -3857,6 +3859,8 @@ Access to full financial telemetry is restricted.`;
     setPreSelectedDate,
     preSelectedCustomerId,
     setPreSelectedCustomerId,
+    preSelectedEstimateId,
+    setPreSelectedEstimateId,
     generatedPdfDraft,
     setGeneratedPdfDraft,
     pendingSignatureCapture,

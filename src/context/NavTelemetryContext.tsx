@@ -17,7 +17,7 @@ export interface NavTelemetryContextValue {
    * "many roads lead to the same record" behaves identically everywhere,
    * instead of each page redefining its own copy of this logic.
    */
-  navigateToScreen: (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => void;
+  navigateToScreen: (screenId: string, params?: { customerId?: string; date?: string; section?: string; estimateId?: string }) => void;
   logOperationalEvent: (type: string, desc: string, icon?: string) => void;
   takeSnapshot: (pageId: string, pageName: string, metaData?: any) => void;
   deleteSnapshot: (id: string) => void;

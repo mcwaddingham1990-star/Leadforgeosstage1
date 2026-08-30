@@ -74,6 +74,8 @@ export interface DomainDataContextValue {
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
   setPreSelectedCustomerId: Dispatch<SetStateAction<string | undefined>>;
+  preSelectedEstimateId: string | undefined;
+  setPreSelectedEstimateId: Dispatch<SetStateAction<string | undefined>>;
   generatedPdfDraft: GeneratedPdfDraft | null;
   setGeneratedPdfDraft: Dispatch<SetStateAction<GeneratedPdfDraft | null>>;
   /** Queued "Collect Signatures" request (e.g. from a customer card) -- consumed by DocumentsPage to open the PDF Editor straight to its file picker, ready to capture signatures on whatever real document gets opened. */

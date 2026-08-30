@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useDomainActions } from "../hooks/useDomainActions";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -50,7 +50,7 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
   const { loggedInUser } = useAuth();
-  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft, documents, setDocuments, businessProfile } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft, documents, setDocuments, businessProfile, preSelectedEstimateId, setPreSelectedEstimateId } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -312,6 +312,19 @@ export const EstimatesPage: React.FC = () => {
   };
 
   const estimates = propsEstimates || localEstimates;
+
+  // Cross-navigation: "Build Estimate" on a Lead lands here with that
+  // estimate already open and ready to edit, instead of silently creating
+  // it in the background and dropping the owner back on an empty list.
+  useEffect(() => {
+    if (!preSelectedEstimateId) return;
+    const match = estimates.find(e => e.id === preSelectedEstimateId);
+    if (match) {
+      openViewModal(match);
+      setIsEditMode(true);
+    }
+    setPreSelectedEstimateId(undefined);
+  }, [preSelectedEstimateId, estimates, setPreSelectedEstimateId]);
   const selectedEstimateJob = selectedEstimate
     ? schedulingEvents.find(event => event.sourceEstimateId === selectedEstimate.id)
     : undefined;
@@ -1081,7 +1094,7 @@ export const EstimatesPage: React.FC = () => {
                 onClick={() => handleAddEstimate(true)}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
               >
-                Generate PDF
+                Save &amp; Generate PDF
               </button>
             </div>
           </div>
@@ -1199,11 +1212,22 @@ export const EstimatesPage: React.FC = () => {
 
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-[#5E7393]">Assigned Sales Representative</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={formSalesRep}
                       onChange={e => setFormSalesRep(e.target.value)}
                       className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Scope of Work Notes</label>
+                    <textarea
+                      value={formNotes}
+                      onChange={e => setFormNotes(e.target.value)}
+                      placeholder="Enter detailed description of proposed services, pricing terms, materials, exclusions..."
+                      rows={4}
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557] resize-none"
                     />
                   </div>
                 </div>
@@ -1342,7 +1366,7 @@ export const EstimatesPage: React.FC = () => {
                     Save Changes
                   </button>
                 )}
-                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit(true)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Generate PDF</button>}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit(true)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Save &amp; Generate PDF</button>}
                 {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
               </div>
             </div>
