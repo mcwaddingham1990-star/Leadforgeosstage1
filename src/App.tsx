@@ -10,6 +10,8 @@ import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
 import { postTransactionEntry, invoiceTotal } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
+import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1928,8 +1930,8 @@ export default function App() {
   const [balanceView, setBalanceView] = useState("Total");
   const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
   const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
-    "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
-  >("balance");
+    "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
+  >("all");
   const fmtMoney = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // Same real double-entry numbers Accounting & Bookkeeping shows, reused
@@ -1988,6 +1990,7 @@ export default function App() {
     );
 
     return {
+      all: { label: "All Transactions", total: cashBalances["acct_cash"] || 0, items: balanceItems },
       balance: { label: "Current Balance", total: cashBalances["acct_cash"] || 0, items: balanceItems },
       unpaid_invoices: { label: "Unpaid Invoices", total: cashBalances["acct_ar"] || 0, items: unpaidInvoiceItems },
       outstanding_expenses: { label: "Outstanding Expenses", total: cashBalances["acct_ap"] || 0, items: outstandingExpenseItems },
@@ -1995,6 +1998,81 @@ export default function App() {
       expenses_paid: { label: "Expenses Paid", total: expensesPaidItems.reduce((s, i) => s + i.amount, 0), items: expensesPaidItems }
     };
   }, [accounts, journalEntries, invoices, bills]);
+  const [isGeneratingFinancialStatement, setIsGeneratingFinancialStatement] = useState(false);
+
+  // Builds a real PDF statement from whichever category is currently open
+  // in the Financial Reports pane -- same real numbers, saved to Documents
+  // and opened for review, exactly like every other "Generate PDF" action
+  // in the app.
+  const handleGenerateFinancialStatementPdf = async () => {
+    const category = financialSnapshotData[financialSnapshotCategory];
+    setIsGeneratingFinancialStatement(true);
+    try {
+      const business = {
+        name: businessNames[0] || "",
+        phone: businessPhones[0] || "",
+        address: businessAddresses[0] || "",
+        email: businessId || "",
+        logo: businessLogos[0] || ""
+      };
+      const transactionLines = category.items.length
+        ? category.items.map(item => `${item.date}   ${item.memo}   ${fmtMoney(item.amount)}`)
+        : ["No transactions in this category yet."];
+      const bytes = await buildTextDocumentPdf(
+        `Financial Statement - ${category.label}`,
+        [
+          { heading: "Summary", body: `${category.label}: ${fmtMoney(category.total)}\nGenerated ${new Date().toLocaleString()}` },
+          { heading: "Transactions", body: transactionLines.join("\n") }
+        ],
+        business
+      );
+      const pdfBase64 = bytesToBase64(bytes);
+      const filename = `Financial Statement - ${category.label} - ${new Date().toISOString().slice(0, 10)}.pdf`;
+      const newDoc: DocumentItem = {
+        id: `doc_statement_${Date.now()}`,
+        name: filename,
+        customer: "None",
+        employee: loggedInUser?.name || "Staff Administrator",
+        vendor: "None",
+        job: "None",
+        type: "Reports",
+        folder: "Company",
+        uploadedBy: loggedInUser?.name || "Staff Administrator",
+        date: new Date().toISOString().split("T")[0],
+        size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+        status: "Draft",
+        isFavorite: false,
+        isArchived: false,
+        notes: "Generated from Financial Reports.",
+        tags: ["Financial Statement", "Generated"],
+        estimateId: "None",
+        invoiceId: "None",
+        lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+      };
+      if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+        (newDoc as any).pdfBase64 = pdfBase64;
+      } else {
+        triggerNotification("This statement is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+      }
+      setDocuments(prev => [...prev, newDoc]);
+      setGeneratedPdfDraft({
+        filename,
+        title: `Financial Statement — ${category.label}`,
+        sourceType: "Report",
+        sourceId: financialSnapshotCategory,
+        customerName: "",
+        representativeName: loggedInUser?.name || "Company Representative",
+        lines: [],
+        pdfBase64
+      });
+      setIsFinancialSnapshotOpen(false);
+      navigateToScreen("documents");
+      if (logOperationalEvent) logOperationalEvent("Financial Statement Generated", filename, "📄");
+    } finally {
+      setIsGeneratingFinancialStatement(false);
+    }
+  };
+
   const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(() => {
     const saved = sessionStorage.getItem("ownerslocal_pending_financial_scan");
     return saved === "income" || saved === "expense" ? saved : null;
@@ -6141,13 +6219,43 @@ Access to full financial telemetry is restricted.`;
                     const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
                     const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
 
+                    // Dashboard widgets show real company data -- each slot maps to the
+                    // real module permission that governs it, so an employee only ever
+                    // sees the widgets their role/granular permissions actually grant
+                    // (same source of truth as the sidebar nav / getVisibleScreens()),
+                    // instead of every widget being visible with only some individually
+                    // locked by ad hoc role-name checks.
+                    const screenIdForCardTarget: Record<string, string> = {
+                      revenue: "revenue",
+                      leads: "leads",
+                      scheduling: "scheduling",
+                      fleet: "routes",
+                      messages: "messages",
+                      inventory: "inventory",
+                    };
+
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
+                      const requiredScreenId = screenIdForCardTarget[targetId];
+                      if (requiredScreenId && !getVisibleScreens().some(s => s.id === requiredScreenId)) {
+                        return (
+                          <div
+                            key={slotLabel}
+                            className="bg-[#C7E3FA] border border-dashed border-red-300 p-4 rounded-[24px] shadow-sm flex flex-col items-center justify-center h-[240px] text-center gap-2"
+                          >
+                            <span className="text-2xl">🔒</span>
+                            <span className="text-[10px] font-black tracking-wider uppercase text-red-700">Restricted Widget</span>
+                            <p className="text-[9.5px] text-slate-500 font-sans font-medium leading-tight px-3">
+                              Your role does not have permission to view this metric.
+                            </p>
+                          </div>
+                        );
+                      }
                       switch (targetId) {
                         case "revenue":
                           {
                             const activeRoleVal = simulatedRole || loggedInUser?.role || "Owner";
-                            const isFinAuthorized = ["Owner", "Admin", "Administrator", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"].includes(activeRoleVal);
+                            const isFinAuthorized = getVisibleScreens().some(s => s.id === "revenue");
                             return (
                               <div 
                                 key={slotLabel}
@@ -7535,17 +7643,28 @@ Access to full financial telemetry is restricted.`;
                               </button>
                             </div>
 
-                            <select
-                              value={financialSnapshotCategory}
-                              onChange={(e) => setFinancialSnapshotCategory(e.target.value as typeof financialSnapshotCategory)}
-                              className="w-full bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-xs font-bold text-[#1F3557] focus:outline-none"
-                            >
-                              <option value="balance">Current Balance</option>
-                              <option value="unpaid_invoices">Unpaid Invoices</option>
-                              <option value="outstanding_expenses">Outstanding Expenses</option>
-                              <option value="payments_collected">Payments Collected</option>
-                              <option value="expenses_paid">Expenses Paid</option>
-                            </select>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={financialSnapshotCategory}
+                                onChange={(e) => setFinancialSnapshotCategory(e.target.value as typeof financialSnapshotCategory)}
+                                className="flex-1 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-xs font-bold text-[#1F3557] focus:outline-none"
+                              >
+                                <option value="all">All Transactions</option>
+                                <option value="balance">Current Balance</option>
+                                <option value="unpaid_invoices">Unpaid Invoices</option>
+                                <option value="outstanding_expenses">Outstanding Expenses</option>
+                                <option value="payments_collected">Payments Collected</option>
+                                <option value="expenses_paid">Expenses Paid</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={handleGenerateFinancialStatementPdf}
+                                disabled={isGeneratingFinancialStatement}
+                                className="shrink-0 px-3.5 py-2 bg-[#315C9F] hover:bg-[#27498C] disabled:opacity-60 text-white rounded-xl text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                {isGeneratingFinancialStatement ? "Generating…" : "Generate PDF"}
+                              </button>
+                            </div>
 
                             {(() => {
                               const category = financialSnapshotData[financialSnapshotCategory];

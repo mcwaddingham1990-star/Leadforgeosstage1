@@ -4,7 +4,7 @@ export interface GeneratedPdfDraft {
   lines: string[];
   customerName: string;
   representativeName: string;
-  sourceType: "Estimate" | "Invoice" | "Job" | "Customer" | "Lead";
+  sourceType: "Estimate" | "Invoice" | "Job" | "Customer" | "Lead" | "Report";
   sourceId: string;
   /** Real, already-built PDF bytes (base64) -- e.g. from src/lib/pdfExport.ts.
    * When present, the PDF Editor opens with this real document loaded
