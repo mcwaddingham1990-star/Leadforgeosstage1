@@ -822,6 +822,7 @@ const OS_SCREENS = [
   { id: "routes", label: "Interactive Map & Routes", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightroutes.jpg", icon: "🗺️", top: "52%", bottom: "57%" },
   { id: "jobs", label: "Jobs", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightjobs.jpg", icon: "💼", top: "22%", bottom: "27%" },
   { id: "timeclock", label: "Time Clock", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lighttimeclock.jpg", icon: "⏱️", top: "47%", bottom: "52%" },
+  { id: "payroll", label: "Payroll", url: "", icon: "💵", top: "47%", bottom: "52%" },
   { id: "inventory", label: "Inventory", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightinventory.jpg", icon: "📦", top: "72%", bottom: "77%" },
   { id: "documents", label: "Documents", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdocuments.jpg", icon: "📁", top: "62%", bottom: "67%" },
   { id: "messages", label: "Messages", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightmessages.jpg", icon: "💬", top: "32%", bottom: "37%" },
@@ -1116,6 +1117,15 @@ const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
   />
 );
 
+const PayrollIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
+  <img
+    src="/branding/payroll-gear-dollar.png"
+    alt=""
+    aria-hidden="true"
+    className={`object-contain ${className}`}
+  />
+);
+
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   switch (screenId) {
     case "owner_console":
@@ -1142,6 +1152,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Briefcase className={className} />;
     case "timeclock":
       return <Clock className={className} />;
+    case "payroll":
+      return <PayrollIcon className={className} />;
     case "inventory":
       return <Package className={className} />;
     case "documents":
@@ -6746,8 +6758,8 @@ Access to full financial telemetry is restricted.`;
                       />
                     )
 
-                  ) : activeScreen.id === "revenue" ? (
-                    !getVisibleScreens().some(screen => screen.id === "revenue") ? (
+                  ) : activeScreen.id === "revenue" || activeScreen.id === "payroll" ? (
+                    !getVisibleScreens().some(screen => screen.id === activeScreen.id) ? (
                       <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
                         <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
                         <h2 className="text-xl font-bold text-white">Restricted Access</h2>
@@ -6764,6 +6776,8 @@ Access to full financial telemetry is restricted.`;
                     ) : (
                       /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
                       <div className="space-y-6 animate-fade-in text-left">
+                      {activeScreen.id === "revenue" && (
+                      <>
                       {/* HEADER SECTION - Separate clean header block */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
@@ -7202,7 +7216,11 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       </div>
 
-                      {/* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */}
+                      </>
+                      )}
+
+                      {activeScreen.id === "payroll" && (
+                      /* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
                           <div>
@@ -7389,7 +7407,10 @@ Access to full financial telemetry is restricted.`;
                           </button>
                         </div>
                       </div>
+                      )}
 
+                      {activeScreen.id === "revenue" && (
+                      <>
                       {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         
@@ -7611,6 +7632,8 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       </div>
 
+                      </>
+                      )}
                     </div>
                     )
 
