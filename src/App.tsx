@@ -553,14 +553,17 @@ const validPersonName = (value: unknown): string => {
 export type WorkspaceTheme = "light-basic" | "light-extreme" | "dark-basic" | "dark-dynamic";
 
 const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
-  if (value === "Light Mode Extreme") return "light-extreme";
+  // "Light Mode Dynamic" was previously labeled "Light Mode Extreme" --
+  // accept the old saved string so existing businesses don't get bumped
+  // back to Light Mode Basic after the rename.
+  if (value === "Light Mode Dynamic" || value === "Light Mode Extreme") return "light-extreme";
   if (value === "Dark Mode Dynamic") return "dark-dynamic";
   if (value === "Dark Mode Basic" || value === "Basic Dark") return "dark-basic";
   return "light-basic";
 };
 
 const workspaceThemeSettingValue = (theme: WorkspaceTheme): string => {
-  if (theme === "light-extreme") return "Light Mode Extreme";
+  if (theme === "light-extreme") return "Light Mode Dynamic";
   if (theme === "dark-dynamic") return "Dark Mode Dynamic";
   if (theme === "dark-basic") return "Dark Mode Basic";
   return "Light Mode Basic";
@@ -7850,7 +7853,7 @@ Access to full financial telemetry is restricted.`;
             }`}
           >
             <option value="light-basic">Light Mode Basic</option>
-            <option value="light-extreme">Light Mode Extreme</option>
+            <option value="light-extreme">Light Mode Dynamic</option>
             <option value="dark-basic">Dark Mode Basic</option>
             <option value="dark-dynamic">Dark Mode Dynamic</option>
           </select>

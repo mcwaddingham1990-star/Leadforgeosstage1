@@ -221,7 +221,7 @@ const INITIAL_DEFAULTS = {
 
 const THEME_OPTIONS: Array<{ value: string; id: WorkspaceTheme; label: string; description: string }> = [
   { value: "Light Mode Basic", id: "light-basic", label: "Light Mode Basic", description: "The original OwnersLOCAL design and colors" },
-  { value: "Light Mode Extreme", id: "light-extreme", label: "Light Mode Extreme", description: "The light login artwork with a more translucent workspace treatment" },
+  { value: "Light Mode Dynamic", id: "light-extreme", label: "Light Mode Dynamic", description: "The light login artwork with a more translucent workspace treatment" },
   { value: "Dark Mode Basic", id: "dark-basic", label: "Dark Mode Basic", description: "Deep navy workspace, solid dark cards, and restrained blue accents" },
   { value: "Dark Mode Dynamic", id: "dark-dynamic", label: "Dark Mode Dynamic", description: "Translucent navy cards, electric-blue edges, and controlled glow" }
 ];

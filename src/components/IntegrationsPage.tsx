@@ -10,8 +10,6 @@ import {
   Brain,
   Upload,
   Download,
-  Search,
-  SlidersHorizontal,
   RefreshCw,
   CheckCircle,
   AlertCircle,
@@ -99,6 +97,30 @@ interface IntegrationsPageProps {
   dashboardLeads: any[];
   setDashboardLeads: React.Dispatch<React.SetStateAction<any[]>>;
 }
+
+// The app's own built-in modules -- shown collapsed as reassurance that
+// nothing else needs to be set up, not as something to configure here.
+const CONNECTED_APP_FEATURES: Array<{ name: string; status: "CONNECTED" | "READY" }> = [
+  { name: "Dashboard", status: "CONNECTED" },
+  { name: "Revenue", status: "CONNECTED" },
+  { name: "Customers", status: "CONNECTED" },
+  { name: "Leads", status: "CONNECTED" },
+  { name: "Estimates & Bids", status: "CONNECTED" },
+  { name: "Scheduling", status: "CONNECTED" },
+  { name: "Dispatch", status: "CONNECTED" },
+  { name: "Routes", status: "CONNECTED" },
+  { name: "Jobs", status: "CONNECTED" },
+  { name: "Time Clock", status: "CONNECTED" },
+  { name: "Inventory", status: "CONNECTED" },
+  { name: "Documents", status: "CONNECTED" },
+  { name: "Messages", status: "CONNECTED" },
+  { name: "Roster", status: "CONNECTED" },
+  { name: "Training", status: "CONNECTED" },
+  { name: "AI Assistant", status: "CONNECTED" },
+  { name: "Settings", status: "CONNECTED" },
+  { name: "Notifications", status: "READY" },
+  { name: "Owner Console", status: "READY" }
+];
 
 export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   dashboardLeads,
@@ -190,15 +212,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   // Webhook history logs -- starts empty for the same reason.
   const [webhookLogs, setWebhookLogs] = useState<WebhookHistoryEntry[]>([]);
 
-  // UI state filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchCategory, setSearchCategory] = useState("All");
-  const [searchStatus, setSearchStatus] = useState("All");
-  const [searchApi, setSearchApi] = useState("All");
-  const [searchDeveloper, setSearchDeveloper] = useState("All");
-  
-  const [selectedFilterCategory, setSelectedFilterCategory] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"grid" | "webhooks" | "logs">("grid");
+  // Simplified page UI state -- with only a couple of real integrations,
+  // the old multi-facet search/filter panel and separate grid/webhooks/logs
+  // tabs had nothing meaningful to do. Backup, the activity log, and
+  // webhook details are still fully available, just tucked under
+  // "More options" instead of being front and center.
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [advancedView, setAdvancedView] = useState<"webhooks" | "logs" | null>(null);
+  const [isFeaturesListOpen, setIsFeaturesListOpen] = useState(false);
 
   // Selected Integration for Details Popup / Configuration Modal
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
@@ -317,75 +338,29 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     }
   };
 
-  // Computations for summary card counts
+  // Computations for the plain-language status row
   const summaryCounts = useMemo(() => {
     const connected = integrations.filter((i) => i.connected).length;
     const available = integrations.length - connected;
     const errors = syncLogs.filter((l) => l.status === "Failed").length;
-    const pendingAuth = integrations.filter((i) => !i.connected && i.scopes.length > 0).length;
     return {
       connected,
       available,
       errors,
-      pendingAuth,
       lastSync: syncLogs[0] ? `${syncLogs[0].date} ${syncLogs[0].time}` : "N/A",
       apiHealth: "98.4%"
     };
   }, [integrations, syncLogs]);
 
-  // Click summary card filters integrations
-  const [activeSummaryFilter, setActiveSummaryFilter] = useState<string | null>(null);
+  // Tapping "Working" / "Not set up" filters the app list to match.
+  const [activeSummaryFilter, setActiveSummaryFilter] = useState<"Connected" | "Available" | null>(null);
 
   const filteredIntegrations = useMemo(() => {
-    return integrations.filter((item) => {
-      // 1. Search Query
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = item.name.toLowerCase().includes(query);
-        const matchesDesc = item.description.toLowerCase().includes(query);
-        const matchesDev = item.developer.toLowerCase().includes(query);
-        if (!matchesName && !matchesDesc && !matchesDev) return false;
-      }
-      
-      // 2. Facet Selectors
-      if (searchCategory !== "All" && item.category !== searchCategory) return false;
-      if (searchStatus !== "All") {
-        if (searchStatus === "Connected" && !item.connected) return false;
-        if (searchStatus === "Disconnected" && item.connected) return false;
-        if (searchStatus === "Needs Authentication" && (item.connected || !item.apiKey)) {
-          // If it's connected or already has a key, it doesn't "need auth" in our mock criteria
-          if (!item.connected && item.apiKey) return true; // wait, let's keep it simple: disconnected with empty keys
-          if (item.connected) return false;
-        }
-      }
-      if (searchApi !== "All" && item.apiType !== searchApi) return false;
-      if (searchDeveloper !== "All" && item.developer !== searchDeveloper) return false;
-
-      // 3. Category Buttons
-      if (selectedFilterCategory) {
-        if (selectedFilterCategory === "Connected" && !item.connected) return false;
-        if (selectedFilterCategory === "Disconnected" && item.connected) return false;
-        if (selectedFilterCategory === "Needs Authentication" && item.connected) return false;
-        if (
-          selectedFilterCategory !== "Connected" && 
-          selectedFilterCategory !== "Disconnected" && 
-          selectedFilterCategory !== "Needs Authentication" && 
-          item.category !== selectedFilterCategory
-        ) {
-          return false;
-        }
-      }
-
-      // 4. Summary Card Filter
-      if (activeSummaryFilter) {
-        if (activeSummaryFilter === "Connected" && !item.connected) return false;
-        if (activeSummaryFilter === "Available" && item.connected) return false;
-        if (activeSummaryFilter === "Pending" && item.connected) return false;
-      }
-
-      return true;
-    });
-  }, [integrations, searchQuery, searchCategory, searchStatus, searchApi, searchDeveloper, selectedFilterCategory, activeSummaryFilter]);
+    if (!activeSummaryFilter) return integrations;
+    return integrations.filter((item) =>
+      activeSummaryFilter === "Connected" ? item.connected : !item.connected
+    );
+  }, [integrations, activeSummaryFilter]);
 
   // Toggle Connection Handler
   // Stripe is the only integration left, and there's no real Stripe OAuth
@@ -498,10 +473,10 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             </span>
             <div>
               <h1 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
-                Integrations Control Node
+                Connected Apps
               </h1>
               <p className="text-xs text-slate-500 font-sans font-medium">
-                OwnersLOCAL Central API Bridge & Real-Time Event Engine Sync
+                Everything hooked up to your business, in one place
               </p>
             </div>
           </div>
@@ -515,612 +490,463 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             className="px-3 py-1.5 bg-indigo-550 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
           >
             <Brain className="h-3.5 w-3.5" />
-            AI Setup
+            AI Helper
           </button>
-
-          <button
-            onClick={handleImportSettings}
-            className="px-3 py-1.5 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Import setup configuration json"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Import Settings
-          </button>
-
-          <button
-            onClick={handleExportSettings}
-            className="px-3 py-1.5 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Export integration definitions"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export Settings
-          </button>
-
         </div>
       </div>
 
-      {/* SUMMARY CARDS SECTION */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      {/* PLAIN-LANGUAGE STATUS ROW */}
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { key: "Connected", label: "Connected Integrations", count: summaryCounts.connected, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
-          { key: "Available", label: "Available Integrations", count: summaryCounts.available, color: "text-[#315C9F] bg-[#E3F3FF] border-[#A9CDEE]" },
-          { key: "Errors", label: "Sync Errors", count: summaryCounts.errors, color: "text-rose-600 bg-rose-50 border-rose-200" },
-          { key: "LastSync", label: "Last Sync Time", value: summaryCounts.lastSync, color: "text-amber-700 bg-amber-50 border-amber-200" },
-          { key: "Health", label: "API Health", value: summaryCounts.apiHealth, color: "text-teal-600 bg-teal-50 border-teal-200" },
-          { key: "Pending", label: "Pending Auth", count: summaryCounts.pendingAuth, color: "text-purple-600 bg-purple-50 border-purple-200" }
+          { key: "Connected" as const, label: "Working", count: summaryCounts.connected, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+          { key: "Available" as const, label: "Not Set Up", count: summaryCounts.available, color: "text-[#315C9F] bg-[#E3F3FF] border-[#A9CDEE]" },
+          { key: null, label: "Problems", count: summaryCounts.errors, color: summaryCounts.errors > 0 ? "text-rose-600 bg-rose-50 border-rose-200" : "text-emerald-600 bg-emerald-50 border-emerald-200" }
         ].map((card) => {
-          const isActive = activeSummaryFilter === card.key;
+          const isProblems = card.label === "Problems";
+          const isActive = !isProblems && activeSummaryFilter === card.key;
           return (
             <div
-              key={card.key}
+              key={card.label}
               onClick={() => {
-                if (isActive) {
-                  setActiveSummaryFilter(null);
-                } else {
-                  setActiveSummaryFilter(card.key);
+                if (isProblems) {
+                  setIsAdvancedOpen(true);
+                  setAdvancedView("logs");
+                  return;
                 }
+                setActiveSummaryFilter(isActive ? null : card.key);
               }}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none text-left flex flex-col justify-between h-24 shadow-xs relative overflow-hidden ${
-                isActive ? "ring-2 ring-[#315C9F] scale-98 shadow-sm" : "hover:translate-y-[-2px]"
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none text-center flex flex-col items-center justify-center gap-1 shadow-xs ${
+                isActive ? "ring-2 ring-[#315C9F] shadow-sm" : "hover:translate-y-[-2px]"
               } ${card.color}`}
             >
-              <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 line-clamp-1">
+              <div className="text-2xl font-extrabold tracking-tight">{card.count}</div>
+              <div className="text-[10.5px] uppercase tracking-wider font-extrabold text-slate-500">
                 {card.label}
-              </div>
-              <div className="text-xl font-extrabold tracking-tight mt-1">
-                {card.count !== undefined ? card.count : card.value}
-              </div>
-              <div className="text-[9px] text-slate-400 mt-1 flex items-center justify-between">
-                <span>{isActive ? "● Active Filter" : "Click to filter"}</span>
-                {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#315C9F] animate-ping" />}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* CORE VIEW NAVIGATION TABS */}
-      <div className="flex border-b border-[#A9CDEE] gap-2 pb-px">
-        {[
-          { key: "grid", label: "Integrations Registry", count: filteredIntegrations.length },
-          { key: "webhooks", label: "Webhook Receivers", count: webhookLogs.length },
-          { key: "logs", label: "Event Sync Ledger", count: syncLogs.length }
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`px-4 py-2 font-sans font-bold text-xs uppercase tracking-wider border-t border-x rounded-t-xl transition-all cursor-pointer ${
-              activeTab === tab.key
-                ? "bg-[#E3F3FF] text-[#342D7E] border-[#A9CDEE] border-b-[#E3F3FF] translate-y-[1px]"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {tab.label} <span className="text-[10px] ml-1 px-1.5 py-0.5 bg-slate-200/50 rounded-full font-mono font-medium text-slate-600">{tab.count}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* INTEGRATIONS REGISTRY VIEW */}
-      {activeTab === "grid" && (
-        <div className="space-y-4">
-          {/* SEARCH & FILTERS CONTROLS */}
-          <div className="bg-[#E3F3FF] p-4.5 rounded-2xl border border-[#A9CDEE] space-y-4">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-[#315C9F]" />
-              <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
-                Multi-faceted Search & Registry Filtering
-              </h3>
-            </div>
-
-            {/* Faceted Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-              {/* Keyword Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Keyword (Service/Dev)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-[#A9CDEE] rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#315C9F]"
-                />
-              </div>
-
-              {/* Category Dropdown */}
-              <div>
-                <select
-                  value={searchCategory}
-                  onChange={(e) => setSearchCategory(e.target.value)}
-                  className="w-full bg-white border border-[#A9CDEE] rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
-                >
-                  <option value="All">All Categories</option>
-                  <option value="Business">Business</option>
-                  <option value="Accounting">Accounting</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Communication">Communication</option>
-                  <option value="Maps">Maps</option>
-                  <option value="AI">AI</option>
-                  <option value="CRM">CRM</option>
-                  <option value="Storage">Storage</option>
-                  <option value="Payments">Payments</option>
-                  <option value="Custom">Custom</option>
-                </select>
-              </div>
-
-              {/* Status Dropdown */}
-              <div>
-                <select
-                  value={searchStatus}
-                  onChange={(e) => setSearchStatus(e.target.value)}
-                  className="w-full bg-white border border-[#A9CDEE] rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
-                >
-                  <option value="All">All Connection Status</option>
-                  <option value="Connected">Connected Only</option>
-                  <option value="Disconnected">Disconnected Only</option>
-                  <option value="Needs Authentication">Needs Authentication</option>
-                </select>
-              </div>
-
-              {/* API Format Dropdown */}
-              <div>
-                <select
-                  value={searchApi}
-                  onChange={(e) => setSearchApi(e.target.value)}
-                  className="w-full bg-white border border-[#A9CDEE] rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
-                >
-                  <option value="All">All API Formats</option>
-                  <option value="REST">REST API</option>
-                  <option value="GraphQL">GraphQL</option>
-                </select>
-              </div>
-
-              {/* Developer Dropdown */}
-              <div>
-                <select
-                  value={searchDeveloper}
-                  onChange={(e) => setSearchDeveloper(e.target.value)}
-                  className="w-full bg-white border border-[#A9CDEE] rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none"
-                >
-                  <option value="All">All Developers</option>
-                  <option value="Google">Google Suite</option>
-                  <option value="Facebook">Meta (Facebook)</option>
-                  <option value="Twilio">Twilio</option>
-                  <option value="Stripe">Stripe</option>
-                  <option value="Microsoft">Microsoft Corp</option>
-                  <option value="Custom">Custom / In-house</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Quick Filter Pill Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[#A9CDEE]/50">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#315C9F] mr-2">
-                Quick Categories:
-              </span>
-              {[
-                { label: "All Registry", val: null },
-                { label: "Connected", val: "Connected" },
-                { label: "Disconnected", val: "Disconnected" },
-                { label: "Needs Authentication", val: "Needs Authentication" },
-                { label: "Business", val: "Business" },
-                { label: "Accounting", val: "Accounting" },
-                { label: "Marketing", val: "Marketing" },
-                { label: "Communication", val: "Communication" },
-                { label: "Maps", val: "Maps" },
-                { label: "AI", val: "AI" },
-                { label: "CRM", val: "CRM" },
-                { label: "Storage", val: "Storage" },
-                { label: "Payments", val: "Payments" },
-                { label: "Custom", val: "Custom" }
-              ].map((pill) => {
-                const isActive = selectedFilterCategory === pill.val;
-                return (
-                  <button
-                    key={pill.label}
-                    onClick={() => setSelectedFilterCategory(pill.val)}
-                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${
-                      isActive
-                        ? "bg-[#315C9F] text-white border-[#315C9F]"
-                        : "bg-[#F5FAFF] hover:bg-[#BDDDF8] text-slate-600 border-[#A9CDEE]"
-                    }`}
-                  >
-                    {pill.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* FRAMEWORK CONNECTION SUMMARY BADGES */}
-          <div className="bg-[#E3F3FF] p-4 rounded-2xl border border-[#A9CDEE] space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-1.5">
-                <Database className="h-4 w-4 text-[#315C9F]" />
-                <span className="text-xs font-bold text-slate-800 font-sans uppercase tracking-wider">
-                  Connected App Features
-                </span>
-              </div>
-              <span className="px-2 py-0.5 bg-[#C7E3FB] text-[#315C9F] text-[9.5px] font-extrabold uppercase rounded-lg border border-[#A9CDEE]">
-                No Duplicate Data
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 xl:grid-cols-9 gap-2">
-              {[
-                { name: "Dashboard", status: "CONNECTED" },
-                { name: "Revenue", status: "CONNECTED" },
-                { name: "Customers", status: "CONNECTED" },
-                { name: "Leads", status: "CONNECTED" },
-                { name: "Estimates & Bids", status: "CONNECTED" },
-                { name: "Scheduling", status: "CONNECTED" },
-                { name: "Dispatch", status: "CONNECTED" },
-                { name: "Routes", status: "CONNECTED" },
-                { name: "Jobs", status: "CONNECTED" },
-                { name: "Time Clock", status: "CONNECTED" },
-                { name: "Inventory", status: "CONNECTED" },
-                { name: "Documents", status: "CONNECTED" },
-                { name: "Messages", status: "CONNECTED" },
-                { name: "Roster", status: "CONNECTED" },
-                { name: "Training", status: "CONNECTED" },
-                { name: "AI Assistant", status: "CONNECTED" },
-                { name: "Settings", status: "CONNECTED" },
-                { name: "Notifications", status: "READY" },
-                { name: "Owner Console", status: "READY" }
-              ].map((fw) => (
-                <div
-                  key={fw.name}
-                  className={`p-1.5 rounded-xl border text-center transition-all ${
-                    fw.status === "CONNECTED"
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-[#F5FAFF] text-slate-500 border-[#A9CDEE] border-dashed"
-                  }`}
-                >
-                  <div className="text-[10px] font-extrabold truncate">{fw.name}</div>
-                  <div className="text-[8px] font-mono font-bold uppercase mt-0.5">
-                    {fw.status === "CONNECTED" ? "✓ Linked" : "□ Ready"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
+      <div className="space-y-4">
           {/* CORE INTEGRATION GRID */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredIntegrations.map((item) => (
-              <div
-                key={item.id}
-                className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4.5 flex flex-col justify-between gap-4 shadow-xs relative overflow-hidden group hover:shadow-sm hover:border-[#91BEE6] transition-all text-left"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl select-none w-11 h-11 rounded-xl bg-[#C7E3FB] border border-[#A9CDEE] flex items-center justify-center shadow-xs">
-                      {item.logo}
+            {filteredIntegrations.map((item) => {
+              const isWebForm = item.id === "website_lead_form";
+              const aiLabel = !item.aiEnabled
+                ? "Off"
+                : item.aiMode === "ASSIST"
+                  ? "Suggests only"
+                  : item.aiMode === "ASSIST + APPROVAL"
+                    ? "Needs approval"
+                    : item.aiMode === "AUTO"
+                      ? "Automatic"
+                      : "Off";
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4.5 flex flex-col justify-between gap-4 shadow-xs relative overflow-hidden group hover:shadow-sm hover:border-[#91BEE6] transition-all text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="text-3xl select-none w-11 h-11 rounded-xl bg-[#C7E3FB] border border-[#A9CDEE] flex items-center justify-center shadow-xs">
+                        {item.logo}
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider font-sans group-hover:text-[#315C9F] transition-colors">
+                          {item.name}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                          {isWebForm ? "Built in — ready now" : item.developer}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider font-sans group-hover:text-[#315C9F] transition-colors">
-                        {item.name}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 font-mono font-bold mt-0.5">
-                        {item.developer} • {item.category}
-                      </p>
-                    </div>
+
+                    <span
+                      className={`text-[8.5px] px-1.5 py-0.5 rounded-lg font-bold uppercase border shrink-0 ${
+                        item.connected
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-[#F5FAFF] text-slate-400 border-[#A9CDEE]"
+                      }`}
+                    >
+                      {item.connected ? "Working" : "Not Set Up"}
+                    </span>
                   </div>
 
-                  {/* Toggle Slider Switch -- greyed out and disabled: no real backend to connect to yet.
-                      Not shown for native (non-OAuth) features like the lead capture form, which
-                      have nothing to "connect" -- they're always available. */}
-                  {item.id !== "website_lead_form" && (
-                    <button
-                      disabled
-                      title={`A real ${item.name} connection isn't wired up yet`}
-                      onClick={() => handleToggleConnection(item.id)}
-                      className="relative inline-flex h-5 w-10 shrink-0 cursor-not-allowed opacity-40 rounded-full border border-transparent bg-slate-300 focus:outline-none"
-                    >
-                      <span className="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white shadow-xs mt-[1px]" />
-                    </button>
-                  )}
-                </div>
+                  <p className="text-[11px] text-slate-600 font-medium font-sans leading-relaxed min-h-12">
+                    {item.description}
+                  </p>
 
-                <p className="text-[11px] text-slate-600 font-medium font-sans leading-relaxed min-h-12">
-                  {item.description}
-                </p>
-
-                {/* Status Badges Row */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-[#A9CDEE]/50">
-                  <span
-                    className={`text-[8.5px] px-1.5 py-0.5 rounded-lg font-mono font-bold uppercase border ${
-                      item.connected
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-[#F5FAFF] text-slate-400 border-[#A9CDEE]"
-                    }`}
-                  >
-                    {item.connected ? "Connected" : "Disconnected"}
-                  </span>
-
-                  <span className="text-[9px] text-slate-400 font-medium font-sans">
-                    Sync: {item.lastSync}
-                  </span>
-
-                  {item.aiEnabled ? (
-                    <span className="ml-auto text-[8.5px] px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-mono font-bold uppercase flex items-center gap-1">
-                      <Brain className="h-2 w-2" />
-                      AI: {item.aiMode}
+                  <div className="flex items-center justify-between text-[9px] text-slate-400 pt-2.5 border-t border-[#A9CDEE]/50">
+                    <span>Last synced: {item.lastSync}</span>
+                    <span className={`flex items-center gap-1 font-bold ${item.aiEnabled ? "text-indigo-600" : ""}`}>
+                      <Brain className="h-2.5 w-2.5" />
+                      AI Helper: {aiLabel}
                     </span>
-                  ) : (
-                    <span className="ml-auto text-[8.5px] px-1.5 py-0.5 bg-[#F5FAFF] text-slate-400 border border-[#A9CDEE] rounded-lg font-mono font-medium uppercase">
-                      AI OFF
-                    </span>
-                  )}
-                </div>
+                  </div>
 
-                {/* Grid Item Buttons */}
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                  <button
-                    onClick={() => handleOpenConfigure(item)}
-                    className="px-2.5 py-1.5 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center"
-                  >
-                    Configure
-                  </button>
-                  {item.id === "website_lead_form" ? (
-                    <button
-                      onClick={() => handleOpenConfigure(item)}
-                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1"
-                    >
-                      <Copy className="h-3 w-3" />
-                      Get Embed Code
-                    </button>
-                  ) : item.connected ? (
-                    <button
-                      onClick={() => handleSyncNow(item.id)}
-                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10.5px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1"
-                    >
-                      <RefreshCw className="h-3 w-3 animate-hover-spin" />
-                      Sync Now
-                    </button>
-                  ) : (
-                    <button
-                      disabled
-                      title={`A real ${item.name} connection isn't wired up yet`}
-                      onClick={() => handleToggleConnection(item.id)}
-                      className="px-2.5 py-1.5 bg-slate-300 text-white rounded-xl text-[10.5px] font-bold font-sans cursor-not-allowed opacity-60 text-center"
-                    >
-                      Connect
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1">
-                  {item.id === "website_lead_form" ? (
-                    <span>Native OwnersLOCAL feature -- no API keys needed</span>
-                  ) : (
-                    <>
-                      <span>API: {item.apiType} format</span>
+                  {/* Card Buttons */}
+                  <div className="flex gap-1.5 pt-1">
+                    {isWebForm ? (
                       <button
-                        onClick={() => {
-                          handleOpenConfigure(item);
-                          setDetailTab("logs");
-                        }}
-                        className="hover:underline text-[#315C9F]"
+                        onClick={() => handleOpenConfigure(item)}
+                        className="flex-1 px-2.5 py-2 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-[11px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
                       >
-                        View Logs ({syncLogs.filter(l => l.integrationId === item.id).length})
+                        <Copy className="h-3 w-3" />
+                        Copy Website Code
                       </button>
-                    </>
-                  )}
+                    ) : item.connected ? (
+                      <>
+                        <button
+                          onClick={() => handleSyncNow(item.id)}
+                          className="flex-1 px-2.5 py-2 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-[11px] font-bold font-sans transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
+                        >
+                          <RefreshCw className="h-3 w-3 animate-hover-spin" />
+                          Sync Now
+                        </button>
+                        <button
+                          onClick={() => handleOpenConfigure(item)}
+                          title="Settings"
+                          className="px-3 py-2 bg-[#F5FAFF] hover:bg-[#E3F3FF] text-slate-500 border border-[#A9CDEE] rounded-xl text-sm font-bold cursor-pointer"
+                        >
+                          ⋯
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          disabled
+                          title={`A real ${item.name} connection isn't wired up yet`}
+                          onClick={() => handleToggleConnection(item.id)}
+                          className="flex-1 px-2.5 py-2 bg-slate-300 text-white rounded-xl text-[11px] font-bold font-sans cursor-not-allowed opacity-60 text-center"
+                        >
+                          {item.category === "Payments" ? "Turn On Payments" : `Connect ${item.name}`}
+                        </button>
+                        <button
+                          onClick={() => handleOpenConfigure(item)}
+                          title="Settings"
+                          className="px-3 py-2 bg-[#F5FAFF] hover:bg-[#E3F3FF] text-slate-500 border border-[#A9CDEE] rounded-xl text-sm font-bold cursor-pointer"
+                        >
+                          ⋯
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {filteredIntegrations.length === 0 && (
               <div className="col-span-full py-12 text-center bg-[#E3F3FF] rounded-2xl border border-[#A9CDEE] space-y-2">
                 <AlertCircle className="h-8 w-8 text-slate-400 mx-auto" />
-                <h4 className="text-xs font-extrabold text-[#342D7E] uppercase">No Match Found</h4>
+                <h4 className="text-xs font-extrabold text-[#342D7E] uppercase">Nothing to show</h4>
                 <p className="text-xs text-slate-500 font-medium font-sans">
-                  Try clearing active faceted options or keyword query.
+                  Nothing matches that filter right now.
                 </p>
                 <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSearchCategory("All");
-                    setSearchStatus("All");
-                    setSearchApi("All");
-                    setSearchDeveloper("All");
-                    setSelectedFilterCategory(null);
-                    setActiveSummaryFilter(null);
-                  }}
+                  onClick={() => setActiveSummaryFilter(null)}
                   className="px-3 py-1 bg-[#315C9F] text-white rounded-xl text-xs font-sans font-bold cursor-pointer"
                 >
-                  Clear All Filters
+                  Show Everything
                 </button>
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* WEBHOOKS RECEIVER MANAGEMENT */}
-      {activeTab === "webhooks" && (
-        <div className="space-y-4">
-          <div className="bg-[#E3F3FF] border border-[#A9CDEE] p-5 rounded-2xl space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
-                  OwnersLOCAL API Hook Registries & Handlers
-                </h3>
-                <p className="text-xs text-slate-500 font-sans mt-0.5">
-                  Receive new leads or send billing and service records to another system.
-                </p>
+          {/* WHAT'S ALREADY WORKING -- collapsed by default so it reassures without shouting */}
+          <div className="bg-[#E3F3FF] rounded-2xl border border-[#A9CDEE] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsFeaturesListOpen((open) => !open)}
+              className="w-full flex items-center justify-between gap-2 p-4 text-left cursor-pointer"
+            >
+              <span className="flex items-center gap-2 text-xs font-bold text-slate-700 font-sans">
+                <Database className="h-4 w-4 text-[#315C9F] shrink-0" />
+                Everything else is already working — nothing to set up
+              </span>
+              <span className="text-[10px] font-bold text-[#315C9F] shrink-0">
+                {isFeaturesListOpen ? "Hide list ▾" : "See list ▸"}
+              </span>
+            </button>
+
+            {isFeaturesListOpen && (
+              <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 xl:grid-cols-9 gap-2">
+                {CONNECTED_APP_FEATURES.map((fw) => (
+                  <div
+                    key={fw.name}
+                    className={`p-1.5 rounded-xl border text-center transition-all ${
+                      fw.status === "CONNECTED"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-[#F5FAFF] text-slate-500 border-[#A9CDEE] border-dashed"
+                    }`}
+                  >
+                    <div className="text-[10px] font-extrabold truncate">{fw.name}</div>
+                    <div className="text-[8px] font-mono font-bold uppercase mt-0.5">
+                      {fw.status === "CONNECTED" ? "✓ Linked" : "□ Ready"}
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
+          </div>
+        </div>
+
+      {/* MORE OPTIONS -- backup, activity log, and webhook details, tucked
+          away since day-to-day use never needs them. Nothing here was
+          removed, just moved out of the way. */}
+      <div className="bg-[#E3F3FF] rounded-2xl border border-[#A9CDEE] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => {
+            setIsAdvancedOpen((open) => !open);
+            setAdvancedView(null);
+          }}
+          className="w-full flex items-center justify-between gap-2 p-4 text-left cursor-pointer"
+        >
+          <span className="text-xs font-bold text-slate-700 font-sans">
+            More options — backup, activity log, developer tools
+          </span>
+          <span className="text-[10px] font-bold text-[#315C9F] shrink-0">
+            {isAdvancedOpen ? "Hide ▾" : "Show ▸"}
+          </span>
+        </button>
+
+        {isAdvancedOpen && (
+          <div className="px-4 pb-4 space-y-2">
+            <p className="text-[10.5px] text-slate-500 font-sans leading-relaxed">
+              These don't affect day-to-day use — for backing up your setup or connecting outside tools.
+            </p>
+
+            <div className="flex items-center justify-between p-3 bg-white/70 border border-[#A9CDEE]/60 rounded-xl text-xs">
+              <span className="font-semibold text-slate-700">Save a backup of this setup</span>
               <button
-                onClick={() => {
-                  triggerNotification("🔄 Repinged pending webhook retries. Dispatched 1 failed packet.");
-                  setWebhookLogs((prev) =>
-                    prev.map((l) => (l.status === "Failed" ? { ...l, status: "Delivered", retryCount: l.retryCount + 1 } : l))
-                  );
-                }}
-                className="px-3 py-1.5 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-xl text-xs font-bold font-sans cursor-pointer flex items-center gap-1.5"
+                onClick={handleExportSettings}
+                className="px-3 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10.5px] font-bold cursor-pointer flex items-center gap-1"
               >
-                <RefreshCw className="h-3 w-3" />
-                Retry Failed Hooks
+                <Download className="h-3 w-3" />
+                Save
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2.5 text-xs text-left">
-                <span className="px-2 py-0.5 bg-emerald-55 border border-emerald-200 text-emerald-700 font-mono font-bold text-[9px] uppercase rounded">
-                  Incoming Receivers (Inbound)
-                </span>
-                <p className="text-[11px] text-slate-500 leading-normal">
-                  Send POST JSON payloads from external builders to update your CRM.
-                </p>
-                <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
-                  https://api.ownerslocal.local/webhooks/incoming_leads?token=wh_2026_xyz
-                </div>
-              </div>
-
-              <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2.5 text-xs text-left">
-                <span className="px-2 py-0.5 bg-blue-55 border border-blue-200 text-blue-700 font-mono font-bold text-[9px] uppercase rounded">
-                  Outgoing Delivery Webhooks
-                </span>
-                <p className="text-[11px] text-slate-500 leading-normal">
-                  OwnersLOCAL triggers POST queries to Zapier or internal endpoints when jobs finish.
-                </p>
-                <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
-                  https://hooks.zapier.com/hooks/catch/91845/leads_sync_endpoint
-                </div>
-              </div>
-
-              <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2 text-xs text-left">
-                <h4 className="text-[11px] font-bold text-slate-800">Event Type Checklist</h4>
-                <div className="space-y-1 text-[10.5px]">
-                  {[
-                    "lead.created (Inbound profile updates)",
-                    "job.completed (Trigger invoices)",
-                    "message.received (Twilio sync lines)",
-                    "invoice.updated (Quickbooks ledger)"
-                  ].map((evt) => (
-                    <label key={evt} className="flex items-center gap-1.5 text-slate-600 font-sans">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#315C9F]" />
-                      <span>{evt}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Webhook log list */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border border-[#A9CDEE] rounded-xl overflow-hidden">
-                <thead className="bg-[#C7E3FB] text-slate-700 font-sans font-bold">
-                  <tr>
-                    <th className="p-2.5">Hook Event ID</th>
-                    <th className="p-2.5">Endpoint Type</th>
-                    <th className="p-2.5">Event Name</th>
-                    <th className="p-2.5">Time Triggered</th>
-                    <th className="p-2.5 text-right">Payload Size</th>
-                    <th className="p-2.5 text-center">Status</th>
-                    <th className="p-2.5 text-center">Retries</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white text-slate-600 font-sans">
-                  {webhookLogs.map((wh) => (
-                    <tr key={wh.id} className="border-b border-[#A9CDEE]/30 hover:bg-slate-50">
-                      <td className="p-2.5 font-mono font-bold text-[#315C9F]">{wh.id}</td>
-                      <td className="p-2.5">
-                        <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded ${
-                          wh.type === "Incoming" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-55 text-blue-700 border border-blue-200"
-                        }`}>
-                          {wh.type}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-semibold text-slate-800">{wh.eventType}</td>
-                      <td className="p-2.5 font-mono text-[10.5px]">{wh.timestamp}</td>
-                      <td className="p-2.5 font-mono text-right">{wh.payloadSize}</td>
-                      <td className="p-2.5 text-center">
-                        <span className={`px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase rounded ${
-                          wh.status === "Delivered" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                          wh.status === "Failed" ? "bg-rose-50 text-rose-600 border border-rose-100" :
-                          "bg-amber-50 text-amber-600 border border-amber-100"
-                        }`}>
-                          {wh.status}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-mono text-center font-bold">{wh.retryCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SYNC LOG & HISTORY */}
-      {activeTab === "logs" && (
-        <div className="space-y-4">
-          <div className="bg-[#E3F3FF] border border-[#A9CDEE] p-5 rounded-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
-                  Operational Event Sync Ledger
-                </h3>
-                <p className="text-xs text-slate-500 font-sans mt-0.5">
-                  Audit trail recording automated synchronization packets and payload counts.
-                </p>
-              </div>
+            <div className="flex items-center justify-between p-3 bg-white/70 border border-[#A9CDEE]/60 rounded-xl text-xs">
+              <span className="font-semibold text-slate-700">Restore from a backup file</span>
               <button
-                onClick={() => {
-                  setSyncLogs([]);
-                  triggerNotification("🧹 Cleared operations sync ledger.");
-                }}
-                className="px-2.5 py-1 text-xs font-bold text-slate-500 border border-slate-300 hover:bg-slate-100 rounded-lg cursor-pointer"
+                onClick={handleImportSettings}
+                className="px-3 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10.5px] font-bold cursor-pointer flex items-center gap-1"
               >
-                Clear Ledger
+                <Upload className="h-3 w-3" />
+                Restore
               </button>
             </div>
 
-            {/* Sync Logs Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border border-[#A9CDEE] rounded-xl overflow-hidden">
-                <thead className="bg-[#C7E3FB] text-slate-700 font-sans font-bold">
-                  <tr>
-                    <th className="p-2.5">Date</th>
-                    <th className="p-2.5">Time</th>
-                    <th className="p-2.5">Integration ID</th>
-                    <th className="p-2.5">Integration Service</th>
-                    <th className="p-2.5 text-center">Mutated Records</th>
-                    <th className="p-2.5 text-center">Errors</th>
-                    <th className="p-2.5">Sync Status Message</th>
-                    <th className="p-2.5 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white text-slate-600 font-sans">
-                  {syncLogs.map((log) => (
-                    <tr key={log.id} className="border-b border-[#A9CDEE]/30 hover:bg-slate-50">
-                      <td className="p-2.5 font-mono text-[10.5px] text-slate-500">{log.date}</td>
-                      <td className="p-2.5 font-mono text-[10.5px] text-slate-500">{log.time}</td>
-                      <td className="p-2.5 font-mono text-[10.5px] font-bold text-slate-800">{log.integrationId}</td>
-                      <td className="p-2.5 font-semibold text-slate-800">{log.integrationName}</td>
-                      <td className="p-2.5 text-center font-mono font-bold text-slate-700">{log.recordsUpdated}</td>
-                      <td className="p-2.5 text-center font-mono font-bold text-rose-600">{log.errors}</td>
-                      <td className="p-2.5 font-medium leading-relaxed">{log.message}</td>
-                      <td className="p-2.5 text-center">
-                        <button
-                          onClick={() => {
-                            handleSyncNow(log.integrationId);
-                          }}
-                          className="px-2 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] rounded-lg text-[9px] font-extrabold uppercase"
-                        >
-                          Retry Sync
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex items-center justify-between p-3 bg-white/70 border border-[#A9CDEE]/60 rounded-xl text-xs">
+              <span className="font-semibold text-slate-700">Activity log ({syncLogs.length})</span>
+              <button
+                onClick={() => setAdvancedView((v) => (v === "logs" ? null : "logs"))}
+                className="px-3 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10.5px] font-bold cursor-pointer"
+              >
+                {advancedView === "logs" ? "Hide" : "View"}
+              </button>
             </div>
+
+            <div className="flex items-center justify-between p-3 bg-white/70 border border-[#A9CDEE]/60 rounded-xl text-xs">
+              <span className="font-semibold text-slate-700">Developer webhooks ({webhookLogs.length})</span>
+              <button
+                onClick={() => setAdvancedView((v) => (v === "webhooks" ? null : "webhooks"))}
+                className="px-3 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10.5px] font-bold cursor-pointer"
+              >
+                {advancedView === "webhooks" ? "Hide" : "View"}
+              </button>
+            </div>
+
+            {/* WEBHOOKS RECEIVER MANAGEMENT */}
+            {advancedView === "webhooks" && (
+              <div className="pt-2 space-y-4">
+                <div className="bg-white/50 border border-[#A9CDEE] p-4 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
+                        API Hook Registries &amp; Handlers
+                      </h3>
+                      <p className="text-xs text-slate-500 font-sans mt-0.5">
+                        Receive new leads or send billing and service records to another system.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        triggerNotification("🔄 Repinged pending webhook retries. Dispatched 1 failed packet.");
+                        setWebhookLogs((prev) =>
+                          prev.map((l) => (l.status === "Failed" ? { ...l, status: "Delivered", retryCount: l.retryCount + 1 } : l))
+                        );
+                      }}
+                      className="px-3 py-1.5 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-xl text-xs font-bold font-sans cursor-pointer flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry Failed Hooks
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2.5 text-xs text-left">
+                      <span className="px-2 py-0.5 bg-emerald-55 border border-emerald-200 text-emerald-700 font-mono font-bold text-[9px] uppercase rounded">
+                        Incoming Receivers (Inbound)
+                      </span>
+                      <p className="text-[11px] text-slate-500 leading-normal">
+                        Send POST JSON payloads from external builders to update your CRM.
+                      </p>
+                      <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
+                        https://api.ownerslocal.local/webhooks/incoming_leads?token=wh_2026_xyz
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2.5 text-xs text-left">
+                      <span className="px-2 py-0.5 bg-blue-55 border border-blue-200 text-blue-700 font-mono font-bold text-[9px] uppercase rounded">
+                        Outgoing Delivery Webhooks
+                      </span>
+                      <p className="text-[11px] text-slate-500 leading-normal">
+                        OwnersLOCAL triggers POST queries to Zapier or internal endpoints when jobs finish.
+                      </p>
+                      <div className="font-mono bg-slate-50 p-2 border border-slate-200 rounded text-[10px] select-all break-all text-slate-700">
+                        https://hooks.zapier.com/hooks/catch/91845/leads_sync_endpoint
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white/65 rounded-xl border border-[#A9CDEE]/60 space-y-2 text-xs text-left">
+                      <h4 className="text-[11px] font-bold text-slate-800">Event Type Checklist</h4>
+                      <div className="space-y-1 text-[10.5px]">
+                        {[
+                          "lead.created (Inbound profile updates)",
+                          "job.completed (Trigger invoices)",
+                          "message.received (Twilio sync lines)",
+                          "invoice.updated (Quickbooks ledger)"
+                        ].map((evt) => (
+                          <label key={evt} className="flex items-center gap-1.5 text-slate-600 font-sans">
+                            <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#315C9F]" />
+                            <span>{evt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Webhook log list */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border border-[#A9CDEE] rounded-xl overflow-hidden">
+                      <thead className="bg-[#C7E3FB] text-slate-700 font-sans font-bold">
+                        <tr>
+                          <th className="p-2.5">Hook Event ID</th>
+                          <th className="p-2.5">Endpoint Type</th>
+                          <th className="p-2.5">Event Name</th>
+                          <th className="p-2.5">Time Triggered</th>
+                          <th className="p-2.5 text-right">Payload Size</th>
+                          <th className="p-2.5 text-center">Status</th>
+                          <th className="p-2.5 text-center">Retries</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white text-slate-600 font-sans">
+                        {webhookLogs.map((wh) => (
+                          <tr key={wh.id} className="border-b border-[#A9CDEE]/30 hover:bg-slate-50">
+                            <td className="p-2.5 font-mono font-bold text-[#315C9F]">{wh.id}</td>
+                            <td className="p-2.5">
+                              <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded ${
+                                wh.type === "Incoming" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-55 text-blue-700 border border-blue-200"
+                              }`}>
+                                {wh.type}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-semibold text-slate-800">{wh.eventType}</td>
+                            <td className="p-2.5 font-mono text-[10.5px]">{wh.timestamp}</td>
+                            <td className="p-2.5 font-mono text-right">{wh.payloadSize}</td>
+                            <td className="p-2.5 text-center">
+                              <span className={`px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase rounded ${
+                                wh.status === "Delivered" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                                wh.status === "Failed" ? "bg-rose-50 text-rose-600 border border-rose-100" :
+                                "bg-amber-50 text-amber-600 border border-amber-100"
+                              }`}>
+                                {wh.status}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-mono text-center font-bold">{wh.retryCount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SYNC LOG & HISTORY */}
+            {advancedView === "logs" && (
+              <div className="pt-2 space-y-4">
+                <div className="bg-white/50 border border-[#A9CDEE] p-4 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">
+                        Activity Log
+                      </h3>
+                      <p className="text-xs text-slate-500 font-sans mt-0.5">
+                        A record of every sync attempt, successful or not.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSyncLogs([]);
+                        triggerNotification("🧹 Cleared operations sync ledger.");
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-slate-500 border border-slate-300 hover:bg-slate-100 rounded-lg cursor-pointer"
+                    >
+                      Clear Log
+                    </button>
+                  </div>
+
+                  {/* Sync Logs Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border border-[#A9CDEE] rounded-xl overflow-hidden">
+                      <thead className="bg-[#C7E3FB] text-slate-700 font-sans font-bold">
+                        <tr>
+                          <th className="p-2.5">Date</th>
+                          <th className="p-2.5">Time</th>
+                          <th className="p-2.5">Integration ID</th>
+                          <th className="p-2.5">Integration Service</th>
+                          <th className="p-2.5 text-center">Mutated Records</th>
+                          <th className="p-2.5 text-center">Errors</th>
+                          <th className="p-2.5">Sync Status Message</th>
+                          <th className="p-2.5 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white text-slate-600 font-sans">
+                        {syncLogs.map((log) => (
+                          <tr key={log.id} className="border-b border-[#A9CDEE]/30 hover:bg-slate-50">
+                            <td className="p-2.5 font-mono text-[10.5px] text-slate-500">{log.date}</td>
+                            <td className="p-2.5 font-mono text-[10.5px] text-slate-500">{log.time}</td>
+                            <td className="p-2.5 font-mono text-[10.5px] font-bold text-slate-800">{log.integrationId}</td>
+                            <td className="p-2.5 font-semibold text-slate-800">{log.integrationName}</td>
+                            <td className="p-2.5 text-center font-mono font-bold text-slate-700">{log.recordsUpdated}</td>
+                            <td className="p-2.5 text-center font-mono font-bold text-rose-600">{log.errors}</td>
+                            <td className="p-2.5 font-medium leading-relaxed">{log.message}</td>
+                            <td className="p-2.5 text-center">
+                              <button
+                                onClick={() => {
+                                  handleSyncNow(log.integrationId);
+                                }}
+                                className="px-2 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] rounded-lg text-[9px] font-extrabold uppercase"
+                              >
+                                Retry Sync
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* DETAIL POPUP & CONFIGURATION MODAL */}
       {isDetailPopupOpen && selectedIntegration && (
