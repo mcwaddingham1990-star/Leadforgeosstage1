@@ -50,8 +50,17 @@ export const INITIAL_ESTIMATES: Estimate[] = [];
 
 export const EstimatesPage: React.FC = () => {
   const { approveEstimateToJob, upsertPotentialCustomer } = useDomainActions();
-  const { loggedInUser } = useAuth();
-  const canCollectSignatures = hasPermission(loggedInUser?.granularPermissions, "collect_signatures", "edit");
+  const { loggedInUser, simulatedRole } = useAuth();
+  // The real owner account's stored granularPermissions can predate a
+  // permission added after their profile was first created (this one only
+  // exists as of this feature) -- Manage Roles shows it as fully granted
+  // because it computes that display fresh, but the owner's own persisted
+  // profile was never rewritten to include it. Same bypass App.tsx's
+  // sidebar nav uses for the real owner: never gate them on a stale
+  // snapshot; only simulated-role previews and real employees go through
+  // the actual granular check.
+  const isRealOwnerAccount = !simulatedRole && !loggedInUser?.isEmployee;
+  const canCollectSignatures = isRealOwnerAccount || hasPermission(loggedInUser?.granularPermissions, "collect_signatures", "edit");
   const { estimates: propsEstimates, setEstimates, schedulingEvents, recentRoster, employees, customers, setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimatePrefill, setEstimatePrefill } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {

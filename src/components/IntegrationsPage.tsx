@@ -1524,39 +1524,51 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
               )}
 
               {/* MODAL BOTTOM BUTTONS */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE] text-xs">
-                <button
-                  type="button"
-                  disabled
-                  title="A real Stripe connection isn't wired up yet"
-                  className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-xl font-bold font-sans cursor-not-allowed"
-                >
-                  Connect Integration
-                </button>
-
-                <div className="flex items-center gap-2">
+              {selectedIntegration.id === "website_lead_form" ? (
+                <div className="flex items-center justify-end pt-2 border-t border-[#A9CDEE] text-xs">
                   <button
                     type="button"
-                    onClick={() => {
-                      handleSyncNow(selectedIntegration.id);
-                    }}
-                    disabled={!selectedIntegration.connected}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold font-sans cursor-pointer ${
-                      selectedIntegration.connected
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                        : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
-                    }`}
-                  >
-                    Sync Now
-                  </button>
-                  <button
-                    type="submit"
+                    onClick={() => setIsDetailPopupOpen(false)}
                     className="px-4 py-1.5 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-xs font-bold font-sans cursor-pointer shadow-sm"
                   >
-                    Save Changes
+                    Done
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE] text-xs">
+                  <button
+                    type="button"
+                    disabled
+                    title="A real Stripe connection isn't wired up yet"
+                    className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-xl font-bold font-sans cursor-not-allowed"
+                  >
+                    Connect Integration
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSyncNow(selectedIntegration.id);
+                      }}
+                      disabled={!selectedIntegration.connected}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold font-sans cursor-pointer ${
+                        selectedIntegration.connected
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                          : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                      }`}
+                    >
+                      Sync Now
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-xs font-bold font-sans cursor-pointer shadow-sm"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              )}
             </form>
           </div>
         </div>
