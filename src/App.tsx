@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
-import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
-import { postTransactionEntry } from "./lib/accountingEngine";
+import { postTransactionEntry, invoiceTotal } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
@@ -1926,6 +1926,75 @@ export default function App() {
   const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
   const [balanceView, setBalanceView] = useState("Total");
+  const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
+  const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
+    "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
+  >("balance");
+  const fmtMoney = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Same real double-entry numbers Accounting & Bookkeeping shows, reused
+  // here so "View Financial Reports" doesn't have to navigate away --
+  // each category's items come straight from the journal entries and open
+  // invoices/bills those real actions already posted, nothing fabricated.
+  const financialSnapshotData = useMemo(() => {
+    const cashBalances: Record<string, number> = {};
+    for (const acct of accounts) cashBalances[acct.id] = computeAccountBalance(acct, journalEntries);
+
+    const cashLine = (entry: JournalEntry) => entry.lines.find(l => l.accountId === "acct_cash");
+    const byDateDesc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const byDateAsc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    const balanceItems = byDateDesc(
+      journalEntries
+        .filter(entry => cashLine(entry))
+        .map(entry => {
+          const line = cashLine(entry)!;
+          return { id: entry.id, date: entry.date, memo: entry.memo, amount: line.debit - line.credit };
+        })
+    );
+
+    const paymentsCollectedItems = byDateDesc(
+      journalEntries
+        .filter(entry => entry.source === "invoice_payment" || entry.source === "income")
+        .map(entry => ({ id: entry.id, date: entry.date, memo: entry.memo, amount: cashLine(entry)?.debit || 0 }))
+    );
+
+    const expensesPaidItems = byDateDesc(
+      journalEntries
+        .filter(entry => entry.source === "bill_payment" || entry.source === "expense" || entry.source === "payroll")
+        .map(entry => ({ id: entry.id, date: entry.date, memo: entry.memo, amount: cashLine(entry)?.credit || 0 }))
+    );
+
+    const unpaidInvoiceItems = byDateAsc(
+      invoices
+        .filter(inv => inv.status !== "paid" && inv.status !== "void")
+        .map(inv => ({
+          id: inv.id,
+          date: inv.dueDate,
+          memo: `Invoice ${inv.invoiceNumber} - ${inv.customer}`,
+          amount: Math.max(0, invoiceTotal(inv) - inv.amountPaid)
+        }))
+    );
+
+    const outstandingExpenseItems = byDateAsc(
+      bills
+        .filter(bill => bill.status !== "paid" && bill.status !== "void")
+        .map(bill => ({
+          id: bill.id,
+          date: bill.dueDate,
+          memo: bill.billNumber ? `Bill ${bill.billNumber} - ${bill.vendor}` : bill.vendor,
+          amount: Math.max(0, bill.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - bill.amountPaid)
+        }))
+    );
+
+    return {
+      balance: { label: "Current Balance", total: cashBalances["acct_cash"] || 0, items: balanceItems },
+      unpaid_invoices: { label: "Unpaid Invoices", total: cashBalances["acct_ar"] || 0, items: unpaidInvoiceItems },
+      outstanding_expenses: { label: "Outstanding Expenses", total: cashBalances["acct_ap"] || 0, items: outstandingExpenseItems },
+      payments_collected: { label: "Payments Collected", total: paymentsCollectedItems.reduce((s, i) => s + i.amount, 0), items: paymentsCollectedItems },
+      expenses_paid: { label: "Expenses Paid", total: expensesPaidItems.reduce((s, i) => s + i.amount, 0), items: expensesPaidItems }
+    };
+  }, [accounts, journalEntries, invoices, bills]);
   const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(() => {
     const saved = sessionStorage.getItem("ownerslocal_pending_financial_scan");
     return saved === "income" || saved === "expense" ? saved : null;
@@ -7575,11 +7644,7 @@ Access to full financial telemetry is restricted.`;
                           </div>
                           
                           <button
-                            onClick={() => {
-                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                              if (accounting) setActiveScreen(accounting);
-                              triggerNotification("Open Reports for current financial statements.");
-                            }}
+                            onClick={() => setIsFinancialSnapshotOpen(true)}
                             className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
                           >
                             View Financial Reports
@@ -7634,6 +7699,83 @@ Access to full financial telemetry is restricted.`;
                           </button>
                         </div>
                       </div>
+
+                      {/* FINANCIAL REPORTS FLOATING PANE */}
+                      {isFinancialSnapshotOpen && (
+                        <div
+                          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs"
+                          onClick={() => setIsFinancialSnapshotOpen(false)}
+                        >
+                          <div
+                            className="bg-[#EAF5FF] max-w-lg w-full rounded-3xl p-6 border border-[#9EC8EF] shadow-2xl flex flex-col gap-4 text-left max-h-[85vh]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3">
+                              <div>
+                                <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
+                                  Financial Reports
+                                </h3>
+                                <p className="text-[11px] text-[#5E7393] font-sans font-semibold">
+                                  Live numbers from Accounting &amp; Bookkeeping
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setIsFinancialSnapshotOpen(false)}
+                                className="text-sm text-[#5E7393] hover:text-[#1F3557] font-bold p-1 hover:bg-white/40 rounded-xl transition-colors cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <select
+                              value={financialSnapshotCategory}
+                              onChange={(e) => setFinancialSnapshotCategory(e.target.value as typeof financialSnapshotCategory)}
+                              className="w-full bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-xs font-bold text-[#1F3557] focus:outline-none"
+                            >
+                              <option value="balance">Current Balance</option>
+                              <option value="unpaid_invoices">Unpaid Invoices</option>
+                              <option value="outstanding_expenses">Outstanding Expenses</option>
+                              <option value="payments_collected">Payments Collected</option>
+                              <option value="expenses_paid">Expenses Paid</option>
+                            </select>
+
+                            {(() => {
+                              const category = financialSnapshotData[financialSnapshotCategory];
+                              return (
+                                <>
+                                  <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] flex items-center justify-between shrink-0">
+                                    <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{category.label}</span>
+                                    <span className="text-xl font-black text-[#1F3557]">{fmtMoney(category.total)}</span>
+                                  </div>
+
+                                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px]">
+                                    {category.items.length === 0 ? (
+                                      <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">
+                                        Nothing here yet.
+                                      </div>
+                                    ) : (
+                                      category.items.map((item) => (
+                                        <div
+                                          key={item.id}
+                                          className="flex items-center justify-between gap-3 p-2.5 bg-white border border-[#9EC8EF]/50 rounded-xl text-xs"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                            <p className="text-[10px] text-[#5E7393] font-mono">{item.date}</p>
+                                          </div>
+                                          <span className={`font-mono font-bold shrink-0 ${item.amount < 0 ? "text-rose-600" : "text-[#1F3557]"}`}>
+                                            {fmtMoney(Math.abs(item.amount))}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
 
                       </>
                       )}
