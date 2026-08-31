@@ -236,6 +236,7 @@ export const LeadsPage: React.FC = () => {
       setLocalLeads(prev => [newLead, ...prev]);
     }
     setIsAddModalOpen(false);
+    if (logOperationalEvent) logOperationalEvent("Lead Added", `New lead '${newLead.name}' added`, "🎯", { screen: "leads" });
     if (action === "pdf") void generateLeadPdf(newLead);
     if (action === "estimate") openEstimateFromLead(newLead);
   };

@@ -36,7 +36,7 @@ export function useDomainActions() {
 
     setCustomers(prev => [newCustomer, ...prev]);
     setLeads(prev => prev.map(l => (l.id === leadId ? { ...l, status: "Won" } : l)));
-    logOperationalEvent("Lead Converted", `${lead.name} converted to Customer`, "🤝");
+    logOperationalEvent("Lead Converted", `${lead.name} converted to Customer`, "🤝", { screen: "customers", customerId: newCustomer.id });
   };
 
   const createEstimateFromLead = (leadId: string) => {
@@ -145,7 +145,7 @@ export function useDomainActions() {
               : c
           )
         );
-        logOperationalEvent("Customer Activated", `${estimate.customerName} moved from Potential → Active`, "🤝");
+        logOperationalEvent("Customer Activated", `${estimate.customerName} moved from Potential → Active`, "🤝", { screen: "customers", customerId: existingCustomer.id });
       }
     } else {
       // No CRM record at all — create an Active customer from estimate data.
@@ -165,10 +165,10 @@ export function useDomainActions() {
         recentlyAdded: true
       };
       setCustomers(prev => [newCustomer, ...prev]);
-      logOperationalEvent("Customer Created", `${estimate.customerName} added as Active customer from accepted estimate`, "🤝");
+      logOperationalEvent("Customer Created", `${estimate.customerName} added as Active customer from accepted estimate`, "🤝", { screen: "customers", customerId: newCustomer.id });
     }
 
-    logOperationalEvent("Estimate Accepted", `${estimate.number} confirmed and converted to ${newJob.status} Job`, "✅");
+    logOperationalEvent("Estimate Accepted", `${estimate.number} confirmed and converted to ${newJob.status} Job`, "✅", { screen: "jobs" });
     return newJob;
   };
 
@@ -203,7 +203,7 @@ export function useDomainActions() {
     };
 
     setCustomers(prev => [newCustomer, ...prev]);
-    logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮");
+    logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮", { screen: "customers", customerId: newCustomer.id });
   };
 
   return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob, upsertPotentialCustomer };

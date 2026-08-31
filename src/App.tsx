@@ -2390,14 +2390,16 @@ export default function App() {
     triggerNotification("Snapshot deleted from folder index");
   };
 
-  function logOperationalEvent(type: string, desc: string, icon: string = "🤖") {
+  function logOperationalEvent(type: string, desc: string, icon: string = "🤖", target?: { screen?: string; customerId?: string }) {
     triggerNotification(`${icon} ${type}: ${desc}`);
     const recipientEmail = loggedInUser?.email;
     if (recipientEmail) {
       const normalizedType = type.toLowerCase();
+      // Doubles as the screen this notification opens when clicked (see
+      // NotificationsPage), so every value here must be a real OS_SCREENS id.
       const category = normalizedType.includes("estimate") ? "estimates"
         : normalizedType.includes("job") ? "jobs"
-        : normalizedType.includes("customer") ? "customer"
+        : normalizedType.includes("customer") ? "customers"
         : normalizedType.includes("lead") ? "leads"
         : normalizedType.includes("inventory") ? "inventory"
         : normalizedType.includes("invoice") || normalizedType.includes("payment") || normalizedType.includes("financial") ? "revenue"
@@ -2411,6 +2413,7 @@ export default function App() {
         category,
         title: type,
         description: desc,
+        icon,
         time: now.toISOString().slice(0, 16).replace("T", " "),
         isRead: false,
         isArchived: false,
@@ -2419,7 +2422,9 @@ export default function App() {
         assignedUser: loggedInUser?.name || loggedInUser?.role || "Owner",
         recipientEmail,
         createdBy: loggedInUser?.name || recipientEmail,
-        history: [`${now.toISOString()}: ${type} completed.`]
+        history: [`${now.toISOString()}: ${type} completed.`],
+        screenId: target?.screen || (category === "system" ? undefined : category),
+        relatedCustomerId: target?.customerId
       }, ...prev]);
     }
     const newAct = {
@@ -7966,11 +7971,7 @@ Access to full financial telemetry is restricted.`;
                     </div>
 
                   ) : activeScreen.id === "notifications" ? (
-                    
-                    <NotificationsPage
-                      dashboardLeads={dashboardLeads}
-                      setDashboardLeads={setDashboardLeads}
-                    />
+                    <NotificationsPage />
 
                   ) : activeScreen.id === "missed_call_textback" ? (
 

@@ -507,7 +507,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setIsAddModalOpen(false);
 
     if (logOperationalEvent) {
-      logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤");
+      logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤", { screen: "customers", customerId: newCust.id });
     }
     if (openPdf) void generateCustomerPdf(newCust);
   };
@@ -534,7 +534,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setSelectedCustomer(null);
 
     if (logOperationalEvent) {
-      logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝");
+      logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝", { screen: "customers", customerId: updated.id });
     }
     if (openPdf) void generateCustomerPdf(updated);
   };

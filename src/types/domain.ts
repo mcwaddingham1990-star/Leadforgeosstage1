@@ -261,8 +261,10 @@ export interface AppNotification {
   description: string;
   time: string;
   isRead: boolean;
+  icon?: string;
   screenId?: string;
   relatedLogId?: string;
+  relatedCustomerId?: string;
   actionable?: boolean;
   actionedAt?: string;
   createdAt: string;
