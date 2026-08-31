@@ -1126,7 +1126,7 @@ export const EstimatesPage: React.FC = () => {
                 onClick={() => handleAddEstimate("pdf")}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
               >
-                Generate PDF
+                Save &amp; Generate PDF
               </button>
               {canCollectSignatures && (
                 <button
@@ -1275,6 +1275,7 @@ export const EstimatesPage: React.FC = () => {
                     <textarea
                       value={formNotes}
                       onChange={e => setFormNotes(e.target.value)}
+                      placeholder="Enter detailed description of proposed services, pricing terms, materials, exclusions..."
                       rows={3}
                       className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557] resize-none"
                     />
@@ -1426,7 +1427,7 @@ export const EstimatesPage: React.FC = () => {
                     Save Changes
                   </button>
                 )}
-                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf")} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Generate PDF</button>}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf")} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Save &amp; Generate PDF</button>}
                 {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
                 {isEditMode && canCollectSignatures && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("signatures")} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Collect Signatures</button>}
                 {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true)} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}

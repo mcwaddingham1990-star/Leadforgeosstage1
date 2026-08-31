@@ -41,7 +41,7 @@ export function useDomainActions() {
 
   const createEstimateFromLead = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
+    if (!lead) return null;
 
     const newEstimate: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
@@ -51,6 +51,11 @@ export function useDomainActions() {
       salesRep: lead.salesRep || "Unassigned",
       amount: lead.estimatedValue || 0,
       status: "Draft",
+      // Carry over what was already captured on the lead so the estimate
+      // doesn't start blank -- the sales rep already wrote this down once.
+      notes: lead.notes || "",
+      phone: lead.phone || undefined,
+      address: lead.address || undefined,
       createdDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     };
@@ -58,6 +63,7 @@ export function useDomainActions() {
     setEstimates(prev => [newEstimate, ...prev]);
     setLeads(prev => prev.map(l => (l.id === leadId ? { ...l, status: "Estimate Sent" } : l)));
     logOperationalEvent("Estimate Created", `Estimate ${newEstimate.number} generated from lead ${lead.name}`, "🧾");
+    return newEstimate;
   };
 
   const approveEstimateToJob = (estimateId: string, schedule?: {
