@@ -844,12 +844,10 @@ const OS_SCREENS = [
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
-// The real expense categories shown on the Revenue page's "Expenses by
-// Category" table -- one source of truth shared with getRevenueChartData
-// below so the table's totals and the graph's per-category lines always
-// agree. "Bills" comes from the bills collection; "Material Expenses" is a
-// bucket of several transaction categories; every other entry matches a
-// transaction's `category` field exactly.
+// The real expense categories shown in the Revenue page's statement table
+// ("Expenses by Category" view). "Bills" comes from the bills collection;
+// "Material Expenses" is a bucket of several transaction categories; every
+// other entry matches a transaction's `category` field exactly.
 const EXPENSE_CATEGORY_NAMES = [
   "Bills", "Material Expenses", "Fuel", "Vehicle Maintenance", "Equipment", "Tools",
   "Insurance", "Taxes", "Marketing", "Software & Subs", "Utilities", "Office Supplies", "Custom Expense"
@@ -870,7 +868,7 @@ function getRevenueChartData(
   transactions: Transaction[] = [],
   bills: Bill[] = []
 ): {
-  series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number; categories: Record<string, number> }>;
+  series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number }>;
   currentTotal: number;
   priorTotal: number;
   currentExpenseTotal: number;
@@ -889,17 +887,6 @@ function getRevenueChartData(
   }));
   const allExpenseCosts = [...expenseTx, ...billCosts];
 
-  // Same per-category item lists the Revenue page's category table/CSV
-  // export reads from, reused here so every category's graph line matches
-  // that table exactly.
-  const categoryItemsMap: Record<string, Array<{ amount: number; date: string }>> = {};
-  for (const name of EXPENSE_CATEGORY_NAMES) {
-    categoryItemsMap[name] = name === "Bills"
-      ? billCosts
-      : name === "Material Expenses"
-        ? materialTx
-        : expenseTx.filter((t) => t.category === name);
-  }
   // Real revenue = job-completion events (revenueEvents) + manually-logged
   // or scanned income transactions (e.g. a photographed check) — both are
   // real money in, and logging one should actually move these totals.
@@ -921,9 +908,7 @@ function getRevenueChartData(
     const Payroll = sumInRange(payrollTx, start, end);
     const OtherExpenses = sumInRange(otherExpenseTx, start, end);
     const TotalExpenses = Bills + MaterialExpenses + Payroll + OtherExpenses;
-    const categories: Record<string, number> = {};
-    for (const name of EXPENSE_CATEGORY_NAMES) categories[name] = sumInRange(categoryItemsMap[name], start, end);
-    return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses, categories };
+    return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses };
   };
 
   const buildDays = (count: number, labelFn: (d: Date) => string) => {
@@ -962,15 +947,11 @@ function getRevenueChartData(
   // expense instead of making the graph look as though earlier income vanished.
   const cumulative = (rows: ReturnType<typeof buildRow>[]) => {
     let revenue = 0, billsTotal = 0, materialTotal = 0, payrollTotal = 0, otherTotal = 0;
-    const categoryTotals: Record<string, number> = {};
-    for (const name of EXPENSE_CATEGORY_NAMES) categoryTotals[name] = 0;
     return rows.map((row) => {
       revenue += row.Revenue;
       billsTotal += row.Bills; materialTotal += row.MaterialExpenses; payrollTotal += row.Payroll; otherTotal += row.OtherExpenses;
       const expenses = billsTotal + materialTotal + payrollTotal + otherTotal;
-      const categories: Record<string, number> = {};
-      for (const name of EXPENSE_CATEGORY_NAMES) { categoryTotals[name] += row.categories[name]; categories[name] = categoryTotals[name]; }
-      return { ...row, Revenue: revenue, Bills: billsTotal, MaterialExpenses: materialTotal, Payroll: payrollTotal, OtherExpenses: otherTotal, Expenses: expenses, TotalExpenses: expenses, Profit: revenue - expenses, categories };
+      return { ...row, Revenue: revenue, Bills: billsTotal, MaterialExpenses: materialTotal, Payroll: payrollTotal, OtherExpenses: otherTotal, Expenses: expenses, TotalExpenses: expenses, Profit: revenue - expenses };
     });
   };
 
@@ -1487,7 +1468,6 @@ export default function App() {
   const refSecurityLogged = React.useRef<Record<string, boolean>>({});
   const isTimeClockLoadedRef = React.useRef(false);
   const [revenueConfirmAction, setRevenueConfirmAction] = useState<{ label: string; icon: string } | null>(null);
-  const [isFinancialInsightsOpen, setIsFinancialInsightsOpen] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -1942,22 +1922,17 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  // Multiselect: all three shown at once by default so the graph opens with
-  // the full picture instead of one line at a time.
+  // Multiselect: none, some, or all three can show on the graph at once.
   const [graphDataTypes, setGraphDataTypes] = useState<Array<"revenue" | "expenses" | "profit">>(["revenue", "expenses", "profit"]);
-  const [expenseGraphMode, setExpenseGraphMode] = useState<"individual" | "combined">("individual");
-  const [selectedExpenseSeries, setSelectedExpenseSeries] = useState<Array<"Bills" | "MaterialExpenses" | "Payroll" | "OtherExpenses">>(["Bills", "MaterialExpenses", "Payroll", "OtherExpenses"]);
-  // Drives both the "Expenses by Category" table (which categories' line
-  // items are listed) and, for anything other than the "__all__" sentinel,
-  // an extra line per selected category on the graph above.
-  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string[]>(["__all__"]);
-  const [isExpenseCategoryDropdownOpen, setIsExpenseCategoryDropdownOpen] = useState(false);
-  const expenseCategoryDropdownRef = useRef<HTMLDivElement>(null);
-  const [openSummaryCard, setOpenSummaryCard] = useState<null | "revenue" | "profit" | "expenses" | "payroll" | "taxes">(null);
+  // Drives the statement table below the graph -- which view(s) of
+  // payments/expenses are listed. Multiple views can be shown at once.
+  const [statementViewFilter, setStatementViewFilter] = useState<string[]>(["all_payments", "all_expenses"]);
+  const [isStatementDropdownOpen, setIsStatementDropdownOpen] = useState(false);
+  const statementDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (expenseCategoryDropdownRef.current && !expenseCategoryDropdownRef.current.contains(e.target as Node)) {
-        setIsExpenseCategoryDropdownOpen(false);
+      if (statementDropdownRef.current && !statementDropdownRef.current.contains(e.target as Node)) {
+        setIsStatementDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -7020,84 +6995,17 @@ Access to full financial telemetry is restricted.`;
                         <PlaidConnectButton />
                       </div>
 
-                      {/* CHOOSE GRAPH DATA BLOCK */}
-                      <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
-                        <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
-                        <p className="text-[9.5px] text-[#5E7393] font-sans font-semibold -mt-1.5">Select any combination to view them together on the graph.</p>
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "revenue",  label: "Total Revenue" },
-                            { value: "expenses", label: "Total Expenses" },
-                            { value: "profit",   label: "Net Revenue" },
-                          ] as const).map(({ value, label }) => {
-                            const selected = graphDataTypes.includes(value);
-                            return (
-                              <button
-                                key={value}
-                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
-                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                  selected
-                                    ? "bg-[#4A86F7] text-white shadow-sm"
-                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                                }`}
-                              >
-                                {selected ? "✓ " : ""}{label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {graphDataTypes.includes("expenses") && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
-                            <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {([ ["Bills", "Bills — service/provider obligations"], ["MaterialExpenses", "Material / Operational Expenses"], ["Payroll", "Payroll"], ["OtherExpenses", "Other Expenses"] ] as const).map(([key, label]) => {
-                              const selected = selectedExpenseSeries.includes(key);
-                              return <button key={key} onClick={() => setSelectedExpenseSeries(current => selected ? current.filter(item => item !== key) : [...current, key])} className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${selected ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-400"}`}>{selected ? "✓ " : ""}{label}</button>;
-                            })}
-                          </div>
-                          <p className="text-[9px] text-[#5E7393]">Materials, equipment, fuel, tools, inventory purchases, and supplies stay under Material / Operational Expenses—not Bills.</p>
-                        </div>}
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "Day",        label: "Day" },
-                            { value: "Week",       label: "Week" },
-                            { value: "Pay Period", label: "Pay Period" },
-                            { value: "Quarter",    label: "Quarter" },
-                            { value: "Annual",     label: "Annual" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setRevenuePageFilter(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                revenuePageFilter === value
-                                  ? "bg-[#1F3557] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
                       {/* QUICK ACTIONS - SMALL BUTTON ROW ABOVE THE GRAPH */}
                       <div className="flex flex-wrap gap-2">
                         {[
                           { label: "Record Expense", action: "expense", icon: DollarSign },
                           { label: "Run Payroll", action: "payroll", icon: Users },
                           { label: "Create Invoice", action: "invoice", icon: FileText },
-                          { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark },
                           { label: "View Financial Reports", action: "financial_reports", icon: Landmark }
                         ].map((btn, idx) => (
                           <button
                             key={idx}
                             onClick={() => {
-                              if (btn.action === "reconcile_soon") {
-                                triggerNotification("Reconcile Bank is coming soon.");
-                                return;
-                              }
                               if (btn.action === "expense") {
                                 sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
                                 setLogTransactionType("expense");
@@ -7113,7 +7021,7 @@ Access to full financial telemetry is restricted.`;
                               }
                               const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
                               if (accounting) setActiveScreen(accounting);
-                              triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
+                              triggerNotification("Open Invoices to create a customer invoice.");
                             }}
                             className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
                           >
@@ -7121,7 +7029,6 @@ Access to full financial telemetry is restricted.`;
                             <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide whitespace-nowrap">
                               {btn.label}
                             </span>
-                            {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[7.5px] font-black uppercase text-amber-700">Soon</span>}
                           </button>
                         ))}
                       </div>
@@ -7254,13 +7161,34 @@ Access to full financial telemetry is restricted.`;
                           />
                         )}
 
+                        {/* Graph series toggles — pick none, some, or all three */}
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            { value: "expenses", label: "Total Expenses" },
+                            { value: "revenue",  label: "Payments Collected" },
+                            { value: "profit",   label: "Net Revenue" },
+                          ] as const).map(({ value, label }) => {
+                            const selected = graphDataTypes.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
+                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                  selected
+                                    ? "bg-[#4A86F7] text-white shadow-sm"
+                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                                }`}
+                              >
+                                {selected ? "✓ " : ""}{label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
                         {/* Recharts Live Multi-line Graph — horizontally scrollable */}
                         {(() => {
-                          const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
-                          const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
+                          const chartSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
                           const chartWidth = Math.max(340, chartSeries.length * 78);
-                          const categoryLineColors = ["#0EA5E9", "#D946EF", "#F97316", "#14B8A6", "#EAB308", "#6366F1", "#EC4899", "#84CC16", "#06B6D4", "#A855F7", "#F43F5E", "#22C55E", "#F59E0B"];
-                          const activeCategoryLines = expenseCategoryFilter.filter(name => name !== "__all__");
                           return (
                             <div className="pt-2">
                               {chartSeries.length > 5 && (
@@ -7325,25 +7253,9 @@ Access to full financial telemetry is restricted.`;
                                     className="font-sans font-bold text-[11px]"
                                     wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                                   />
-                                  {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
+                                  {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Payments Collected" />}
                                   {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Net Revenue" />}
-                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
-                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
-                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
-                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
-                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
-                                  {activeCategoryLines.map((name) => (
-                                    <Line
-                                      key={name}
-                                      type="monotone"
-                                      dataKey={(row: any) => row.categories?.[name] ?? 0}
-                                      stroke={categoryLineColors[EXPENSE_CATEGORY_NAMES.indexOf(name as any) % categoryLineColors.length]}
-                                      strokeWidth={2.5}
-                                      strokeDasharray="4 2"
-                                      dot={{ r: 3 }}
-                                      name={name}
-                                    />
-                                  ))}
+                                  {graphDataTypes.includes("expenses") && <Line type="monotone" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Total Expenses" />}
                                 </LineChart>
                               </div>
                             </div>
@@ -7351,204 +7263,17 @@ Access to full financial telemetry is restricted.`;
                         })()}
                       </div>
 
-                      {/* SUMMARY CARDS - FIVE COMPACT TILES IN ONE ROW */}
-                      <div className="grid grid-cols-5 gap-2">
-                        {(() => {
-                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
-                          // Accounting's dashboard is all-time. Keep these headline cards
-                          // on that same basis; the chart and comparison cards below remain
-                          // controlled by revenuePageFilter.
-                          const transactionExpenseTotal = transactions
-                            .filter(transaction => transaction.type === "expense")
-                            .reduce((sum, transaction) => sum + transaction.amount, 0);
-                          const allTimeBillTotal = bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0);
-                          const allTimeExpenseTotal = transactionExpenseTotal + allTimeBillTotal;
-                          const netProfit = completedJobsRevenue - allTimeExpenseTotal;
-                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                          return [
-                          {
-                            label: "Total Revenue",
-                            key: "revenue",
-                            val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                            change: null,
-                            isUp: true,
-                            comp: "All-time recognized revenue",
-                            icon: DollarSign,
-                            color: "text-emerald-500",
-                            bgColor: "bg-emerald-500/10"
-                          },
-                          {
-                            label: "Net Profit",
-                            key: "profit",
-                            val: fmt(netProfit),
-                            change: null,
-                            isUp: netProfit >= 0,
-                            comp: "All-time revenue minus logged expenses",
-                            icon: TrendingUp,
-                            color: "text-blue-500",
-                            bgColor: "bg-blue-500/10"
-                          },
-                          {
-                            label: "Total Expenses",
-                            key: "expenses",
-                            val: fmt(allTimeExpenseTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "All-time logged expenses",
-                            icon: TrendingDown,
-                            color: "text-rose-500",
-                            bgColor: "bg-rose-500/10"
-                          },
-                          {
-                            label: "Gross Payroll",
-                            key: "payroll",
-                            val: fmt(currentPayrollTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "Real payroll runs, this period",
-                            icon: Users,
-                            color: "text-purple-500",
-                            bgColor: "bg-purple-500/10"
-                          },
-                          {
-                            label: "Accrued Taxes",
-                            key: "taxes",
-                            val: "$0.00",
-                            change: null,
-                            isUp: false,
-                            comp: "Tax tracking not built yet",
-                            icon: Landmark,
-                            color: "text-amber-500",
-                            bgColor: "bg-amber-500/10"
-                          }
-                          ];
-                        })().map((card, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setOpenSummaryCard(card.key as typeof openSummaryCard)}
-                            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-xl p-2.5 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm flex flex-col gap-1 text-left cursor-pointer transition-all min-w-0"
-                          >
-                            <div className="flex justify-between items-center gap-1">
-                              <span className="text-[8px] font-bold text-[#5E7393] uppercase tracking-wide truncate">{card.label}</span>
-                              <div className={`p-1 rounded-md shrink-0 ${card.bgColor} ${card.color}`}>
-                                <card.icon className="w-2.5 h-2.5" />
-                              </div>
-                            </div>
-                            <p className="text-sm font-sans font-black text-[#1F3557] tracking-tight truncate">{card.val}</p>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* SUMMARY CARD BREAKDOWN POPUP */}
-                      {openSummaryCard && (() => {
-                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                        const byDateDesc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-                        const expenseTxAll = transactions.filter(t => t.type === "expense");
-                        const billItems = bills.filter(b => b.status !== "void").map(b => ({
-                          id: b.id,
-                          date: b.issuedDate,
-                          memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
-                          amount: b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)
-                        }));
-
-                        let title = "";
-                        let total = 0;
-                        let items: Array<{ id: string; date: string; memo: string; amount: number }> = [];
-                        let emptyText = "No data yet.";
-
-                        if (openSummaryCard === "revenue") {
-                          title = "Total Revenue";
-                          total = completedJobsRevenue;
-                          items = byDateDesc([
-                            ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount })),
-                            ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount }))
-                          ]);
-                          emptyText = "No revenue recorded yet.";
-                        } else if (openSummaryCard === "expenses") {
-                          title = "Total Expenses";
-                          items = byDateDesc([
-                            ...expenseTxAll.map(t => ({ id: t.id, date: t.date, memo: `${t.description || "Expense"}${t.category ? ` — ${t.category}` : ""}`, amount: t.amount })),
-                            ...billItems
-                          ]);
-                          total = items.reduce((s, i) => s + i.amount, 0);
-                          emptyText = "No expenses logged yet.";
-                        } else if (openSummaryCard === "profit") {
-                          title = "Net Profit";
-                          const expenseTotal = expenseTxAll.reduce((s, t) => s + t.amount, 0) + billItems.reduce((s, i) => s + i.amount, 0);
-                          total = completedJobsRevenue - expenseTotal;
-                          items = [
-                            { id: "rev", date: "", memo: "Total Revenue", amount: completedJobsRevenue },
-                            { id: "exp", date: "", memo: "Total Expenses", amount: -expenseTotal }
-                          ];
-                          emptyText = "No revenue or expenses recorded yet.";
-                        } else if (openSummaryCard === "payroll") {
-                          title = "Gross Payroll";
-                          items = byDateDesc(
-                            transactions
-                              .filter(t => t.type === "expense" && t.category === "Payroll")
-                              .map(t => ({ id: t.id, date: t.date, memo: t.description || "Payroll run", amount: t.amount }))
-                          );
-                          total = items.reduce((s, i) => s + i.amount, 0);
-                          emptyText = "No payroll runs recorded yet.";
-                        } else {
-                          title = "Accrued Taxes";
-                          emptyText = "Tax tracking not built yet.";
-                        }
-
-                        return (
-                          <div
-                            className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs"
-                            onClick={() => setOpenSummaryCard(null)}
-                          >
-                            <div
-                              className="bg-[#EAF5FF] max-w-lg w-full rounded-3xl p-6 border border-[#9EC8EF] shadow-2xl flex flex-col gap-4 text-left max-h-[85vh]"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3">
-                                <div>
-                                  <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">{title}</h3>
-                                  <p className="text-[11px] text-[#5E7393] font-sans font-semibold">All-time breakdown</p>
-                                </div>
-                                <button
-                                  onClick={() => setOpenSummaryCard(null)}
-                                  className="text-sm text-[#5E7393] hover:text-[#1F3557] font-bold p-1 hover:bg-white/40 rounded-xl transition-colors cursor-pointer"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-
-                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] flex items-center justify-between shrink-0">
-                                <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{title}</span>
-                                <span className="text-xl font-black text-[#1F3557]">{fmt(total)}</span>
-                              </div>
-
-                              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[100px]">
-                                {items.length === 0 ? (
-                                  <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">{emptyText}</div>
-                                ) : (
-                                  items.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 p-2.5 bg-white border border-[#9EC8EF]/50 rounded-xl text-xs">
-                                      <div className="min-w-0">
-                                        <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
-                                        {item.date && <p className="text-[10px] text-[#5E7393] font-mono">{item.date}</p>}
-                                      </div>
-                                      <span className={`font-mono font-bold shrink-0 ${item.amount < 0 ? "text-rose-600" : "text-[#1F3557]"}`}>
-                                        {fmt(Math.abs(item.amount))}
-                                      </span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* EXPENSES BY CATEGORY - TABLE + MULTISELECT DROPDOWN + CSV EXPORT */}
+                      {/* STATEMENT TABLE - PAYMENTS & EXPENSES, MIDDLE-TO-BOTTOM OF THE PAGE */}
                       {(() => {
                         const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-                        const getCategoryItems = (name: string): Array<{ id: string; date: string; memo: string; amount: number }> => {
+                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                        const paymentItems = [
+                          ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount, party: e.customer || "Unknown" })),
+                          ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, party: t.description || "Unknown" }))
+                        ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+                        const getCategoryItems = (name: string) => {
                           if (name === "Bills") {
                             return bills.filter(b => b.status !== "void").map(b => ({
                               id: b.id,
@@ -7566,68 +7291,101 @@ Access to full financial telemetry is restricted.`;
                             .filter(t => t.type === "expense" && t.category === name)
                             .map(t => ({ id: t.id, date: t.date, memo: t.description || name, amount: t.amount }));
                         };
-                        const categoryTotals = EXPENSE_CATEGORY_NAMES.map(name => {
-                          const items = getCategoryItems(name);
-                          return { name, total: items.reduce((s, i) => s + i.amount, 0) };
-                        });
+                        const expenseItems = EXPENSE_CATEGORY_NAMES.flatMap(name =>
+                          getCategoryItems(name).map(item => ({ ...item, category: name as string }))
+                        ).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-                        const showingAll = expenseCategoryFilter.includes("__all__");
-                        const visibleNames = showingAll ? [...EXPENSE_CATEGORY_NAMES] : expenseCategoryFilter;
-                        const tableRows = visibleNames
-                          .flatMap(name => getCategoryItems(name).map(item => ({ ...item, category: name })))
-                          .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-                        const tableTotal = tableRows.reduce((s, r) => s + r.amount, 0);
-                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-                        const toggleCategory = (name: string) => {
-                          setExpenseCategoryFilter(current => {
-                            const withoutAll = current.filter(v => v !== "__all__");
-                            const isSelected = withoutAll.includes(name);
-                            const next = isSelected ? withoutAll.filter(v => v !== name) : [...withoutAll, name];
-                            return next.length === 0 ? ["__all__"] : next;
-                          });
+                        const STATEMENT_VIEWS = [
+                          { value: "all_payments", label: "All Payments" },
+                          { value: "payments_by_date", label: "Payments by Date" },
+                          { value: "payments_by_customer", label: "Payments by Customer" },
+                          { value: "all_expenses", label: "All Expenses" },
+                          { value: "expenses_by_category", label: "Expenses by Category" },
+                        ];
+                        const toggleView = (value: string) => {
+                          setStatementViewFilter(current => current.includes(value) ? current.filter(v => v !== value) : [...current, value]);
                         };
+
+                        const groupBy = (items: any[], keyFn: (item: any) => string): Record<string, any[]> => {
+                          const groups: Record<string, any[]> = {};
+                          for (const item of items) {
+                            const key = keyFn(item);
+                            if (!groups[key]) groups[key] = [];
+                            groups[key].push(item);
+                          }
+                          return groups;
+                        };
+
+                        const sections: Array<{ key: string; title: string; groups: Array<{ label: string; items: any[]; total: number }> }> = [];
+
+                        if (statementViewFilter.includes("all_payments")) {
+                          sections.push({ key: "all_payments", title: "All Payments", groups: [{ label: "", items: paymentItems, total: paymentItems.reduce((s, i) => s + i.amount, 0) }] });
+                        }
+                        if (statementViewFilter.includes("payments_by_date")) {
+                          const byDate = groupBy(paymentItems, i => i.date);
+                          sections.push({
+                            key: "payments_by_date",
+                            title: "Payments by Date",
+                            groups: Object.keys(byDate).sort((a, b) => (a < b ? 1 : -1)).map(date => ({ label: date, items: byDate[date], total: byDate[date].reduce((s, i) => s + i.amount, 0) }))
+                          });
+                        }
+                        if (statementViewFilter.includes("payments_by_customer")) {
+                          const byCustomer = groupBy(paymentItems, i => i.party || "Unknown");
+                          sections.push({
+                            key: "payments_by_customer",
+                            title: "Payments by Customer",
+                            groups: Object.keys(byCustomer).sort().map(party => ({ label: party, items: byCustomer[party], total: byCustomer[party].reduce((s, i) => s + i.amount, 0) }))
+                          });
+                        }
+                        if (statementViewFilter.includes("all_expenses")) {
+                          sections.push({ key: "all_expenses", title: "All Expenses", groups: [{ label: "", items: expenseItems, total: expenseItems.reduce((s, i) => s + i.amount, 0) }] });
+                        }
+                        if (statementViewFilter.includes("expenses_by_category")) {
+                          const byCategory = groupBy(expenseItems, i => i.category);
+                          sections.push({
+                            key: "expenses_by_category",
+                            title: "Expenses by Category",
+                            groups: EXPENSE_CATEGORY_NAMES.filter(name => byCategory[name]?.length).map(name => ({ label: name, items: byCategory[name], total: byCategory[name].reduce((s, i) => s + i.amount, 0) }))
+                          });
+                        }
+
+                        const csvRows = sections.flatMap(section =>
+                          section.groups.flatMap(group =>
+                            group.items.map((item: any) => [section.title, group.label || item.category || "", item.date, item.memo, item.amount.toFixed(2)])
+                          )
+                        );
 
                         return (
                           <div className="space-y-3">
                             <div className="flex justify-between items-center px-1">
-                              <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Category</h3>
-                              <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{tableRows.length} line item{tableRows.length === 1 ? "" : "s"}</span>
+                              <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Statement</h3>
                             </div>
 
                             <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
-                                <div className="relative" ref={expenseCategoryDropdownRef}>
+                                <div className="relative" ref={statementDropdownRef}>
                                   <button
                                     type="button"
-                                    onClick={() => setIsExpenseCategoryDropdownOpen(open => !open)}
-                                    className="flex items-center gap-2 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] cursor-pointer min-w-[180px] justify-between"
+                                    onClick={() => setIsStatementDropdownOpen(open => !open)}
+                                    className="flex items-center gap-2 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] cursor-pointer min-w-[200px] justify-between"
                                   >
                                     <span className="truncate">
-                                      {showingAll ? "All Expenses" : `${expenseCategoryFilter.length} categor${expenseCategoryFilter.length === 1 ? "y" : "ies"} selected`}
+                                      {statementViewFilter.length === 0 ? "Choose a view..." : `${statementViewFilter.length} view${statementViewFilter.length === 1 ? "" : "s"} selected`}
                                     </span>
-                                    <ChevronDown className={`w-3.5 h-3.5 text-[#315C9F] shrink-0 transition-transform ${isExpenseCategoryDropdownOpen ? "rotate-180" : ""}`} />
+                                    <ChevronDown className={`w-3.5 h-3.5 text-[#315C9F] shrink-0 transition-transform ${isStatementDropdownOpen ? "rotate-180" : ""}`} />
                                   </button>
-                                  {isExpenseCategoryDropdownOpen && (
-                                    <div className="absolute z-20 top-full mt-1 left-0 bg-white border border-[#9EC8EF] rounded-xl shadow-lg py-1.5 w-56 max-h-72 overflow-y-auto">
-                                      <button
-                                        type="button"
-                                        onClick={() => setExpenseCategoryFilter(["__all__"])}
-                                        className={`w-full text-left px-3 py-1.5 text-[11px] font-bold flex items-center gap-2 cursor-pointer hover:bg-[#EAF5FF] ${showingAll ? "text-[#315C9F]" : "text-[#1F3557]"}`}
-                                      >
-                                        {showingAll ? "✓" : "○"} All Expenses
-                                      </button>
-                                      <div className="border-t border-[#9EC8EF]/40 my-1" />
-                                      {EXPENSE_CATEGORY_NAMES.map(name => {
-                                        const selected = !showingAll && expenseCategoryFilter.includes(name);
+                                  {isStatementDropdownOpen && (
+                                    <div className="absolute z-20 top-full mt-1 left-0 bg-white border border-[#9EC8EF] rounded-xl shadow-lg py-1.5 w-56">
+                                      {STATEMENT_VIEWS.map(({ value, label }) => {
+                                        const selected = statementViewFilter.includes(value);
                                         return (
                                           <button
-                                            key={name}
+                                            key={value}
                                             type="button"
-                                            onClick={() => toggleCategory(name)}
+                                            onClick={() => toggleView(value)}
                                             className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold flex items-center gap-2 cursor-pointer hover:bg-[#EAF5FF] ${selected ? "text-[#315C9F]" : "text-[#1F3557]"}`}
                                           >
-                                            {selected ? "✓" : "○"} {name}
+                                            {selected ? "✓" : "○"} {label}
                                           </button>
                                         );
                                       })}
@@ -7638,176 +7396,60 @@ Access to full financial telemetry is restricted.`;
                                 <button
                                   type="button"
                                   onClick={() => downloadCsv(
-                                    `Expenses by Category - ${showingAll ? "All Expenses" : visibleNames.join(", ")} - ${new Date().toISOString().slice(0, 10)}.csv`,
-                                    ["Category", "Date", "Description", "Amount"],
-                                    tableRows.map(r => [r.category, r.date, r.memo, r.amount.toFixed(2)])
+                                    `Statement - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                    ["View", "Group", "Date", "Description", "Amount"],
+                                    csvRows
                                   )}
                                   className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
                                 >
                                   <FileText className="w-3.5 h-3.5" /> Save as CSV
                                 </button>
-
-                                <span className="text-[10.5px] text-[#5E7393] font-sans font-medium">
-                                  {showingAll ? "Pick specific categories from the dropdown to add their lines to the graph." : "Selected categories are also plotted on the graph above."}
-                                </span>
                               </div>
 
-                              <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
-                                <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
-                                <span className="text-base font-black text-[#1F3557]">{fmt(tableTotal)}</span>
-                              </div>
-
-                              <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50">
-                                <table className="w-full text-xs">
-                                  <thead className="sticky top-0 bg-[#EAF5FF]">
-                                    <tr className="text-[9.5px] text-[#5E7393] uppercase font-bold">
-                                      <th className="text-left px-3 py-2">Category</th>
-                                      <th className="text-left px-3 py-2">Date</th>
-                                      <th className="text-left px-3 py-2">Description</th>
-                                      <th className="text-right px-3 py-2">Amount</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {tableRows.length === 0 ? (
-                                      <tr><td colSpan={4} className="text-center py-8 text-[#5E7393] font-medium">No expenses in this selection yet.</td></tr>
-                                    ) : (
-                                      tableRows.map((row, idx) => (
-                                        <tr key={`${row.id}_${idx}`} className="border-t border-[#9EC8EF]/20 bg-white/40">
-                                          <td className="px-3 py-2 font-bold text-[#1F3557] whitespace-nowrap">{row.category}</td>
-                                          <td className="px-3 py-2 font-mono text-[#5E7393] whitespace-nowrap">{row.date}</td>
-                                          <td className="px-3 py-2 text-[#1F3557]/85 truncate max-w-[160px]">{row.memo}</td>
-                                          <td className="px-3 py-2 text-right font-mono font-bold text-[#1F3557] whitespace-nowrap">{fmt(row.amount)}</td>
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-
-                              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
-                                {categoryTotals.map(({ name, total }) => (
-                                  <span key={name} className="text-[9.5px] text-[#5E7393] font-sans font-medium">
-                                    {name}: <strong className="text-[#1F3557]">{fmt(total)}</strong>
-                                  </span>
-                                ))}
+                              <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/30">
+                                {sections.length === 0 ? (
+                                  <div className="py-12 text-center text-xs text-[#5E7393] font-sans font-medium">Pick a view from the dropdown to see the statement.</div>
+                                ) : (
+                                  sections.map(section => (
+                                    <div key={section.key} className="bg-white/40">
+                                      <div className="px-3 py-2 bg-[#EAF5FF] text-[10px] font-black text-[#1F3557] uppercase tracking-wide">{section.title}</div>
+                                      {section.groups.map((group, gIdx) => (
+                                        <div key={gIdx}>
+                                          {group.label && (
+                                            <div className="flex items-center justify-between px-3 py-1.5 bg-[#EAF5FF]/50 text-[10px] font-bold text-[#5E7393]">
+                                              <span>{group.label}</span>
+                                              <span className="text-[#1F3557]">{fmt(group.total)}</span>
+                                            </div>
+                                          )}
+                                          {group.items.length === 0 ? (
+                                            <div className="px-3 py-3 text-[11px] text-[#5E7393] font-medium">Nothing here yet.</div>
+                                          ) : (
+                                            group.items.map((item: any, idx: number) => (
+                                              <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs border-t border-[#9EC8EF]/10">
+                                                <div className="min-w-0">
+                                                  <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                                  <p className="text-[10px] text-[#5E7393] font-mono">{item.date}{item.category ? ` — ${item.category}` : ""}</p>
+                                                </div>
+                                                <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                      ))}
+                                      {!section.groups.some(g => g.label) && (
+                                        <div className="flex items-center justify-between px-3 py-2 bg-[#EAF5FF]/50 text-[10px] font-bold">
+                                          <span className="text-[#5E7393] uppercase">Total</span>
+                                          <span className="text-[#1F3557]">{fmt(section.groups.reduce((s, g) => s + g.total, 0))}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
                           </div>
                         );
                       })()}
-
-                      {/* FINANCIAL INSIGHTS SECTION */}
-                      <div className="grid grid-cols-1 gap-6">
-
-                        {/* Compact on-demand AI Financial Insights widget */}
-                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm text-left self-start">
-                          <button
-                            type="button"
-                            onClick={() => setIsFinancialInsightsOpen(open => !open)}
-                            aria-expanded={isFinancialInsightsOpen}
-                            className="w-full flex items-center gap-3 rounded-xl bg-[#EAF5FF] border border-[#9EC8EF] px-4 py-3 text-left hover:bg-[#BDDDF8] transition-colors"
-                          >
-                            <span className="p-2 rounded-lg bg-[#315C9F] text-white shadow-sm">
-                              <Sparkles className="w-4 h-4" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">On-demand analysis</span>
-                              <span className="block text-sm font-sans font-black text-[#1F3557]">AI Financial Insights</span>
-                            </span>
-                            <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform ${isFinancialInsightsOpen ? "rotate-180" : ""}`} />
-                          </button>
-
-                          {isFinancialInsightsOpen && (
-                          <div className="space-y-3 pt-3">
-                            {(() => {
-                              // Real insights only, each gated on having a real prior period to
-                              // compare against — no invoice or tax-liability system exists in the
-                              // app to back "overdue invoices" / "quarterly tax due" style claims,
-                              // so those insight types were removed rather than left fabricated.
-                              const now = new Date();
-                              const periodDays = 14;
-                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
-                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
-                              const priorEnd = curStart;
-                              const sumBetween = (category: string | null, start: Date, end: Date) =>
-                                transactions
-                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
-                                  .reduce((s, t) => s + t.amount, 0);
-                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
-
-                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
-
-                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
-                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
-                              if (curPayroll > 0 && priorPayroll > 0) {
-                                const pct = pctChange(curPayroll, priorPayroll);
-                                insights.push({
-                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review payroll details ➔",
-                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
-                                  icon: Users,
-                                  action: "Payroll Cost Analysis"
-                                });
-                              }
-
-                              const curFuel = sumBetween("Fuel", curStart, curEnd);
-                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
-                              if (curFuel > 0 && priorFuel > 0) {
-                                const pct = pctChange(curFuel, priorFuel);
-                                insights.push({
-                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review fuel expenses ➔",
-                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
-                                  icon: Landmark,
-                                  action: "Fuel Receipts & Fleet Usage"
-                                });
-                              }
-
-                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
-                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
-                              const curExpenses = sumBetween(null, curStart, curEnd);
-                              if (curRevenue > 0) {
-                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
-                                insights.push({
-                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
-                                  link: "View profit report ➔",
-                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
-                                  icon: TrendingUp,
-                                  action: "Net Profitability Margin Analyzer"
-                                });
-                              }
-
-                              if (insights.length === 0) {
-                                return (
-                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
-                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
-                                  </div>
-                                );
-                              }
-
-                              return insights.map((insight, idx) => (
-                                <div
-                                  key={idx}
-                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
-                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
-                                >
-                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
-                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
-                                  </span>
-                                  <div>
-                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
-                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
-                                      {insight.link}
-                                    </p>
-                                  </div>
-                                </div>
-                              ));
-                            })()}
-                          </div>
-                          )}
-                        </div>
-                      </div>
 
                       {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">

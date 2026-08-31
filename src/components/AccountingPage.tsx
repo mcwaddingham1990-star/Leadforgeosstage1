@@ -1372,6 +1372,7 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
   };
 
   const comingSoon = [
+    "Reconcile Bank",
     "Automatic Bank Sync",
     "Credit Card Sync",
     "Automatic Transaction Import",
