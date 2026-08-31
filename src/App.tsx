@@ -1040,6 +1040,92 @@ function getRevenueChartData(
   return withTotals(cumulative(years), periodStart, periodEnd, 0);
 }
 
+interface RevenueStepPoint {
+  x: number;
+  label: string;
+  Payments: number;
+  Expenses: number;
+  Net: number;
+}
+
+/**
+ * A true event-driven step series for the Revenue page's own graph (the
+ * Dashboard mini-widget keeps using getRevenueChartData's fixed-bucket
+ * trend above -- different chart, different job). Each real payment or
+ * expense event -- a completed job, a logged/scanned income or expense
+ * transaction, an issued bill -- plots one point at its real timestamp,
+ * carrying the running cumulative total for Payments/Expenses/Net as of
+ * that moment. The series starts at zero at the period's start and holds
+ * flat out to "now" so the line visibly stays at its last value until the
+ * next real event -- exactly what a step chart (type="stepAfter") draws.
+ */
+function getRevenueStepSeries(
+  filter: string,
+  revenueEvents: RevenueEvent[],
+  transactions: Transaction[] = [],
+  bills: Bill[] = []
+): { points: RevenueStepPoint[]; periodStart: Date; periodEnd: Date } {
+  const now = new Date();
+  let periodStart: Date;
+
+  if (filter === "Day") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (filter === "Week") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  } else if (filter === "Pay Period") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
+  } else if (filter === "Quarter") {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    periodStart = new Date(now.getFullYear(), quarterStartMonth, 1);
+  } else if (filter === "Annual") {
+    periodStart = new Date(now.getFullYear(), 0, 1);
+  } else {
+    const allDates = [
+      ...revenueEvents.map((e) => new Date(e.date)),
+      ...transactions.map((t) => new Date(t.date)),
+      ...bills.map((b) => new Date(b.issuedDate))
+    ].filter((d) => !Number.isNaN(d.getTime()));
+    periodStart = allDates.length ? new Date(Math.min(...allDates.map((d) => d.getTime()))) : now;
+  }
+  const periodEnd = now;
+
+  type Ev = { time: number; kind: "payment" | "expense"; amount: number };
+  const events: Ev[] = [];
+  const inRange = (t: number) => !Number.isNaN(t) && t >= periodStart.getTime() && t <= periodEnd.getTime();
+
+  for (const e of revenueEvents) {
+    const t = new Date(e.date).getTime();
+    if (inRange(t)) events.push({ time: t, kind: "payment", amount: e.amount });
+  }
+  for (const t of transactions) {
+    if (t.type !== "income" && t.type !== "expense") continue;
+    const time = new Date(t.date).getTime();
+    if (inRange(time)) events.push({ time, kind: t.type === "income" ? "payment" : "expense", amount: t.amount });
+  }
+  for (const b of bills) {
+    if (b.status === "void") continue;
+    const time = new Date(b.issuedDate).getTime();
+    if (!inRange(time)) continue;
+    const amount = b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+    events.push({ time, kind: "expense", amount });
+  }
+  events.sort((a, b) => a.time - b.time);
+
+  const fmtLabel = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const points: RevenueStepPoint[] = [{ x: periodStart.getTime(), label: fmtLabel(periodStart.getTime()), Payments: 0, Expenses: 0, Net: 0 }];
+  let runningPayments = 0;
+  let runningExpenses = 0;
+  for (const ev of events) {
+    if (ev.kind === "payment") runningPayments += ev.amount; else runningExpenses += ev.amount;
+    points.push({ x: ev.time, label: fmtLabel(ev.time), Payments: runningPayments, Expenses: runningExpenses, Net: runningPayments - runningExpenses });
+  }
+  if (points[points.length - 1].x < periodEnd.getTime()) {
+    points.push({ x: periodEnd.getTime(), label: fmtLabel(periodEnd.getTime()), Payments: runningPayments, Expenses: runningExpenses, Net: runningPayments - runningExpenses });
+  }
+
+  return { points, periodStart, periodEnd };
+}
+
 /**
  * Real hours worked in the trailing `sinceDaysAgo` days, computed by
  * pairing Clock In/Break End with Clock Out/Break Start the same way
@@ -1922,22 +2008,12 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  // Multiselect: none, some, or all three can show on the graph at once.
+  // None, some, or all three can show on the graph at once.
   const [graphDataTypes, setGraphDataTypes] = useState<Array<"revenue" | "expenses" | "profit">>(["revenue", "expenses", "profit"]);
-  // Drives the statement table below the graph -- which view(s) of
-  // payments/expenses are listed. Multiple views can be shown at once.
-  const [statementViewFilter, setStatementViewFilter] = useState<string[]>(["all_payments", "all_expenses"]);
-  const [isStatementDropdownOpen, setIsStatementDropdownOpen] = useState(false);
-  const statementDropdownRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (statementDropdownRef.current && !statementDropdownRef.current.contains(e.target as Node)) {
-        setIsStatementDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  // Category filter for each of the two statement tables below the graph.
+  // "all" is each table's default (every payment / every expense).
+  const [paymentsTableFilter, setPaymentsTableFilter] = useState("all");
+  const [expensesTableFilter, setExpensesTableFilter] = useState("all");
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -1950,7 +2026,6 @@ export default function App() {
   const [payrollPayday, setPayrollPayday] = useState(5);
   const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
-  const [balanceView, setBalanceView] = useState("Total");
   const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
   const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
     "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
@@ -2139,16 +2214,16 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [businessId, payrollSchedule, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart, payrollPayday, payrollState]);
 
-  // Total Balance is the first-use default. After the user picks another
-  // view, remember it per business through refreshes and logout/login.
+  // Pay Period is the first-use default. After the user picks another
+  // graph interval, remember it per business through refreshes and logout/login.
   useEffect(() => {
     if (!businessId) return;
     const saved = localStorage.getItem(`ownerslocal_balance_view:${businessId}`);
-    setBalanceView(["Day", "Pay Period", "Quarter", "Annual", "Total"].includes(saved || "") ? saved! : "Total");
+    setRevenuePageFilter(["Day", "Week", "Pay Period", "Quarter", "Annual", "Total"].includes(saved || "") ? saved! : "Pay Period");
   }, [businessId]);
 
-  const changeBalanceView = (view: string) => {
-    setBalanceView(view);
+  const changeRevenuePageFilter = (view: string) => {
+    setRevenuePageFilter(view);
     if (businessId) localStorage.setItem(`ownerslocal_balance_view:${businessId}`, view);
   };
 
@@ -6995,105 +7070,57 @@ Access to full financial telemetry is restricted.`;
                         <PlaidConnectButton />
                       </div>
 
-                      {/* QUICK ACTIONS - SMALL BUTTON ROW ABOVE THE GRAPH */}
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: "Record Expense", action: "expense", icon: DollarSign },
-                          { label: "Run Payroll", action: "payroll", icon: Users },
-                          { label: "Create Invoice", action: "invoice", icon: FileText },
-                          { label: "View Financial Reports", action: "financial_reports", icon: Landmark }
-                        ].map((btn, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              if (btn.action === "expense") {
-                                sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
-                                setLogTransactionType("expense");
-                                return;
-                              }
-                              if (btn.action === "payroll") {
-                                handleRunPayroll();
-                                return;
-                              }
-                              if (btn.action === "financial_reports") {
-                                setIsFinancialSnapshotOpen(true);
-                                return;
-                              }
-                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                              if (accounting) setActiveScreen(accounting);
-                              triggerNotification("Open Invoices to create a customer invoice.");
-                            }}
-                            className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
-                          >
-                            <btn.icon className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
-                            <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide whitespace-nowrap">
-                              {btn.label}
-                            </span>
-                          </button>
-                        ))}
+                      {/* QUICK ACTIONS - 4 BUTTONS, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                        <div className="flex flex-nowrap gap-2 w-max">
+                          {[
+                            { label: "Record Expense", action: "expense", icon: DollarSign },
+                            { label: "Run Payroll", action: "payroll", icon: Users },
+                            { label: "Create Invoice", action: "invoice", icon: FileText },
+                            { label: "View Financial Reports", action: "financial_reports", icon: Landmark }
+                          ].map((btn, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                if (btn.action === "expense") {
+                                  sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                  setLogTransactionType("expense");
+                                  return;
+                                }
+                                if (btn.action === "payroll") {
+                                  handleRunPayroll();
+                                  return;
+                                }
+                                if (btn.action === "financial_reports") {
+                                  setIsFinancialSnapshotOpen(true);
+                                  return;
+                                }
+                                const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                                if (accounting) setActiveScreen(accounting);
+                                triggerNotification("Open Invoices to create a customer invoice.");
+                              }}
+                              className="shrink-0 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <btn.icon className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
+                              <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide whitespace-nowrap">
+                                {btn.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH MULTI-LINE GRAPH */}
+                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH STEP GRAPH */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Overview</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
-                              Period: <strong className="text-[#315C9F]">
-                                {(() => {
-                                  const now = new Date();
-                                  if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Week") return `Daily activity — last 7 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
-                                  if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
-                                  if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
-                                  return "Running totals — complete financial history";
-                                })()}
-                              </strong>
-                            </p>
-                          </div>
-
-                          {/* Filter Button Group */}
-                          <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
-                            {[
-                              { value: "Day", label: "View by Day" },
-                              { value: "Week", label: "View by Week" },
-                              { value: "Pay Period", label: "View by Pay Period" },
-                              { value: "Quarter", label: "View by Quarter" },
-                              { value: "Annual", label: "View Annual" },
-                              { value: "Total", label: "View Total" }
-                            ].map(({ value, label }) => {
-                              const isActive = revenuePageFilter === value;
-                              return (
-                                <button
-                                  key={value}
-                                  onClick={() => {
-                                    setRevenuePageFilter(value);
-                                    triggerNotification(`Adjusted graph filter to: ${label}`);
-                                  }}
-                                  className={`px-3 py-1.5 text-[10.5px] rounded-lg transition-all duration-200 cursor-pointer font-bold ${
-                                    isActive
-                                      ? "bg-[#4A86F7] text-white shadow-sm"
-                                      : "text-[#5E7393] hover:text-[#1F3557]"
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Summary Display on Graph card */}
+                        {/* Summary Display + the one graph-interval dropdown (top of the graph) */}
                         {(() => {
-                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions, bills);
+                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
                           const balance = currentTotal - currentExpenseTotal;
                           const priorBalance = priorTotal - priorExpenseTotal;
                           const hasPrior = priorBalance !== 0;
                           const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
                           const isUp = pct === null ? balance > 0 : pct >= 0;
-                          const balanceLabel = balanceView === "Total" ? "Total Balance" : `${balanceView} Balance`;
+                          const balanceLabel = revenuePageFilter === "Total" ? "Total Balance" : `${revenuePageFilter} Balance`;
                           return (
                             <div className="flex flex-wrap items-end gap-3 sm:gap-4">
                               <div>
@@ -7103,19 +7130,20 @@ Access to full financial telemetry is restricted.`;
                                 </span>
                               </div>
                               <select
-                                aria-label="Balance view"
-                                value={balanceView}
+                                aria-label="Graph interval"
+                                value={revenuePageFilter}
                                 onChange={(e) => {
-                                  changeBalanceView(e.target.value);
-                                  triggerNotification(`Balance view updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                  changeRevenuePageFilter(e.target.value);
+                                  triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
                                 }}
                                 className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
                               >
                                 <option value="Day">View by Day</option>
+                                <option value="Week">View by Week</option>
                                 <option value="Pay Period">View by Pay Period</option>
                                 <option value="Quarter">View by Quarter</option>
                                 <option value="Annual">View Annual</option>
-                                <option value="Total">View Total Balance</option>
+                                <option value="Total">View Total</option>
                               </select>
                               <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
                                 {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
@@ -7161,49 +7189,35 @@ Access to full financial telemetry is restricted.`;
                           />
                         )}
 
-                        {/* Graph series toggles — pick none, some, or all three */}
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "expenses", label: "Total Expenses" },
-                            { value: "revenue",  label: "Payments Collected" },
-                            { value: "profit",   label: "Net Revenue" },
-                          ] as const).map(({ value, label }) => {
-                            const selected = graphDataTypes.includes(value);
-                            return (
-                              <button
-                                key={value}
-                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
-                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                  selected
-                                    ? "bg-[#4A86F7] text-white shadow-sm"
-                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                                }`}
-                              >
-                                {selected ? "✓ " : ""}{label}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Recharts Live Multi-line Graph — horizontally scrollable */}
+                        {/* Event-driven step graph — a point at every real payment/expense,
+                            flat until the next one, reset to zero at the start of the period */}
                         {(() => {
-                          const chartSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
-                          const chartWidth = Math.max(340, chartSeries.length * 78);
+                          const { points } = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
+                          const chartWidth = Math.max(340, points.length * 60);
+                          const xTickFormat = (ms: number) => {
+                            const d = new Date(ms);
+                            return revenuePageFilter === "Day"
+                              ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+                              : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                          };
                           return (
                             <div className="pt-2">
-                              {chartSeries.length > 5 && (
+                              {points.length > 6 && (
                                 <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
                               )}
                               <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
                                 <LineChart
                                   width={chartWidth}
                                   height={280}
-                                  data={chartSeries}
+                                  data={points}
                                   margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
                                 >
                                   <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
                                   <XAxis
-                                    dataKey="time"
+                                    dataKey="x"
+                                    type="number"
+                                    domain={["dataMin", "dataMax"]}
+                                    tickFormatter={xTickFormat}
                                     stroke="#5E7393"
                                     fontSize={10}
                                     tickLine={false}
@@ -7220,12 +7234,14 @@ Access to full financial telemetry is restricted.`;
                                     className="font-mono"
                                     width={48}
                                   />
-                                  <Tooltip content={
+                                  <Tooltip
+                                    labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                                    content={
                                     ({ active, payload, label }) => {
                                       if (active && payload && payload.length) {
                                         return (
                                           <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
+                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                                             <div className="space-y-1">
                                               {payload.map((entry: any, index: number) => (
                                                 <div key={index} className="flex items-center justify-between gap-6">
@@ -7253,25 +7269,51 @@ Access to full financial telemetry is restricted.`;
                                     className="font-sans font-bold text-[11px]"
                                     wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                                   />
-                                  {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Payments Collected" />}
-                                  {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Net Revenue" />}
-                                  {graphDataTypes.includes("expenses") && <Line type="monotone" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Total Expenses" />}
+                                  {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
+                                  {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
+                                  {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
                                 </LineChart>
                               </div>
                             </div>
                           );
                         })()}
+
+                        {/* Graph series toggles — bottom-left of the card, pick any combination */}
+                        <div className="flex flex-wrap justify-start gap-2">
+                          {([
+                            { value: "revenue",  label: "Payments Collected" },
+                            { value: "expenses", label: "Expenses" },
+                            { value: "profit",   label: "Net Revenue" },
+                          ] as const).map(({ value, label }) => {
+                            const selected = graphDataTypes.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
+                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                  selected
+                                    ? "bg-[#4A86F7] text-white shadow-sm"
+                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                                }`}
+                              >
+                                {selected ? "✓ " : ""}{label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
-                      {/* STATEMENT TABLE - PAYMENTS & EXPENSES, MIDDLE-TO-BOTTOM OF THE PAGE */}
+                      {/* TWO STATEMENT TABLES - PAYMENTS (TOP), THEN EXPENSES (BELOW) */}
                       {(() => {
                         const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
                         const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-                        const paymentItems = [
-                          ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount, party: e.customer || "Unknown" })),
-                          ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, party: t.description || "Unknown" }))
+                        const allPaymentItems = [
+                          ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount, source: "Completed Job Revenue" })),
+                          ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, source: "Logged Income" }))
                         ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const paymentItems = paymentsTableFilter === "all" ? allPaymentItems : allPaymentItems.filter(i => i.source === paymentsTableFilter);
+                        const paymentsTotal = paymentItems.reduce((s, i) => s + i.amount, 0);
 
                         const getCategoryItems = (name: string) => {
                           if (name === "Bills") {
@@ -7291,160 +7333,135 @@ Access to full financial telemetry is restricted.`;
                             .filter(t => t.type === "expense" && t.category === name)
                             .map(t => ({ id: t.id, date: t.date, memo: t.description || name, amount: t.amount }));
                         };
-                        const expenseItems = EXPENSE_CATEGORY_NAMES.flatMap(name =>
+                        const allExpenseItems = EXPENSE_CATEGORY_NAMES.flatMap(name =>
                           getCategoryItems(name).map(item => ({ ...item, category: name as string }))
                         ).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const expenseItems = expensesTableFilter === "all" ? allExpenseItems : allExpenseItems.filter(i => i.category === expensesTableFilter);
+                        const expensesTotal = expenseItems.reduce((s, i) => s + i.amount, 0);
 
-                        const STATEMENT_VIEWS = [
-                          { value: "all_payments", label: "All Payments" },
-                          { value: "payments_by_date", label: "Payments by Date" },
-                          { value: "payments_by_customer", label: "Payments by Customer" },
-                          { value: "all_expenses", label: "All Expenses" },
-                          { value: "expenses_by_category", label: "Expenses by Category" },
-                        ];
-                        const toggleView = (value: string) => {
-                          setStatementViewFilter(current => current.includes(value) ? current.filter(v => v !== value) : [...current, value]);
-                        };
-
-                        const groupBy = (items: any[], keyFn: (item: any) => string): Record<string, any[]> => {
-                          const groups: Record<string, any[]> = {};
-                          for (const item of items) {
-                            const key = keyFn(item);
-                            if (!groups[key]) groups[key] = [];
-                            groups[key].push(item);
-                          }
-                          return groups;
-                        };
-
-                        const sections: Array<{ key: string; title: string; groups: Array<{ label: string; items: any[]; total: number }> }> = [];
-
-                        if (statementViewFilter.includes("all_payments")) {
-                          sections.push({ key: "all_payments", title: "All Payments", groups: [{ label: "", items: paymentItems, total: paymentItems.reduce((s, i) => s + i.amount, 0) }] });
-                        }
-                        if (statementViewFilter.includes("payments_by_date")) {
-                          const byDate = groupBy(paymentItems, i => i.date);
-                          sections.push({
-                            key: "payments_by_date",
-                            title: "Payments by Date",
-                            groups: Object.keys(byDate).sort((a, b) => (a < b ? 1 : -1)).map(date => ({ label: date, items: byDate[date], total: byDate[date].reduce((s, i) => s + i.amount, 0) }))
-                          });
-                        }
-                        if (statementViewFilter.includes("payments_by_customer")) {
-                          const byCustomer = groupBy(paymentItems, i => i.party || "Unknown");
-                          sections.push({
-                            key: "payments_by_customer",
-                            title: "Payments by Customer",
-                            groups: Object.keys(byCustomer).sort().map(party => ({ label: party, items: byCustomer[party], total: byCustomer[party].reduce((s, i) => s + i.amount, 0) }))
-                          });
-                        }
-                        if (statementViewFilter.includes("all_expenses")) {
-                          sections.push({ key: "all_expenses", title: "All Expenses", groups: [{ label: "", items: expenseItems, total: expenseItems.reduce((s, i) => s + i.amount, 0) }] });
-                        }
-                        if (statementViewFilter.includes("expenses_by_category")) {
-                          const byCategory = groupBy(expenseItems, i => i.category);
-                          sections.push({
-                            key: "expenses_by_category",
-                            title: "Expenses by Category",
-                            groups: EXPENSE_CATEGORY_NAMES.filter(name => byCategory[name]?.length).map(name => ({ label: name, items: byCategory[name], total: byCategory[name].reduce((s, i) => s + i.amount, 0) }))
-                          });
-                        }
-
-                        const csvRows = sections.flatMap(section =>
-                          section.groups.flatMap(group =>
-                            group.items.map((item: any) => [section.title, group.label || item.category || "", item.date, item.memo, item.amount.toFixed(2)])
-                          )
+                        const saveTotalStatement = () => downloadCsv(
+                          `Total Statement - ${new Date().toISOString().slice(0, 10)}.csv`,
+                          ["Type", "Category / Source", "Date", "Description", "Amount"],
+                          [
+                            ...allPaymentItems.map(i => ["Payment", i.source, i.date, i.memo, i.amount.toFixed(2)]),
+                            ...allExpenseItems.map(i => ["Expense", i.category, i.date, i.memo, i.amount.toFixed(2)])
+                          ]
                         );
 
                         return (
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center px-1">
-                              <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Statement</h3>
-                            </div>
-
-                            <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="relative" ref={statementDropdownRef}>
+                          <div className="space-y-5">
+                            {/* PAYMENTS TABLE */}
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center px-1">
+                                <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Payments</h3>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{paymentItems.length} line item{paymentItems.length === 1 ? "" : "s"}</span>
+                              </div>
+                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={paymentsTableFilter}
+                                    onChange={(e) => setPaymentsTableFilter(e.target.value)}
+                                    className="bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="all">All Payments</option>
+                                    <option value="Completed Job Revenue">Completed Job Revenue</option>
+                                    <option value="Logged Income">Logged Income</option>
+                                  </select>
                                   <button
                                     type="button"
-                                    onClick={() => setIsStatementDropdownOpen(open => !open)}
-                                    className="flex items-center gap-2 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] cursor-pointer min-w-[200px] justify-between"
+                                    onClick={() => downloadCsv(
+                                      `Payments - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                      ["Source", "Date", "Description", "Amount"],
+                                      paymentItems.map(i => [i.source, i.date, i.memo, i.amount.toFixed(2)])
+                                    )}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
                                   >
-                                    <span className="truncate">
-                                      {statementViewFilter.length === 0 ? "Choose a view..." : `${statementViewFilter.length} view${statementViewFilter.length === 1 ? "" : "s"} selected`}
-                                    </span>
-                                    <ChevronDown className={`w-3.5 h-3.5 text-[#315C9F] shrink-0 transition-transform ${isStatementDropdownOpen ? "rotate-180" : ""}`} />
+                                    <FileText className="w-3.5 h-3.5" /> Save Payments as CSV
                                   </button>
-                                  {isStatementDropdownOpen && (
-                                    <div className="absolute z-20 top-full mt-1 left-0 bg-white border border-[#9EC8EF] rounded-xl shadow-lg py-1.5 w-56">
-                                      {STATEMENT_VIEWS.map(({ value, label }) => {
-                                        const selected = statementViewFilter.includes(value);
-                                        return (
-                                          <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => toggleView(value)}
-                                            className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold flex items-center gap-2 cursor-pointer hover:bg-[#EAF5FF] ${selected ? "text-[#315C9F]" : "text-[#1F3557]"}`}
-                                          >
-                                            {selected ? "✓" : "○"} {label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
+                                  <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
+                                  <span className="text-base font-black text-[#1F3557]">{fmt(paymentsTotal)}</span>
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/20">
+                                  {paymentItems.length === 0 ? (
+                                    <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">No payments in this selection yet.</div>
+                                  ) : (
+                                    paymentItems.map((item, idx) => (
+                                      <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs bg-white/40">
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                          <p className="text-[10px] text-[#5E7393] font-mono">{item.date} — {item.source}</p>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* EXPENSES TABLE */}
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center px-1">
+                                <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses</h3>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{expenseItems.length} line item{expenseItems.length === 1 ? "" : "s"}</span>
+                              </div>
+                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={expensesTableFilter}
+                                    onChange={(e) => setExpensesTableFilter(e.target.value)}
+                                    className="bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="all">All Expenses</option>
+                                    {EXPENSE_CATEGORY_NAMES.map(name => <option key={name} value={name}>{name}</option>)}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadCsv(
+                                      `Expenses - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                      ["Category", "Date", "Description", "Amount"],
+                                      expenseItems.map(i => [i.category, i.date, i.memo, i.amount.toFixed(2)])
+                                    )}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Save Expenses as CSV
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
+                                  <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
+                                  <span className="text-base font-black text-[#1F3557]">{fmt(expensesTotal)}</span>
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/20">
+                                  {expenseItems.length === 0 ? (
+                                    <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">No expenses in this selection yet.</div>
+                                  ) : (
+                                    expenseItems.map((item, idx) => (
+                                      <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs bg-white/40">
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                          <p className="text-[10px] text-[#5E7393] font-mono">{item.date} — {item.category}</p>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
+                                      </div>
+                                    ))
                                   )}
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => downloadCsv(
-                                    `Statement - ${new Date().toISOString().slice(0, 10)}.csv`,
-                                    ["View", "Group", "Date", "Description", "Amount"],
-                                    csvRows
-                                  )}
-                                  className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
-                                >
-                                  <FileText className="w-3.5 h-3.5" /> Save as CSV
-                                </button>
-                              </div>
-
-                              <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/30">
-                                {sections.length === 0 ? (
-                                  <div className="py-12 text-center text-xs text-[#5E7393] font-sans font-medium">Pick a view from the dropdown to see the statement.</div>
-                                ) : (
-                                  sections.map(section => (
-                                    <div key={section.key} className="bg-white/40">
-                                      <div className="px-3 py-2 bg-[#EAF5FF] text-[10px] font-black text-[#1F3557] uppercase tracking-wide">{section.title}</div>
-                                      {section.groups.map((group, gIdx) => (
-                                        <div key={gIdx}>
-                                          {group.label && (
-                                            <div className="flex items-center justify-between px-3 py-1.5 bg-[#EAF5FF]/50 text-[10px] font-bold text-[#5E7393]">
-                                              <span>{group.label}</span>
-                                              <span className="text-[#1F3557]">{fmt(group.total)}</span>
-                                            </div>
-                                          )}
-                                          {group.items.length === 0 ? (
-                                            <div className="px-3 py-3 text-[11px] text-[#5E7393] font-medium">Nothing here yet.</div>
-                                          ) : (
-                                            group.items.map((item: any, idx: number) => (
-                                              <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs border-t border-[#9EC8EF]/10">
-                                                <div className="min-w-0">
-                                                  <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
-                                                  <p className="text-[10px] text-[#5E7393] font-mono">{item.date}{item.category ? ` — ${item.category}` : ""}</p>
-                                                </div>
-                                                <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
-                                              </div>
-                                            ))
-                                          )}
-                                        </div>
-                                      ))}
-                                      {!section.groups.some(g => g.label) && (
-                                        <div className="flex items-center justify-between px-3 py-2 bg-[#EAF5FF]/50 text-[10px] font-bold">
-                                          <span className="text-[#5E7393] uppercase">Total</span>
-                                          <span className="text-[#1F3557]">{fmt(section.groups.reduce((s, g) => s + g.total, 0))}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))
-                                )}
+                                <div className="flex justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={saveTotalStatement}
+                                    className="px-3.5 py-2 text-[11px] font-bold rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Compile and Save Total Statement as CSV
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
