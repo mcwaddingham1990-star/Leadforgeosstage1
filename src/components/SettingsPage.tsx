@@ -325,13 +325,18 @@ export default function SettingsPage({
 
   // Search filter for settings
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState(initialSection || "company");
+  // Everyone except the owner only ever sees Appearance (the theme picker) --
+  // every other category is business/security configuration the owner
+  // controls, so non-owners land there regardless of what was requested.
+  const [activeCategory, setActiveCategory] = useState(
+    activeRole === "Owner" ? (initialSection || "company") : "appearance"
+  );
 
   // A deep-link (e.g. Roster's "Manage Roles" button) can arrive while this
   // page is already mounted, when the initial useState above won't re-run.
   useEffect(() => {
-    if (initialSection) setActiveCategory(initialSection);
-  }, [initialSection]);
+    if (initialSection) setActiveCategory(activeRole === "Owner" ? initialSection : "appearance");
+  }, [initialSection, activeRole]);
 
   // AI recommendations popup state
   const [showAiRecs, setShowAiRecs] = useState(false);
@@ -406,7 +411,7 @@ export default function SettingsPage({
     { id: "audit_logs", label: "Audit Logs", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
     { id: "api_keys", label: "API Keys", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
     { id: "advanced", label: "Advanced Settings", icon: <ShieldAlert className="w-4 h-4 text-[#315C9F]" />, group: "System Control" }
-  ];
+  ].filter(cat => activeRole === "Owner" || cat.id === "appearance");
 
   // Grouped Categories for sidebar
   const groupedCategories = useMemo(() => {
@@ -858,22 +863,28 @@ export default function SettingsPage({
             >
               <RotateCcw className="w-3.5 h-3.5" /> Reset Category
             </button>
-            <button
-              onClick={handleExport}
-              className="px-3 py-2 bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-white transition-all shadow-sm cursor-pointer uppercase tracking-wider"
-            >
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
-            <label className="px-3 py-2 bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-white transition-all shadow-sm cursor-pointer uppercase tracking-wider">
-              <Upload className="w-3.5 h-3.5" /> Import
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-            </label>
-            <button
-              onClick={() => setShowAiRecs(true)}
-              className="px-3 py-2 bg-[#4A9BFF] text-white border border-[#3583E6] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-[#3583E6] transition-all shadow-sm cursor-pointer uppercase tracking-wider"
-            >
-              <Sparkles className="w-3.5 h-3.5" /> AI Recommendations
-            </button>
+            {activeRole === "Owner" && (
+              <>
+                <button
+                  onClick={handleExport}
+                  className="px-3 py-2 bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-white transition-all shadow-sm cursor-pointer uppercase tracking-wider"
+                >
+                  <Download className="w-3.5 h-3.5" /> Export
+                </button>
+                <label className="px-3 py-2 bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-white transition-all shadow-sm cursor-pointer uppercase tracking-wider">
+                  <Upload className="w-3.5 h-3.5" /> Import
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+              </>
+            )}
+            {activeRole === "Owner" && (
+              <button
+                onClick={() => setShowAiRecs(true)}
+                className="px-3 py-2 bg-[#4A9BFF] text-white border border-[#3583E6] text-xs font-bold rounded-xl flex items-center gap-1.5 hover:bg-[#3583E6] transition-all shadow-sm cursor-pointer uppercase tracking-wider"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> AI Recommendations
+              </button>
+            )}
           </div>
         </div>
 
@@ -886,7 +897,7 @@ export default function SettingsPage({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search all 31 system settings categories instantly..."
+            placeholder={activeRole === "Owner" ? "Search all system settings categories instantly..." : "Search appearance settings..."}
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#A9CDEE] rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#4A9BFF] placeholder-slate-400"
           />
           {searchQuery && (

@@ -652,107 +652,107 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   operations_manager: {
     name: "Operations Manager",
     description: "Dashboard, Scheduling, Dispatch, Routes, Jobs, Inventory, etc.",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "training"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "training", "settings"]
   },
   dispatcher: {
     name: "Dispatcher",
     description: "Dispatch, Routes, Map, Jobs, Sched",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages", "settings"]
   },
   scheduler: {
     name: "Scheduler",
     description: "Dashboard, Scheduling, Customers, Jobs, Messages",
-    permissions: ["dashboard", "scheduling", "customers", "jobs", "messages"]
+    permissions: ["dashboard", "scheduling", "customers", "jobs", "messages", "settings"]
   },
   sales_manager: {
     name: "Sales Manager",
     description: "Dashboard, Customers, Leads, Estimates, Messages, AI Assistant",
-    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant", "scheduling", "settings"]
   },
   sales_representative: {
     name: "Sales Representative",
     description: "Leads, CRM, Estimates, Docs",
-    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant", "scheduling", "settings"]
   },
   estimator: {
     name: "Estimator",
     description: "Estimates, Bids, Takeoffs, Reports",
-    permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant", "scheduling", "settings"]
   },
   project_manager: {
     name: "Project Manager",
     description: "Dashboard, Customers, Scheduling, Dispatch, Routes, Jobs, Inventory, Documents, Messages",
-    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "settings"]
   },
   field_supervisor: {
     name: "Field Supervisor",
     description: "Dashboard, Jobs, Scheduling, Dispatch, Routes, Inventory, Documents, Messages, Training",
-    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training"]
+    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training", "settings"]
   },
   technician: {
     name: "Technician",
     description: "Dashboard, Jobs, Time Clock, Messages, Documents, Training",
-    permissions: ["dashboard", "jobs", "timeclock", "messages", "documents", "training"]
+    permissions: ["dashboard", "jobs", "timeclock", "messages", "documents", "training", "scheduling", "settings"]
   },
   laborer: {
     name: "Laborer",
     description: "Dashboard, Jobs, Time Clock, Training, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "training", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "training", "messages", "scheduling", "settings"]
   },
   apprentice: {
     name: "Apprentice",
     description: "Dashboard, Jobs, Time Clock, Training, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "training", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "training", "messages", "scheduling", "settings"]
   },
   installer: {
     name: "Installer",
     description: "Dashboard, Jobs, Time Clock, Inventory, Documents, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   driver: {
     name: "Driver",
     description: "Dashboard, Routes, Jobs, Time Clock, Messages",
-    permissions: ["dashboard", "routes", "jobs", "timeclock", "messages"]
+    permissions: ["dashboard", "routes", "jobs", "timeclock", "messages", "scheduling", "settings"]
   },
   warehouse_manager: {
     name: "Warehouse / Inventory Manager",
     description: "Dashboard, Inventory, Documents, Messages",
-    permissions: ["dashboard", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   purchasing_manager: {
     name: "Purchasing Manager",
     description: "Dashboard, Inventory, Documents",
-    permissions: ["dashboard", "inventory", "documents"]
+    permissions: ["dashboard", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   customer_service: {
     name: "Customer Service Representative",
     description: "Dashboard, Customers, Leads, Scheduling, Messages",
-    permissions: ["dashboard", "customers", "leads", "scheduling", "messages"]
+    permissions: ["dashboard", "customers", "leads", "scheduling", "messages", "settings"]
   },
   marketing_manager: {
     name: "Marketing Manager",
     description: "Dashboard, Customers, Leads, AI Assistant",
-    permissions: ["dashboard", "customers", "leads", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "ai_assistant", "messages", "scheduling", "settings"]
   },
   accountant: {
     name: "Accountant / Bookkeeper",
     description: "Dashboard, Customers, Estimates",
-    permissions: ["dashboard", "customers", "estimates"]
+    permissions: ["dashboard", "customers", "estimates", "messages", "scheduling", "settings"]
   },
   hr_manager: {
     name: "HR Manager",
     description: "Dashboard, Documents, Training",
-    permissions: ["dashboard", "documents", "training"]
+    permissions: ["dashboard", "documents", "training", "messages", "scheduling", "settings"]
   },
   safety_manager: {
     name: "Safety Manager",
     description: "Dashboard, Jobs, Training, Documents",
-    permissions: ["dashboard", "jobs", "training", "documents"]
+    permissions: ["dashboard", "jobs", "training", "documents", "messages", "scheduling", "settings"]
   },
   it_administrator: {
     name: "IT Administrator",
     description: "Everything except Owner company settings",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "training", "settings"]
   }
 };
 
