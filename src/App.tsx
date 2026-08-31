@@ -6,7 +6,7 @@ import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/fire
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
-import type { GeneratedPdfDraft } from "./types/generatedPdf";
+import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
 import { postTransactionEntry } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
@@ -1583,6 +1583,7 @@ export default function App() {
   const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
+  const [estimatePrefill, setEstimatePrefill] = useState<EstimatePrefill | null>(null);
   const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string } | null>(null);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
@@ -3859,6 +3860,8 @@ Access to full financial telemetry is restricted.`;
     setPreSelectedCustomerId,
     generatedPdfDraft,
     setGeneratedPdfDraft,
+    estimatePrefill,
+    setEstimatePrefill,
     pendingSignatureCapture,
     setPendingSignatureCapture,
     globalAiSetting,

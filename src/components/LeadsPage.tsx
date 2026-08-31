@@ -4,6 +4,9 @@ import { parseAddress } from "./StructuredAddressFields";
 import { useDomainActions } from "../hooks/useDomainActions";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { buildLeadPdf, bytesToBase64 } from "../lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
+import type { DocumentItem } from "../types/domain";
 import {
   Search,
   Plus,
@@ -45,8 +48,8 @@ import type { Lead } from "../types/domain";
 export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC = () => {
-  const { convertLeadToCustomer, createEstimateFromLead } = useDomainActions();
-  const { leads: propsLeads, setLeads } = useDomainData();
+  const { convertLeadToCustomer } = useDomainActions();
+  const { leads: propsLeads, setLeads, setDocuments, businessProfile, setGeneratedPdfDraft, setEstimatePrefill } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -137,12 +140,76 @@ export const LeadsPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleAddLead = () => {
-    if (!formName.trim()) return;
+  // Builds a real PDF from the lead's own data, saves it to the Documents
+  // Hub, then opens the PDF Editor so it can be reviewed/finished and
+  // mailed -- same pattern as EstimatesPage's generateEstimatePdf.
+  const generateLeadPdf = async (lead: Lead) => {
+    const bytes = await buildLeadPdf(lead, businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const docId = `doc_lead_${lead.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: `${lead.name.replace(/\s+/g, "_")}_Lead_Summary.pdf`,
+      customer: lead.name,
+      employee: "Staff Administrator",
+      vendor: "None",
+      job: "None",
+      type: "Contracts",
+      folder: "Leads",
+      uploadedBy: "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: "Generated from the Leads PDF Editor.",
+      tags: ["Lead", "Generated"],
+      estimateId: "None",
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification?.("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
+    setDocuments(prev => [...prev, newDoc]);
+    setGeneratedPdfDraft({
+      filename: newDoc.name,
+      title: `Lead Summary — ${lead.name}`,
+      sourceType: "Lead",
+      sourceId: lead.id,
+      customerName: lead.name,
+      representativeName: lead.salesRep || "Company Representative",
+      lines: [],
+      pdfBase64
+    });
+    onNavigateToScreen("documents");
+    if (logOperationalEvent) logOperationalEvent("Lead PDF Generated", `Lead summary for ${lead.name}`, "📄");
+  };
+
+  // Queues the Estimate form to open pre-filled with this lead's info
+  // (including notes) via the shared estimatePrefill handoff, then
+  // navigates to Estimates -- the same "one canonical form, pre-seeded"
+  // pattern the PDF handoff already uses.
+  const openEstimateFromLead = (lead: Lead) => {
+    setEstimatePrefill({
+      customerName: lead.name,
+      company: lead.company,
+      phone: lead.phone,
+      address: lead.address,
+      notes: lead.notes,
+      sourceLeadId: lead.id
+    });
+    onNavigateToScreen("estimates");
+  };
+
+  const buildNewLeadFromForm = (): Lead | null => {
+    if (!formName.trim()) return null;
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
-    
-    const newLead: Lead = {
+
+    return {
       id: "lead_" + Math.random().toString(36).substring(2, 9),
       name: formName.trim(),
       company: formCompany.trim(),
@@ -157,6 +224,11 @@ export const LeadsPage: React.FC = () => {
       address: combinedAddress,
       notes: formNotes.trim()
     };
+  };
+
+  const handleAddLead = (action: "save" | "pdf" | "estimate" = "save") => {
+    const newLead = buildNewLeadFromForm();
+    if (!newLead) return;
 
     if (setLeads) {
       setLeads(prev => [newLead, ...prev]);
@@ -164,6 +236,8 @@ export const LeadsPage: React.FC = () => {
       setLocalLeads(prev => [newLead, ...prev]);
     }
     setIsAddModalOpen(false);
+    if (action === "pdf") void generateLeadPdf(newLead);
+    if (action === "estimate") openEstimateFromLead(newLead);
   };
 
   const openViewModal = (ld: Lead) => {
@@ -241,7 +315,7 @@ export const LeadsPage: React.FC = () => {
 
   const handleCreateEstimate = () => {
     if (!selectedLead) return;
-    createEstimateFromLead(selectedLead.id);
+    openEstimateFromLead(selectedLead);
     setSelectedLead(null);
   };
 
@@ -1023,12 +1097,28 @@ export const LeadsPage: React.FC = () => {
               <button
                 type="button"
                 disabled={!formName.trim()}
-                onClick={handleAddLead}
+                onClick={() => handleAddLead("save")}
                 className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                   formName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                 }`}
               >
                 Save Lead
+              </button>
+              <button
+                type="button"
+                disabled={!formName.trim()}
+                onClick={() => handleAddLead("pdf")}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
+              >
+                Generate PDF
+              </button>
+              <button
+                type="button"
+                disabled={!formName.trim()}
+                onClick={() => handleAddLead("estimate")}
+                className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 disabled:text-slate-500 transition-colors cursor-pointer"
+              >
+                Build Estimate
               </button>
             </div>
           </div>

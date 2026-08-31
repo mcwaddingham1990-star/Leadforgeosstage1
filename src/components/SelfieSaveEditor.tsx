@@ -59,11 +59,16 @@ export interface SelfieSaveEditorProps {
   // "Signer 1" / "Signer 2".
   signerHint?: { customerName?: string; representativeName?: string } | null;
   businessProfile?: BusinessProfile;
+  // When true, seeds the standard 2-party signature + initials lines as
+  // soon as the source PDF finishes loading -- the same fields "Capture
+  // Signatures" adds manually -- so a "Collect Signatures" action from
+  // another page lands the user straight on a ready-to-sign document.
+  autoCaptureSignatures?: boolean;
   onClose: () => void;
   onSave: (docId: string, updatedName: string, metaProperties?: any) => void;
 }
 
-export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,businessProfile,onClose,onSave}:SelfieSaveEditorProps){
+export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,businessProfile,autoCaptureSignatures,onClose,onSave}:SelfieSaveEditorProps){
   const [splash,setSplash]=useState(true);
   const [setup,setSetup]=useState(!autoOpenPdfPicker && !initialPdfBase64 && !initialDraft);
   const [features,setFeatures]=useState(defaultFeatures);
@@ -111,6 +116,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
   const initialDraftLoadedRef=useRef(false);
   const initialPdfLoadedRef=useRef(false);
+  const autoCaptureTriggeredRef=useRef(false);
   const dragRef=useRef<{key:string;pointerId:number;offsetX:number;offsetY:number;w:number;h:number;start:{clientX:number;clientY:number;x:number;y:number;page:number}}|null>(null);
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
@@ -140,6 +146,11 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       notify("Saved PDF could not be reopened. Choose the original file from Device / Drive.");
     }
   },[initialPdfBase64,initialFilename]);
+  useEffect(()=>{
+    if(!autoCaptureSignatures||autoCaptureTriggeredRef.current||pdfPages.length===0)return;
+    autoCaptureTriggeredRef.current=true;
+    captureSignatures();
+  },[autoCaptureSignatures,pdfPages]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
   useEffect(()=>{
     const updatePdfSelection=()=>{
