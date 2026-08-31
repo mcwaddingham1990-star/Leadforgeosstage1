@@ -12,6 +12,7 @@ import { postTransactionEntry, invoiceTotal } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
 import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
+import { downloadCsv } from "./lib/csv";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -843,6 +844,17 @@ const OS_SCREENS = [
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
+// The real expense categories shown on the Revenue page's "Expenses by
+// Category" table -- one source of truth shared with getRevenueChartData
+// below so the table's totals and the graph's per-category lines always
+// agree. "Bills" comes from the bills collection; "Material Expenses" is a
+// bucket of several transaction categories; every other entry matches a
+// transaction's `category` field exactly.
+const EXPENSE_CATEGORY_NAMES = [
+  "Bills", "Material Expenses", "Fuel", "Vehicle Maintenance", "Equipment", "Tools",
+  "Insurance", "Taxes", "Marketing", "Software & Subs", "Utilities", "Office Supplies", "Custom Expense"
+] as const;
+
 /**
  * Buckets the real revenueEvents log (written by the Event Engine's
  * job-completion cascade) and real transactions log (manual/scanned/payroll
@@ -858,7 +870,7 @@ function getRevenueChartData(
   transactions: Transaction[] = [],
   bills: Bill[] = []
 ): {
-  series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number }>;
+  series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number; categories: Record<string, number> }>;
   currentTotal: number;
   priorTotal: number;
   currentExpenseTotal: number;
@@ -876,6 +888,18 @@ function getRevenueChartData(
     date: bill.issuedDate
   }));
   const allExpenseCosts = [...expenseTx, ...billCosts];
+
+  // Same per-category item lists the Revenue page's category table/CSV
+  // export reads from, reused here so every category's graph line matches
+  // that table exactly.
+  const categoryItemsMap: Record<string, Array<{ amount: number; date: string }>> = {};
+  for (const name of EXPENSE_CATEGORY_NAMES) {
+    categoryItemsMap[name] = name === "Bills"
+      ? billCosts
+      : name === "Material Expenses"
+        ? materialTx
+        : expenseTx.filter((t) => t.category === name);
+  }
   // Real revenue = job-completion events (revenueEvents) + manually-logged
   // or scanned income transactions (e.g. a photographed check) — both are
   // real money in, and logging one should actually move these totals.
@@ -897,7 +921,9 @@ function getRevenueChartData(
     const Payroll = sumInRange(payrollTx, start, end);
     const OtherExpenses = sumInRange(otherExpenseTx, start, end);
     const TotalExpenses = Bills + MaterialExpenses + Payroll + OtherExpenses;
-    return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses };
+    const categories: Record<string, number> = {};
+    for (const name of EXPENSE_CATEGORY_NAMES) categories[name] = sumInRange(categoryItemsMap[name], start, end);
+    return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses, categories };
   };
 
   const buildDays = (count: number, labelFn: (d: Date) => string) => {
@@ -936,11 +962,15 @@ function getRevenueChartData(
   // expense instead of making the graph look as though earlier income vanished.
   const cumulative = (rows: ReturnType<typeof buildRow>[]) => {
     let revenue = 0, billsTotal = 0, materialTotal = 0, payrollTotal = 0, otherTotal = 0;
+    const categoryTotals: Record<string, number> = {};
+    for (const name of EXPENSE_CATEGORY_NAMES) categoryTotals[name] = 0;
     return rows.map((row) => {
       revenue += row.Revenue;
       billsTotal += row.Bills; materialTotal += row.MaterialExpenses; payrollTotal += row.Payroll; otherTotal += row.OtherExpenses;
       const expenses = billsTotal + materialTotal + payrollTotal + otherTotal;
-      return { ...row, Revenue: revenue, Bills: billsTotal, MaterialExpenses: materialTotal, Payroll: payrollTotal, OtherExpenses: otherTotal, Expenses: expenses, TotalExpenses: expenses, Profit: revenue - expenses };
+      const categories: Record<string, number> = {};
+      for (const name of EXPENSE_CATEGORY_NAMES) { categoryTotals[name] += row.categories[name]; categories[name] = categoryTotals[name]; }
+      return { ...row, Revenue: revenue, Bills: billsTotal, MaterialExpenses: materialTotal, Payroll: payrollTotal, OtherExpenses: otherTotal, Expenses: expenses, TotalExpenses: expenses, Profit: revenue - expenses, categories };
     });
   };
 
@@ -1912,9 +1942,27 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  const [graphDataType, setGraphDataType] = useState<"revenue" | "expenses" | "profit">("revenue");
+  // Multiselect: all three shown at once by default so the graph opens with
+  // the full picture instead of one line at a time.
+  const [graphDataTypes, setGraphDataTypes] = useState<Array<"revenue" | "expenses" | "profit">>(["revenue", "expenses", "profit"]);
   const [expenseGraphMode, setExpenseGraphMode] = useState<"individual" | "combined">("individual");
   const [selectedExpenseSeries, setSelectedExpenseSeries] = useState<Array<"Bills" | "MaterialExpenses" | "Payroll" | "OtherExpenses">>(["Bills", "MaterialExpenses", "Payroll", "OtherExpenses"]);
+  // Drives both the "Expenses by Category" table (which categories' line
+  // items are listed) and, for anything other than the "__all__" sentinel,
+  // an extra line per selected category on the graph above.
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string[]>(["__all__"]);
+  const [isExpenseCategoryDropdownOpen, setIsExpenseCategoryDropdownOpen] = useState(false);
+  const expenseCategoryDropdownRef = useRef<HTMLDivElement>(null);
+  const [openSummaryCard, setOpenSummaryCard] = useState<null | "revenue" | "profit" | "expenses" | "payroll" | "taxes">(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (expenseCategoryDropdownRef.current && !expenseCategoryDropdownRef.current.contains(e.target as Node)) {
+        setIsExpenseCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -2742,7 +2790,7 @@ export default function App() {
               const sourceCounts: Record<string, number> = {};
               leads.forEach((l) => { sourceCounts[l.source] = (sourceCounts[l.source] || 0) + 1; });
               const topSourceEntry = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
-              blockedText = `Based on our operational ledger, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
+              blockedText = `Based on our records, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
             } else {
               blockedText = "No customer or lead data on record yet.";
             }
@@ -6349,7 +6397,7 @@ Access to full financial telemetry is restricted.`;
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950/5 border border-dashed border-red-300 rounded-2xl p-2 text-center">
                                       <span className="text-lg">🔒</span>
                                       <p className="text-[10px] font-sans font-bold text-red-700 mt-1 uppercase tracking-wider">Financial Visualization Locked</p>
-                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business ledger streams.</p>
+                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business financial data.</p>
                                     </div>
                                   )}
                                 </div>
@@ -6544,7 +6592,7 @@ Access to full financial telemetry is restricted.`;
                               onClick={() => {
                                 const matched = OS_SCREENS.find(s => s.id === "inventory");
                                 if (matched) setActiveScreen(matched);
-                                triggerNotification("Navigated to Inventory ledger");
+                                triggerNotification("Navigated to Inventory");
                               }}
                               className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
                             >
@@ -6975,26 +7023,30 @@ Access to full financial telemetry is restricted.`;
                       {/* CHOOSE GRAPH DATA BLOCK */}
                       <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
                         <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
+                        <p className="text-[9.5px] text-[#5E7393] font-sans font-semibold -mt-1.5">Select any combination to view them together on the graph.</p>
                         <div className="flex flex-wrap gap-2">
                           {([
                             { value: "revenue",  label: "Total Revenue" },
                             { value: "expenses", label: "Total Expenses" },
-                            { value: "profit",   label: "Total Profit" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setGraphDataType(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                graphDataType === value
-                                  ? "bg-[#4A86F7] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                            { value: "profit",   label: "Net Revenue" },
+                          ] as const).map(({ value, label }) => {
+                            const selected = graphDataTypes.includes(value);
+                            return (
+                              <button
+                                key={value}
+                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
+                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                  selected
+                                    ? "bg-[#4A86F7] text-white shadow-sm"
+                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                                }`}
+                              >
+                                {selected ? "✓ " : ""}{label}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {graphDataType === "expenses" && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
+                        {graphDataTypes.includes("expenses") && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
                           <div className="flex flex-wrap gap-2">
                             <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
                             <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
@@ -7030,11 +7082,55 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       </div>
 
+                      {/* QUICK ACTIONS - SMALL BUTTON ROW ABOVE THE GRAPH */}
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: "Record Expense", action: "expense", icon: DollarSign },
+                          { label: "Run Payroll", action: "payroll", icon: Users },
+                          { label: "Create Invoice", action: "invoice", icon: FileText },
+                          { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark },
+                          { label: "View Financial Reports", action: "financial_reports", icon: Landmark }
+                        ].map((btn, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              if (btn.action === "reconcile_soon") {
+                                triggerNotification("Reconcile Bank is coming soon.");
+                                return;
+                              }
+                              if (btn.action === "expense") {
+                                sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                setLogTransactionType("expense");
+                                return;
+                              }
+                              if (btn.action === "payroll") {
+                                handleRunPayroll();
+                                return;
+                              }
+                              if (btn.action === "financial_reports") {
+                                setIsFinancialSnapshotOpen(true);
+                                return;
+                              }
+                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                              if (accounting) setActiveScreen(accounting);
+                              triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
+                            }}
+                            className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
+                          >
+                            <btn.icon className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
+                            <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide whitespace-nowrap">
+                              {btn.label}
+                            </span>
+                            {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[7.5px] font-black uppercase text-amber-700">Soon</span>}
+                          </button>
+                        ))}
+                      </div>
+
                       {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH MULTI-LINE GRAPH */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
                           <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Ledger</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Overview</span>
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
                             <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
                               Period: <strong className="text-[#315C9F]">
@@ -7163,6 +7259,8 @@ Access to full financial telemetry is restricted.`;
                           const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
                           const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
                           const chartWidth = Math.max(340, chartSeries.length * 78);
+                          const categoryLineColors = ["#0EA5E9", "#D946EF", "#F97316", "#14B8A6", "#EAB308", "#6366F1", "#EC4899", "#84CC16", "#06B6D4", "#A855F7", "#F43F5E", "#22C55E", "#F59E0B"];
+                          const activeCategoryLines = expenseCategoryFilter.filter(name => name !== "__all__");
                           return (
                             <div className="pt-2">
                               {chartSeries.length > 5 && (
@@ -7227,13 +7325,25 @@ Access to full financial telemetry is restricted.`;
                                     className="font-sans font-bold text-[11px]"
                                     wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                                   />
-                                  {graphDataType === "revenue" && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
-                                  {graphDataType === "profit" && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Profit" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
+                                  {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
+                                  {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Net Revenue" />}
+                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
+                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
+                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
+                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
+                                  {graphDataTypes.includes("expenses") && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
+                                  {activeCategoryLines.map((name) => (
+                                    <Line
+                                      key={name}
+                                      type="monotone"
+                                      dataKey={(row: any) => row.categories?.[name] ?? 0}
+                                      stroke={categoryLineColors[EXPENSE_CATEGORY_NAMES.indexOf(name as any) % categoryLineColors.length]}
+                                      strokeWidth={2.5}
+                                      strokeDasharray="4 2"
+                                      dot={{ r: 3 }}
+                                      name={name}
+                                    />
+                                  ))}
                                 </LineChart>
                               </div>
                             </div>
@@ -7241,8 +7351,8 @@ Access to full financial telemetry is restricted.`;
                         })()}
                       </div>
 
-                      {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                      {/* SUMMARY CARDS - FIVE COMPACT TILES IN ONE ROW */}
+                      <div className="grid grid-cols-5 gap-2">
                         {(() => {
                           const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
                           // Accounting's dashboard is all-time. Keep these headline cards
@@ -7313,97 +7423,284 @@ Access to full financial telemetry is restricted.`;
                           }
                           ];
                         })().map((card, idx) => (
-                          <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
-                            <div className="flex justify-between items-start">
-                              <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
-                              <div className={`p-1.5 rounded-lg ${card.bgColor} ${card.color}`}>
-                                <card.icon className="w-3.5 h-3.5" />
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setOpenSummaryCard(card.key as typeof openSummaryCard)}
+                            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-xl p-2.5 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm flex flex-col gap-1 text-left cursor-pointer transition-all min-w-0"
+                          >
+                            <div className="flex justify-between items-center gap-1">
+                              <span className="text-[8px] font-bold text-[#5E7393] uppercase tracking-wide truncate">{card.label}</span>
+                              <div className={`p-1 rounded-md shrink-0 ${card.bgColor} ${card.color}`}>
+                                <card.icon className="w-2.5 h-2.5" />
                               </div>
                             </div>
-                            
-                            <div>
-                              <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight">{card.val}</p>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                {card.change && (
-                                  <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
-                                    {card.isUp ? "+" : "-"}{card.change}
-                                  </span>
-                                )}
-                                <span className="text-[9.5px] text-[#5E7393] font-sans font-medium">{card.comp}</span>
-                              </div>
-                            </div>
-                          </div>
+                            <p className="text-sm font-sans font-black text-[#1F3557] tracking-tight truncate">{card.val}</p>
+                          </button>
                         ))}
                       </div>
 
-                      {/* EXPENSE CATEGORIES GRID - 12 SEPARATE FLOATING BLUE CARDS */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center px-1">
-                          <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
-                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">Financial expense categories</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          {[
-                            { name: "Bills", target: "accounting", label: "Bills" },
-                            { name: "Material Expenses", target: "inventory", label: "Inventory / Job Costs" },
-                            { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
-                            { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
-                            { name: "Equipment", target: "inventory", label: "Inventory" },
-                            { name: "Tools", target: "inventory", label: "Inventory" },
-                            { name: "Insurance", target: "documents", label: "Documents" },
-                            { name: "Taxes", target: "documents", label: "Documents" },
-                            { name: "Marketing", target: "integrations", label: "Web Integration" },
-                            { name: "Software & Subs", target: "integrations", label: "Integrations" },
-                            { name: "Utilities", target: "placeholder_utilities", label: "Expenses" },
-                            { name: "Office Supplies", target: "inventory", label: "Inventory" },
-                            { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
-                          ].map((cat, idx) => {
-                            const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-                            const categoryTotal = cat.name === "Bills"
-                              ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
-                              : cat.name === "Material Expenses"
-                                ? transactions.filter((t) => t.type === "expense" && materialCategories.has(t.category || "")).reduce((sum, t) => sum + t.amount, 0)
-                                : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
-                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      {/* SUMMARY CARD BREAKDOWN POPUP */}
+                      {openSummaryCard && (() => {
+                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                        const byDateDesc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const expenseTxAll = transactions.filter(t => t.type === "expense");
+                        const billItems = bills.filter(b => b.status !== "void").map(b => ({
+                          id: b.id,
+                          date: b.issuedDate,
+                          memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
+                          amount: b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)
+                        }));
 
-                            return (
-                              <div
-                                key={idx}
-                                onClick={() => {
-                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations" || cat.target === "accounting") {
-                                    const matched = OS_SCREENS.find(s => s.id === cat.target);
-                                    if (matched) {
-                                      setActiveScreen(matched);
-                                      triggerNotification(`Navigated to: ${matched.label}`);
-                                    }
-                                  } else {
-                                    openPlaceholderPage(cat.name + " Expense Logs", "💳");
-                                  }
-                                }}
-                                className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm hover:shadow transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 text-left group"
-                              >
+                        let title = "";
+                        let total = 0;
+                        let items: Array<{ id: string; date: string; memo: string; amount: number }> = [];
+                        let emptyText = "No data yet.";
+
+                        if (openSummaryCard === "revenue") {
+                          title = "Total Revenue";
+                          total = completedJobsRevenue;
+                          items = byDateDesc([
+                            ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount })),
+                            ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount }))
+                          ]);
+                          emptyText = "No revenue recorded yet.";
+                        } else if (openSummaryCard === "expenses") {
+                          title = "Total Expenses";
+                          items = byDateDesc([
+                            ...expenseTxAll.map(t => ({ id: t.id, date: t.date, memo: `${t.description || "Expense"}${t.category ? ` — ${t.category}` : ""}`, amount: t.amount })),
+                            ...billItems
+                          ]);
+                          total = items.reduce((s, i) => s + i.amount, 0);
+                          emptyText = "No expenses logged yet.";
+                        } else if (openSummaryCard === "profit") {
+                          title = "Net Profit";
+                          const expenseTotal = expenseTxAll.reduce((s, t) => s + t.amount, 0) + billItems.reduce((s, i) => s + i.amount, 0);
+                          total = completedJobsRevenue - expenseTotal;
+                          items = [
+                            { id: "rev", date: "", memo: "Total Revenue", amount: completedJobsRevenue },
+                            { id: "exp", date: "", memo: "Total Expenses", amount: -expenseTotal }
+                          ];
+                          emptyText = "No revenue or expenses recorded yet.";
+                        } else if (openSummaryCard === "payroll") {
+                          title = "Gross Payroll";
+                          items = byDateDesc(
+                            transactions
+                              .filter(t => t.type === "expense" && t.category === "Payroll")
+                              .map(t => ({ id: t.id, date: t.date, memo: t.description || "Payroll run", amount: t.amount }))
+                          );
+                          total = items.reduce((s, i) => s + i.amount, 0);
+                          emptyText = "No payroll runs recorded yet.";
+                        } else {
+                          title = "Accrued Taxes";
+                          emptyText = "Tax tracking not built yet.";
+                        }
+
+                        return (
+                          <div
+                            className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs"
+                            onClick={() => setOpenSummaryCard(null)}
+                          >
+                            <div
+                              className="bg-[#EAF5FF] max-w-lg w-full rounded-3xl p-6 border border-[#9EC8EF] shadow-2xl flex flex-col gap-4 text-left max-h-[85vh]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3">
                                 <div>
-                                  <span className="text-[9.5px] text-[#5E7393] font-bold uppercase tracking-wider block truncate">{cat.name}</span>
-                                  <span className="text-base font-sans font-black text-[#1F3557] tracking-tight block mt-0.5">{currentAmt}</span>
+                                  <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">{title}</h3>
+                                  <p className="text-[11px] text-[#5E7393] font-sans font-semibold">All-time breakdown</p>
                                 </div>
-                                
-                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2 mt-1">
-                                  <span className="text-[8.5px] font-bold text-[#315C9F] group-hover:underline flex items-center gap-0.5 shrink-0">
-                                    {cat.label} ➔
-                                  </span>
-                                </div>
+                                <button
+                                  onClick={() => setOpenSummaryCard(null)}
+                                  className="text-sm text-[#5E7393] hover:text-[#1F3557] font-bold p-1 hover:bg-white/40 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  ✕
+                                </button>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
 
-                      {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        
+                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] flex items-center justify-between shrink-0">
+                                <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{title}</span>
+                                <span className="text-xl font-black text-[#1F3557]">{fmt(total)}</span>
+                              </div>
+
+                              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[100px]">
+                                {items.length === 0 ? (
+                                  <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">{emptyText}</div>
+                                ) : (
+                                  items.map((item) => (
+                                    <div key={item.id} className="flex items-center justify-between gap-3 p-2.5 bg-white border border-[#9EC8EF]/50 rounded-xl text-xs">
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                        {item.date && <p className="text-[10px] text-[#5E7393] font-mono">{item.date}</p>}
+                                      </div>
+                                      <span className={`font-mono font-bold shrink-0 ${item.amount < 0 ? "text-rose-600" : "text-[#1F3557]"}`}>
+                                        {fmt(Math.abs(item.amount))}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* EXPENSES BY CATEGORY - TABLE + MULTISELECT DROPDOWN + CSV EXPORT */}
+                      {(() => {
+                        const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                        const getCategoryItems = (name: string): Array<{ id: string; date: string; memo: string; amount: number }> => {
+                          if (name === "Bills") {
+                            return bills.filter(b => b.status !== "void").map(b => ({
+                              id: b.id,
+                              date: b.issuedDate,
+                              memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
+                              amount: b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)
+                            }));
+                          }
+                          if (name === "Material Expenses") {
+                            return transactions
+                              .filter(t => t.type === "expense" && materialCategories.has(t.category || ""))
+                              .map(t => ({ id: t.id, date: t.date, memo: t.description || "Material expense", amount: t.amount }));
+                          }
+                          return transactions
+                            .filter(t => t.type === "expense" && t.category === name)
+                            .map(t => ({ id: t.id, date: t.date, memo: t.description || name, amount: t.amount }));
+                        };
+                        const categoryTotals = EXPENSE_CATEGORY_NAMES.map(name => {
+                          const items = getCategoryItems(name);
+                          return { name, total: items.reduce((s, i) => s + i.amount, 0) };
+                        });
+
+                        const showingAll = expenseCategoryFilter.includes("__all__");
+                        const visibleNames = showingAll ? [...EXPENSE_CATEGORY_NAMES] : expenseCategoryFilter;
+                        const tableRows = visibleNames
+                          .flatMap(name => getCategoryItems(name).map(item => ({ ...item, category: name })))
+                          .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const tableTotal = tableRows.reduce((s, r) => s + r.amount, 0);
+                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                        const toggleCategory = (name: string) => {
+                          setExpenseCategoryFilter(current => {
+                            const withoutAll = current.filter(v => v !== "__all__");
+                            const isSelected = withoutAll.includes(name);
+                            const next = isSelected ? withoutAll.filter(v => v !== name) : [...withoutAll, name];
+                            return next.length === 0 ? ["__all__"] : next;
+                          });
+                        };
+
+                        return (
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center px-1">
+                              <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Category</h3>
+                              <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{tableRows.length} line item{tableRows.length === 1 ? "" : "s"}</span>
+                            </div>
+
+                            <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="relative" ref={expenseCategoryDropdownRef}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsExpenseCategoryDropdownOpen(open => !open)}
+                                    className="flex items-center gap-2 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] cursor-pointer min-w-[180px] justify-between"
+                                  >
+                                    <span className="truncate">
+                                      {showingAll ? "All Expenses" : `${expenseCategoryFilter.length} categor${expenseCategoryFilter.length === 1 ? "y" : "ies"} selected`}
+                                    </span>
+                                    <ChevronDown className={`w-3.5 h-3.5 text-[#315C9F] shrink-0 transition-transform ${isExpenseCategoryDropdownOpen ? "rotate-180" : ""}`} />
+                                  </button>
+                                  {isExpenseCategoryDropdownOpen && (
+                                    <div className="absolute z-20 top-full mt-1 left-0 bg-white border border-[#9EC8EF] rounded-xl shadow-lg py-1.5 w-56 max-h-72 overflow-y-auto">
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpenseCategoryFilter(["__all__"])}
+                                        className={`w-full text-left px-3 py-1.5 text-[11px] font-bold flex items-center gap-2 cursor-pointer hover:bg-[#EAF5FF] ${showingAll ? "text-[#315C9F]" : "text-[#1F3557]"}`}
+                                      >
+                                        {showingAll ? "✓" : "○"} All Expenses
+                                      </button>
+                                      <div className="border-t border-[#9EC8EF]/40 my-1" />
+                                      {EXPENSE_CATEGORY_NAMES.map(name => {
+                                        const selected = !showingAll && expenseCategoryFilter.includes(name);
+                                        return (
+                                          <button
+                                            key={name}
+                                            type="button"
+                                            onClick={() => toggleCategory(name)}
+                                            className={`w-full text-left px-3 py-1.5 text-[11px] font-semibold flex items-center gap-2 cursor-pointer hover:bg-[#EAF5FF] ${selected ? "text-[#315C9F]" : "text-[#1F3557]"}`}
+                                          >
+                                            {selected ? "✓" : "○"} {name}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => downloadCsv(
+                                    `Expenses by Category - ${showingAll ? "All Expenses" : visibleNames.join(", ")} - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                    ["Category", "Date", "Description", "Amount"],
+                                    tableRows.map(r => [r.category, r.date, r.memo, r.amount.toFixed(2)])
+                                  )}
+                                  className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <FileText className="w-3.5 h-3.5" /> Save as CSV
+                                </button>
+
+                                <span className="text-[10.5px] text-[#5E7393] font-sans font-medium">
+                                  {showingAll ? "Pick specific categories from the dropdown to add their lines to the graph." : "Selected categories are also plotted on the graph above."}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
+                                <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
+                                <span className="text-base font-black text-[#1F3557]">{fmt(tableTotal)}</span>
+                              </div>
+
+                              <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50">
+                                <table className="w-full text-xs">
+                                  <thead className="sticky top-0 bg-[#EAF5FF]">
+                                    <tr className="text-[9.5px] text-[#5E7393] uppercase font-bold">
+                                      <th className="text-left px-3 py-2">Category</th>
+                                      <th className="text-left px-3 py-2">Date</th>
+                                      <th className="text-left px-3 py-2">Description</th>
+                                      <th className="text-right px-3 py-2">Amount</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {tableRows.length === 0 ? (
+                                      <tr><td colSpan={4} className="text-center py-8 text-[#5E7393] font-medium">No expenses in this selection yet.</td></tr>
+                                    ) : (
+                                      tableRows.map((row, idx) => (
+                                        <tr key={`${row.id}_${idx}`} className="border-t border-[#9EC8EF]/20 bg-white/40">
+                                          <td className="px-3 py-2 font-bold text-[#1F3557] whitespace-nowrap">{row.category}</td>
+                                          <td className="px-3 py-2 font-mono text-[#5E7393] whitespace-nowrap">{row.date}</td>
+                                          <td className="px-3 py-2 text-[#1F3557]/85 truncate max-w-[160px]">{row.memo}</td>
+                                          <td className="px-3 py-2 text-right font-mono font-bold text-[#1F3557] whitespace-nowrap">{fmt(row.amount)}</td>
+                                        </tr>
+                                      ))
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+                                {categoryTotals.map(({ name, total }) => (
+                                  <span key={name} className="text-[9.5px] text-[#5E7393] font-sans font-medium">
+                                    {name}: <strong className="text-[#1F3557]">{fmt(total)}</strong>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* FINANCIAL INSIGHTS SECTION */}
+                      <div className="grid grid-cols-1 gap-6">
+
                         {/* Compact on-demand AI Financial Insights widget */}
-                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm lg:col-span-2 text-left self-start">
+                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm text-left self-start">
                           <button
                             type="button"
                             onClick={() => setIsFinancialInsightsOpen(open => !open)}
@@ -7450,7 +7747,7 @@ Access to full financial telemetry is restricted.`;
                                   link: "Review payroll details ➔",
                                   color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
                                   icon: Users,
-                                  action: "Payroll Ledger Analysis"
+                                  action: "Payroll Cost Analysis"
                                 });
                               }
 
@@ -7509,62 +7806,6 @@ Access to full financial telemetry is restricted.`;
                             })()}
                           </div>
                           )}
-                        </div>
-
-                        {/* Quick Actions Card */}
-                        <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-4 text-left">
-                          <div className="border-b border-[#9EC8EF]/30 pb-3">
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Ledger Actions</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Quick Actions</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Execute double-entry bookkeeping actions</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-3 flex-1 py-1">
-                            {[
-                              { label: "Record Expense", action: "expense", icon: DollarSign },
-                              { label: "Run Payroll", action: "payroll", icon: Users },
-                              { label: "Create Invoice", action: "invoice", icon: FileText },
-                              { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark }
-                            ].map((btn, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  if (btn.action === "reconcile_soon") {
-                                    triggerNotification("Reconcile Bank is coming soon.");
-                                    return;
-                                  }
-                                  if (btn.action === "expense") {
-                                    sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
-                                    setLogTransactionType("expense");
-                                    return;
-                                  }
-                                  if (btn.action === "payroll") {
-                                    handleRunPayroll();
-                                    return;
-                                  }
-                                  const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                                  if (accounting) setActiveScreen(accounting);
-                                  triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
-                                }}
-                                className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
-                              >
-                                <span className="p-1.5 bg-[#EAF5FF] border border-[#9EC8EF]/30 rounded-lg text-[#315C9F] shadow-sm">
-                                  <btn.icon className="w-4 h-4" />
-                                </span>
-                                <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide leading-tight">
-                                  {btn.label}
-                                </span>
-                                {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase text-amber-700">Coming Soon</span>}
-                              </button>
-                            ))}
-                          </div>
-                          
-                          <button
-                            onClick={() => setIsFinancialSnapshotOpen(true)}
-                            className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
-                          >
-                            View Financial Reports
-                          </button>
                         </div>
                       </div>
 
@@ -7738,7 +7979,7 @@ Access to full financial telemetry is restricted.`;
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
                           <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Overview</span>
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
                             <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
                           </div>
@@ -7914,7 +8155,7 @@ Access to full financial telemetry is restricted.`;
                         
                         <div className="text-center pt-2">
                           <button
-                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
+                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wages", icon: "👥" })}
                             className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
                           >
                             View All Employees ➔
@@ -8294,7 +8535,7 @@ Access to full financial telemetry is restricted.`;
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span>AI Agent is analyzing workspace ledger...</span>
+                  <span>AI Agent is analyzing workspace data...</span>
                 </div>
               )}
 
@@ -8305,7 +8546,7 @@ Access to full financial telemetry is restricted.`;
                     <div>
                       <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
                       <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
+                        Your query involves sensitive financial parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
                       </p>
                     </div>
                   </div>
@@ -8447,7 +8688,7 @@ Access to full financial telemetry is restricted.`;
                 { id: "ask", label: "Ask AI", icon: "💬" },
                 { id: "actions", label: "Actions", icon: "⚡" },
                 { id: "settings", label: "Settings", icon: "⚙️" },
-                { id: "recent", label: "Ledger", icon: "📋" }
+                { id: "recent", label: "Activity", icon: "📋" }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -8528,7 +8769,7 @@ Access to full financial telemetry is restricted.`;
                         <div>
                           <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
                           <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
+                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt records requires session verification. Do you confirm your Owner/Admin permission level?
                           </p>
                         </div>
                       </div>
