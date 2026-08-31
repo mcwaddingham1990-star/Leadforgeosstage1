@@ -6830,8 +6830,8 @@ Access to full financial telemetry is restricted.`;
                       />
                     )
 
-                  ) : activeScreen.id === "revenue" || activeScreen.id === "payroll" ? (
-                    !getVisibleScreens().some(screen => screen.id === activeScreen.id) ? (
+                  ) : activeScreen.id === "revenue" ? (
+                    !getVisibleScreens().some(screen => screen.id === "revenue") ? (
                       <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
                         <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
                         <h2 className="text-xl font-bold text-white">Restricted Access</h2>
@@ -6848,8 +6848,6 @@ Access to full financial telemetry is restricted.`;
                     ) : (
                       /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
                       <div className="space-y-6 animate-fade-in text-left">
-                      {activeScreen.id === "revenue" && (
-                      <>
                       {/* HEADER SECTION - Separate clean header block */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
@@ -7288,201 +7286,6 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       </div>
 
-                      </>
-                      )}
-
-                      {activeScreen.id === "payroll" && (
-                      /* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
-                          </div>
-                          
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                            {/* Employee Search Bar */}
-                            <div className="relative flex-1 sm:w-60">
-                              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                                <Search className="w-4 h-4 text-[#5E7393]" />
-                              </span>
-                              <input
-                                value={payrollSearch}
-                                onChange={(e) => setPayrollSearch(e.target.value)}
-                                type="text"
-                                placeholder="Search employees..."
-                                className="w-full pl-9.5 pr-4 py-2 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl focus:outline-none focus:border-[#4A86F7] text-[#1F3557] font-medium placeholder-[#5E7393]/70"
-                              />
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={downloadPayrollCsv}
-                              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              Download CSV
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={printPayrollSummary}
-                              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#315C9F] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              Print / PDF
-                            </button>
-                            
-                            <button
-                              onClick={() => {
-                                const matched = OS_SCREENS.find(s => s.id === "roster");
-                                if (matched) setActiveScreen(matched);
-                              }}
-                              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shrink-0"
-                            >
-                              View Roster
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
-                            <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
-                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
-                            <select value={payrollSchedule} onChange={e => selectPayrollSchedule(e.target.value as PayrollSchedule)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]">
-                              <option value="weekly_friday">Weekly — payday Friday</option>
-                              <option value="biweekly">Every two weeks</option>
-                              <option value="semimonthly">Semimonthly — 1–15 / 16–end</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="custom">Custom date range</option>
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period start
-                            <input type="date" value={payrollPeriodStart} max={payrollPeriodEnd} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodStart(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period end
-                            <input type="date" value={payrollPeriodEnd} min={payrollPeriodStart} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodEnd(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Workweek starts
-                            <select value={payrollWorkweekStart} onChange={e => setPayrollWorkweekStart(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
-                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
-                            </select>
-                          </label>
-                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Payday
-                            <select value={payrollPayday} onChange={e => setPayrollPayday(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
-                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
-                            </select>
-                          </label>
-                          <div className="flex flex-wrap gap-2 lg:col-span-6">
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
-                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
-                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
-                          </div>
-                        </div>
-
-                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
-                            using the selected pay period and workweek rules above. recentRoster is a separate
-                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
-                            to real hours — this table uses the real `employees` collection instead. */}
-                        {(() => {
-                          const rows = employees
-                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
-                            .map((emp) => {
-                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
-                              const { hours, overtimeHours: otHours } = computePayrollHoursForRange(myLogs, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
-                              const regHours = hours - otHours;
-                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
-                              const lastPayroll = transactions
-                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
-                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
-                              return { emp, hours, otHours, pay, lastPayroll, status };
-                            });
-                          return (
-                            <>
-                              {payrollSearch && (
-                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
-                                  Found {rows.length} employees matching "{payrollSearch}"
-                                </div>
-                              )}
-
-                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
-                                <table className="w-full text-left border-collapse">
-                                  <thead>
-                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
-                                      <th className="px-4 py-3">Employee</th>
-                                      <th className="px-4 py-3 text-right">Current Hours</th>
-                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
-                                      <th className="px-4 py-3 text-right">Current Pay</th>
-                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
-                                      <th className="px-4 py-3 text-center">Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
-                                    {rows.length === 0 && (
-                                      <tr>
-                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
-                                          No real employees onboarded yet.
-                                        </td>
-                                      </tr>
-                                    )}
-                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
-                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
-                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
-                                      return (
-                                        <tr
-                                          key={emp.email}
-                                          onClick={() => {
-                                            const matched = OS_SCREENS.find(s => s.id === "roster");
-                                            if (matched) setActiveScreen(matched);
-                                          }}
-                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
-                                        >
-                                          <td className="px-4 py-3 flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
-                                              {initials}
-                                            </div>
-                                            <div>
-                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
-                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
-                                            </div>
-                                          </td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
-                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
-                                          <td className="px-4 py-3 text-center">
-                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
-                                              {status}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </>
-                          );
-                        })()}
-                        
-                        <div className="text-center pt-2">
-                          <button
-                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
-                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            View All Employees ➔
-                          </button>
-                        </div>
-                      </div>
-                      )}
-
-                      {activeScreen.id === "revenue" && (
-                      <>
                       {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         
@@ -7777,9 +7580,224 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       )}
 
-                      </>
-                      )}
                     </div>
+                    )
+
+                  ) : activeScreen.id === "payroll" ? (
+                    !getVisibleScreens().some(screen => screen.id === "payroll") ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account does not have permission to access Payroll.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-6 animate-fade-in text-left">
+                      {/* HEADER SECTION */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                          <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
+                            <span className="select-none text-xl">💵</span> Payroll
+                          </h2>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Run payroll, track hours, and manage pay periods for your crew</p>
+                        </div>
+                      </div>
+
+                      /* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
+                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
+                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                            {/* Employee Search Bar */}
+                            <div className="relative flex-1 sm:w-60">
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                                <Search className="w-4 h-4 text-[#5E7393]" />
+                              </span>
+                              <input
+                                value={payrollSearch}
+                                onChange={(e) => setPayrollSearch(e.target.value)}
+                                type="text"
+                                placeholder="Search employees..."
+                                className="w-full pl-9.5 pr-4 py-2 text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl focus:outline-none focus:border-[#4A86F7] text-[#1F3557] font-medium placeholder-[#5E7393]/70"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={downloadPayrollCsv}
+                              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Download CSV
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={printPayrollSummary}
+                              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#315C9F] font-bold rounded-xl text-xs transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Print / PDF
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                const matched = OS_SCREENS.find(s => s.id === "roster");
+                                if (matched) setActiveScreen(matched);
+                              }}
+                              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] text-[#315C9F] border border-[#9EC8EF] font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shrink-0"
+                            >
+                              View Roster
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
+                            <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
+                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
+                            <select value={payrollSchedule} onChange={e => selectPayrollSchedule(e.target.value as PayrollSchedule)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]">
+                              <option value="weekly_friday">Weekly — payday Friday</option>
+                              <option value="biweekly">Every two weeks</option>
+                              <option value="semimonthly">Semimonthly — 1–15 / 16–end</option>
+                              <option value="monthly">Monthly</option>
+                              <option value="custom">Custom date range</option>
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period start
+                            <input type="date" value={payrollPeriodStart} max={payrollPeriodEnd} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodStart(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Period end
+                            <input type="date" value={payrollPeriodEnd} min={payrollPeriodStart} onChange={e => { setPayrollSchedule("custom"); setPayrollPeriodEnd(e.target.value); }} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs" />
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Workweek starts
+                            <select value={payrollWorkweekStart} onChange={e => setPayrollWorkweekStart(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[9px] font-black uppercase text-[#5E7393]">Payday
+                            <select value={payrollPayday} onChange={e => setPayrollPayday(Number(e.target.value))} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs">
+                              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((day,index)=><option key={day} value={index}>{day}</option>)}
+                            </select>
+                          </label>
+                          <div className="flex flex-wrap gap-2 lg:col-span-6">
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
+                            <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
+                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
+                          </div>
+                        </div>
+
+                        {/* Real payroll rows: real employees x real time_clock_logs x real hourlyRate,
+                            using the selected pay period and workweek rules above. recentRoster is a separate
+                            onboarding-invite list without email/hourlyRate, so it can't be cross-referenced
+                            to real hours — this table uses the real `employees` collection instead. */}
+                        {(() => {
+                          const rows = employees
+                            .filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(payrollSearch.toLowerCase()) || e.role.toLowerCase().includes(payrollSearch.toLowerCase()))
+                            .map((emp) => {
+                              const myLogs = timeClockLogs.filter(l => l.employeeEmail === emp.email);
+                              const { hours, overtimeHours: otHours } = computePayrollHoursForRange(myLogs, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart);
+                              const regHours = hours - otHours;
+                              const pay = emp.hourlyRate ? regHours * emp.hourlyRate + otHours * emp.hourlyRate * 1.5 : 0;
+                              const lastPayroll = transactions
+                                .filter(t => t.source === "payroll" && t.description === `${emp.firstName} ${emp.lastName}`.trim())
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                              const lastLog = [...myLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+                              const status = !lastLog ? "Off Duty" : lastLog.type === "Break Start" ? "On Break" : lastLog.type === "Clock Out" ? "Off Duty" : "Clocked In";
+                              return { emp, hours, otHours, pay, lastPayroll, status };
+                            });
+                          return (
+                            <>
+                              {payrollSearch && (
+                                <div className="text-[11px] font-sans font-bold text-[#1F3557] bg-[#EAF5FF] px-3.5 py-1.5 rounded-lg border border-[#9EC8EF]/50 inline-block">
+                                  Found {rows.length} employees matching "{payrollSearch}"
+                                </div>
+                              )}
+
+                              <div className="overflow-x-auto rounded-xl border border-[#9EC8EF] shadow-sm">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#EAF5FF] border-b border-[#9EC8EF] text-[10px] font-bold text-[#1F3557] uppercase tracking-wider">
+                                      <th className="px-4 py-3">Employee</th>
+                                      <th className="px-4 py-3 text-right">Current Hours</th>
+                                      <th className="px-4 py-3 text-right">Overtime Hours</th>
+                                      <th className="px-4 py-3 text-right">Current Pay</th>
+                                      <th className="px-4 py-3 text-center">Last Payroll Date</th>
+                                      <th className="px-4 py-3 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#9EC8EF]/30 text-xs font-sans">
+                                    {rows.length === 0 && (
+                                      <tr>
+                                        <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
+                                          No real employees onboarded yet.
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {rows.map(({ emp, hours, otHours, pay, lastPayroll, status }) => {
+                                      const initials = `${emp.firstName[0] || ""}${emp.lastName[0] || ""}`.toUpperCase();
+                                      const statusColor = status === "Clocked In" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : status === "On Break" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+                                      return (
+                                        <tr
+                                          key={emp.email}
+                                          onClick={() => {
+                                            const matched = OS_SCREENS.find(s => s.id === "roster");
+                                            if (matched) setActiveScreen(matched);
+                                          }}
+                                          className="hover:bg-[#BDDDF8] transition-colors cursor-pointer"
+                                        >
+                                          <td className="px-4 py-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-[#EAF5FF] text-[#315C9F] border-[#9EC8EF] font-black text-xs flex items-center justify-center border shadow-sm">
+                                              {initials}
+                                            </div>
+                                            <div>
+                                              <p className="font-extrabold text-[#1F3557]">{emp.firstName} {emp.lastName}</p>
+                                              <p className="text-[10px] text-[#5E7393] font-mono tracking-wider">{emp.role}</p>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{hours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">{otHours.toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-mono font-bold text-[#1F3557]">${pay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                          <td className="px-4 py-3 text-center font-mono text-[#5E7393]">{lastPayroll ? lastPayroll.date : "—"}</td>
+                                          <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-0.5 border text-[9.5px] font-bold rounded ${statusColor}`}>
+                                              {status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          );
+                        })()}
+                        
+                        <div className="text-center pt-2">
+                          <button
+                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
+                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            View All Employees ➔
+                          </button>
+                        </div>
+                      </div>
+                      </div>
                     )
 
                   ) : activeScreen.id === "scheduling" ? (
