@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { hasPermission } from "../types/permissions";
+import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 import {
   Search,
   Plus,
@@ -246,7 +247,7 @@ export const EstimatesPage: React.FC = () => {
     if (!formCustomerName.trim()) return;
     const newEst: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
-      number: "EST-2026-" + Math.floor(100 + Math.random() * 900),
+      number: generateEstimateNumber(),
       customerName: formCustomerName.trim(),
       company: formCompany.trim() || formCustomerName.trim() + " Inc",
       status: formStatus,
@@ -256,8 +257,8 @@ export const EstimatesPage: React.FC = () => {
       projectSpecifics: formProjectSpecifics.trim() || undefined,
       address: formAddress.trim() || undefined,
       phone: formPhone.trim() || undefined,
-      createdDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }),
-      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
+      createdDate: formatEstimateDate(new Date()),
+      expirationDate: estimateExpirationDate()
     };
 
     if (setEstimates) {

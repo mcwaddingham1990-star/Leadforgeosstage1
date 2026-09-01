@@ -1,6 +1,7 @@
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { Customer, Estimate, SchedulingEvent } from "../types/domain";
+import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 
 /**
  * Single home for the cross-domain writes that today happen ad hoc inside
@@ -16,7 +17,7 @@ export function useDomainActions() {
 
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
+    if (!lead) return null;
 
     const newCustomer: Customer = {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
@@ -37,6 +38,7 @@ export function useDomainActions() {
     setCustomers(prev => [newCustomer, ...prev]);
     setLeads(prev => prev.map(l => (l.id === leadId ? { ...l, status: "Won" } : l)));
     logOperationalEvent("Lead Converted", `${lead.name} converted to Customer`, "🤝", { screen: "customers", customerId: newCustomer.id });
+    return newCustomer;
   };
 
   const createEstimateFromLead = (leadId: string) => {
@@ -45,7 +47,7 @@ export function useDomainActions() {
 
     const newEstimate: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
-      number: "E-" + (1000 + Math.floor(Math.random() * 9000)),
+      number: generateEstimateNumber(),
       company: lead.company || lead.name + " Inc",
       customerName: lead.name,
       salesRep: lead.salesRep || "Unassigned",
@@ -56,8 +58,8 @@ export function useDomainActions() {
       notes: lead.notes || "",
       phone: lead.phone || undefined,
       address: lead.address || undefined,
-      createdDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      createdDate: formatEstimateDate(new Date()),
+      expirationDate: estimateExpirationDate()
     };
 
     setEstimates(prev => [newEstimate, ...prev]);

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
+import { useDomainActions } from "../hooks/useDomainActions";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Search, 
@@ -128,6 +129,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     employees,
     timeClockLogs
   } = useDomainData();
+  const { convertLeadToCustomer } = useDomainActions();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
@@ -961,52 +963,28 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     }
   };
 
-  // Convert Lead -> Active Customer profile instantly
+  // Convert Lead -> Active Customer profile instantly. Uses the same
+  // convertLeadToCustomer() every other lead-conversion entry point calls
+  // (Leads page included) instead of a separate reimplementation here --
+  // real address, real lifetime value, no fabricated "Dallas, TX" or
+  // phantom open job.
   const handleConvertLead = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    // 1. Create customer
-    const newCustId = `cust_gen_${Date.now()}`;
-    const newCust = {
-      id: newCustId,
-      company: lead.company || `${lead.name}'s Property`,
-      contact: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      address: lead.company || "Dallas, TX",
-      openJobs: 1,
-      outstandingBalance: 0,
-      lifetimeValue: lead.estimatedValue || 2400,
-      status: "Active" as const,
-      type: "Residential" as const,
-      isVIP: false,
-      recentlyAdded: true
-    };
-
-    setCustomers(prev => [...prev, newCust]);
-
-    // 2. Mark Lead as Won
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: "Won" } : l));
+    const newCust = convertLeadToCustomer(leadId);
+    if (!newCust) return;
 
     setSelectedPin({
-      id: newCustId,
+      id: newCust.id,
       type: "Customer",
       title: newCust.company,
-      subtitle: `Contact: ${newCust.contact} | Open Jobs: 1`,
+      subtitle: `Contact: ${newCust.contact} | Open Jobs: ${newCust.openJobs}`,
       address: newCust.address,
-      lat: geocodeAddress(newCust.address, newCustId).lat,
-      lng: geocodeAddress(newCust.address, newCustId).lng,
+      lat: geocodeAddress(newCust.address, newCust.id).lat,
+      lng: geocodeAddress(newCust.address, newCust.id).lng,
       raw: newCust
     });
-
-    if (logOperationalEvent) {
-      logOperationalEvent(
-        "Lead Promoted",
-        `Lead ${lead.name} has been promoted to Customers list.`,
-        "🎯"
-      );
-    }
   };
 
   // Dispatch technician assignment
