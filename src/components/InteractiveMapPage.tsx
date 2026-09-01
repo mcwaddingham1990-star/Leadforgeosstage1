@@ -930,7 +930,12 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       location: matchedCustomer?.address || est.address || est.company || "",
       priority: "Medium" as const,
       notes: `Generated automatically via approved estimate ${est.number}. Amount: $${est.amount}`,
-      status: "Scheduled" as const
+      status: "Scheduled" as const,
+      // Same real expected-payout field every other job-creation path
+      // populates (manual scheduling, Jobs page, accepted-estimate
+      // conversion) -- the amount was already known here, just never
+      // carried into the structured field anything reading job value reads.
+      budget: est.amount
     };
 
     setSchedulingEvents(prev => [...prev, newJob]);

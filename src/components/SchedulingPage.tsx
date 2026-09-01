@@ -165,6 +165,12 @@ export const SchedulingPage: React.FC = () => {
   const [formLocation, setFormLocation] = useState("");
   const [formPriority, setFormPriority] = useState<"Low" | "Medium" | "High" | "Urgent">("Medium");
   const [formNotes, setFormNotes] = useState("");
+  // Expected $ value for a Job event -- every job needs this populated the
+  // same way regardless of how it was created (manually here, from an
+  // accepted estimate, from the Jobs page, or approved off the map), so
+  // anything reading a job's budget (Money Tracker's ticker, reports) sees
+  // a real number instead of one code path leaving it blank.
+  const [formBudget, setFormBudget] = useState("");
 
   // Check if role has create/edit permissions
   // Schedulers, Dispatchers, Owners, Managers can do everything.
@@ -244,6 +250,7 @@ export const SchedulingPage: React.FC = () => {
     setFormLocation("");
     setFormPriority("Medium");
     setFormNotes("");
+    setFormBudget("");
     setIsEditingEvent(false);
   };
 
@@ -500,7 +507,8 @@ export const SchedulingPage: React.FC = () => {
         assignedCrew: formCrew !== "None" ? formCrew : undefined,
         location: formLocation.trim() || customerAddress,
         priority: formPriority,
-        notes: formNotes.trim()
+        notes: formNotes.trim(),
+        budget: formType === "Job" ? (Number(formBudget) || 0) : evt.budget
       } : evt));
 
       if (logOperationalEvent) {
@@ -525,7 +533,8 @@ export const SchedulingPage: React.FC = () => {
         location: formLocation.trim() || customerAddress,
         priority: formPriority,
         notes: formNotes.trim(),
-        status: "Scheduled"
+        status: "Scheduled",
+        budget: formType === "Job" ? (Number(formBudget) || 0) : undefined
       };
 
       setEvents(prev => [...prev, newEvt]);
@@ -601,6 +610,7 @@ export const SchedulingPage: React.FC = () => {
     setFormLocation(evt.location || "");
     setFormPriority(evt.priority);
     setFormNotes(evt.notes || "");
+    setFormBudget(evt.budget ? String(evt.budget) : "");
 
     setIsEditingEvent(true);
     setIsNewEventOpen(true);
@@ -1630,6 +1640,24 @@ export const SchedulingPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
+                {formType === "Job" && (
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Expected Job Value</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formBudget}
+                      onChange={(e) => setFormBudget(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 focus:outline-none font-semibold"
+                    />
+                    <p className="text-[9px] text-slate-400 font-medium">
+                      The real expected payout for this job -- shown wherever job value is tracked (Money Tracker's upcoming payouts, reports), the same as a job created from an accepted estimate.
+                    </p>
+                  </div>
+                )}
+
                 {/* Specific Location field */}
                 <StructuredAddressFields
                   label="Site / Job Location"
