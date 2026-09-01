@@ -102,7 +102,7 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { LineChart, Line } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
 
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
@@ -7110,197 +7110,367 @@ Access to full financial telemetry is restricted.`;
                         </div>
                       </div>
 
-                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH STEP GRAPH */}
+                      {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
-                        {/* Summary Display + the one graph-interval dropdown (top of the graph) */}
                         {(() => {
-                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
-                          const balance = currentTotal - currentExpenseTotal;
-                          const priorBalance = priorTotal - priorExpenseTotal;
-                          const hasPrior = priorBalance !== 0;
-                          const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
-                          const isUp = pct === null ? balance > 0 : pct >= 0;
-                          const balanceLabel = revenuePageFilter === "Total" ? "Total Balance" : `${revenuePageFilter} Balance`;
-                          return (
-                            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
-                              <div>
-                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393] mb-1">{balanceLabel}</p>
-                                <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
-                                  {`${balance < 0 ? "-" : ""}$${Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                </span>
-                              </div>
-                              <select
-                                aria-label="Graph interval"
-                                value={revenuePageFilter}
-                                onChange={(e) => {
-                                  changeRevenuePageFilter(e.target.value);
-                                  triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
-                                }}
-                                className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
-                              >
-                                <option value="Day">View by Day</option>
-                                <option value="Week">View by Week</option>
-                                <option value="Pay Period">View by Pay Period</option>
-                                <option value="Quarter">View by Quarter</option>
-                                <option value="Annual">View Annual</option>
-                                <option value="Total">View Total</option>
-                              </select>
-                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
-                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
-                                {pct === null ? (balance !== 0 ? "Current" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
-                              </span>
-                              <span className="text-xs text-[#5E7393] font-sans font-medium">income minus expenses</span>
-                            </div>
-                          );
-                        })()}
+                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
+                          const { points, periodStart, periodEnd } = stepData;
+                          const latest = points[points.length - 1];
+                          const paymentsTotal = latest.Payments;
+                          const expensesTotal = latest.Expenses;
+                          const netTotal = latest.Net;
+                          const netMargin = paymentsTotal > 0 ? (netTotal / paymentsTotal) * 100 : null;
 
-                        {/* Log real income/expenses, run real payroll */}
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Income
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Expense
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isRunningPayroll}
-                            onClick={handleRunPayroll}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
-                          </button>
-                        </div>
+                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
+                          const priorNet = priorTotal - priorExpenseTotal;
+                          const pctChange = (cur: number, prior: number) => (prior !== 0 ? ((cur - prior) / Math.abs(prior)) * 100 : null);
+                          const paymentsPct = pctChange(paymentsTotal, priorTotal);
+                          const expensesPct = pctChange(expensesTotal, priorExpenseTotal);
+                          const netPct = pctChange(netTotal, priorNet);
 
-                        {logTransactionType && (
-                          <LogTransactionModal
-                            type={logTransactionType}
-                            createdBy={loggedInUser?.email}
-                            onSave={handleSaveTransaction}
-                            onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
-                          />
-                        )}
+                          const inPeriod = (d: string) => {
+                            const t = new Date(d).getTime();
+                            return !Number.isNaN(t) && t >= periodStart.getTime() && t <= periodEnd.getTime();
+                          };
+                          const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
+                          const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
 
-                        {/* Event-driven step graph — a point at every real payment/expense,
-                            flat until the next one, reset to zero at the start of the period */}
-                        {(() => {
-                          const { points } = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
-                          const chartWidth = Math.max(340, points.length * 60);
+                          const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                          const categoryTotalsThisPeriod = EXPENSE_CATEGORY_NAMES.map(name => {
+                            const values = name === "Bills"
+                              ? bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))
+                              : name === "Material Expenses"
+                                ? transactions.filter(t => t.type === "expense" && materialCategories.has(t.category || "") && inPeriod(t.date)).map(t => t.amount)
+                                : transactions.filter(t => t.type === "expense" && t.category === name && inPeriod(t.date)).map(t => t.amount);
+                            return { name: name as string, total: values.reduce((s, v) => s + v, 0) };
+                          }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+
+                          const topCategories = categoryTotalsThisPeriod.slice(0, 4);
+                          const otherCategoriesTotal = categoryTotalsThisPeriod.slice(4).reduce((s, c) => s + c.total, 0);
+                          const expenseSlices = [
+                            ...topCategories.map((c, i) => ({ label: c.name, value: c.total, color: ["#F43F5E", "#F59E0B", "#8B5CF6", "#64748B"][i % 4] })),
+                            ...(otherCategoriesTotal > 0 ? [{ label: "Other", value: otherCategoriesTotal, color: "#94A3B8" }] : [])
+                          ];
+                          const revenueSlicesRaw = [
+                            { label: "Completed Job Revenue", value: jobRevenueThisPeriod, color: "#4A86F7" },
+                            { label: "Logged Income", value: loggedIncomeThisPeriod, color: "#0EA5E9" }
+                          ];
+                          const revenueSlices = revenueSlicesRaw.filter(s => s.value > 0);
+                          const revenueSlicesTotal = revenueSlices.reduce((s, r) => s + r.value, 0);
+                          const expenseSlicesTotal = expenseSlices.reduce((s, r) => s + r.value, 0);
+
+                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
+
+                          const todayStr = new Date().toISOString().slice(0, 10);
+                          const upcomingJobs = schedulingEvents
+                            .filter(e => e.eventType === "Job" && e.date >= todayStr && e.status !== "Completed" && e.status !== "Cancelled")
+                            .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+                            .map(e => ({ id: e.id, label: e.title || e.customer || "Job", amount: e.budget || 0 }));
+                          const upcomingBills = bills
+                            .filter(b => b.status !== "paid" && b.status !== "void")
+                            .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))
+                            .map(b => ({ id: b.id, label: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor, amount: Math.max(0, b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - b.amountPaid) }));
+                          const tickerItems = [...upcomingJobs, ...upcomingBills];
+
+                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                           const xTickFormat = (ms: number) => {
                             const d = new Date(ms);
                             return revenuePageFilter === "Day"
                               ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
                               : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
                           };
+                          const chartWidth = Math.max(340, points.length * 60);
+
                           return (
-                            <div className="pt-2">
-                              {points.length > 6 && (
-                                <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
-                              )}
-                              <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-                                <LineChart
-                                  width={chartWidth}
-                                  height={280}
-                                  data={points}
-                                  margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                                  <XAxis
-                                    dataKey="x"
-                                    type="number"
-                                    domain={["dataMin", "dataMax"]}
-                                    tickFormatter={xTickFormat}
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    dy={10}
-                                    className="font-mono"
-                                  />
-                                  <YAxis
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
-                                    className="font-mono"
-                                    width={48}
-                                  />
-                                  <Tooltip
-                                    labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                                    content={
-                                    ({ active, payload, label }) => {
-                                      if (active && payload && payload.length) {
-                                        return (
-                                          <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
-                                            <div className="space-y-1">
-                                              {payload.map((entry: any, index: number) => (
-                                                <div key={index} className="flex items-center justify-between gap-6">
-                                                  <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                    {entry.name}:
-                                                  </span>
-                                                  <span className="font-mono font-bold text-[#1F3557] text-[11px]">
-                                                    ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    }
-                                  } />
-                                  <Legend
-                                    verticalAlign="top"
-                                    height={36}
-                                    iconType="circle"
-                                    iconSize={8}
-                                    className="font-sans font-bold text-[11px]"
-                                    wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                                  />
-                                  {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
-                                  {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
-                                  {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
-                                </LineChart>
+                            <>
+                              {/* HEADER: Money Tracker + graph-interval dropdown (top-left), Live badge (top-right) */}
+                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-[#9EC8EF]/30 pb-4">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="select-none text-xl">💰</span>
+                                  <h2 className="text-base font-sans font-black text-[#1F3557] uppercase tracking-wider">Money Tracker</h2>
+                                  <select
+                                    aria-label="Graph interval"
+                                    value={revenuePageFilter}
+                                    onChange={(e) => {
+                                      changeRevenuePageFilter(e.target.value);
+                                      triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                    }}
+                                    className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="Day">Day</option>
+                                    <option value="Week">Week</option>
+                                    <option value="Pay Period">Pay Period</option>
+                                    <option value="Quarter">Quarter</option>
+                                    <option value="Annual">Annual</option>
+                                    <option value="Total">Total</option>
+                                  </select>
+                                </div>
+                                <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 uppercase tracking-wider">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Live Data
+                                </span>
                               </div>
-                            </div>
+
+                              {/* Log real income/expenses, run real payroll */}
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
+                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+                                >
+                                  + Log Income
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
+                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                                >
+                                  + Log Expense
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isRunningPayroll}
+                                  onClick={handleRunPayroll}
+                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
+                                </button>
+                              </div>
+
+                              {logTransactionType && (
+                                <LogTransactionModal
+                                  type={logTransactionType}
+                                  createdBy={loggedInUser?.email}
+                                  onSave={handleSaveTransaction}
+                                  onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
+                                />
+                              )}
+
+                              {/* CHART + REAL STAT TILES */}
+                              <div className="flex flex-col lg:flex-row gap-5">
+                                <div className="flex-1 min-w-0">
+                                  {points.length > 6 && (
+                                    <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
+                                  )}
+                                  <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                    <LineChart
+                                      width={chartWidth}
+                                      height={280}
+                                      data={points}
+                                      margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
+                                    >
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                      <XAxis
+                                        dataKey="x"
+                                        type="number"
+                                        domain={["dataMin", "dataMax"]}
+                                        tickFormatter={xTickFormat}
+                                        stroke="#5E7393"
+                                        fontSize={10}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        dy={10}
+                                        className="font-mono"
+                                      />
+                                      <YAxis
+                                        stroke="#5E7393"
+                                        fontSize={10}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
+                                        className="font-mono"
+                                        width={48}
+                                      />
+                                      <Tooltip
+                                        labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                                        content={
+                                        ({ active, payload, label }) => {
+                                          if (active && payload && payload.length) {
+                                            return (
+                                              <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
+                                                <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                                                <div className="space-y-1">
+                                                  {payload.map((entry: any, index: number) => (
+                                                    <div key={index} className="flex items-center justify-between gap-6">
+                                                      <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
+                                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                        {entry.name}:
+                                                      </span>
+                                                      <span className="font-mono font-bold text-[#1F3557] text-[11px]">
+                                                        ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        }
+                                      } />
+                                      <Legend
+                                        verticalAlign="top"
+                                        height={36}
+                                        iconType="circle"
+                                        iconSize={8}
+                                        className="font-sans font-bold text-[11px]"
+                                        wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                                      />
+                                      {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
+                                      {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
+                                      {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
+                                    </LineChart>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:w-52 shrink-0">
+                                  {([
+                                    { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10", isPct: false },
+                                    { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", isPct: false },
+                                    { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10", isPct: false },
+                                    { label: "Net Margin", val: netMargin, pct: null as number | null, icon: Landmark, color: "text-purple-500", bg: "bg-purple-500/10", isPct: true }
+                                  ]).map((tile, idx) => (
+                                    <div key={idx} className="bg-[#EAF5FF] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wide">{tile.label}</span>
+                                        <div className={`p-1 rounded-md ${tile.bg} ${tile.color}`}><tile.icon className="w-3 h-3" /></div>
+                                      </div>
+                                      <p className="text-sm font-black text-[#1F3557]">
+                                        {tile.isPct ? (tile.val === null ? "—" : `${tile.val.toFixed(1)}%`) : fmt(tile.val as number)}
+                                      </p>
+                                      {tile.pct !== null && (
+                                        <p className={`text-[9px] font-bold mt-0.5 ${(tile.pct as number) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                          {(tile.pct as number) >= 0 ? "▲" : "▼"} {Math.abs(tile.pct as number).toFixed(1)}% vs last period
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Graph series toggles — bottom-left of the card, pick any combination */}
+                              <div className="flex flex-wrap justify-start gap-2">
+                                {([
+                                  { value: "revenue",  label: "Payments Collected" },
+                                  { value: "expenses", label: "Expenses" },
+                                  { value: "profit",   label: "Net Revenue" },
+                                ] as const).map(({ value, label }) => {
+                                  const selected = graphDataTypes.includes(value);
+                                  return (
+                                    <button
+                                      key={value}
+                                      onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
+                                      className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                        selected
+                                          ? "bg-[#4A86F7] text-white shadow-sm"
+                                          : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                                      }`}
+                                    >
+                                      {selected ? "✓ " : ""}{label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Revenue Breakdown</p>
+                                  {revenueSlices.length === 0 ? (
+                                    <p className="text-[10.5px] text-[#5E7393] text-center py-8">No revenue this period yet.</p>
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <ResponsiveContainer width={90} height={90}>
+                                        <PieChart>
+                                          <Pie data={revenueSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                            {revenueSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                          </Pie>
+                                        </PieChart>
+                                      </ResponsiveContainer>
+                                      <div className="space-y-1.5 flex-1 min-w-0">
+                                        {revenueSlices.map((s, i) => (
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px]">
+                                            <span className="flex items-center gap-1.5 truncate text-[#1F3557] font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} /> {s.label}
+                                            </span>
+                                            <span className="font-mono font-bold text-[#5E7393] shrink-0">{Math.round((s.value / revenueSlicesTotal) * 100)}%</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Expense Breakdown</p>
+                                  {expenseSlices.length === 0 ? (
+                                    <p className="text-[10.5px] text-[#5E7393] text-center py-8">No expenses this period yet.</p>
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <ResponsiveContainer width={90} height={90}>
+                                        <PieChart>
+                                          <Pie data={expenseSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                            {expenseSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                          </Pie>
+                                        </PieChart>
+                                      </ResponsiveContainer>
+                                      <div className="space-y-1.5 flex-1 min-w-0">
+                                        {expenseSlices.map((s, i) => (
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px]">
+                                            <span className="flex items-center gap-1.5 truncate text-[#1F3557] font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} /> {s.label}
+                                            </span>
+                                            <span className="font-mono font-bold text-[#5E7393] shrink-0">{Math.round((s.value / expenseSlicesTotal) * 100)}%</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Cash Flow</p>
+                                  <ResponsiveContainer width="100%" height={100}>
+                                    <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                      <XAxis dataKey="time" stroke="#5E7393" fontSize={8} tickLine={false} axisLine={false} />
+                                      <YAxis stroke="#5E7393" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
+                                      <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} />
+                                      <Bar dataKey="Profit" radius={[3, 3, 0, 0]}>
+                                        {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#22C55E" : "#F43F5E"} />)}
+                                      </Bar>
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+
+                              {/* Upcoming payouts (jobs), then upcoming bills -- one continuous scrolling ticker, bottom to top */}
+                              <div>
+                                <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Payouts &amp; Bills</p>
+                                <div className="bg-[#EAF5FF] rounded-2xl border border-[#9EC8EF] h-56 overflow-hidden relative">
+                                  {tickerItems.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center text-[11px] text-[#5E7393] font-medium">Nothing upcoming yet.</div>
+                                  ) : (
+                                    <div
+                                      className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+                                      style={{ animation: `ticker-scroll ${Math.max(12, tickerItems.length * 3)}s linear infinite` }}
+                                    >
+                                      {[0, 1].map(copy => (
+                                        <div key={copy}>
+                                          {tickerItems.map((item, idx) => (
+                                            <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#9EC8EF]/20 text-xs">
+                                              <span className="font-semibold text-[#1F3557] truncate">{item.label}</span>
+                                              <span className="font-mono font-bold text-[#315C9F] shrink-0">{fmt(item.amount)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </>
                           );
                         })()}
-
-                        {/* Graph series toggles — bottom-left of the card, pick any combination */}
-                        <div className="flex flex-wrap justify-start gap-2">
-                          {([
-                            { value: "revenue",  label: "Payments Collected" },
-                            { value: "expenses", label: "Expenses" },
-                            { value: "profit",   label: "Net Revenue" },
-                          ] as const).map(({ value, label }) => {
-                            const selected = graphDataTypes.includes(value);
-                            return (
-                              <button
-                                key={value}
-                                onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
-                                className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                  selected
-                                    ? "bg-[#4A86F7] text-white shadow-sm"
-                                    : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                                }`}
-                              >
-                                {selected ? "✓ " : ""}{label}
-                              </button>
-                            );
-                          })}
-                        </div>
                       </div>
 
                       {/* TWO STATEMENT TABLES - PAYMENTS (TOP), THEN EXPENSES (BELOW) */}

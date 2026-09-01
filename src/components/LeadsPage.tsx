@@ -778,7 +778,7 @@ export const LeadsPage: React.FC = () => {
       <div className="space-y-3.5">
         <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5" />
-          Lead Insights & Performance Analytics
+          Lead Insights & Performance
         </h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

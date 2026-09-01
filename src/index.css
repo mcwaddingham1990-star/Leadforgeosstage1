@@ -7,6 +7,14 @@
   --font-display: "Space Grotesk", sans-serif;
 }
 
+/* Money Tracker's upcoming-jobs/bills ticker: the content is rendered twice
+   back to back and this scrolls the wrapper up by exactly one copy's height,
+   which loops seamlessly since the second copy is identical to the first. */
+@keyframes ticker-scroll {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
 /* ==========================================================================
    WORKSPACE THEME OVERRIDES (EXCLUDING LOGIN)
    This block perfectly implements the exact color specifications and design
