@@ -7075,9 +7075,9 @@ Access to full financial telemetry is restricted.`;
                         <div className="flex flex-nowrap gap-2 w-max">
                           {[
                             { label: "Record Expense", action: "expense", icon: DollarSign },
+                            { label: "Add Custom Payment", action: "payment", icon: CreditCard },
                             { label: "Run Payroll", action: "payroll", icon: Users },
-                            { label: "Create Invoice", action: "invoice", icon: FileText },
-                            { label: "View Financial Reports", action: "financial_reports", icon: Landmark }
+                            { label: "Create Invoice", action: "invoice", icon: FileText }
                           ].map((btn, idx) => (
                             <button
                               key={idx}
@@ -7087,12 +7087,18 @@ Access to full financial telemetry is restricted.`;
                                   setLogTransactionType("expense");
                                   return;
                                 }
-                                if (btn.action === "payroll") {
-                                  handleRunPayroll();
+                                if (btn.action === "payment") {
+                                  // Same real income-transaction pipeline as Money
+                                  // Tracker's own "+ Log Income" button, so a custom
+                                  // payment shows up everywhere a payment already
+                                  // does -- the graph, the Payments table, CSV
+                                  // exports, the Revenue Breakdown donut.
+                                  sessionStorage.setItem("ownerslocal_pending_financial_scan", "income");
+                                  setLogTransactionType("income");
                                   return;
                                 }
-                                if (btn.action === "financial_reports") {
-                                  setIsFinancialSnapshotOpen(true);
+                                if (btn.action === "payroll") {
+                                  handleRunPayroll();
                                   return;
                                 }
                                 const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
@@ -7371,6 +7377,13 @@ Access to full financial telemetry is restricted.`;
                                   );
                                 })}
                               </div>
+
+                              <button
+                                onClick={() => setIsFinancialSnapshotOpen(true)}
+                                className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 w-fit"
+                              >
+                                <Landmark className="w-3.5 h-3.5" /> View Financial Reports
+                              </button>
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
