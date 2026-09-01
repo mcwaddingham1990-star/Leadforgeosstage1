@@ -7117,7 +7117,7 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
+                      <div className="bg-white/50 backdrop-blur-xl rounded-3xl p-6 border border-white/70 shadow-[0_0_40px_rgba(74,134,247,0.14)] space-y-5">
                         {(() => {
                           const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
                           const { points, periodStart, periodEnd } = stepData;
@@ -7176,7 +7176,6 @@ Access to full financial telemetry is restricted.`;
                             .filter(b => b.status !== "paid" && b.status !== "void")
                             .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))
                             .map(b => ({ id: b.id, label: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor, amount: Math.max(0, b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - b.amountPaid) }));
-                          const tickerItems = [...upcomingJobs, ...upcomingBills];
 
                           const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                           const xTickFormat = (ms: number) => {
@@ -7187,10 +7186,37 @@ Access to full financial telemetry is restricted.`;
                           };
                           const chartWidth = Math.max(340, points.length * 60);
 
+                          // One shared ticker renderer -- Upcoming Job Payments and
+                          // Upcoming Bills & Expenses are two independent scrolling
+                          // columns, each looping the same way.
+                          const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string) => (
+                            <div className="bg-white/40 backdrop-blur-md rounded-2xl border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)] h-56 overflow-hidden relative">
+                              {items.length === 0 ? (
+                                <div className="h-full flex items-center justify-center text-[11px] text-[#5E7393] font-medium">{emptyText}</div>
+                              ) : (
+                                <div
+                                  className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+                                  style={{ animation: `ticker-scroll ${Math.max(12, items.length * 3)}s linear infinite` }}
+                                >
+                                  {[0, 1].map(copy => (
+                                    <div key={copy}>
+                                      {items.map((item, idx) => (
+                                        <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#9EC8EF]/20 text-xs">
+                                          <span className="font-semibold text-[#1F3557] truncate">{item.label}</span>
+                                          <span className="font-mono font-bold text-[#315C9F] shrink-0">{fmt(item.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+
                           return (
                             <>
                               {/* HEADER: Money Tracker + graph-interval dropdown (top-left), Live badge (top-right) */}
-                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-[#9EC8EF]/30 pb-4">
+                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-white/60 pb-4">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="select-none text-xl">💰</span>
                                   <h2 className="text-base font-sans font-black text-[#1F3557] uppercase tracking-wider">Money Tracker</h2>
@@ -7201,7 +7227,7 @@ Access to full financial telemetry is restricted.`;
                                       changeRevenuePageFilter(e.target.value);
                                       triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
                                     }}
-                                    className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
+                                    className="text-[10.5px] font-bold text-[#1F3557] bg-white/70 border border-white/80 rounded-xl px-3 py-2 focus:outline-none cursor-pointer shadow-sm"
                                   >
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
@@ -7211,7 +7237,7 @@ Access to full financial telemetry is restricted.`;
                                     <option value="Total">Total</option>
                                   </select>
                                 </div>
-                                <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 uppercase tracking-wider">
+                                <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 uppercase tracking-wider bg-emerald-500/10 px-2.5 py-1 rounded-full">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                   Live Data
                                 </span>
@@ -7237,7 +7263,7 @@ Access to full financial telemetry is restricted.`;
                                   type="button"
                                   disabled={isRunningPayroll}
                                   onClick={handleRunPayroll}
-                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-white/70 text-[#315C9F] border border-white/80 hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
                                 </button>
@@ -7252,110 +7278,84 @@ Access to full financial telemetry is restricted.`;
                                 />
                               )}
 
-                              {/* CHART + REAL STAT TILES */}
-                              <div className="flex flex-col lg:flex-row gap-5">
-                                <div className="flex-1 min-w-0">
-                                  {points.length > 6 && (
-                                    <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
-                                  )}
-                                  <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-                                    <LineChart
-                                      width={chartWidth}
-                                      height={280}
-                                      data={points}
-                                      margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
-                                    >
-                                      <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                                      <XAxis
-                                        dataKey="x"
-                                        type="number"
-                                        domain={["dataMin", "dataMax"]}
-                                        tickFormatter={xTickFormat}
-                                        stroke="#5E7393"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        dy={10}
-                                        className="font-mono"
-                                      />
-                                      <YAxis
-                                        stroke="#5E7393"
-                                        fontSize={10}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
-                                        className="font-mono"
-                                        width={48}
-                                      />
-                                      <Tooltip
-                                        labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                                        content={
-                                        ({ active, payload, label }) => {
-                                          if (active && payload && payload.length) {
-                                            return (
-                                              <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                                <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
-                                                <div className="space-y-1">
-                                                  {payload.map((entry: any, index: number) => (
-                                                    <div key={index} className="flex items-center justify-between gap-6">
-                                                      <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                        {entry.name}:
-                                                      </span>
-                                                      <span className="font-mono font-bold text-[#1F3557] text-[11px]">
-                                                        ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                      </span>
-                                                    </div>
-                                                  ))}
-                                                </div>
+                              {/* GRAPH -- full width */}
+                              <div>
+                                {points.length > 6 && (
+                                  <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
+                                )}
+                                <div className="overflow-x-auto overflow-y-hidden rounded-2xl bg-white/30 backdrop-blur-md border border-white/60 shadow-[0_0_24px_rgba(74,134,247,0.10)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                  <LineChart
+                                    width={chartWidth}
+                                    height={280}
+                                    data={points}
+                                    margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                    <XAxis
+                                      dataKey="x"
+                                      type="number"
+                                      domain={["dataMin", "dataMax"]}
+                                      tickFormatter={xTickFormat}
+                                      stroke="#5E7393"
+                                      fontSize={10}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      dy={10}
+                                      className="font-mono"
+                                    />
+                                    <YAxis
+                                      stroke="#5E7393"
+                                      fontSize={10}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
+                                      className="font-mono"
+                                      width={48}
+                                    />
+                                    <Tooltip
+                                      labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                                      content={
+                                      ({ active, payload, label }) => {
+                                        if (active && payload && payload.length) {
+                                          return (
+                                            <div className="bg-white/90 backdrop-blur border border-white shadow-md p-3 rounded-xl text-left text-xs font-sans">
+                                              <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                                              <div className="space-y-1">
+                                                {payload.map((entry: any, index: number) => (
+                                                  <div key={index} className="flex items-center justify-between gap-6">
+                                                    <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
+                                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                      {entry.name}:
+                                                    </span>
+                                                    <span className="font-mono font-bold text-[#1F3557] text-[11px]">
+                                                      ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </span>
+                                                  </div>
+                                                ))}
                                               </div>
-                                            );
-                                          }
-                                          return null;
+                                            </div>
+                                          );
                                         }
-                                      } />
-                                      <Legend
-                                        verticalAlign="top"
-                                        height={36}
-                                        iconType="circle"
-                                        iconSize={8}
-                                        className="font-sans font-bold text-[11px]"
-                                        wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                                      />
-                                      {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
-                                      {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
-                                      {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
-                                    </LineChart>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:w-52 shrink-0">
-                                  {([
-                                    { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10", isPct: false },
-                                    { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", isPct: false },
-                                    { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10", isPct: false },
-                                    { label: "Net Margin", val: netMargin, pct: null as number | null, icon: Landmark, color: "text-purple-500", bg: "bg-purple-500/10", isPct: true }
-                                  ]).map((tile, idx) => (
-                                    <div key={idx} className="bg-[#EAF5FF] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wide">{tile.label}</span>
-                                        <div className={`p-1 rounded-md ${tile.bg} ${tile.color}`}><tile.icon className="w-3 h-3" /></div>
-                                      </div>
-                                      <p className="text-sm font-black text-[#1F3557]">
-                                        {tile.isPct ? (tile.val === null ? "—" : `${tile.val.toFixed(1)}%`) : fmt(tile.val as number)}
-                                      </p>
-                                      {tile.pct !== null && (
-                                        <p className={`text-[9px] font-bold mt-0.5 ${(tile.pct as number) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                                          {(tile.pct as number) >= 0 ? "▲" : "▼"} {Math.abs(tile.pct as number).toFixed(1)}% vs last period
-                                        </p>
-                                      )}
-                                    </div>
-                                  ))}
+                                        return null;
+                                      }
+                                    } />
+                                    <Legend
+                                      verticalAlign="top"
+                                      height={36}
+                                      iconType="circle"
+                                      iconSize={8}
+                                      className="font-sans font-bold text-[11px]"
+                                      wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                                    />
+                                    {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
+                                    {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
+                                  </LineChart>
                                 </div>
                               </div>
 
-                              {/* Graph series toggles — bottom-left of the card, pick any combination */}
-                              <div className="flex flex-wrap justify-start gap-2">
+                              {/* Graph series toggles, then View Financial Reports */}
+                              <div className="flex flex-wrap items-center gap-2">
                                 {([
                                   { value: "revenue",  label: "Payments Collected" },
                                   { value: "expenses", label: "Expenses" },
@@ -7369,25 +7369,24 @@ Access to full financial telemetry is restricted.`;
                                       className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
                                         selected
                                           ? "bg-[#4A86F7] text-white shadow-sm"
-                                          : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
+                                          : "bg-white/60 text-[#5E7393] border border-white/80 hover:text-[#1F3557]"
                                       }`}
                                     >
                                       {selected ? "✓ " : ""}{label}
                                     </button>
                                   );
                                 })}
+                                <button
+                                  onClick={() => setIsFinancialSnapshotOpen(true)}
+                                  className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Landmark className="w-3.5 h-3.5" /> View Financial Reports
+                                </button>
                               </div>
-
-                              <button
-                                onClick={() => setIsFinancialSnapshotOpen(true)}
-                                className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 w-fit"
-                              >
-                                <Landmark className="w-3.5 h-3.5" /> View Financial Reports
-                              </button>
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Revenue Breakdown</p>
                                   {revenueSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#5E7393] text-center py-8">No revenue this period yet.</p>
@@ -7414,7 +7413,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Expense Breakdown</p>
                                   {expenseSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#5E7393] text-center py-8">No expenses this period yet.</p>
@@ -7441,7 +7440,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[#EAF5FF] rounded-2xl p-4 border border-[#9EC8EF]">
+                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Cash Flow</p>
                                   <ResponsiveContainer width="100%" height={100}>
                                     <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -7456,29 +7455,43 @@ Access to full financial telemetry is restricted.`;
                                 </div>
                               </div>
 
-                              {/* Upcoming payouts (jobs), then upcoming bills -- one continuous scrolling ticker, bottom to top */}
-                              <div>
-                                <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Payouts &amp; Bills</p>
-                                <div className="bg-[#EAF5FF] rounded-2xl border border-[#9EC8EF] h-56 overflow-hidden relative">
-                                  {tickerItems.length === 0 ? (
-                                    <div className="h-full flex items-center justify-center text-[11px] text-[#5E7393] font-medium">Nothing upcoming yet.</div>
-                                  ) : (
-                                    <div
-                                      className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
-                                      style={{ animation: `ticker-scroll ${Math.max(12, tickerItems.length * 3)}s linear infinite` }}
-                                    >
-                                      {[0, 1].map(copy => (
-                                        <div key={copy}>
-                                          {tickerItems.map((item, idx) => (
-                                            <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#9EC8EF]/20 text-xs">
-                                              <span className="font-semibold text-[#1F3557] truncate">{item.label}</span>
-                                              <span className="font-mono font-bold text-[#315C9F] shrink-0">{fmt(item.amount)}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      ))}
+                              {/* REAL STAT TILES -- own row, below the breakdowns */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {([
+                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10", isPct: false },
+                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", isPct: false },
+                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10", isPct: false },
+                                  { label: "Net Margin", val: netMargin, pct: null as number | null, icon: Landmark, color: "text-purple-500", bg: "bg-purple-500/10", isPct: true }
+                                ]).map((tile, idx) => (
+                                  <div key={idx} className="bg-white/40 backdrop-blur-md rounded-2xl p-3.5 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wide">{tile.label}</span>
+                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${tile.bg} ${tile.color}`} style={{ borderColor: "currentColor" }}>
+                                        <tile.icon className="w-3 h-3" />
+                                      </div>
                                     </div>
-                                  )}
+                                    <p className="text-base font-black text-[#1F3557]">
+                                      {tile.isPct ? (tile.val === null ? "—" : `${tile.val.toFixed(1)}%`) : fmt(tile.val as number)}
+                                    </p>
+                                    {tile.pct !== null && (
+                                      <p className={`text-[9px] font-bold mt-0.5 ${(tile.pct as number) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {(tile.pct as number) >= 0 ? "▲" : "▼"} {Math.abs(tile.pct as number).toFixed(1)}% vs last period
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Upcoming Job Payments (left) and Upcoming Bills & Expenses (right) --
+                                  two independent scrolling columns, bottom to top */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Job Payments</p>
+                                  {renderTicker(upcomingJobs, "No upcoming jobs yet.")}
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Bills &amp; Expenses</p>
+                                  {renderTicker(upcomingBills, "No upcoming bills yet.")}
                                 </div>
                               </div>
                             </>
