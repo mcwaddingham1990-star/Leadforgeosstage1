@@ -1112,7 +1112,19 @@ function getRevenueStepSeries(
   events.sort((a, b) => a.time - b.time);
 
   const fmtLabel = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  const points: RevenueStepPoint[] = [{ x: periodStart.getTime(), label: fmtLabel(periodStart.getTime()), Payments: 0, Expenses: 0, Net: 0 }];
+  // The chart's leading point is normally the literal calendar start of the
+  // period (periodStart), which for Quarter/Annual/Total can sit weeks
+  // before any real activity -- leaving most of the chart's width flat and
+  // squeezing the real movement into a sliver near the right edge. When
+  // there's a real gap, pull the chart's own starting point in close to the
+  // first real event instead (still $0, still true) so the line's actual
+  // movement isn't crushed into a fraction of the width. This only changes
+  // where the STEP CHART starts drawing -- periodStart/periodEnd (used for
+  // "this period" totals and breakdowns elsewhere) are untouched.
+  const anchorTime = events.length > 0
+    ? Math.max(periodStart.getTime(), events[0].time - Math.max((periodEnd.getTime() - periodStart.getTime()) * 0.05, 60 * 60 * 1000))
+    : periodStart.getTime();
+  const points: RevenueStepPoint[] = [{ x: anchorTime, label: fmtLabel(anchorTime), Payments: 0, Expenses: 0, Net: 0 }];
   let runningPayments = 0;
   let runningExpenses = 0;
   for (const ev of events) {
@@ -7316,7 +7328,7 @@ Access to full financial telemetry is restricted.`;
                                     <span className="absolute text-white/70" style={{ top: '74%', left: '14%', fontSize: 8, textShadow: '0 0 6px rgba(255,255,255,0.85)' }}>✦</span>
                                     <span className="absolute text-white/60" style={{ top: '20%', left: '55%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
                                   </div>
-                                  <ResponsiveContainer width="100%" height={440}>
+                                  <ResponsiveContainer width="100%" height={580}>
                                   <ComposedChart
                                     data={points}
                                     margin={{ top: 10, right: 20, left: 8, bottom: 0 }}
