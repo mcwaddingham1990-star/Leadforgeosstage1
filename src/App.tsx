@@ -7194,6 +7194,26 @@ Access to full financial telemetry is restricted.`;
                           };
                           const chartWidth = Math.max(340, points.length * 60);
 
+                          // Diamond-shaped marker (matches the approved reference chart's
+                          // square/diamond points) instead of Recharts' default circle dot.
+                          const diamondDot = (color: string) => (dotProps: any) => {
+                            const { cx, cy, index } = dotProps;
+                            const s = 6.5;
+                            return (
+                              <rect
+                                key={`diamond-${color}-${index}`}
+                                x={cx - s / 2}
+                                y={cy - s / 2}
+                                width={s}
+                                height={s}
+                                fill={color}
+                                stroke="#fff"
+                                strokeWidth={1.25}
+                                transform={`rotate(45 ${cx} ${cy})`}
+                              />
+                            );
+                          };
+
                           // One shared ticker renderer -- Upcoming Job Payments and
                           // Upcoming Bills & Expenses are two independent scrolling
                           // columns, each looping the same way.
@@ -7296,6 +7316,14 @@ Access to full financial telemetry is restricted.`;
                                   <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-3 h-3 border-b border-r border-cyan-400/60" />
+                                  {/* Purely decorative twinkle accents -- fixed positions, not derived from data */}
+                                  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                                    <span className="absolute text-white/80" style={{ top: '14%', left: '24%', fontSize: 9, textShadow: '0 0 6px rgba(255,255,255,0.9)' }}>✦</span>
+                                    <span className="absolute text-white/70" style={{ top: '58%', left: '70%', fontSize: 7, textShadow: '0 0 5px rgba(255,255,255,0.85)' }}>✦</span>
+                                    <span className="absolute text-white/60" style={{ top: '32%', left: '84%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
+                                    <span className="absolute text-white/70" style={{ top: '74%', left: '14%', fontSize: 8, textShadow: '0 0 6px rgba(255,255,255,0.85)' }}>✦</span>
+                                    <span className="absolute text-white/60" style={{ top: '20%', left: '55%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
+                                  </div>
                                   <ComposedChart
                                     width={chartWidth}
                                     height={280}
@@ -7376,9 +7404,9 @@ Access to full financial telemetry is restricted.`;
                                     {graphDataTypes.includes("revenue") && <Area type="monotone" dataKey="Payments" stroke="none" fill="url(#mtGlowPayments)" isAnimationActive={false} legendType="none" tooltipType="none" />}
                                     {graphDataTypes.includes("expenses") && <Area type="monotone" dataKey="Expenses" stroke="none" fill="url(#mtGlowExpenses)" isAnimationActive={false} legendType="none" tooltipType="none" />}
                                     {graphDataTypes.includes("profit") && <Area type="monotone" dataKey="Net" stroke="none" fill="url(#mtGlowNet)" isAnimationActive={false} legendType="none" tooltipType="none" />}
-                                    {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Payments" stroke="#168BFF" strokeWidth={3.5} dot={{ r: 3.5, fill: "#EAF8FF", stroke: "#168BFF", strokeWidth: 1.5 }} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 9px #168BFF) drop-shadow(0 0 17px rgba(22,139,255,0.65))' }} />}
-                                    {graphDataTypes.includes("expenses") && <Line type="monotone" dataKey="Expenses" stroke="#FF6E91" strokeWidth={3.5} dot={{ r: 3.5, fill: "#FFF2F6", stroke: "#FF6E91", strokeWidth: 1.5 }} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 9px #FF6E91) drop-shadow(0 0 17px rgba(255,110,145,0.62))' }} />}
-                                    {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Net" stroke="#14E6D1" strokeWidth={3.5} dot={{ r: 3.5, fill: "#ECFFFC", stroke: "#14B8A6", strokeWidth: 1.5 }} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 9px #14E6D1) drop-shadow(0 0 17px rgba(20,230,209,0.68))' }} />}
+                                    {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Payments" stroke="#168BFF" strokeWidth={2.5} dot={diamondDot("#168BFF")} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #168BFF) drop-shadow(0 0 14px rgba(22,139,255,0.55)) drop-shadow(0 0 28px rgba(22,139,255,0.30))' }} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="monotone" dataKey="Expenses" stroke="#FF6E91" strokeWidth={2.5} dot={diamondDot("#FF6E91")} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #FF6E91) drop-shadow(0 0 14px rgba(255,110,145,0.52)) drop-shadow(0 0 28px rgba(255,110,145,0.28))' }} />}
+                                    {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Net" stroke="#14E6D1" strokeWidth={2.5} dot={diamondDot("#14E6D1")} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #14E6D1) drop-shadow(0 0 14px rgba(20,230,209,0.58)) drop-shadow(0 0 28px rgba(20,230,209,0.30))' }} />}
                                   </ComposedChart>
                                 </div>
                               </div>
