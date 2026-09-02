@@ -7117,9 +7117,9 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
-                      <div className="relative overflow-hidden bg-gradient-to-br from-[#050B18] via-[#0A1830] to-[#081428] rounded-xl p-6 border border-cyan-400/40 shadow-[0_0_50px_rgba(34,211,238,0.28),0_0_110px_rgba(34,211,238,0.12)] space-y-5">
+                      <div className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_50%_-10%,rgba(56,189,248,0.24),transparent_34%),linear-gradient(145deg,#061326_0%,#0b2340_46%,#07172d_100%)] rounded-[18px] p-4 sm:p-5 border border-cyan-200/70 shadow-[0_0_0_1px_rgba(14,165,233,0.28),0_0_32px_rgba(14,165,233,0.35),inset_0_0_70px_rgba(2,132,199,0.12)] space-y-3">
                         {/* HUD decoration: grid texture, idle scan sweep, corner brackets -- all decorative, sit behind the real content below */}
-                        <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(rgba(34,211,238,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.08) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                        <div className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'linear-gradient(rgba(125,211,252,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(125,211,252,0.055) 1px, transparent 1px), repeating-linear-gradient(0deg,rgba(255,255,255,0.018) 0,rgba(255,255,255,0.018) 1px,transparent 1px,transparent 4px)', backgroundSize: '24px 24px,24px 24px,100% 4px' }} />
                         <div className="pointer-events-none absolute inset-0 overflow-hidden">
                           <div className="absolute inset-x-0 h-32 bg-gradient-to-b from-transparent via-cyan-400/10 to-transparent" style={{ animation: 'hud-scan 7s linear infinite' }} />
                         </div>
@@ -7197,8 +7197,8 @@ Access to full financial telemetry is restricted.`;
                           // One shared ticker renderer -- Upcoming Job Payments and
                           // Upcoming Bills & Expenses are two independent scrolling
                           // columns, each looping the same way.
-                          const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string) => (
-                            <div className="bg-[#050B18]/70 rounded-lg border border-cyan-400/30 shadow-[inset_0_0_24px_rgba(34,211,238,0.06)] h-56 overflow-hidden relative">
+                          const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string, tone: "income" | "expense") => (
+                            <div className="bg-[linear-gradient(180deg,rgba(12,37,66,0.96),rgba(6,22,43,0.98))] rounded-[10px] border border-cyan-200/55 shadow-[0_0_16px_rgba(34,211,238,0.18),inset_0_0_28px_rgba(56,189,248,0.10)] h-56 overflow-hidden relative">
                               {items.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-[11px] font-mono text-cyan-300/50">{emptyText}</div>
                               ) : (
@@ -7210,8 +7210,8 @@ Access to full financial telemetry is restricted.`;
                                     <div key={copy}>
                                       {items.map((item, idx) => (
                                         <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-cyan-400/10 text-xs font-mono">
-                                          <span className="font-semibold text-cyan-100 truncate">{item.label}</span>
-                                          <span className="font-mono font-bold text-cyan-300 shrink-0" style={{ textShadow: '0 0 6px rgba(34,211,238,0.6)' }}>{fmt(item.amount)}</span>
+                                          <span className={`font-semibold truncate ${tone === "income" ? "text-emerald-300" : "text-rose-300"}`}>{item.label}</span>
+                                          <span className={`font-mono font-bold shrink-0 ${tone === "income" ? "text-emerald-300" : "text-rose-300"}`} style={{ textShadow: tone === "income" ? '0 0 7px rgba(52,211,153,0.72)' : '0 0 7px rgba(251,113,133,0.72)' }}>{fmt(item.amount)}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -7224,7 +7224,7 @@ Access to full financial telemetry is restricted.`;
                           return (
                             <>
                               {/* HEADER: Money Tracker + graph-interval dropdown (top-left), Live badge (top-right) */}
-                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-cyan-400/25 pb-4">
+                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-cyan-200/35 pb-3">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="select-none text-xl" style={{ filter: 'drop-shadow(0 0 6px rgba(34,211,238,0.8))' }}>💰</span>
                                   <h2 className="text-base font-mono font-black text-cyan-50 uppercase tracking-[0.2em]" style={{ textShadow: '0 0 12px rgba(34,211,238,0.7)' }}>Money Tracker</h2>
@@ -7252,18 +7252,18 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               {/* Log real income/expenses, run real payroll */}
-                              <div className="flex flex-wrap gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <button
                                   type="button"
                                   onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-emerald-300 border border-emerald-400/40 hover:border-emerald-400/70 hover:shadow-[0_0_10px_rgba(52,211,153,0.4)] cursor-pointer flex items-center gap-1 transition-all"
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase tracking-wide rounded-[8px] bg-[linear-gradient(180deg,rgba(21,90,66,0.94),rgba(9,45,34,0.98))] text-emerald-200 border border-emerald-300/55 hover:border-white hover:shadow-[0_0_18px_rgba(52,211,153,0.55)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_12px_rgba(16,185,129,0.20)]"
                                 >
                                   + Log Income
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-rose-300 border border-rose-400/40 hover:border-rose-400/70 hover:shadow-[0_0_10px_rgba(251,113,133,0.4)] cursor-pointer flex items-center gap-1 transition-all"
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase tracking-wide rounded-[8px] bg-[linear-gradient(180deg,rgba(107,32,49,0.94),rgba(53,15,26,0.98))] text-rose-200 border border-rose-300/55 hover:border-white hover:shadow-[0_0_18px_rgba(251,113,133,0.55)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_12px_rgba(244,63,94,0.20)]"
                                 >
                                   + Log Expense
                                 </button>
@@ -7271,7 +7271,7 @@ Access to full financial telemetry is restricted.`;
                                   type="button"
                                   disabled={isRunningPayroll}
                                   onClick={handleRunPayroll}
-                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-cyan-300 border border-cyan-400/40 hover:border-cyan-400/70 hover:shadow-[0_0_10px_rgba(34,211,238,0.4)] cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase tracking-wide rounded-[8px] bg-[linear-gradient(180deg,rgba(31,77,116,0.94),rgba(12,40,70,0.98))] text-cyan-50 border border-cyan-200/65 hover:border-white hover:shadow-[0_0_18px_rgba(56,189,248,0.55)] cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_12px_rgba(14,165,233,0.20)]"
                                 >
                                   {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
                                 </button>
@@ -7291,7 +7291,7 @@ Access to full financial telemetry is restricted.`;
                                 {points.length > 6 && (
                                   <p className="text-[10px] text-cyan-300/50 font-mono text-right pr-2 pb-1 select-none">← swipe to scroll →</p>
                                 )}
-                                <div className="relative overflow-x-auto overflow-y-hidden rounded-lg bg-[#050B18]/70 border border-cyan-400/30 shadow-[0_0_24px_rgba(34,211,238,0.15),inset_0_0_30px_rgba(34,211,238,0.05)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <div className="relative overflow-x-auto overflow-y-hidden rounded-[12px] bg-[linear-gradient(180deg,rgba(15,45,78,0.95),rgba(5,21,42,0.98))] border border-cyan-200/60 shadow-[0_0_22px_rgba(34,211,238,0.26),inset_0_0_34px_rgba(56,189,248,0.10)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
                                   <span className="pointer-events-none absolute top-1.5 left-1.5 w-3 h-3 border-t border-l border-cyan-400/60" />
                                   <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
@@ -7384,7 +7384,7 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               {/* Graph series toggles, then View Financial Reports */}
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {([
                                   { value: "revenue",  label: "Payments Collected" },
                                   { value: "expenses", label: "Expenses" },
@@ -7395,7 +7395,7 @@ Access to full financial telemetry is restricted.`;
                                     <button
                                       key={value}
                                       onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
-                                      className={`px-3 py-1.5 text-[10.5px] font-mono rounded-md font-bold transition-all duration-200 cursor-pointer ${
+                                      className={`min-h-10 px-3 py-2 text-[10.5px] font-mono rounded-[8px] font-black transition-all duration-200 cursor-pointer ${
                                         selected
                                           ? "bg-cyan-400 text-[#050B18] shadow-[0_0_16px_rgba(34,211,238,0.8)]"
                                           : "bg-[#0A1830] border border-cyan-400/30 text-cyan-300/60 hover:border-cyan-400/60 hover:text-cyan-100"
@@ -7407,7 +7407,7 @@ Access to full financial telemetry is restricted.`;
                                 })}
                                 <button
                                   onClick={() => setIsFinancialSnapshotOpen(true)}
-                                  className="px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-md bg-gradient-to-r from-cyan-400 to-blue-400 text-[#050B18] cursor-pointer flex items-center gap-1.5 shadow-[0_0_20px_rgba(34,211,238,0.7)]"
+                                  className="min-h-10 px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-[8px] bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 text-[#03111f] cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_22px_rgba(34,211,238,0.72),inset_0_1px_0_rgba(255,255,255,0.55)]"
                                 >
                                   <Landmark className="w-3.5 h-3.5" /> View Financial Reports
                                 </button>
@@ -7415,7 +7415,7 @@ Access to full financial telemetry is restricted.`;
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                <div className="relative bg-[linear-gradient(145deg,rgba(20,57,93,0.96),rgba(7,27,52,0.98))] rounded-[10px] p-4 border border-cyan-200/55 shadow-[0_0_18px_rgba(34,211,238,0.20),inset_0_0_24px_rgba(56,189,248,0.08)]">
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Revenue Breakdown</p>
                                   {revenueSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No revenue this period yet.</p>
@@ -7444,7 +7444,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                <div className="relative bg-[linear-gradient(145deg,rgba(20,57,93,0.96),rgba(7,27,52,0.98))] rounded-[10px] p-4 border border-cyan-200/55 shadow-[0_0_18px_rgba(34,211,238,0.20),inset_0_0_24px_rgba(56,189,248,0.08)]">
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Expense Breakdown</p>
                                   {expenseSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No expenses this period yet.</p>
@@ -7473,7 +7473,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                <div className="relative bg-[linear-gradient(145deg,rgba(20,57,93,0.96),rgba(7,27,52,0.98))] rounded-[10px] p-4 border border-cyan-200/55 shadow-[0_0_18px_rgba(34,211,238,0.20),inset_0_0_24px_rgba(56,189,248,0.08)]">
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Cash Flow</p>
                                   <div style={{ filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.4))' }}>
                                     <ResponsiveContainer width="100%" height={100}>
@@ -7497,7 +7497,7 @@ Access to full financial telemetry is restricted.`;
                                   { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "#FB7185", bg: "bg-rose-400/10" },
                                   { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "#4ADE80", bg: "bg-emerald-400/10" }
                                 ]).map((tile, idx) => (
-                                  <div key={idx} className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                  <div key={idx} className="relative bg-[linear-gradient(145deg,rgba(20,57,93,0.96),rgba(7,27,52,0.98))] rounded-[10px] p-4 border border-cyan-200/55 shadow-[0_0_18px_rgba(34,211,238,0.20),inset_0_0_24px_rgba(56,189,248,0.08)]">
                                     <div className="flex items-center justify-between mb-1.5">
                                       <span className="text-[9px] font-mono font-bold text-cyan-300/70 uppercase tracking-widest">{tile.label}</span>
                                       <div className={`w-7 h-7 rounded-full border flex items-center justify-center ${tile.bg}`} style={{ borderColor: tile.color, color: tile.color, boxShadow: `0 0 8px ${tile.color}66` }}>
@@ -7519,11 +7519,11 @@ Access to full financial telemetry is restricted.`;
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Upcoming Job Payments</p>
-                                  {renderTicker(upcomingJobs, "No upcoming jobs yet.")}
+                                  {renderTicker(upcomingJobs, "No upcoming jobs yet.", "income")}
                                 </div>
                                 <div>
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Upcoming Bills &amp; Expenses</p>
-                                  {renderTicker(upcomingBills, "No upcoming bills yet.")}
+                                  {renderTicker(upcomingBills, "No upcoming bills yet.", "expense")}
                                 </div>
                               </div>
                             </>
