@@ -102,7 +102,7 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } from "recharts";
 import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
 
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
@@ -7296,12 +7296,26 @@ Access to full financial telemetry is restricted.`;
                                   <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-3 h-3 border-b border-r border-cyan-400/60" />
-                                  <LineChart
+                                  <ComposedChart
                                     width={chartWidth}
                                     height={280}
                                     data={points}
                                     margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
                                   >
+                                    <defs>
+                                      <linearGradient id="mtGlowPayments" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#22D3EE" stopOpacity={0.45} />
+                                        <stop offset="100%" stopColor="#22D3EE" stopOpacity={0} />
+                                      </linearGradient>
+                                      <linearGradient id="mtGlowExpenses" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#FB7185" stopOpacity={0.45} />
+                                        <stop offset="100%" stopColor="#FB7185" stopOpacity={0} />
+                                      </linearGradient>
+                                      <linearGradient id="mtGlowNet" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#4ADE80" stopOpacity={0.45} />
+                                        <stop offset="100%" stopColor="#4ADE80" stopOpacity={0} />
+                                      </linearGradient>
+                                    </defs>
                                     <CartesianGrid strokeDasharray="2 4" stroke="#123A5C" vertical={false} />
                                     <XAxis
                                       dataKey="x"
@@ -7359,10 +7373,13 @@ Access to full financial telemetry is restricted.`;
                                       className="font-mono font-bold text-[11px]"
                                       wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#7DD3FC' }}
                                     />
-                                    {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#22D3EE" strokeWidth={2.5} dot={{ r: 3, fill: "#22D3EE" }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #22D3EE)' }} />}
-                                    {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#FB7185" strokeWidth={2.5} dot={{ r: 3, fill: "#FB7185" }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #FB7185)' }} />}
-                                    {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#4ADE80" strokeWidth={2.5} dot={{ r: 3, fill: "#4ADE80" }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #4ADE80)' }} />}
-                                  </LineChart>
+                                    {graphDataTypes.includes("revenue") && <Area type="stepAfter" dataKey="Payments" stroke="none" fill="url(#mtGlowPayments)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("expenses") && <Area type="stepAfter" dataKey="Expenses" stroke="none" fill="url(#mtGlowExpenses)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("profit") && <Area type="stepAfter" dataKey="Net" stroke="none" fill="url(#mtGlowNet)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#22D3EE" strokeWidth={3.5} dot={{ r: 3.5, fill: "#22D3EE", strokeWidth: 0 }} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 10px #22D3EE)' }} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#FB7185" strokeWidth={3.5} dot={{ r: 3.5, fill: "#FB7185", strokeWidth: 0 }} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 10px #FB7185)' }} />}
+                                    {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#4ADE80" strokeWidth={3.5} dot={{ r: 3.5, fill: "#4ADE80", strokeWidth: 0 }} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 10px #4ADE80)' }} />}
+                                  </ComposedChart>
                                 </div>
                               </div>
 
@@ -7404,13 +7421,15 @@ Access to full financial telemetry is restricted.`;
                                     <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No revenue this period yet.</p>
                                   ) : (
                                     <div className="flex items-center gap-3">
-                                      <ResponsiveContainer width={90} height={90}>
-                                        <PieChart>
-                                          <Pie data={revenueSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
-                                            {revenueSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
-                                          </Pie>
-                                        </PieChart>
-                                      </ResponsiveContainer>
+                                      <div style={{ filter: 'drop-shadow(0 0 8px rgba(34,211,238,0.5))' }}>
+                                        <ResponsiveContainer width={90} height={90}>
+                                          <PieChart>
+                                            <Pie data={revenueSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                              {revenueSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                            </Pie>
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </div>
                                       <div className="space-y-1.5 flex-1 min-w-0">
                                         {revenueSlices.map((s, i) => (
                                           <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
@@ -7431,13 +7450,15 @@ Access to full financial telemetry is restricted.`;
                                     <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No expenses this period yet.</p>
                                   ) : (
                                     <div className="flex items-center gap-3">
-                                      <ResponsiveContainer width={90} height={90}>
-                                        <PieChart>
-                                          <Pie data={expenseSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
-                                            {expenseSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
-                                          </Pie>
-                                        </PieChart>
-                                      </ResponsiveContainer>
+                                      <div style={{ filter: 'drop-shadow(0 0 8px rgba(251,113,133,0.5))' }}>
+                                        <ResponsiveContainer width={90} height={90}>
+                                          <PieChart>
+                                            <Pie data={expenseSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                              {expenseSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                            </Pie>
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </div>
                                       <div className="space-y-1.5 flex-1 min-w-0">
                                         {expenseSlices.map((s, i) => (
                                           <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
@@ -7454,16 +7475,18 @@ Access to full financial telemetry is restricted.`;
 
                                 <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
                                   <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Cash Flow</p>
-                                  <ResponsiveContainer width="100%" height={100}>
-                                    <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                                      <XAxis dataKey="time" stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} />
-                                      <YAxis stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
-                                      <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} contentStyle={{ background: "#0A1830", border: "1px solid rgba(34,211,238,0.4)", borderRadius: 8, fontFamily: "monospace", fontSize: 11, color: "#fff" }} />
-                                      <Bar dataKey="Profit" radius={[3, 3, 0, 0]}>
-                                        {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#4ADE80" : "#FB7185"} />)}
-                                      </Bar>
-                                    </BarChart>
-                                  </ResponsiveContainer>
+                                  <div style={{ filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.4))' }}>
+                                    <ResponsiveContainer width="100%" height={100}>
+                                      <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                        <XAxis dataKey="time" stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
+                                        <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} contentStyle={{ background: "#0A1830", border: "1px solid rgba(34,211,238,0.4)", borderRadius: 8, fontFamily: "monospace", fontSize: 11, color: "#fff" }} />
+                                        <Bar dataKey="Profit" radius={[3, 3, 0, 0]}>
+                                          {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#4ADE80" : "#FB7185"} />)}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  </div>
                                 </div>
                               </div>
 
