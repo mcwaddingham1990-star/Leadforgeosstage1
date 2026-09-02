@@ -1127,6 +1127,17 @@ function getRevenueStepSeries(
     events.push({ time, kind: "expense", amount });
   }
   events.sort((a, b) => a.time - b.time);
+  // Dates without a time-of-day (a bill's issued date, a logged transaction's
+  // date) all land on that day's midnight, so two real events on the same
+  // calendar day collide at the exact same x -- which draws as a genuinely
+  // vertical segment, not just a steep one. Spread same-timestamp events by
+  // a nominal minute each, in their already-sorted order, so the line is a
+  // real (if steep) diagonal between them. No amount or ordering changes.
+  for (let i = 1; i < events.length; i++) {
+    if (events[i].time <= events[i - 1].time) {
+      events[i].time = events[i - 1].time + 60000;
+    }
+  }
 
   const fmtLabel = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const points: RevenueStepPoint[] = [{ x: periodStart.getTime(), label: fmtLabel(periodStart.getTime()), Payments: 0, Expenses: 0, Net: 0 }];
@@ -6027,23 +6038,23 @@ Access to full financial telemetry is restricted.`;
                         isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
                       } ${
                         isCurrent
-                          ? "bg-[#A9CEF5] text-[#1F3557] font-bold shadow-sm"
+                          ? "bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
                           : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
                       }`}
                       title={screen.label}
                     >
                       {isSidebarCollapsed ? (
                         /* Only show menu icons when collapsed */
-                        <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                        <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                           {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
                         </span>
                       ) : (
                         /* Show both icon and label when expanded */
                         <div className="flex items-center gap-2.5 w-full min-w-0">
-                          <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                          <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                             {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
                           </span>
-                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                             {screen.label}
                           </span>
                         </div>
@@ -7113,17 +7124,14 @@ Access to full financial telemetry is restricted.`;
                                 if (accounting) setActiveScreen(accounting);
                                 triggerNotification("Open Invoices to create a customer invoice.");
                               }}
-                              className="shrink-0 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
+                              className="shrink-0 bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] hover:from-[#1E6EE0] hover:to-[#0D5FCB] border border-white/40 rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all shadow-[0_0_10px_rgba(20,133,244,0.35)]"
                             >
-                              <btn.icon className="w-3.5 h-3.5 text-[#07599A] shrink-0" />
-                              <span className="text-[10.5px] font-extrabold text-[#07599A] uppercase tracking-wide whitespace-nowrap">
+                              <btn.icon className="w-3.5 h-3.5 text-white shrink-0" />
+                              <span className="text-[10.5px] font-extrabold text-white uppercase tracking-wide whitespace-nowrap">
                                 {btn.label}
                               </span>
                             </button>
                           ))}
-                          <div className="shrink-0">
-                            <PlaidConnectButton />
-                          </div>
                         </div>
                       </div>
 
@@ -7262,7 +7270,7 @@ Access to full financial telemetry is restricted.`;
                           // Upcoming Bills & Expenses are two independent scrolling
                           // columns, each looping the same way.
                           const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string, tone: "income" | "expense") => (
-                            <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-56 overflow-hidden relative">
+                            <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-28 overflow-hidden relative">
                               {items.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">{emptyText}</div>
                               ) : (
@@ -7580,7 +7588,7 @@ Access to full financial telemetry is restricted.`;
                                         <tile.icon className="w-3.5 h-3.5" />
                                       </div>
                                     </div>
-                                    <p className="text-lg font-mono font-black text-[#07599a]" style={{ textShadow: `0 0 10px ${tile.color}88` }}>{fmt(tile.val)}</p>
+                                    <p className="text-lg font-mono font-black" style={{ color: tile.color, textShadow: `0 0 10px ${tile.color}88` }}>{fmt(tile.val)}</p>
                                     {tile.pct !== null && (
                                       <p className={`text-[9.5px] font-mono font-bold mt-0.5 ${tile.pct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
                                         {tile.pct >= 0 ? "▲" : "▼"} {Math.abs(tile.pct).toFixed(1)}% vs last period
@@ -7601,6 +7609,11 @@ Access to full financial telemetry is restricted.`;
                                   <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Upcoming Bills &amp; Expenses</p>
                                   {renderTicker(upcomingBills, "No upcoming bills yet.", "expense")}
                                 </div>
+                              </div>
+
+                              {/* Plaid connect -- lives at the bottom of the card, out of the way of the graph and quick actions */}
+                              <div className="flex justify-end pt-1">
+                                <PlaidConnectButton />
                               </div>
                             </>
                           );
