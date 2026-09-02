@@ -7192,8 +7192,6 @@ Access to full financial telemetry is restricted.`;
                               ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
                               : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
                           };
-                          const chartWidth = Math.max(340, points.length * 60);
-
                           // Diamond-shaped marker (matches the approved reference chart's
                           // square/diamond points) instead of Recharts' default circle dot.
                           const diamondDot = (color: string) => (dotProps: any) => {
@@ -7308,10 +7306,7 @@ Access to full financial telemetry is restricted.`;
 
                               {/* GRAPH -- full width HUD readout */}
                               <div>
-                                {points.length > 6 && (
-                                  <p className="text-[10px] text-[#2473aa]/65 font-mono text-right pr-2 pb-1 select-none">← swipe to scroll →</p>
-                                )}
-                                <div className="relative overflow-x-auto overflow-y-hidden rounded-lg bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] border border-white shadow-[0_0_18px_rgba(56,189,248,0.40),inset_0_0_24px_rgba(255,255,255,0.82)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <div className="relative overflow-hidden rounded-lg bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] border border-white shadow-[0_0_18px_rgba(56,189,248,0.40),inset_0_0_24px_rgba(255,255,255,0.82)] p-2">
                                   <span className="pointer-events-none absolute top-1.5 left-1.5 w-3 h-3 border-t border-l border-cyan-400/60" />
                                   <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
                                   <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
@@ -7324,11 +7319,10 @@ Access to full financial telemetry is restricted.`;
                                     <span className="absolute text-white/70" style={{ top: '74%', left: '14%', fontSize: 8, textShadow: '0 0 6px rgba(255,255,255,0.85)' }}>✦</span>
                                     <span className="absolute text-white/60" style={{ top: '20%', left: '55%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
                                   </div>
+                                  <ResponsiveContainer width="100%" height={440}>
                                   <ComposedChart
-                                    width={chartWidth}
-                                    height={280}
                                     data={points}
-                                    margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
+                                    margin={{ top: 10, right: 20, left: 8, bottom: 0 }}
                                   >
                                     <defs>
                                       <linearGradient id="mtGlowPayments" x1="0" y1="0" x2="0" y2="1">
@@ -7356,15 +7350,18 @@ Access to full financial telemetry is restricted.`;
                                       axisLine={false}
                                       dy={10}
                                       className="font-mono"
+                                      interval="preserveStartEnd"
+                                      minTickGap={24}
                                     />
                                     <YAxis
+                                      domain={[0, (max: number) => Math.ceil(max * 1.04)]}
                                       stroke="#12689E"
                                       fontSize={10}
                                       tickLine={false}
                                       axisLine={false}
                                       tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
                                       className="font-mono"
-                                      width={48}
+                                      width={44}
                                     />
                                     <Tooltip
                                       labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
@@ -7401,13 +7398,14 @@ Access to full financial telemetry is restricted.`;
                                       className="font-mono font-bold text-[11px]"
                                       wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#07599A' }}
                                     />
-                                    {graphDataTypes.includes("revenue") && <Area type="monotone" dataKey="Payments" stroke="none" fill="url(#mtGlowPayments)" isAnimationActive={false} legendType="none" tooltipType="none" />}
-                                    {graphDataTypes.includes("expenses") && <Area type="monotone" dataKey="Expenses" stroke="none" fill="url(#mtGlowExpenses)" isAnimationActive={false} legendType="none" tooltipType="none" />}
-                                    {graphDataTypes.includes("profit") && <Area type="monotone" dataKey="Net" stroke="none" fill="url(#mtGlowNet)" isAnimationActive={false} legendType="none" tooltipType="none" />}
-                                    {graphDataTypes.includes("revenue") && <Line type="monotone" dataKey="Payments" stroke="#168BFF" strokeWidth={2.5} dot={diamondDot("#168BFF")} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #168BFF) drop-shadow(0 0 14px rgba(22,139,255,0.55)) drop-shadow(0 0 28px rgba(22,139,255,0.30))' }} />}
-                                    {graphDataTypes.includes("expenses") && <Line type="monotone" dataKey="Expenses" stroke="#FF6E91" strokeWidth={2.5} dot={diamondDot("#FF6E91")} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #FF6E91) drop-shadow(0 0 14px rgba(255,110,145,0.52)) drop-shadow(0 0 28px rgba(255,110,145,0.28))' }} />}
-                                    {graphDataTypes.includes("profit") && <Line type="monotone" dataKey="Net" stroke="#14E6D1" strokeWidth={2.5} dot={diamondDot("#14E6D1")} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #14E6D1) drop-shadow(0 0 14px rgba(20,230,209,0.58)) drop-shadow(0 0 28px rgba(20,230,209,0.30))' }} />}
+                                    {graphDataTypes.includes("revenue") && <Area type="linear" dataKey="Payments" stroke="none" fill="url(#mtGlowPayments)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("expenses") && <Area type="linear" dataKey="Expenses" stroke="none" fill="url(#mtGlowExpenses)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("profit") && <Area type="linear" dataKey="Net" stroke="none" fill="url(#mtGlowNet)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("revenue") && <Line type="linear" dataKey="Payments" stroke="#168BFF" strokeWidth={3} dot={diamondDot("#168BFF")} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #168BFF) drop-shadow(0 0 16px rgba(22,139,255,0.65)) drop-shadow(0 0 34px rgba(22,139,255,0.42))' }} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="linear" dataKey="Expenses" stroke="#FF6E91" strokeWidth={3} dot={diamondDot("#FF6E91")} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #FF6E91) drop-shadow(0 0 16px rgba(255,110,145,0.62)) drop-shadow(0 0 34px rgba(255,110,145,0.40))' }} />}
+                                    {graphDataTypes.includes("profit") && <Line type="linear" dataKey="Net" stroke="#14E6D1" strokeWidth={3} dot={diamondDot("#14E6D1")} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #14E6D1) drop-shadow(0 0 16px rgba(20,230,209,0.68)) drop-shadow(0 0 34px rgba(20,230,209,0.44))' }} />}
                                   </ComposedChart>
+                                  </ResponsiveContainer>
                                 </div>
                               </div>
 
