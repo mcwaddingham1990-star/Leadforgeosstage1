@@ -788,6 +788,18 @@ select option {
   color: #59c7ff !important;
   text-shadow: 0 0 12px rgba(36, 157, 255, .24);
 }
+/* Primary + muted brand text (headings, table cells, Quick Actions buttons,
+   etc.) is hardcoded navy everywhere in the app. theme-dark-basic already
+   remaps these same two classes to a light color; dynamic never got the
+   same treatment, so this text stayed navy-on-near-black against the forced
+   -dark surfaces/buttons above -- unreadable. */
+.workspace-theme.theme-dark-dynamic [class~="text-[#1F3557]"],
+.workspace-theme.theme-dark-dynamic [class~="text-[#342D7E]"] {
+  color: #eaf6ff !important;
+}
+.workspace-theme.theme-dark-dynamic [class~="text-[#5E7393]"] {
+  color: rgba(205, 226, 255, .72) !important;
+}
 .workspace-theme.theme-dark-dynamic svg:not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-red"]):not([class*="text-rose"]):not([class*="text-yellow"]):not([class*="text-amber"]) {
   filter: drop-shadow(0 0 5px rgba(32, 145, 255, .18));
 }
