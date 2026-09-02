@@ -7136,7 +7136,7 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
-                      <div className="relative overflow-hidden bg-[linear-gradient(145deg,rgba(220,240,255,0.98),rgba(190,225,251,0.96)_48%,rgba(213,239,255,0.98))] rounded-xl p-4 sm:p-5 border border-white/95 shadow-[0_0_28px_rgba(56,189,248,0.52),inset_0_0_34px_rgba(255,255,255,0.86)] space-y-3 text-[#07599a]">
+                      <div className="mt-card relative overflow-hidden bg-[linear-gradient(145deg,rgba(220,240,255,0.98),rgba(190,225,251,0.96)_48%,rgba(213,239,255,0.98))] rounded-xl p-4 sm:p-5 border border-white/95 shadow-[0_0_28px_rgba(56,189,248,0.52),inset_0_0_34px_rgba(255,255,255,0.86)] space-y-3 text-[#07599a]">
                         {/* HUD decoration: grid texture, corner brackets -- all decorative, sit behind the real content below */}
                         <div className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'linear-gradient(rgba(14,116,180,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,180,0.055) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
                         <span className="pointer-events-none absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-white" />

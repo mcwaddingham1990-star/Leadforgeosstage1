@@ -199,38 +199,43 @@ select option {
 }
 
 /* 6. Typography & Text Colors */
-/* Primary Text (#1F3557) */
-.workspace-theme text,
-.workspace-theme h1,
-.workspace-theme h2,
-.workspace-theme h3,
-.workspace-theme h4,
-.workspace-theme h5,
-.workspace-theme h6,
-.workspace-theme th,
-.workspace-theme .text-slate-900,
-.workspace-theme .text-slate-800,
-.workspace-theme .text-slate-700,
-.workspace-theme .text-gray-900,
-.workspace-theme .text-\[\#342D7E\],
-.workspace-theme .text-blue-900,
-.workspace-theme .text-indigo-900 {
+/* Primary Text (#1F3557). Excludes the Money Tracker card (.mt-card) --
+   that card sets its own deliberate per-element text colors (headings,
+   glowing stat values, breakdown labels) via Tailwind arbitrary-value
+   classes, which these blanket tag selectors would otherwise stomp flat
+   since a stylesheet !important always beats a plain utility class or an
+   inline style regardless of the color it was actually given. */
+.workspace-theme text:not(.mt-card *),
+.workspace-theme h1:not(.mt-card *),
+.workspace-theme h2:not(.mt-card *),
+.workspace-theme h3:not(.mt-card *),
+.workspace-theme h4:not(.mt-card *),
+.workspace-theme h5:not(.mt-card *),
+.workspace-theme h6:not(.mt-card *),
+.workspace-theme th:not(.mt-card *),
+.workspace-theme .text-slate-900:not(.mt-card *),
+.workspace-theme .text-slate-800:not(.mt-card *),
+.workspace-theme .text-slate-700:not(.mt-card *),
+.workspace-theme .text-gray-900:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]:not(.mt-card *),
+.workspace-theme .text-blue-900:not(.mt-card *),
+.workspace-theme .text-indigo-900:not(.mt-card *) {
   color: #1F3557 !important;
 }
 
-/* Secondary Text (#5E7393) */
-.workspace-theme p,
-.workspace-theme span,
-.workspace-theme label,
-.workspace-theme td,
-.workspace-theme .text-slate-500,
-.workspace-theme .text-slate-400,
-.workspace-theme .text-slate-600,
-.workspace-theme .text-gray-500,
-.workspace-theme .text-gray-400,
-.workspace-theme .text-\[\#342D7E\]\/75,
-.workspace-theme .text-\[\#342D7E\]\/60,
-.workspace-theme .text-\[\#342D7E\]\/50 {
+/* Secondary Text (#5E7393) -- same .mt-card exclusion as above. */
+.workspace-theme p:not(.mt-card *),
+.workspace-theme span:not(.mt-card *),
+.workspace-theme label:not(.mt-card *),
+.workspace-theme td:not(.mt-card *),
+.workspace-theme .text-slate-500:not(.mt-card *),
+.workspace-theme .text-slate-400:not(.mt-card *),
+.workspace-theme .text-slate-600:not(.mt-card *),
+.workspace-theme .text-gray-500:not(.mt-card *),
+.workspace-theme .text-gray-400:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/75:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/60:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/50:not(.mt-card *) {
   color: #5E7393 !important;
 }
 
@@ -250,13 +255,18 @@ select option {
   color: #07599A !important;
 }
 
-/* 8. Primary Buttons (#4A86F7 with hover #3977EE) */
-.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent),
-.workspace-theme .bg-\[\#4A9BFF\],
-.workspace-theme .bg-\[\#4A86F7\],
-.workspace-theme .bg-blue-600,
-.workspace-theme .bg-indigo-600,
-.workspace-theme button.bg-\[\#4A9BFF\] {
+/* 8. Primary Buttons (#4A86F7 with hover #3977EE). Excludes .mt-card --
+   the Money Tracker card's own buttons (Log Income/Log Expense/Run
+   Payroll, series toggles) are deliberately color-coded per action and
+   none of them match this rule's exclusion classes (which are old plain
+   Tailwind names, not MT's arbitrary hex classes), so without this
+   exclusion every one of them would get forced to the same flat blue. */
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *),
+.workspace-theme .bg-\[\#4A9BFF\]:not(.mt-card *),
+.workspace-theme .bg-\[\#4A86F7\]:not(.mt-card *),
+.workspace-theme .bg-blue-600:not(.mt-card *),
+.workspace-theme .bg-indigo-600:not(.mt-card *),
+.workspace-theme button.bg-\[\#4A9BFF\]:not(.mt-card *) {
   background-color: #158CEB !important;
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.96) !important;
@@ -266,12 +276,12 @@ select option {
   backdrop-filter: blur(8px) !important;
 }
 
-.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):hover,
-.workspace-theme .bg-\[\#4A9BFF\]:hover,
-.workspace-theme .bg-\[\#4A86F7\]:hover,
-.workspace-theme .bg-blue-600:hover,
-.workspace-theme .bg-indigo-600:hover,
-.workspace-theme button.bg-\[\#4A9BFF\]:hover {
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *):hover,
+.workspace-theme .bg-\[\#4A9BFF\]:not(.mt-card *):hover,
+.workspace-theme .bg-\[\#4A86F7\]:not(.mt-card *):hover,
+.workspace-theme .bg-blue-600:not(.mt-card *):hover,
+.workspace-theme .bg-indigo-600:not(.mt-card *):hover,
+.workspace-theme button.bg-\[\#4A9BFF\]:not(.mt-card *):hover {
   background-color: #0D7DE0 !important;
   border-color: #ffffff !important;
   background-image: linear-gradient(135deg, #35C5FF 0%, #0D8CF2 55%, #2E6DE3 100%) !important;
