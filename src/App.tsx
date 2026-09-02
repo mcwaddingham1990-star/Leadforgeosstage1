@@ -7117,7 +7117,9 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
-                      <div className="bg-white/50 backdrop-blur-xl rounded-3xl p-6 border border-white/70 shadow-[0_0_40px_rgba(74,134,247,0.14)] space-y-5">
+                      <div className="relative overflow-hidden bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[32px] p-6 border-2 border-white shadow-[0_0_50px_rgba(120,190,255,0.55),inset_0_1px_0_rgba(255,255,255,0.8)] space-y-5">
+                        <span className="pointer-events-none select-none absolute top-6 left-8 text-white/80 text-lg">✦</span>
+                        <span className="pointer-events-none select-none absolute bottom-8 right-10 text-white/70 text-sm">✦</span>
                         {(() => {
                           const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
                           const { points, periodStart, periodEnd } = stepData;
@@ -7125,7 +7127,6 @@ Access to full financial telemetry is restricted.`;
                           const paymentsTotal = latest.Payments;
                           const expensesTotal = latest.Expenses;
                           const netTotal = latest.Net;
-                          const netMargin = paymentsTotal > 0 ? (netTotal / paymentsTotal) * 100 : null;
 
                           const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
                           const priorNet = priorTotal - priorExpenseTotal;
@@ -7190,7 +7191,7 @@ Access to full financial telemetry is restricted.`;
                           // Upcoming Bills & Expenses are two independent scrolling
                           // columns, each looping the same way.
                           const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string) => (
-                            <div className="bg-white/40 backdrop-blur-md rounded-2xl border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)] h-56 overflow-hidden relative">
+                            <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)] h-56 overflow-hidden relative">
                               {items.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-[11px] text-[#5E7393] font-medium">{emptyText}</div>
                               ) : (
@@ -7227,7 +7228,7 @@ Access to full financial telemetry is restricted.`;
                                       changeRevenuePageFilter(e.target.value);
                                       triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
                                     }}
-                                    className="text-[10.5px] font-bold text-[#1F3557] bg-white/70 border border-white/80 rounded-xl px-3 py-2 focus:outline-none cursor-pointer shadow-sm"
+                                    className="text-[10.5px] font-bold text-[#1F3557] bg-white border-2 border-white rounded-xl px-3 py-2 focus:outline-none cursor-pointer shadow-[0_0_10px_rgba(120,190,255,0.5)]"
                                   >
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
@@ -7283,7 +7284,7 @@ Access to full financial telemetry is restricted.`;
                                 {points.length > 6 && (
                                   <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
                                 )}
-                                <div className="overflow-x-auto overflow-y-hidden rounded-2xl bg-white/30 backdrop-blur-md border border-white/60 shadow-[0_0_24px_rgba(74,134,247,0.10)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <div className="overflow-x-auto overflow-y-hidden rounded-[28px] bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] border-2 border-white shadow-[0_0_28px_rgba(120,190,255,0.55),inset_0_1px_0_rgba(255,255,255,0.8)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
                                   <LineChart
                                     width={chartWidth}
                                     height={280}
@@ -7368,8 +7369,8 @@ Access to full financial telemetry is restricted.`;
                                       onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
                                       className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
                                         selected
-                                          ? "bg-[#4A86F7] text-white shadow-sm"
-                                          : "bg-white/60 text-[#5E7393] border border-white/80 hover:text-[#1F3557]"
+                                          ? "bg-[#4A86F7] text-white shadow-[0_0_12px_rgba(74,134,247,0.6)]"
+                                          : "bg-white border-2 border-white text-[#5E7393] shadow-[0_0_8px_rgba(120,190,255,0.4)] hover:text-[#1F3557]"
                                       }`}
                                     >
                                       {selected ? "✓ " : ""}{label}
@@ -7378,7 +7379,7 @@ Access to full financial telemetry is restricted.`;
                                 })}
                                 <button
                                   onClick={() => setIsFinancialSnapshotOpen(true)}
-                                  className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                  className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 shadow-[0_0_16px_rgba(74,134,247,0.6)]"
                                 >
                                   <Landmark className="w-3.5 h-3.5" /> View Financial Reports
                                 </button>
@@ -7386,7 +7387,7 @@ Access to full financial telemetry is restricted.`;
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
+                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Revenue Breakdown</p>
                                   {revenueSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#5E7393] text-center py-8">No revenue this period yet.</p>
@@ -7413,7 +7414,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
+                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Expense Breakdown</p>
                                   {expenseSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#5E7393] text-center py-8">No expenses this period yet.</p>
@@ -7440,7 +7441,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-white/40 backdrop-blur-md rounded-2xl p-4 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
+                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
                                   <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Cash Flow</p>
                                   <ResponsiveContainer width="100%" height={100}>
                                     <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -7456,26 +7457,23 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               {/* REAL STAT TILES -- own row, below the breakdowns */}
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {([
-                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10", isPct: false },
-                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", isPct: false },
-                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10", isPct: false },
-                                  { label: "Net Margin", val: netMargin, pct: null as number | null, icon: Landmark, color: "text-purple-500", bg: "bg-purple-500/10", isPct: true }
+                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10" },
+                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10" },
+                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" }
                                 ]).map((tile, idx) => (
-                                  <div key={idx} className="bg-white/40 backdrop-blur-md rounded-2xl p-3.5 border border-white/70 shadow-[0_0_18px_rgba(74,134,247,0.10)]">
+                                  <div key={idx} className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
                                     <div className="flex items-center justify-between mb-1.5">
                                       <span className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wide">{tile.label}</span>
-                                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${tile.bg} ${tile.color}`} style={{ borderColor: "currentColor" }}>
-                                        <tile.icon className="w-3 h-3" />
+                                      <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center ${tile.bg} ${tile.color}`} style={{ borderColor: "currentColor" }}>
+                                        <tile.icon className="w-3.5 h-3.5" />
                                       </div>
                                     </div>
-                                    <p className="text-base font-black text-[#1F3557]">
-                                      {tile.isPct ? (tile.val === null ? "—" : `${tile.val.toFixed(1)}%`) : fmt(tile.val as number)}
-                                    </p>
+                                    <p className="text-lg font-black text-[#1F3557]">{fmt(tile.val)}</p>
                                     {tile.pct !== null && (
-                                      <p className={`text-[9px] font-bold mt-0.5 ${(tile.pct as number) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                                        {(tile.pct as number) >= 0 ? "▲" : "▼"} {Math.abs(tile.pct as number).toFixed(1)}% vs last period
+                                      <p className={`text-[9.5px] font-bold mt-0.5 ${tile.pct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {tile.pct >= 0 ? "▲" : "▼"} {Math.abs(tile.pct).toFixed(1)}% vs last period
                                       </p>
                                     )}
                                   </div>
