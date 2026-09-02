@@ -991,6 +991,21 @@ function getRevenueChartData(
     return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
   }
 
+  if (filter === "Month") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const daysInMonth = Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000);
+    const dailyRows: ReturnType<typeof buildRow>[] = [];
+    for (let i = 0; i < daysInMonth; i++) {
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), 1 + i);
+      const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+      dailyRows.push(buildRow(dayStart.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }), dayStart, dayEnd));
+    }
+    const priorMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const priorTotal = sumInRange(revenueSource, priorMonthStart, periodStart);
+    return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
+  }
+
   if (filter === "Quarter") {
     const months: ReturnType<typeof buildRow>[] = [];
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
@@ -1074,6 +1089,8 @@ function getRevenueStepSeries(
     periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
   } else if (filter === "Pay Period") {
     periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
+  } else if (filter === "Month") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
   } else if (filter === "Quarter") {
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
     periodStart = new Date(now.getFullYear(), quarterStartMonth, 1);
@@ -1112,19 +1129,7 @@ function getRevenueStepSeries(
   events.sort((a, b) => a.time - b.time);
 
   const fmtLabel = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  // The chart's leading point is normally the literal calendar start of the
-  // period (periodStart), which for Quarter/Annual/Total can sit weeks
-  // before any real activity -- leaving most of the chart's width flat and
-  // squeezing the real movement into a sliver near the right edge. When
-  // there's a real gap, pull the chart's own starting point in close to the
-  // first real event instead (still $0, still true) so the line's actual
-  // movement isn't crushed into a fraction of the width. This only changes
-  // where the STEP CHART starts drawing -- periodStart/periodEnd (used for
-  // "this period" totals and breakdowns elsewhere) are untouched.
-  const anchorTime = events.length > 0
-    ? Math.max(periodStart.getTime(), events[0].time - Math.max((periodEnd.getTime() - periodStart.getTime()) * 0.05, 60 * 60 * 1000))
-    : periodStart.getTime();
-  const points: RevenueStepPoint[] = [{ x: anchorTime, label: fmtLabel(anchorTime), Payments: 0, Expenses: 0, Net: 0 }];
+  const points: RevenueStepPoint[] = [{ x: periodStart.getTime(), label: fmtLabel(periodStart.getTime()), Payments: 0, Expenses: 0, Net: 0 }];
   let runningPayments = 0;
   let runningExpenses = 0;
   for (const ev of events) {
@@ -2039,6 +2044,7 @@ export default function App() {
   const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
   const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
+  const [pinnedChartPoint, setPinnedChartPoint] = useState<{ label: number; payload: any[] } | null>(null);
   const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
     "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
   >("all");
@@ -2236,6 +2242,7 @@ export default function App() {
 
   const changeRevenuePageFilter = (view: string) => {
     setRevenuePageFilter(view);
+    setPinnedChartPoint(null);
     if (businessId) localStorage.setItem(`ownerslocal_balance_view:${businessId}`, view);
   };
 
@@ -7070,19 +7077,8 @@ Access to full financial telemetry is restricted.`;
                       </div>
                     ) : (
                       /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
-                      <div className="space-y-6 animate-fade-in text-left">
-                      {/* HEADER SECTION - Separate clean header block */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                          <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-                            <span className="select-none text-xl">📈</span> Company Revenue Tracking
-                          </h2>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
-                        </div>
-                        <PlaidConnectButton />
-                      </div>
-
-                      {/* QUICK ACTIONS - 4 BUTTONS, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
+                      <div className="space-y-3 animate-fade-in text-left">
+                      {/* QUICK ACTIONS - 4 BUTTONS + Plaid connect, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
                       <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' as any }}>
                         <div className="flex flex-nowrap gap-2 w-max">
                           {[
@@ -7119,12 +7115,15 @@ Access to full financial telemetry is restricted.`;
                               }}
                               className="shrink-0 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all"
                             >
-                              <btn.icon className="w-3.5 h-3.5 text-[#315C9F] shrink-0" />
-                              <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide whitespace-nowrap">
+                              <btn.icon className="w-3.5 h-3.5 text-[#07599A] shrink-0" />
+                              <span className="text-[10.5px] font-extrabold text-[#07599A] uppercase tracking-wide whitespace-nowrap">
                                 {btn.label}
                               </span>
                             </button>
                           ))}
+                          <div className="shrink-0">
+                            <PlaidConnectButton />
+                          </div>
                         </div>
                       </div>
 
@@ -7201,6 +7200,44 @@ Access to full financial telemetry is restricted.`;
                               ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
                               : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
                           };
+                          // Per-filter calendar tick structure: a labeled "major" tick plus
+                          // unlabeled hash-mark ticks at finer resolution, matching a real
+                          // calendar axis instead of ticks auto-derived from sparse event data.
+                          // Week: every day, all labeled. Month: every day hash-marked, every
+                          // week labeled. Quarter: every day hash-marked, every month labeled.
+                          // Annual: every week hash-marked, every month labeled. Day/Pay
+                          // Period/Total keep Recharts' own auto ticks (empty ticks array).
+                          const DAY_MS = 86400000;
+                          const buildAxisTicks = (): { ticks: number[]; isMajor: (t: number) => boolean; majorLabel: (t: number) => string } => {
+                            const startMs = periodStart.getTime();
+                            const endMs = periodEnd.getTime();
+                            if (revenuePageFilter === "Week") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return { ticks, isMajor: () => true, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { weekday: "short" }) };
+                            }
+                            if (revenuePageFilter === "Month") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return {
+                                ticks,
+                                isMajor: (t) => Math.round((t - startMs) / DAY_MS) % 7 === 0,
+                                majorLabel: (t) => `Wk ${Math.floor(Math.round((t - startMs) / DAY_MS) / 7) + 1}`
+                              };
+                            }
+                            if (revenuePageFilter === "Quarter") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return { ticks, isMajor: (t) => new Date(t).getDate() === 1, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { month: "short" }) };
+                            }
+                            if (revenuePageFilter === "Annual") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS * 7) ticks.push(t);
+                              return { ticks, isMajor: (t) => new Date(t).getDate() <= 7, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { month: "short" }) };
+                            }
+                            return { ticks: [], isMajor: () => true, majorLabel: xTickFormat };
+                          };
+                          const axisTicks = buildAxisTicks();
                           // Diamond-shaped marker (matches the approved reference chart's
                           // square/diamond points) instead of Recharts' default circle dot.
                           const diamondDot = (color: string) => (dotProps: any) => {
@@ -7267,6 +7304,7 @@ Access to full financial telemetry is restricted.`;
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
                                     <option value="Pay Period">Pay Period</option>
+                                    <option value="Month">Month</option>
                                     <option value="Quarter">Quarter</option>
                                     <option value="Annual">Annual</option>
                                     <option value="Total">Total</option>
@@ -7332,6 +7370,11 @@ Access to full financial telemetry is restricted.`;
                                   <ComposedChart
                                     data={points}
                                     margin={{ top: 10, right: 20, left: 8, bottom: 0 }}
+                                    onClick={(state: any) => {
+                                      if (state && state.activeLabel !== undefined && state.activePayload && state.activePayload.length) {
+                                        setPinnedChartPoint({ label: state.activeLabel, payload: state.activePayload });
+                                      }
+                                    }}
                                   >
                                     <defs>
                                       <linearGradient id="mtGlowPayments" x1="0" y1="0" x2="0" y2="1">
@@ -7351,16 +7394,15 @@ Access to full financial telemetry is restricted.`;
                                     <XAxis
                                       dataKey="x"
                                       type="number"
-                                      domain={["dataMin", "dataMax"]}
-                                      tickFormatter={xTickFormat}
+                                      domain={[periodStart.getTime(), periodEnd.getTime()]}
+                                      {...(axisTicks.ticks.length ? { ticks: axisTicks.ticks, interval: 0 } : { interval: "preserveStartEnd" as const, minTickGap: 24 })}
+                                      tickFormatter={(t: number) => axisTicks.ticks.length ? (axisTicks.isMajor(t) ? axisTicks.majorLabel(t) : "") : xTickFormat(t)}
                                       stroke="#12689E"
                                       fontSize={10}
-                                      tickLine={false}
+                                      tickLine={true}
                                       axisLine={false}
                                       dy={10}
                                       className="font-mono"
-                                      interval="preserveStartEnd"
-                                      minTickGap={24}
                                     />
                                     <YAxis
                                       domain={[0, (max: number) => Math.ceil(max * 1.04)]}
@@ -7372,33 +7414,6 @@ Access to full financial telemetry is restricted.`;
                                       className="font-mono"
                                       width={44}
                                     />
-                                    <Tooltip
-                                      labelFormatter={(ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                                      content={
-                                      ({ active, payload, label }) => {
-                                        if (active && payload && payload.length) {
-                                          return (
-                                            <div className="bg-[#e2f3ff]/95 border border-white shadow-[0_0_20px_rgba(56,189,248,0.45)] p-3 rounded-lg text-left text-xs font-mono">
-                                              <p className="font-bold text-[#07599a] mb-1.5 border-b border-sky-500/20 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
-                                              <div className="space-y-1">
-                                                {payload.map((entry: any, index: number) => (
-                                                  <div key={index} className="flex items-center justify-between gap-6">
-                                                    <span className="flex items-center gap-1.5 font-semibold text-cyan-300/80 text-[11px]">
-                                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}` }} />
-                                                      {entry.name}:
-                                                    </span>
-                                                    <span className="font-mono font-bold text-[#07599a] text-[11px]">
-                                                      ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </span>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          );
-                                        }
-                                        return null;
-                                      }
-                                    } />
                                     <Legend
                                       verticalAlign="top"
                                       height={36}
@@ -7415,6 +7430,32 @@ Access to full financial telemetry is restricted.`;
                                     {graphDataTypes.includes("profit") && <Line type="linear" dataKey="Net" stroke="#14E6D1" strokeWidth={3} dot={diamondDot("#14E6D1")} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #14E6D1) drop-shadow(0 0 16px rgba(20,230,209,0.68)) drop-shadow(0 0 34px rgba(20,230,209,0.44))' }} />}
                                   </ComposedChart>
                                   </ResponsiveContainer>
+                                  {pinnedChartPoint && (
+                                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 min-w-[190px] bg-[#e2f3ff]/95 border border-white shadow-[0_0_20px_rgba(56,189,248,0.45)] p-3 rounded-lg text-left text-xs font-mono">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPinnedChartPoint(null)}
+                                        aria-label="Close"
+                                        className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-white text-[#07599a] hover:bg-[#c7e3fa] cursor-pointer"
+                                      >
+                                        ✕
+                                      </button>
+                                      <p className="font-bold text-[#07599a] mb-1.5 pr-5 border-b border-sky-500/20 pb-1">{new Date(pinnedChartPoint.label).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                                      <div className="space-y-1">
+                                        {pinnedChartPoint.payload.map((entry: any, index: number) => (
+                                          <div key={index} className="flex items-center justify-between gap-6">
+                                            <span className="flex items-center gap-1.5 font-semibold text-[#2473aa] text-[11px]">
+                                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}` }} />
+                                              {entry.name}:
+                                            </span>
+                                            <span className="font-mono font-bold text-[#07599a] text-[11px]">
+                                              ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
