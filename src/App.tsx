@@ -7118,11 +7118,8 @@ Access to full financial telemetry is restricted.`;
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
                       <div className="relative overflow-hidden bg-[linear-gradient(145deg,rgba(220,240,255,0.98),rgba(190,225,251,0.96)_48%,rgba(213,239,255,0.98))] rounded-xl p-4 sm:p-5 border border-white/95 shadow-[0_0_28px_rgba(56,189,248,0.52),inset_0_0_34px_rgba(255,255,255,0.86)] space-y-3 text-[#07599a]">
-                        {/* HUD decoration: grid texture, idle scan sweep, corner brackets -- all decorative, sit behind the real content below */}
+                        {/* HUD decoration: grid texture, corner brackets -- all decorative, sit behind the real content below */}
                         <div className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'linear-gradient(rgba(14,116,180,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,180,0.055) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
-                        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                          <div className="absolute inset-x-0 h-32 bg-gradient-to-b from-transparent via-white/30 to-transparent" style={{ animation: 'hud-scan 7s linear infinite' }} />
-                        </div>
                         <span className="pointer-events-none absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-white" />
                         <span className="pointer-events-none absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-white" />
                         <span className="pointer-events-none absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-white" />
@@ -7228,8 +7225,8 @@ Access to full financial telemetry is restricted.`;
                                     <div key={copy}>
                                       {items.map((item, idx) => (
                                         <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-sky-500/15 text-xs font-mono">
-                                          <span className={`font-semibold truncate ${tone === "income" ? "text-[#078e64]" : "text-[#d8435c]"}`}>{item.label}</span>
-                                          <span className={`font-mono font-bold shrink-0 ${tone === "income" ? "text-[#078e64]" : "text-[#d8435c]"}`} style={{ textShadow: tone === "income" ? '0 0 7px rgba(45,212,191,0.72)' : '0 0 7px rgba(251,113,133,0.68)' }}>{fmt(item.amount)}</span>
+                                          <span className={`font-semibold truncate ${tone === "income" ? "text-[#00C853]" : "text-[#FF1744]"}`} style={{ textShadow: tone === "income" ? '0 0 6px rgba(0,230,118,0.85), 0 0 14px rgba(0,200,83,0.5)' : '0 0 6px rgba(255,23,68,0.85), 0 0 14px rgba(255,23,68,0.5)' }}>{item.label}</span>
+                                          <span className={`font-mono font-bold shrink-0 ${tone === "income" ? "text-[#00C853]" : "text-[#FF1744]"}`} style={{ textShadow: tone === "income" ? '0 0 7px rgba(0,230,118,0.9), 0 0 16px rgba(0,200,83,0.6)' : '0 0 7px rgba(255,23,68,0.9), 0 0 16px rgba(255,23,68,0.55)' }}>{fmt(item.amount)}</span>
                                         </div>
                                       ))}
                                     </div>
