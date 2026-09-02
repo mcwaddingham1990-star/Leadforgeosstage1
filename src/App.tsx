@@ -7117,9 +7117,16 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
-                      <div className="relative overflow-hidden bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[32px] p-6 border-2 border-white shadow-[0_0_50px_rgba(120,190,255,0.55),inset_0_1px_0_rgba(255,255,255,0.8)] space-y-5">
-                        <span className="pointer-events-none select-none absolute top-6 left-8 text-white/80 text-lg">✦</span>
-                        <span className="pointer-events-none select-none absolute bottom-8 right-10 text-white/70 text-sm">✦</span>
+                      <div className="relative overflow-hidden bg-gradient-to-br from-[#050B18] via-[#0A1830] to-[#081428] rounded-xl p-6 border border-cyan-400/40 shadow-[0_0_50px_rgba(34,211,238,0.28),0_0_110px_rgba(34,211,238,0.12)] space-y-5">
+                        {/* HUD decoration: grid texture, idle scan sweep, corner brackets -- all decorative, sit behind the real content below */}
+                        <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(rgba(34,211,238,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.08) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                          <div className="absolute inset-x-0 h-32 bg-gradient-to-b from-transparent via-cyan-400/10 to-transparent" style={{ animation: 'hud-scan 7s linear infinite' }} />
+                        </div>
+                        <span className="pointer-events-none absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-cyan-400/80" />
+                        <span className="pointer-events-none absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-cyan-400/80" />
+                        <span className="pointer-events-none absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-cyan-400/80" />
+                        <span className="pointer-events-none absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-cyan-400/80" />
                         {(() => {
                           const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
                           const { points, periodStart, periodEnd } = stepData;
@@ -7155,12 +7162,12 @@ Access to full financial telemetry is restricted.`;
                           const topCategories = categoryTotalsThisPeriod.slice(0, 4);
                           const otherCategoriesTotal = categoryTotalsThisPeriod.slice(4).reduce((s, c) => s + c.total, 0);
                           const expenseSlices = [
-                            ...topCategories.map((c, i) => ({ label: c.name, value: c.total, color: ["#F43F5E", "#F59E0B", "#8B5CF6", "#64748B"][i % 4] })),
-                            ...(otherCategoriesTotal > 0 ? [{ label: "Other", value: otherCategoriesTotal, color: "#94A3B8" }] : [])
+                            ...topCategories.map((c, i) => ({ label: c.name, value: c.total, color: ["#FB7185", "#FBBF24", "#A78BFA", "#94A3B8"][i % 4] })),
+                            ...(otherCategoriesTotal > 0 ? [{ label: "Other", value: otherCategoriesTotal, color: "#64748B" }] : [])
                           ];
                           const revenueSlicesRaw = [
-                            { label: "Completed Job Revenue", value: jobRevenueThisPeriod, color: "#4A86F7" },
-                            { label: "Logged Income", value: loggedIncomeThisPeriod, color: "#0EA5E9" }
+                            { label: "Completed Job Revenue", value: jobRevenueThisPeriod, color: "#22D3EE" },
+                            { label: "Logged Income", value: loggedIncomeThisPeriod, color: "#60A5FA" }
                           ];
                           const revenueSlices = revenueSlicesRaw.filter(s => s.value > 0);
                           const revenueSlicesTotal = revenueSlices.reduce((s, r) => s + r.value, 0);
@@ -7191,9 +7198,9 @@ Access to full financial telemetry is restricted.`;
                           // Upcoming Bills & Expenses are two independent scrolling
                           // columns, each looping the same way.
                           const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string) => (
-                            <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)] h-56 overflow-hidden relative">
+                            <div className="bg-[#050B18]/70 rounded-lg border border-cyan-400/30 shadow-[inset_0_0_24px_rgba(34,211,238,0.06)] h-56 overflow-hidden relative">
                               {items.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-[11px] text-[#5E7393] font-medium">{emptyText}</div>
+                                <div className="h-full flex items-center justify-center text-[11px] font-mono text-cyan-300/50">{emptyText}</div>
                               ) : (
                                 <div
                                   className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
@@ -7202,9 +7209,9 @@ Access to full financial telemetry is restricted.`;
                                   {[0, 1].map(copy => (
                                     <div key={copy}>
                                       {items.map((item, idx) => (
-                                        <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#9EC8EF]/20 text-xs">
-                                          <span className="font-semibold text-[#1F3557] truncate">{item.label}</span>
-                                          <span className="font-mono font-bold text-[#315C9F] shrink-0">{fmt(item.amount)}</span>
+                                        <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-cyan-400/10 text-xs font-mono">
+                                          <span className="font-semibold text-cyan-100 truncate">{item.label}</span>
+                                          <span className="font-mono font-bold text-cyan-300 shrink-0" style={{ textShadow: '0 0 6px rgba(34,211,238,0.6)' }}>{fmt(item.amount)}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -7217,10 +7224,10 @@ Access to full financial telemetry is restricted.`;
                           return (
                             <>
                               {/* HEADER: Money Tracker + graph-interval dropdown (top-left), Live badge (top-right) */}
-                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-white/60 pb-4">
+                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-cyan-400/25 pb-4">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="select-none text-xl">💰</span>
-                                  <h2 className="text-base font-sans font-black text-[#1F3557] uppercase tracking-wider">Money Tracker</h2>
+                                  <span className="select-none text-xl" style={{ filter: 'drop-shadow(0 0 6px rgba(34,211,238,0.8))' }}>💰</span>
+                                  <h2 className="text-base font-mono font-black text-cyan-50 uppercase tracking-[0.2em]" style={{ textShadow: '0 0 12px rgba(34,211,238,0.7)' }}>Money Tracker</h2>
                                   <select
                                     aria-label="Graph interval"
                                     value={revenuePageFilter}
@@ -7228,7 +7235,7 @@ Access to full financial telemetry is restricted.`;
                                       changeRevenuePageFilter(e.target.value);
                                       triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
                                     }}
-                                    className="text-[10.5px] font-bold text-[#1F3557] bg-white border-2 border-white rounded-xl px-3 py-2 focus:outline-none cursor-pointer shadow-[0_0_10px_rgba(120,190,255,0.5)]"
+                                    className="text-[10.5px] font-mono font-bold text-cyan-100 bg-[#0A1830] border border-cyan-400/50 rounded-md px-3 py-2 focus:outline-none cursor-pointer shadow-[0_0_10px_rgba(34,211,238,0.35)]"
                                   >
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
@@ -7238,8 +7245,8 @@ Access to full financial telemetry is restricted.`;
                                     <option value="Total">Total</option>
                                   </select>
                                 </div>
-                                <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 uppercase tracking-wider bg-emerald-500/10 px-2.5 py-1 rounded-full">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="flex items-center gap-1.5 text-[10px] font-mono font-black text-emerald-300 uppercase tracking-wider bg-emerald-500/10 border border-emerald-400/40 px-2.5 py-1 rounded-md shadow-[0_0_10px_rgba(52,211,153,0.35)]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
                                   Live Data
                                 </span>
                               </div>
@@ -7249,14 +7256,14 @@ Access to full financial telemetry is restricted.`;
                                 <button
                                   type="button"
                                   onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
+                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-emerald-300 border border-emerald-400/40 hover:border-emerald-400/70 hover:shadow-[0_0_10px_rgba(52,211,153,0.4)] cursor-pointer flex items-center gap-1 transition-all"
                                 >
                                   + Log Income
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-rose-300 border border-rose-400/40 hover:border-rose-400/70 hover:shadow-[0_0_10px_rgba(251,113,133,0.4)] cursor-pointer flex items-center gap-1 transition-all"
                                 >
                                   + Log Expense
                                 </button>
@@ -7264,7 +7271,7 @@ Access to full financial telemetry is restricted.`;
                                   type="button"
                                   disabled={isRunningPayroll}
                                   onClick={handleRunPayroll}
-                                  className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-white/70 text-[#315C9F] border border-white/80 hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-3 py-1.5 text-[10.5px] font-mono font-bold rounded-md bg-[#0A1830] text-cyan-300 border border-cyan-400/40 hover:border-cyan-400/70 hover:shadow-[0_0_10px_rgba(34,211,238,0.4)] cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                                 >
                                   {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
                                 </button>
@@ -7279,25 +7286,29 @@ Access to full financial telemetry is restricted.`;
                                 />
                               )}
 
-                              {/* GRAPH -- full width */}
+                              {/* GRAPH -- full width HUD readout */}
                               <div>
                                 {points.length > 6 && (
-                                  <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
+                                  <p className="text-[10px] text-cyan-300/50 font-mono text-right pr-2 pb-1 select-none">← swipe to scroll →</p>
                                 )}
-                                <div className="overflow-x-auto overflow-y-hidden rounded-[28px] bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] border-2 border-white shadow-[0_0_28px_rgba(120,190,255,0.55),inset_0_1px_0_rgba(255,255,255,0.8)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                <div className="relative overflow-x-auto overflow-y-hidden rounded-lg bg-[#050B18]/70 border border-cyan-400/30 shadow-[0_0_24px_rgba(34,211,238,0.15),inset_0_0_30px_rgba(34,211,238,0.05)] p-2" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                                  <span className="pointer-events-none absolute top-1.5 left-1.5 w-3 h-3 border-t border-l border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-3 h-3 border-b border-r border-cyan-400/60" />
                                   <LineChart
                                     width={chartWidth}
                                     height={280}
                                     data={points}
                                     margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
                                   >
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
+                                    <CartesianGrid strokeDasharray="2 4" stroke="#123A5C" vertical={false} />
                                     <XAxis
                                       dataKey="x"
                                       type="number"
                                       domain={["dataMin", "dataMax"]}
                                       tickFormatter={xTickFormat}
-                                      stroke="#5E7393"
+                                      stroke="#38BDF8"
                                       fontSize={10}
                                       tickLine={false}
                                       axisLine={false}
@@ -7305,7 +7316,7 @@ Access to full financial telemetry is restricted.`;
                                       className="font-mono"
                                     />
                                     <YAxis
-                                      stroke="#5E7393"
+                                      stroke="#38BDF8"
                                       fontSize={10}
                                       tickLine={false}
                                       axisLine={false}
@@ -7319,16 +7330,16 @@ Access to full financial telemetry is restricted.`;
                                       ({ active, payload, label }) => {
                                         if (active && payload && payload.length) {
                                           return (
-                                            <div className="bg-white/90 backdrop-blur border border-white shadow-md p-3 rounded-xl text-left text-xs font-sans">
-                                              <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                                            <div className="bg-[#0A1830]/95 border border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.3)] p-3 rounded-lg text-left text-xs font-mono">
+                                              <p className="font-bold text-cyan-100 mb-1.5 border-b border-cyan-400/20 pb-1">{new Date(label as number).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                                               <div className="space-y-1">
                                                 {payload.map((entry: any, index: number) => (
                                                   <div key={index} className="flex items-center justify-between gap-6">
-                                                    <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                    <span className="flex items-center gap-1.5 font-semibold text-cyan-300/80 text-[11px]">
+                                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}` }} />
                                                       {entry.name}:
                                                     </span>
-                                                    <span className="font-mono font-bold text-[#1F3557] text-[11px]">
+                                                    <span className="font-mono font-bold text-white text-[11px]">
                                                       ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                   </div>
@@ -7345,12 +7356,12 @@ Access to full financial telemetry is restricted.`;
                                       height={36}
                                       iconType="circle"
                                       iconSize={8}
-                                      className="font-sans font-bold text-[11px]"
-                                      wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                                      className="font-mono font-bold text-[11px]"
+                                      wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#7DD3FC' }}
                                     />
-                                    {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#4A86F7" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} />}
-                                    {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} />}
-                                    {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#22C55E" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} />}
+                                    {graphDataTypes.includes("revenue") && <Line type="stepAfter" dataKey="Payments" stroke="#22D3EE" strokeWidth={2.5} dot={{ r: 3, fill: "#22D3EE" }} activeDot={{ r: 6 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #22D3EE)' }} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="stepAfter" dataKey="Expenses" stroke="#FB7185" strokeWidth={2.5} dot={{ r: 3, fill: "#FB7185" }} activeDot={{ r: 6 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #FB7185)' }} />}
+                                    {graphDataTypes.includes("profit") && <Line type="stepAfter" dataKey="Net" stroke="#4ADE80" strokeWidth={2.5} dot={{ r: 3, fill: "#4ADE80" }} activeDot={{ r: 6 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 6px #4ADE80)' }} />}
                                   </LineChart>
                                 </div>
                               </div>
@@ -7367,10 +7378,10 @@ Access to full financial telemetry is restricted.`;
                                     <button
                                       key={value}
                                       onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
-                                      className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
+                                      className={`px-3 py-1.5 text-[10.5px] font-mono rounded-md font-bold transition-all duration-200 cursor-pointer ${
                                         selected
-                                          ? "bg-[#4A86F7] text-white shadow-[0_0_12px_rgba(74,134,247,0.6)]"
-                                          : "bg-white border-2 border-white text-[#5E7393] shadow-[0_0_8px_rgba(120,190,255,0.4)] hover:text-[#1F3557]"
+                                          ? "bg-cyan-400 text-[#050B18] shadow-[0_0_16px_rgba(34,211,238,0.8)]"
+                                          : "bg-[#0A1830] border border-cyan-400/30 text-cyan-300/60 hover:border-cyan-400/60 hover:text-cyan-100"
                                       }`}
                                     >
                                       {selected ? "✓ " : ""}{label}
@@ -7379,7 +7390,7 @@ Access to full financial telemetry is restricted.`;
                                 })}
                                 <button
                                   onClick={() => setIsFinancialSnapshotOpen(true)}
-                                  className="px-3.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5 shadow-[0_0_16px_rgba(74,134,247,0.6)]"
+                                  className="px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-md bg-gradient-to-r from-cyan-400 to-blue-400 text-[#050B18] cursor-pointer flex items-center gap-1.5 shadow-[0_0_20px_rgba(34,211,238,0.7)]"
                                 >
                                   <Landmark className="w-3.5 h-3.5" /> View Financial Reports
                                 </button>
@@ -7387,10 +7398,10 @@ Access to full financial telemetry is restricted.`;
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
-                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Revenue Breakdown</p>
+                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                  <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Revenue Breakdown</p>
                                   {revenueSlices.length === 0 ? (
-                                    <p className="text-[10.5px] text-[#5E7393] text-center py-8">No revenue this period yet.</p>
+                                    <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No revenue this period yet.</p>
                                   ) : (
                                     <div className="flex items-center gap-3">
                                       <ResponsiveContainer width={90} height={90}>
@@ -7402,11 +7413,11 @@ Access to full financial telemetry is restricted.`;
                                       </ResponsiveContainer>
                                       <div className="space-y-1.5 flex-1 min-w-0">
                                         {revenueSlices.map((s, i) => (
-                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px]">
-                                            <span className="flex items-center gap-1.5 truncate text-[#1F3557] font-semibold">
-                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} /> {s.label}
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                                            <span className="flex items-center gap-1.5 truncate text-cyan-100 font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} /> {s.label}
                                             </span>
-                                            <span className="font-mono font-bold text-[#5E7393] shrink-0">{Math.round((s.value / revenueSlicesTotal) * 100)}%</span>
+                                            <span className="font-mono font-bold text-cyan-300/80 shrink-0">{Math.round((s.value / revenueSlicesTotal) * 100)}%</span>
                                           </div>
                                         ))}
                                       </div>
@@ -7414,10 +7425,10 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
-                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Expense Breakdown</p>
+                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                  <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Expense Breakdown</p>
                                   {expenseSlices.length === 0 ? (
-                                    <p className="text-[10.5px] text-[#5E7393] text-center py-8">No expenses this period yet.</p>
+                                    <p className="text-[10.5px] text-cyan-300/40 font-mono text-center py-8">No expenses this period yet.</p>
                                   ) : (
                                     <div className="flex items-center gap-3">
                                       <ResponsiveContainer width={90} height={90}>
@@ -7429,11 +7440,11 @@ Access to full financial telemetry is restricted.`;
                                       </ResponsiveContainer>
                                       <div className="space-y-1.5 flex-1 min-w-0">
                                         {expenseSlices.map((s, i) => (
-                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px]">
-                                            <span className="flex items-center gap-1.5 truncate text-[#1F3557] font-semibold">
-                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} /> {s.label}
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                                            <span className="flex items-center gap-1.5 truncate text-cyan-100 font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} /> {s.label}
                                             </span>
-                                            <span className="font-mono font-bold text-[#5E7393] shrink-0">{Math.round((s.value / expenseSlicesTotal) * 100)}%</span>
+                                            <span className="font-mono font-bold text-cyan-300/80 shrink-0">{Math.round((s.value / expenseSlicesTotal) * 100)}%</span>
                                           </div>
                                         ))}
                                       </div>
@@ -7441,15 +7452,15 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
-                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Cash Flow</p>
+                                <div className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
+                                  <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Cash Flow</p>
                                   <ResponsiveContainer width="100%" height={100}>
                                     <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                                      <XAxis dataKey="time" stroke="#5E7393" fontSize={8} tickLine={false} axisLine={false} />
-                                      <YAxis stroke="#5E7393" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
-                                      <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} />
+                                      <XAxis dataKey="time" stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} />
+                                      <YAxis stroke="#38BDF8" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
+                                      <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} contentStyle={{ background: "#0A1830", border: "1px solid rgba(34,211,238,0.4)", borderRadius: 8, fontFamily: "monospace", fontSize: 11, color: "#fff" }} />
                                       <Bar dataKey="Profit" radius={[3, 3, 0, 0]}>
-                                        {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#22C55E" : "#F43F5E"} />)}
+                                        {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#4ADE80" : "#FB7185"} />)}
                                       </Bar>
                                     </BarChart>
                                   </ResponsiveContainer>
@@ -7459,20 +7470,20 @@ Access to full financial telemetry is restricted.`;
                               {/* REAL STAT TILES -- own row, below the breakdowns */}
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {([
-                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "text-blue-500", bg: "bg-blue-500/10" },
-                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10" },
-                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" }
+                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "#22D3EE", bg: "bg-cyan-400/10" },
+                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "#FB7185", bg: "bg-rose-400/10" },
+                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "#4ADE80", bg: "bg-emerald-400/10" }
                                 ]).map((tile, idx) => (
-                                  <div key={idx} className="bg-gradient-to-br from-[#EAF6FF] to-[#CFE9FF] rounded-[24px] p-4 border-2 border-white shadow-[0_0_20px_rgba(120,190,255,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]">
+                                  <div key={idx} className="bg-[#0A1830]/70 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_18px_rgba(34,211,238,0.12)]">
                                     <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wide">{tile.label}</span>
-                                      <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center ${tile.bg} ${tile.color}`} style={{ borderColor: "currentColor" }}>
+                                      <span className="text-[9px] font-mono font-bold text-cyan-300/70 uppercase tracking-widest">{tile.label}</span>
+                                      <div className={`w-7 h-7 rounded-full border flex items-center justify-center ${tile.bg}`} style={{ borderColor: tile.color, color: tile.color, boxShadow: `0 0 8px ${tile.color}66` }}>
                                         <tile.icon className="w-3.5 h-3.5" />
                                       </div>
                                     </div>
-                                    <p className="text-lg font-black text-[#1F3557]">{fmt(tile.val)}</p>
+                                    <p className="text-lg font-mono font-black text-white" style={{ textShadow: `0 0 10px ${tile.color}88` }}>{fmt(tile.val)}</p>
                                     {tile.pct !== null && (
-                                      <p className={`text-[9.5px] font-bold mt-0.5 ${tile.pct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                      <p className={`text-[9.5px] font-mono font-bold mt-0.5 ${tile.pct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
                                         {tile.pct >= 0 ? "▲" : "▼"} {Math.abs(tile.pct).toFixed(1)}% vs last period
                                       </p>
                                     )}
@@ -7484,11 +7495,11 @@ Access to full financial telemetry is restricted.`;
                                   two independent scrolling columns, bottom to top */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Job Payments</p>
+                                  <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Upcoming Job Payments</p>
                                   {renderTicker(upcomingJobs, "No upcoming jobs yet.")}
                                 </div>
                                 <div>
-                                  <p className="text-[10px] font-black text-[#1F3557] uppercase tracking-wide mb-2">Upcoming Bills &amp; Expenses</p>
+                                  <p className="text-[10px] font-mono font-black text-cyan-300/80 uppercase tracking-widest mb-2">Upcoming Bills &amp; Expenses</p>
                                   {renderTicker(upcomingBills, "No upcoming bills yet.")}
                                 </div>
                               </div>

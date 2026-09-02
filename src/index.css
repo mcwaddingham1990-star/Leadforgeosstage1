@@ -15,6 +15,14 @@
   to { transform: translateY(-50%); }
 }
 
+/* Money Tracker's HUD panel: a faint light sweeps down the whole card,
+   the way a cockpit display idles. Applied to a full-height translucent
+   bar inside an overflow-hidden wrapper so it loops seamlessly. */
+@keyframes hud-scan {
+  0% { transform: translateY(-120%); }
+  100% { transform: translateY(120%); }
+}
+
 /* ==========================================================================
    WORKSPACE THEME OVERRIDES (EXCLUDING LOGIN)
    This block perfectly implements the exact color specifications and design
