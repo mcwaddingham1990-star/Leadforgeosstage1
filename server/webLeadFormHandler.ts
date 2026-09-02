@@ -85,5 +85,58 @@ export async function handleWebLeadFormSubmit(body: WebLeadFormSubmission): Prom
     updatedAt: new Date().toISOString()
   });
 
+  await notifyNewWebsiteLead(db, businessId, name);
+
   return { ok: true };
+}
+
+/**
+ * Notifies the owner's inbox, plus any employee individually granted the
+ * "View Lead Messages in Inbox" permission (view_lead_messages) -- written
+ * server-side via the Admin SDK since NotificationsPage's Firestore rule
+ * requires each notification's own recipientEmail to match the reading
+ * user, so one recipient can't just subscribe to another's document.
+ */
+async function notifyNewWebsiteLead(
+  db: FirebaseFirestore.Firestore,
+  businessId: string,
+  leadName: string
+): Promise<void> {
+  const recipients = new Set<string>([businessId]);
+
+  try {
+    const employeesSnap = await db.collection("employees").where("businessEmail", "==", businessId).get();
+    employeesSnap.forEach(employeeDoc => {
+      const data = employeeDoc.data();
+      const permission = data?.granularPermissions?.view_lead_messages;
+      const granted = permission === "view" || permission === "edit" || permission === "delete"
+        || permission?.view === true || permission?.edit === true || permission?.delete === true;
+      if (granted && typeof data?.email === "string" && data.email) recipients.add(data.email);
+    });
+  } catch (err) {
+    console.error("Error resolving employees for website-lead notification (continuing with owner only):", err);
+  }
+
+  const now = new Date();
+  const time = now.toISOString().slice(0, 16).replace("T", " ");
+  const writes = Array.from(recipients).map(recipientEmail => {
+    const notifId = `notif_web_lead_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return db.collection("notifications").doc(notifId).set({
+      id: notifId,
+      businessId,
+      category: "leads",
+      title: "New Website Lead",
+      description: `${leadName} submitted your website lead form.`,
+      time,
+      isRead: false,
+      isArchived: false,
+      isPinned: false,
+      priority: "Normal",
+      assignedUser: "Owner",
+      recipientEmail,
+      createdBy: "Website Lead Form",
+      history: [`${time}: New website lead form submission from ${leadName}.`]
+    });
+  });
+  await Promise.all(writes);
 }

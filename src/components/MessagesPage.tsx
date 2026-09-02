@@ -49,6 +49,7 @@ import { DocumentItem } from "./DocumentsPage";
 import { geocodeAddress } from "./InteractiveMapPage";
 import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { hasPermission } from "../types/permissions";
 
 // Let's define the Types
 export interface MessageAttachment {
@@ -107,6 +108,10 @@ export interface Conversation {
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  // Everyone with Messages access can view and send -- deleting a
+  // conversation is owner-only by default, unless a role has explicitly
+  // been granted Delete on the Messages module.
+  const canDeleteMessages = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "messages", "delete");
   const { documents, setDocuments, customers: customersList, recentRoster, employees, schedulingEvents, estimates, invoices, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -647,6 +652,10 @@ export const MessagesPage: React.FC = () => {
   };
 
   const deleteConversation = (id: string) => {
+    if (!canDeleteMessages) {
+      triggerRealTimeNotification("🚫 Only the owner can delete conversations.");
+      return;
+    }
     setConversations(prev => prev.filter(c => c.id !== id));
     triggerRealTimeNotification("Conversation deleted successfully.");
   };
@@ -1552,12 +1561,14 @@ export const MessagesPage: React.FC = () => {
                 <Archive className="w-3.5 h-3.5" /> {activeConv.isArchived ? "Restore Stream" : "Archive Stream"}
               </button>
 
-              <button
-                onClick={() => deleteConversation(activeConv.id)}
-                className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl text-[10.5px] font-bold uppercase cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Delete Stream
-              </button>
+              {canDeleteMessages && (
+                <button
+                  onClick={() => deleteConversation(activeConv.id)}
+                  className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl text-[10.5px] font-bold uppercase cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Stream
+                </button>
+              )}
             </div>
 
           </div>

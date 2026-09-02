@@ -1,7 +1,7 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
 import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
-import type { GeneratedPdfDraft } from "../types/generatedPdf";
+import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
 export interface RosterEntry {
   id?: string;
@@ -74,10 +74,11 @@ export interface DomainDataContextValue {
   setPreSelectedDate: Dispatch<SetStateAction<string | undefined>>;
   preSelectedCustomerId: string | undefined;
   setPreSelectedCustomerId: Dispatch<SetStateAction<string | undefined>>;
-  preSelectedEstimateId: string | undefined;
-  setPreSelectedEstimateId: Dispatch<SetStateAction<string | undefined>>;
   generatedPdfDraft: GeneratedPdfDraft | null;
   setGeneratedPdfDraft: Dispatch<SetStateAction<GeneratedPdfDraft | null>>;
+  /** Queued "open the Estimate form pre-filled with this info" request (e.g. from a Lead's "Build Estimate" button) -- consumed by EstimatesPage to open its Add Estimate modal pre-populated, then cleared. */
+  estimatePrefill: EstimatePrefill | null;
+  setEstimatePrefill: Dispatch<SetStateAction<EstimatePrefill | null>>;
   /** Queued "Collect Signatures" request (e.g. from a customer card) -- consumed by DocumentsPage to open the PDF Editor straight to its file picker, ready to capture signatures on whatever real document gets opened. */
   pendingSignatureCapture: { customerName?: string } | null;
   setPendingSignatureCapture: Dispatch<SetStateAction<{ customerName?: string } | null>>;

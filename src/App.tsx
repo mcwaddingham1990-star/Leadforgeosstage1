@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
-import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
-import type { GeneratedPdfDraft } from "./types/generatedPdf";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
+import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
-import { postTransactionEntry } from "./lib/accountingEngine";
+import { postTransactionEntry, invoiceTotal } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
+import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
+import { downloadCsv } from "./lib/csv";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -99,7 +102,7 @@ import {
   Tooltip,
   Legend
 } from "recharts";
-import { LineChart, Line } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } from "recharts";
 import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
 
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
@@ -553,14 +556,17 @@ const validPersonName = (value: unknown): string => {
 export type WorkspaceTheme = "light-basic" | "light-extreme" | "dark-basic" | "dark-dynamic";
 
 const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
-  if (value === "Light Mode Extreme") return "light-extreme";
+  // "Light Mode Dynamic" was previously labeled "Light Mode Extreme" --
+  // accept the old saved string so existing businesses don't get bumped
+  // back to Light Mode Basic after the rename.
+  if (value === "Light Mode Dynamic" || value === "Light Mode Extreme") return "light-extreme";
   if (value === "Dark Mode Dynamic") return "dark-dynamic";
   if (value === "Dark Mode Basic" || value === "Basic Dark") return "dark-basic";
   return "light-basic";
 };
 
 const workspaceThemeSettingValue = (theme: WorkspaceTheme): string => {
-  if (theme === "light-extreme") return "Light Mode Extreme";
+  if (theme === "light-extreme") return "Light Mode Dynamic";
   if (theme === "dark-dynamic") return "Dark Mode Dynamic";
   if (theme === "dark-basic") return "Dark Mode Basic";
   return "Light Mode Basic";
@@ -649,107 +655,107 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   operations_manager: {
     name: "Operations Manager",
     description: "Dashboard, Scheduling, Dispatch, Routes, Jobs, Inventory, etc.",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "training"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "training", "settings"]
   },
   dispatcher: {
     name: "Dispatcher",
     description: "Dispatch, Routes, Map, Jobs, Sched",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages", "settings"]
   },
   scheduler: {
     name: "Scheduler",
     description: "Dashboard, Scheduling, Customers, Jobs, Messages",
-    permissions: ["dashboard", "scheduling", "customers", "jobs", "messages"]
+    permissions: ["dashboard", "scheduling", "customers", "jobs", "messages", "settings"]
   },
   sales_manager: {
     name: "Sales Manager",
     description: "Dashboard, Customers, Leads, Estimates, Messages, AI Assistant",
-    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant", "scheduling", "settings"]
   },
   sales_representative: {
     name: "Sales Representative",
     description: "Leads, CRM, Estimates, Docs",
-    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "messages", "ai_assistant", "scheduling", "settings"]
   },
   estimator: {
     name: "Estimator",
     description: "Estimates, Bids, Takeoffs, Reports",
-    permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "estimates", "documents", "messages", "ai_assistant", "scheduling", "settings"]
   },
   project_manager: {
     name: "Project Manager",
     description: "Dashboard, Customers, Scheduling, Dispatch, Routes, Jobs, Inventory, Documents, Messages",
-    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "settings"]
   },
   field_supervisor: {
     name: "Field Supervisor",
     description: "Dashboard, Jobs, Scheduling, Dispatch, Routes, Inventory, Documents, Messages, Training",
-    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training"]
+    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training", "settings"]
   },
   technician: {
     name: "Technician",
     description: "Dashboard, Jobs, Time Clock, Messages, Documents, Training",
-    permissions: ["dashboard", "jobs", "timeclock", "messages", "documents", "training"]
+    permissions: ["dashboard", "jobs", "timeclock", "messages", "documents", "training", "scheduling", "settings"]
   },
   laborer: {
     name: "Laborer",
     description: "Dashboard, Jobs, Time Clock, Training, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "training", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "training", "messages", "scheduling", "settings"]
   },
   apprentice: {
     name: "Apprentice",
     description: "Dashboard, Jobs, Time Clock, Training, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "training", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "training", "messages", "scheduling", "settings"]
   },
   installer: {
     name: "Installer",
     description: "Dashboard, Jobs, Time Clock, Inventory, Documents, Messages",
-    permissions: ["dashboard", "jobs", "timeclock", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "jobs", "timeclock", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   driver: {
     name: "Driver",
     description: "Dashboard, Routes, Jobs, Time Clock, Messages",
-    permissions: ["dashboard", "routes", "jobs", "timeclock", "messages"]
+    permissions: ["dashboard", "routes", "jobs", "timeclock", "messages", "scheduling", "settings"]
   },
   warehouse_manager: {
     name: "Warehouse / Inventory Manager",
     description: "Dashboard, Inventory, Documents, Messages",
-    permissions: ["dashboard", "inventory", "documents", "messages"]
+    permissions: ["dashboard", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   purchasing_manager: {
     name: "Purchasing Manager",
     description: "Dashboard, Inventory, Documents",
-    permissions: ["dashboard", "inventory", "documents"]
+    permissions: ["dashboard", "inventory", "documents", "messages", "scheduling", "settings"]
   },
   customer_service: {
     name: "Customer Service Representative",
     description: "Dashboard, Customers, Leads, Scheduling, Messages",
-    permissions: ["dashboard", "customers", "leads", "scheduling", "messages"]
+    permissions: ["dashboard", "customers", "leads", "scheduling", "messages", "settings"]
   },
   marketing_manager: {
     name: "Marketing Manager",
     description: "Dashboard, Customers, Leads, AI Assistant",
-    permissions: ["dashboard", "customers", "leads", "ai_assistant"]
+    permissions: ["dashboard", "customers", "leads", "ai_assistant", "messages", "scheduling", "settings"]
   },
   accountant: {
     name: "Accountant / Bookkeeper",
     description: "Dashboard, Customers, Estimates",
-    permissions: ["dashboard", "customers", "estimates"]
+    permissions: ["dashboard", "customers", "estimates", "messages", "scheduling", "settings"]
   },
   hr_manager: {
     name: "HR Manager",
     description: "Dashboard, Documents, Training",
-    permissions: ["dashboard", "documents", "training"]
+    permissions: ["dashboard", "documents", "training", "messages", "scheduling", "settings"]
   },
   safety_manager: {
     name: "Safety Manager",
     description: "Dashboard, Jobs, Training, Documents",
-    permissions: ["dashboard", "jobs", "training", "documents"]
+    permissions: ["dashboard", "jobs", "training", "documents", "messages", "scheduling", "settings"]
   },
   it_administrator: {
     name: "IT Administrator",
     description: "Everything except Owner company settings",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "training", "settings"]
   }
 };
 
@@ -822,6 +828,7 @@ const OS_SCREENS = [
   { id: "routes", label: "Interactive Map & Routes", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightroutes.jpg", icon: "🗺️", top: "52%", bottom: "57%" },
   { id: "jobs", label: "Jobs", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightjobs.jpg", icon: "💼", top: "22%", bottom: "27%" },
   { id: "timeclock", label: "Time Clock", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lighttimeclock.jpg", icon: "⏱️", top: "47%", bottom: "52%" },
+  { id: "payroll", label: "Payroll", url: "", icon: "💵", top: "47%", bottom: "52%" },
   { id: "inventory", label: "Inventory", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightinventory.jpg", icon: "📦", top: "72%", bottom: "77%" },
   { id: "documents", label: "Documents", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdocuments.jpg", icon: "📁", top: "62%", bottom: "67%" },
   { id: "messages", label: "Messages", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightmessages.jpg", icon: "💬", top: "32%", bottom: "37%" },
@@ -836,6 +843,15 @@ const OS_SCREENS = [
   { id: "missed_call_textback", label: "Missed Call Text-Back", url: "", icon: "📵", top: "82%", bottom: "87%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
+
+// The real expense categories shown in the Revenue page's statement table
+// ("Expenses by Category" view). "Bills" comes from the bills collection;
+// "Material Expenses" is a bucket of several transaction categories; every
+// other entry matches a transaction's `category` field exactly.
+const EXPENSE_CATEGORY_NAMES = [
+  "Bills", "Material Expenses", "Fuel", "Vehicle Maintenance", "Equipment", "Tools",
+  "Insurance", "Taxes", "Marketing", "Software & Subs", "Utilities", "Office Supplies", "Custom Expense"
+] as const;
 
 /**
  * Buckets the real revenueEvents log (written by the Event Engine's
@@ -870,6 +886,7 @@ function getRevenueChartData(
     date: bill.issuedDate
   }));
   const allExpenseCosts = [...expenseTx, ...billCosts];
+
   // Real revenue = job-completion events (revenueEvents) + manually-logged
   // or scanned income transactions (e.g. a photographed check) — both are
   // real money in, and logging one should actually move these totals.
@@ -974,6 +991,21 @@ function getRevenueChartData(
     return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
   }
 
+  if (filter === "Month") {
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const daysInMonth = Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000);
+    const dailyRows: ReturnType<typeof buildRow>[] = [];
+    for (let i = 0; i < daysInMonth; i++) {
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), 1 + i);
+      const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+      dailyRows.push(buildRow(dayStart.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }), dayStart, dayEnd));
+    }
+    const priorMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const priorTotal = sumInRange(revenueSource, priorMonthStart, periodStart);
+    return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
+  }
+
   if (filter === "Quarter") {
     const months: ReturnType<typeof buildRow>[] = [];
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
@@ -1021,6 +1053,105 @@ function getRevenueChartData(
   const periodStart = new Date(firstYear, 0, 1);
   const periodEnd = new Date(now.getFullYear() + 1, 0, 1);
   return withTotals(cumulative(years), periodStart, periodEnd, 0);
+}
+
+interface RevenueStepPoint {
+  x: number;
+  label: string;
+  Payments: number;
+  Expenses: number;
+  Net: number;
+}
+
+/**
+ * A true event-driven step series for the Revenue page's own graph (the
+ * Dashboard mini-widget keeps using getRevenueChartData's fixed-bucket
+ * trend above -- different chart, different job). Each real payment or
+ * expense event -- a completed job, a logged/scanned income or expense
+ * transaction, an issued bill -- plots one point at its real timestamp,
+ * carrying the running cumulative total for Payments/Expenses/Net as of
+ * that moment. The series starts at zero at the period's start and holds
+ * flat out to "now" so the line visibly stays at its last value until the
+ * next real event -- exactly what a step chart (type="stepAfter") draws.
+ */
+function getRevenueStepSeries(
+  filter: string,
+  revenueEvents: RevenueEvent[],
+  transactions: Transaction[] = [],
+  bills: Bill[] = []
+): { points: RevenueStepPoint[]; periodStart: Date; periodEnd: Date } {
+  const now = new Date();
+  let periodStart: Date;
+
+  if (filter === "Day") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (filter === "Week") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+  } else if (filter === "Pay Period") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
+  } else if (filter === "Month") {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (filter === "Quarter") {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    periodStart = new Date(now.getFullYear(), quarterStartMonth, 1);
+  } else if (filter === "Annual") {
+    periodStart = new Date(now.getFullYear(), 0, 1);
+  } else {
+    const allDates = [
+      ...revenueEvents.map((e) => new Date(e.date)),
+      ...transactions.map((t) => new Date(t.date)),
+      ...bills.map((b) => new Date(b.issuedDate))
+    ].filter((d) => !Number.isNaN(d.getTime()));
+    periodStart = allDates.length ? new Date(Math.min(...allDates.map((d) => d.getTime()))) : now;
+  }
+  const periodEnd = now;
+
+  type Ev = { time: number; kind: "payment" | "expense"; amount: number };
+  const events: Ev[] = [];
+  const inRange = (t: number) => !Number.isNaN(t) && t >= periodStart.getTime() && t <= periodEnd.getTime();
+
+  for (const e of revenueEvents) {
+    const t = new Date(e.date).getTime();
+    if (inRange(t)) events.push({ time: t, kind: "payment", amount: e.amount });
+  }
+  for (const t of transactions) {
+    if (t.type !== "income" && t.type !== "expense") continue;
+    const time = new Date(t.date).getTime();
+    if (inRange(time)) events.push({ time, kind: t.type === "income" ? "payment" : "expense", amount: t.amount });
+  }
+  for (const b of bills) {
+    if (b.status === "void") continue;
+    const time = new Date(b.issuedDate).getTime();
+    if (!inRange(time)) continue;
+    const amount = b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+    events.push({ time, kind: "expense", amount });
+  }
+  events.sort((a, b) => a.time - b.time);
+  // Dates without a time-of-day (a bill's issued date, a logged transaction's
+  // date) all land on that day's midnight, so two real events on the same
+  // calendar day collide at the exact same x -- which draws as a genuinely
+  // vertical segment, not just a steep one. Spread same-timestamp events by
+  // a nominal minute each, in their already-sorted order, so the line is a
+  // real (if steep) diagonal between them. No amount or ordering changes.
+  for (let i = 1; i < events.length; i++) {
+    if (events[i].time <= events[i - 1].time) {
+      events[i].time = events[i - 1].time + 60000;
+    }
+  }
+
+  const fmtLabel = (t: number) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const points: RevenueStepPoint[] = [{ x: periodStart.getTime(), label: fmtLabel(periodStart.getTime()), Payments: 0, Expenses: 0, Net: 0 }];
+  let runningPayments = 0;
+  let runningExpenses = 0;
+  for (const ev of events) {
+    if (ev.kind === "payment") runningPayments += ev.amount; else runningExpenses += ev.amount;
+    points.push({ x: ev.time, label: fmtLabel(ev.time), Payments: runningPayments, Expenses: runningExpenses, Net: runningPayments - runningExpenses });
+  }
+  if (points[points.length - 1].x < periodEnd.getTime()) {
+    points.push({ x: periodEnd.getTime(), label: fmtLabel(periodEnd.getTime()), Payments: runningPayments, Expenses: runningExpenses, Net: runningPayments - runningExpenses });
+  }
+
+  return { points, periodStart, periodEnd };
 }
 
 /**
@@ -1116,6 +1247,15 @@ const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
   />
 );
 
+const PayrollIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
+  <img
+    src="/branding/payroll-gear-dollar.png"
+    alt=""
+    aria-hidden="true"
+    className={`object-contain ${className}`}
+  />
+);
+
 const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   switch (screenId) {
     case "owner_console":
@@ -1142,6 +1282,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Briefcase className={className} />;
     case "timeclock":
       return <Clock className={className} />;
+    case "payroll":
+      return <PayrollIcon className={className} />;
     case "inventory":
       return <Package className={className} />;
     case "documents":
@@ -1440,7 +1582,6 @@ export default function App() {
   const refSecurityLogged = React.useRef<Record<string, boolean>>({});
   const isTimeClockLoadedRef = React.useRef(false);
   const [revenueConfirmAction, setRevenueConfirmAction] = useState<{ label: string; icon: string } | null>(null);
-  const [isFinancialInsightsOpen, setIsFinancialInsightsOpen] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -1583,6 +1724,7 @@ export default function App() {
   const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
+  const [estimatePrefill, setEstimatePrefill] = useState<EstimatePrefill | null>(null);
   const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string } | null>(null);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
@@ -1655,7 +1797,6 @@ export default function App() {
     transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
-  const [preSelectedEstimateId, setPreSelectedEstimateId] = useState<string | undefined>(undefined);
   // Lets other pages deep-link into a specific Settings sub-section (e.g.
   // Roster's "Manage Roles" button) instead of dead-ending in an alert/toast
   // telling the user to go find it themselves.
@@ -1895,9 +2036,12 @@ export default function App() {
   });
   const [isCustomizingDailyViewOpen, setIsCustomizingDailyViewOpen] = useState(false);
   const [revenueResetInterval, setRevenueResetInterval] = useState("Pay Period");
-  const [graphDataType, setGraphDataType] = useState<"revenue" | "expenses" | "profit">("revenue");
-  const [expenseGraphMode, setExpenseGraphMode] = useState<"individual" | "combined">("individual");
-  const [selectedExpenseSeries, setSelectedExpenseSeries] = useState<Array<"Bills" | "MaterialExpenses" | "Payroll" | "OtherExpenses">>(["Bills", "MaterialExpenses", "Payroll", "OtherExpenses"]);
+  // None, some, or all three can show on the graph at once.
+  const [graphDataTypes, setGraphDataTypes] = useState<Array<"revenue" | "expenses" | "profit">>(["revenue", "expenses", "profit"]);
+  // Category filter for each of the two statement tables below the graph.
+  // "all" is each table's default (every payment / every expense).
+  const [paymentsTableFilter, setPaymentsTableFilter] = useState("all");
+  const [expensesTableFilter, setExpensesTableFilter] = useState("all");
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -1910,7 +2054,152 @@ export default function App() {
   const [payrollPayday, setPayrollPayday] = useState(5);
   const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
-  const [balanceView, setBalanceView] = useState("Total");
+  const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
+  const [pinnedChartPoint, setPinnedChartPoint] = useState<{ label: number; payload: any[] } | null>(null);
+  const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
+    "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
+  >("all");
+  const fmtMoney = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Same real double-entry numbers Accounting & Bookkeeping shows, reused
+  // here so "View Financial Reports" doesn't have to navigate away --
+  // each category's items come straight from the journal entries and open
+  // invoices/bills those real actions already posted, nothing fabricated.
+  const financialSnapshotData = useMemo(() => {
+    const cashBalances: Record<string, number> = {};
+    for (const acct of accounts) cashBalances[acct.id] = computeAccountBalance(acct, journalEntries);
+
+    const cashLine = (entry: JournalEntry) => entry.lines.find(l => l.accountId === "acct_cash");
+    const byDateDesc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const byDateAsc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    const balanceItems = byDateDesc(
+      journalEntries
+        .filter(entry => cashLine(entry))
+        .map(entry => {
+          const line = cashLine(entry)!;
+          return { id: entry.id, date: entry.date, memo: entry.memo, amount: line.debit - line.credit };
+        })
+    );
+
+    const paymentsCollectedItems = byDateDesc(
+      journalEntries
+        .filter(entry => entry.source === "invoice_payment" || entry.source === "income")
+        .map(entry => ({ id: entry.id, date: entry.date, memo: entry.memo, amount: cashLine(entry)?.debit || 0 }))
+    );
+
+    const expensesPaidItems = byDateDesc(
+      journalEntries
+        .filter(entry => entry.source === "bill_payment" || entry.source === "expense" || entry.source === "payroll")
+        .map(entry => ({ id: entry.id, date: entry.date, memo: entry.memo, amount: cashLine(entry)?.credit || 0 }))
+    );
+
+    const unpaidInvoiceItems = byDateAsc(
+      invoices
+        .filter(inv => inv.status !== "paid" && inv.status !== "void")
+        .map(inv => ({
+          id: inv.id,
+          date: inv.dueDate,
+          memo: `Invoice ${inv.invoiceNumber} - ${inv.customer}`,
+          amount: Math.max(0, invoiceTotal(inv) - inv.amountPaid)
+        }))
+    );
+
+    const outstandingExpenseItems = byDateAsc(
+      bills
+        .filter(bill => bill.status !== "paid" && bill.status !== "void")
+        .map(bill => ({
+          id: bill.id,
+          date: bill.dueDate,
+          memo: bill.billNumber ? `Bill ${bill.billNumber} - ${bill.vendor}` : bill.vendor,
+          amount: Math.max(0, bill.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - bill.amountPaid)
+        }))
+    );
+
+    return {
+      all: { label: "All Transactions", total: cashBalances["acct_cash"] || 0, items: balanceItems },
+      balance: { label: "Current Balance", total: cashBalances["acct_cash"] || 0, items: balanceItems },
+      unpaid_invoices: { label: "Unpaid Invoices", total: cashBalances["acct_ar"] || 0, items: unpaidInvoiceItems },
+      outstanding_expenses: { label: "Outstanding Expenses", total: cashBalances["acct_ap"] || 0, items: outstandingExpenseItems },
+      payments_collected: { label: "Payments Collected", total: paymentsCollectedItems.reduce((s, i) => s + i.amount, 0), items: paymentsCollectedItems },
+      expenses_paid: { label: "Expenses Paid", total: expensesPaidItems.reduce((s, i) => s + i.amount, 0), items: expensesPaidItems }
+    };
+  }, [accounts, journalEntries, invoices, bills]);
+  const [isGeneratingFinancialStatement, setIsGeneratingFinancialStatement] = useState(false);
+
+  // Builds a real PDF statement from whichever category is currently open
+  // in the Financial Reports pane -- same real numbers, saved to Documents
+  // and opened for review, exactly like every other "Generate PDF" action
+  // in the app.
+  const handleGenerateFinancialStatementPdf = async () => {
+    const category = financialSnapshotData[financialSnapshotCategory];
+    setIsGeneratingFinancialStatement(true);
+    try {
+      const business = {
+        name: businessNames[0] || "",
+        phone: businessPhones[0] || "",
+        address: businessAddresses[0] || "",
+        email: businessId || "",
+        logo: businessLogos[0] || ""
+      };
+      const transactionLines = category.items.length
+        ? category.items.map(item => `${item.date}   ${item.memo}   ${fmtMoney(item.amount)}`)
+        : ["No transactions in this category yet."];
+      const bytes = await buildTextDocumentPdf(
+        `Financial Statement - ${category.label}`,
+        [
+          { heading: "Summary", body: `${category.label}: ${fmtMoney(category.total)}\nGenerated ${new Date().toLocaleString()}` },
+          { heading: "Transactions", body: transactionLines.join("\n") }
+        ],
+        business
+      );
+      const pdfBase64 = bytesToBase64(bytes);
+      const filename = `Financial Statement - ${category.label} - ${new Date().toISOString().slice(0, 10)}.pdf`;
+      const newDoc: DocumentItem = {
+        id: `doc_statement_${Date.now()}`,
+        name: filename,
+        customer: "None",
+        employee: loggedInUser?.name || "Staff Administrator",
+        vendor: "None",
+        job: "None",
+        type: "Reports",
+        folder: "Company",
+        uploadedBy: loggedInUser?.name || "Staff Administrator",
+        date: new Date().toISOString().split("T")[0],
+        size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+        status: "Draft",
+        isFavorite: false,
+        isArchived: false,
+        notes: "Generated from Financial Reports.",
+        tags: ["Financial Statement", "Generated"],
+        estimateId: "None",
+        invoiceId: "None",
+        lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+      };
+      if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+        (newDoc as any).pdfBase64 = pdfBase64;
+      } else {
+        triggerNotification("This statement is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+      }
+      setDocuments(prev => [...prev, newDoc]);
+      setGeneratedPdfDraft({
+        filename,
+        title: `Financial Statement — ${category.label}`,
+        sourceType: "Report",
+        sourceId: financialSnapshotCategory,
+        customerName: "",
+        representativeName: loggedInUser?.name || "Company Representative",
+        lines: [],
+        pdfBase64
+      });
+      setIsFinancialSnapshotOpen(false);
+      navigateToScreen("documents");
+      if (logOperationalEvent) logOperationalEvent("Financial Statement Generated", filename, "📄");
+    } finally {
+      setIsGeneratingFinancialStatement(false);
+    }
+  };
+
   const [logTransactionType, setLogTransactionType] = useState<"income" | "expense" | null>(() => {
     const saved = sessionStorage.getItem("ownerslocal_pending_financial_scan");
     return saved === "income" || saved === "expense" ? saved : null;
@@ -1954,16 +2243,17 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [businessId, payrollSchedule, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart, payrollPayday, payrollState]);
 
-  // Total Balance is the first-use default. After the user picks another
-  // view, remember it per business through refreshes and logout/login.
+  // Pay Period is the first-use default. After the user picks another
+  // graph interval, remember it per business through refreshes and logout/login.
   useEffect(() => {
     if (!businessId) return;
     const saved = localStorage.getItem(`ownerslocal_balance_view:${businessId}`);
-    setBalanceView(["Day", "Pay Period", "Quarter", "Annual", "Total"].includes(saved || "") ? saved! : "Total");
+    setRevenuePageFilter(["Day", "Week", "Pay Period", "Quarter", "Annual", "Total"].includes(saved || "") ? saved! : "Pay Period");
   }, [businessId]);
 
-  const changeBalanceView = (view: string) => {
-    setBalanceView(view);
+  const changeRevenuePageFilter = (view: string) => {
+    setRevenuePageFilter(view);
+    setPinnedChartPoint(null);
     if (businessId) localStorage.setItem(`ownerslocal_balance_view:${businessId}`, view);
   };
 
@@ -2306,14 +2596,16 @@ export default function App() {
     triggerNotification("Snapshot deleted from folder index");
   };
 
-  function logOperationalEvent(type: string, desc: string, icon: string = "🤖") {
+  function logOperationalEvent(type: string, desc: string, icon: string = "🤖", target?: { screen?: string; customerId?: string }) {
     triggerNotification(`${icon} ${type}: ${desc}`);
     const recipientEmail = loggedInUser?.email;
     if (recipientEmail) {
       const normalizedType = type.toLowerCase();
+      // Doubles as the screen this notification opens when clicked (see
+      // NotificationsPage), so every value here must be a real OS_SCREENS id.
       const category = normalizedType.includes("estimate") ? "estimates"
         : normalizedType.includes("job") ? "jobs"
-        : normalizedType.includes("customer") ? "customer"
+        : normalizedType.includes("customer") ? "customers"
         : normalizedType.includes("lead") ? "leads"
         : normalizedType.includes("inventory") ? "inventory"
         : normalizedType.includes("invoice") || normalizedType.includes("payment") || normalizedType.includes("financial") ? "revenue"
@@ -2327,6 +2619,7 @@ export default function App() {
         category,
         title: type,
         description: desc,
+        icon,
         time: now.toISOString().slice(0, 16).replace("T", " "),
         isRead: false,
         isArchived: false,
@@ -2335,7 +2628,9 @@ export default function App() {
         assignedUser: loggedInUser?.name || loggedInUser?.role || "Owner",
         recipientEmail,
         createdBy: loggedInUser?.name || recipientEmail,
-        history: [`${now.toISOString()}: ${type} completed.`]
+        history: [`${now.toISOString()}: ${type} completed.`],
+        screenId: target?.screen || (category === "system" ? undefined : category),
+        relatedCustomerId: target?.customerId
       }, ...prev]);
     }
     const newAct = {
@@ -2575,7 +2870,7 @@ export default function App() {
               const sourceCounts: Record<string, number> = {};
               leads.forEach((l) => { sourceCounts[l.source] = (sourceCounts[l.source] || 0) + 1; });
               const topSourceEntry = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
-              blockedText = `Based on our operational ledger, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
+              blockedText = `Based on our records, **${topCustomer.contact} (${topCustomer.company})** is the top customer (**[REDACTED - OWNER ONLY]** LTV)${topSourceEntry ? `, and your most consistent acquisition source is ${topSourceEntry[0]}` : ""}.`;
             } else {
               blockedText = "No customer or lead data on record yet.";
             }
@@ -2811,11 +3106,10 @@ Access to full financial telemetry is restricted.`;
   // row, dropdown, card) should route through this so "many roads lead to the
   // same record" behaves identically everywhere, instead of each page call
   // site redefining its own copy of this logic.
-  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string; estimateId?: string }) => {
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => {
     setPreSelectedCustomerId(params?.customerId ?? undefined);
     setPreSelectedDate(params?.date ?? undefined);
     setPreSelectedSettingsSection(params?.section ?? undefined);
-    setPreSelectedEstimateId(params?.estimateId ?? undefined);
     const matched = OS_SCREENS.find(s => s.id === screenId);
     if (matched) {
       setActiveScreen(matched);
@@ -3859,10 +4153,10 @@ Access to full financial telemetry is restricted.`;
     setPreSelectedDate,
     preSelectedCustomerId,
     setPreSelectedCustomerId,
-    preSelectedEstimateId,
-    setPreSelectedEstimateId,
     generatedPdfDraft,
     setGeneratedPdfDraft,
+    estimatePrefill,
+    setEstimatePrefill,
     pendingSignatureCapture,
     setPendingSignatureCapture,
     globalAiSetting,
@@ -5744,23 +6038,23 @@ Access to full financial telemetry is restricted.`;
                         isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
                       } ${
                         isCurrent
-                          ? "bg-[#A9CEF5] text-[#1F3557] font-bold shadow-sm"
+                          ? "bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
                           : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
                       }`}
                       title={screen.label}
                     >
                       {isSidebarCollapsed ? (
                         /* Only show menu icons when collapsed */
-                        <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                        <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                           {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
                         </span>
                       ) : (
                         /* Show both icon and label when expanded */
                         <div className="flex items-center gap-2.5 w-full min-w-0">
-                          <span className={`shrink-0 select-none ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                          <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                             {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
                           </span>
-                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-[#1F3557]" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                             {screen.label}
                           </span>
                         </div>
@@ -6053,13 +6347,43 @@ Access to full financial telemetry is restricted.`;
                     const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
                     const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
 
+                    // Dashboard widgets show real company data -- each slot maps to the
+                    // real module permission that governs it, so an employee only ever
+                    // sees the widgets their role/granular permissions actually grant
+                    // (same source of truth as the sidebar nav / getVisibleScreens()),
+                    // instead of every widget being visible with only some individually
+                    // locked by ad hoc role-name checks.
+                    const screenIdForCardTarget: Record<string, string> = {
+                      revenue: "revenue",
+                      leads: "leads",
+                      scheduling: "scheduling",
+                      fleet: "routes",
+                      messages: "messages",
+                      inventory: "inventory",
+                    };
+
                     // Renders card by slot target ID
                     const renderCardSlot = (targetId: string, slotLabel: string) => {
+                      const requiredScreenId = screenIdForCardTarget[targetId];
+                      if (requiredScreenId && !getVisibleScreens().some(s => s.id === requiredScreenId)) {
+                        return (
+                          <div
+                            key={slotLabel}
+                            className="bg-[#C7E3FA] border border-dashed border-red-300 p-4 rounded-[24px] shadow-sm flex flex-col items-center justify-center h-[240px] text-center gap-2"
+                          >
+                            <span className="text-2xl">🔒</span>
+                            <span className="text-[10px] font-black tracking-wider uppercase text-red-700">Restricted Widget</span>
+                            <p className="text-[9.5px] text-slate-500 font-sans font-medium leading-tight px-3">
+                              Your role does not have permission to view this metric.
+                            </p>
+                          </div>
+                        );
+                      }
                       switch (targetId) {
                         case "revenue":
                           {
                             const activeRoleVal = simulatedRole || loggedInUser?.role || "Owner";
-                            const isFinAuthorized = ["Owner", "Admin", "Administrator", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"].includes(activeRoleVal);
+                            const isFinAuthorized = getVisibleScreens().some(s => s.id === "revenue");
                             return (
                               <div 
                                 key={slotLabel}
@@ -6153,7 +6477,7 @@ Access to full financial telemetry is restricted.`;
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950/5 border border-dashed border-red-300 rounded-2xl p-2 text-center">
                                       <span className="text-lg">🔒</span>
                                       <p className="text-[10px] font-sans font-bold text-red-700 mt-1 uppercase tracking-wider">Financial Visualization Locked</p>
-                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business ledger streams.</p>
+                                      <p className="text-[8px] text-slate-500 font-sans mt-0.5 font-medium leading-tight">Your current role ({activeRoleVal}) does not have permissions to view business financial data.</p>
                                     </div>
                                   )}
                                 </div>
@@ -6348,7 +6672,7 @@ Access to full financial telemetry is restricted.`;
                               onClick={() => {
                                 const matched = OS_SCREENS.find(s => s.id === "inventory");
                                 if (matched) setActiveScreen(matched);
-                                triggerNotification("Navigated to Inventory ledger");
+                                triggerNotification("Navigated to Inventory");
                               }}
                               className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left"
                             >
@@ -6764,450 +7088,874 @@ Access to full financial telemetry is restricted.`;
                       </div>
                     ) : (
                       /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
+                      <div className="space-y-3 animate-fade-in text-left">
+                      {/* QUICK ACTIONS - 4 BUTTONS + Plaid connect, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
+                      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' as any }}>
+                        <div className="flex flex-nowrap gap-2 w-max">
+                          {[
+                            { label: "Record Expense", action: "expense", icon: DollarSign },
+                            { label: "Add Custom Payment", action: "payment", icon: CreditCard },
+                            { label: "Run Payroll", action: "payroll", icon: Users },
+                            { label: "Create Invoice", action: "invoice", icon: FileText }
+                          ].map((btn, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                if (btn.action === "expense") {
+                                  sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                  setLogTransactionType("expense");
+                                  return;
+                                }
+                                if (btn.action === "payment") {
+                                  // Same real income-transaction pipeline as Money
+                                  // Tracker's own "+ Log Income" button, so a custom
+                                  // payment shows up everywhere a payment already
+                                  // does -- the graph, the Payments table, CSV
+                                  // exports, the Revenue Breakdown donut.
+                                  sessionStorage.setItem("ownerslocal_pending_financial_scan", "income");
+                                  setLogTransactionType("income");
+                                  return;
+                                }
+                                if (btn.action === "payroll") {
+                                  handleRunPayroll();
+                                  return;
+                                }
+                                const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
+                                if (accounting) setActiveScreen(accounting);
+                                triggerNotification("Open Invoices to create a customer invoice.");
+                              }}
+                              className="shrink-0 bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] hover:from-[#1E6EE0] hover:to-[#0D5FCB] border border-white/40 rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all shadow-[0_0_10px_rgba(20,133,244,0.35)]"
+                            >
+                              <btn.icon className="w-3.5 h-3.5 text-white shrink-0" />
+                              <span className="text-[10.5px] font-extrabold text-white uppercase tracking-wide whitespace-nowrap">
+                                {btn.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* TOP SECTION - MONEY TRACKER CARD (graph, real stat tiles, real breakdowns, real cash flow, upcoming ticker) */}
+                      <div className="mt-card relative overflow-hidden bg-[linear-gradient(145deg,rgba(220,240,255,0.98),rgba(190,225,251,0.96)_48%,rgba(213,239,255,0.98))] rounded-xl p-4 sm:p-5 border border-white/95 shadow-[0_0_28px_rgba(56,189,248,0.52),inset_0_0_34px_rgba(255,255,255,0.86)] space-y-3 text-[#07599a]">
+                        {/* HUD decoration: grid texture, corner brackets -- all decorative, sit behind the real content below */}
+                        <div className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: 'linear-gradient(rgba(14,116,180,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,180,0.055) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                        <span className="pointer-events-none absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-white" />
+                        <span className="pointer-events-none absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-white" />
+                        <span className="pointer-events-none absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-white" />
+                        <span className="pointer-events-none absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-white" />
+                        {(() => {
+                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
+                          const { points, periodStart, periodEnd } = stepData;
+                          const latest = points[points.length - 1];
+                          const paymentsTotal = latest.Payments;
+                          const expensesTotal = latest.Expenses;
+                          const netTotal = latest.Net;
+
+                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
+                          const priorNet = priorTotal - priorExpenseTotal;
+                          const pctChange = (cur: number, prior: number) => (prior !== 0 ? ((cur - prior) / Math.abs(prior)) * 100 : null);
+                          const paymentsPct = pctChange(paymentsTotal, priorTotal);
+                          const expensesPct = pctChange(expensesTotal, priorExpenseTotal);
+                          const netPct = pctChange(netTotal, priorNet);
+
+                          const inPeriod = (d: string) => {
+                            const t = new Date(d).getTime();
+                            return !Number.isNaN(t) && t >= periodStart.getTime() && t <= periodEnd.getTime();
+                          };
+                          const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
+                          const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
+
+                          const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                          const categoryTotalsThisPeriod = EXPENSE_CATEGORY_NAMES.map(name => {
+                            const values = name === "Bills"
+                              ? bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))
+                              : name === "Material Expenses"
+                                ? transactions.filter(t => t.type === "expense" && materialCategories.has(t.category || "") && inPeriod(t.date)).map(t => t.amount)
+                                : transactions.filter(t => t.type === "expense" && t.category === name && inPeriod(t.date)).map(t => t.amount);
+                            return { name: name as string, total: values.reduce((s, v) => s + v, 0) };
+                          }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+
+                          const topCategories = categoryTotalsThisPeriod.slice(0, 4);
+                          const otherCategoriesTotal = categoryTotalsThisPeriod.slice(4).reduce((s, c) => s + c.total, 0);
+                          const expenseSlices = [
+                            ...topCategories.map((c, i) => ({ label: c.name, value: c.total, color: ["#FB7185", "#FBBF24", "#A78BFA", "#94A3B8"][i % 4] })),
+                            ...(otherCategoriesTotal > 0 ? [{ label: "Other", value: otherCategoriesTotal, color: "#64748B" }] : [])
+                          ];
+                          const revenueSlicesRaw = [
+                            { label: "Completed Job Revenue", value: jobRevenueThisPeriod, color: "#22D3EE" },
+                            { label: "Logged Income", value: loggedIncomeThisPeriod, color: "#60A5FA" }
+                          ];
+                          const revenueSlices = revenueSlicesRaw.filter(s => s.value > 0);
+                          const revenueSlicesTotal = revenueSlices.reduce((s, r) => s + r.value, 0);
+                          const expenseSlicesTotal = expenseSlices.reduce((s, r) => s + r.value, 0);
+
+                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
+
+                          const todayStr = new Date().toISOString().slice(0, 10);
+                          const upcomingJobs = schedulingEvents
+                            .filter(e => e.eventType === "Job" && e.date >= todayStr && e.status !== "Completed" && e.status !== "Cancelled")
+                            .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+                            .map(e => ({ id: e.id, label: e.title || e.customer || "Job", amount: e.budget || 0 }));
+                          const upcomingBills = bills
+                            .filter(b => b.status !== "paid" && b.status !== "void")
+                            .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))
+                            .map(b => ({ id: b.id, label: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor, amount: Math.max(0, b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - b.amountPaid) }));
+
+                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                          const xTickFormat = (ms: number) => {
+                            const d = new Date(ms);
+                            return revenuePageFilter === "Day"
+                              ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+                              : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                          };
+                          // Per-filter calendar tick structure: a labeled "major" tick plus
+                          // unlabeled hash-mark ticks at finer resolution, matching a real
+                          // calendar axis instead of ticks auto-derived from sparse event data.
+                          // Week: every day, all labeled. Month: every day hash-marked, every
+                          // week labeled. Quarter: every day hash-marked, every month labeled.
+                          // Annual: every week hash-marked, every month labeled. Day/Pay
+                          // Period/Total keep Recharts' own auto ticks (empty ticks array).
+                          const DAY_MS = 86400000;
+                          const buildAxisTicks = (): { ticks: number[]; isMajor: (t: number) => boolean; majorLabel: (t: number) => string } => {
+                            const startMs = periodStart.getTime();
+                            const endMs = periodEnd.getTime();
+                            if (revenuePageFilter === "Week") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return { ticks, isMajor: () => true, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { weekday: "short" }) };
+                            }
+                            if (revenuePageFilter === "Month") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return {
+                                ticks,
+                                isMajor: (t) => Math.round((t - startMs) / DAY_MS) % 7 === 0,
+                                majorLabel: (t) => `Wk ${Math.floor(Math.round((t - startMs) / DAY_MS) / 7) + 1}`
+                              };
+                            }
+                            if (revenuePageFilter === "Quarter") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS) ticks.push(t);
+                              return { ticks, isMajor: (t) => new Date(t).getDate() === 1, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { month: "short" }) };
+                            }
+                            if (revenuePageFilter === "Annual") {
+                              const ticks: number[] = [];
+                              for (let t = startMs; t <= endMs; t += DAY_MS * 7) ticks.push(t);
+                              return { ticks, isMajor: (t) => new Date(t).getDate() <= 7, majorLabel: (t) => new Date(t).toLocaleDateString(undefined, { month: "short" }) };
+                            }
+                            return { ticks: [], isMajor: () => true, majorLabel: xTickFormat };
+                          };
+                          const axisTicks = buildAxisTicks();
+                          // Diamond-shaped marker (matches the approved reference chart's
+                          // square/diamond points) instead of Recharts' default circle dot.
+                          const diamondDot = (color: string) => (dotProps: any) => {
+                            const { cx, cy, index } = dotProps;
+                            const s = 6.5;
+                            return (
+                              <rect
+                                key={`diamond-${color}-${index}`}
+                                x={cx - s / 2}
+                                y={cy - s / 2}
+                                width={s}
+                                height={s}
+                                fill={color}
+                                stroke="#fff"
+                                strokeWidth={1.25}
+                                transform={`rotate(45 ${cx} ${cy})`}
+                              />
+                            );
+                          };
+
+                          // One shared ticker renderer -- Upcoming Job Payments and
+                          // Upcoming Bills & Expenses are two independent scrolling
+                          // columns, each looping the same way.
+                          const renderTicker = (items: Array<{ id: string; label: string; amount: number }>, emptyText: string, tone: "income" | "expense") => (
+                            <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-28 overflow-hidden relative">
+                              {items.length === 0 ? (
+                                <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">{emptyText}</div>
+                              ) : (
+                                <div
+                                  className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+                                  style={{ animation: `ticker-scroll ${Math.max(12, items.length * 3)}s linear infinite` }}
+                                >
+                                  {[0, 1].map(copy => (
+                                    <div key={copy}>
+                                      {items.map((item, idx) => (
+                                        <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-sky-500/15 text-xs font-mono">
+                                          <span className={`font-semibold truncate ${tone === "income" ? "text-[#00C853]" : "text-[#FF1744]"}`} style={{ textShadow: tone === "income" ? '0 0 6px rgba(0,230,118,0.85), 0 0 14px rgba(0,200,83,0.5)' : '0 0 6px rgba(255,23,68,0.85), 0 0 14px rgba(255,23,68,0.5)' }}>{item.label}</span>
+                                          <span className={`font-mono font-bold shrink-0 ${tone === "income" ? "text-[#00C853]" : "text-[#FF1744]"}`} style={{ textShadow: tone === "income" ? '0 0 7px rgba(0,230,118,0.9), 0 0 16px rgba(0,200,83,0.6)' : '0 0 7px rgba(255,23,68,0.9), 0 0 16px rgba(255,23,68,0.55)' }}>{fmt(item.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+
+                          return (
+                            <>
+                              {/* HEADER: Money Tracker + graph-interval dropdown (top-left), Live badge (top-right) */}
+                              <div className="flex items-center justify-between gap-3 flex-wrap border-b border-white/90 pb-3">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="select-none text-xl" style={{ filter: 'drop-shadow(0 0 6px rgba(14,165,233,0.55))' }}>💰</span>
+                                  <h2 className="text-base font-mono font-black text-[#07599a] uppercase tracking-[0.2em]" style={{ textShadow: '0 0 10px rgba(255,255,255,0.95)' }}>Money Tracker</h2>
+                                  <select
+                                    aria-label="Graph interval"
+                                    value={revenuePageFilter}
+                                    onChange={(e) => {
+                                      changeRevenuePageFilter(e.target.value);
+                                      triggerNotification(`Graph interval updated to: ${e.target.options[e.target.selectedIndex].text}`);
+                                    }}
+                                    className="text-[10.5px] font-mono font-bold text-[#07599a] bg-[#e8f6ff]/90 border border-white rounded-md px-3 py-2 focus:outline-none cursor-pointer shadow-[0_0_10px_rgba(56,189,248,0.34),inset_0_0_8px_rgba(255,255,255,0.9)]"
+                                  >
+                                    <option value="Day">Day</option>
+                                    <option value="Week">Week</option>
+                                    <option value="Pay Period">Pay Period</option>
+                                    <option value="Month">Month</option>
+                                    <option value="Quarter">Quarter</option>
+                                    <option value="Annual">Annual</option>
+                                    <option value="Total">Total</option>
+                                  </select>
+                                </div>
+                                <span className="flex items-center gap-1.5 text-[10px] font-mono font-black text-[#078e64] uppercase tracking-wider bg-white/45 border border-white px-2.5 py-1 rounded-md shadow-[0_0_10px_rgba(56,189,248,0.28)]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
+                                  Live Data
+                                </span>
+                              </div>
+
+                              {/* Log real income/expenses, run real payroll */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#078e64] border border-white hover:shadow-[0_0_15px_rgba(52,211,153,0.5)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
+                                >
+                                  + Log Income
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#d8435c] border border-white hover:shadow-[0_0_15px_rgba(216,67,92,0.45)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
+                                >
+                                  + Log Expense
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isRunningPayroll}
+                                  onClick={handleRunPayroll}
+                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#07599a] border border-white hover:shadow-[0_0_15px_rgba(56,189,248,0.55)] cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
+                                >
+                                  {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
+                                </button>
+                              </div>
+
+                              {logTransactionType && (
+                                <LogTransactionModal
+                                  type={logTransactionType}
+                                  createdBy={loggedInUser?.email}
+                                  onSave={handleSaveTransaction}
+                                  onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
+                                />
+                              )}
+
+                              {/* GRAPH -- full width HUD readout */}
+                              <div>
+                                <div className="relative overflow-hidden rounded-lg bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] border border-white shadow-[0_0_18px_rgba(56,189,248,0.40),inset_0_0_24px_rgba(255,255,255,0.82)] p-2">
+                                  <span className="pointer-events-none absolute top-1.5 left-1.5 w-3 h-3 border-t border-l border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute top-1.5 right-1.5 w-3 h-3 border-t border-r border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-3 h-3 border-b border-l border-cyan-400/60" />
+                                  <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-3 h-3 border-b border-r border-cyan-400/60" />
+                                  {/* Purely decorative twinkle accents -- fixed positions, not derived from data */}
+                                  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                                    <span className="absolute text-white/80" style={{ top: '14%', left: '24%', fontSize: 9, textShadow: '0 0 6px rgba(255,255,255,0.9)' }}>✦</span>
+                                    <span className="absolute text-white/70" style={{ top: '58%', left: '70%', fontSize: 7, textShadow: '0 0 5px rgba(255,255,255,0.85)' }}>✦</span>
+                                    <span className="absolute text-white/60" style={{ top: '32%', left: '84%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
+                                    <span className="absolute text-white/70" style={{ top: '74%', left: '14%', fontSize: 8, textShadow: '0 0 6px rgba(255,255,255,0.85)' }}>✦</span>
+                                    <span className="absolute text-white/60" style={{ top: '20%', left: '55%', fontSize: 6, textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>✦</span>
+                                  </div>
+                                  <ResponsiveContainer width="100%" height={580}>
+                                  <ComposedChart
+                                    data={points}
+                                    margin={{ top: 10, right: 20, left: 8, bottom: 0 }}
+                                    onClick={(state: any) => {
+                                      if (state && state.activeLabel !== undefined && state.activePayload && state.activePayload.length) {
+                                        setPinnedChartPoint({ label: state.activeLabel, payload: state.activePayload });
+                                      }
+                                    }}
+                                  >
+                                    <defs>
+                                      <linearGradient id="mtGlowPayments" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#168BFF" stopOpacity={0.48} />
+                                        <stop offset="100%" stopColor="#168BFF" stopOpacity={0} />
+                                      </linearGradient>
+                                      <linearGradient id="mtGlowExpenses" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#FF6E91" stopOpacity={0.46} />
+                                        <stop offset="100%" stopColor="#FF6E91" stopOpacity={0} />
+                                      </linearGradient>
+                                      <linearGradient id="mtGlowNet" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#14E6D1" stopOpacity={0.50} />
+                                        <stop offset="100%" stopColor="#14E6D1" stopOpacity={0} />
+                                      </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="1 3" stroke="#68A9CF" strokeOpacity={0.38} vertical={true} />
+                                    <XAxis
+                                      dataKey="x"
+                                      type="number"
+                                      domain={[periodStart.getTime(), periodEnd.getTime()]}
+                                      {...(axisTicks.ticks.length ? { ticks: axisTicks.ticks, interval: 0 } : { interval: "preserveStartEnd" as const, minTickGap: 24 })}
+                                      tickFormatter={(t: number) => axisTicks.ticks.length ? (axisTicks.isMajor(t) ? axisTicks.majorLabel(t) : "") : xTickFormat(t)}
+                                      stroke="#12689E"
+                                      fontSize={10}
+                                      tickLine={true}
+                                      axisLine={false}
+                                      dy={10}
+                                      className="font-mono"
+                                    />
+                                    <YAxis
+                                      domain={[0, (max: number) => Math.ceil(max * 1.04)]}
+                                      stroke="#12689E"
+                                      fontSize={10}
+                                      tickLine={false}
+                                      axisLine={false}
+                                      tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
+                                      className="font-mono"
+                                      width={44}
+                                    />
+                                    <Legend
+                                      verticalAlign="top"
+                                      height={36}
+                                      iconType="circle"
+                                      iconSize={8}
+                                      className="font-mono font-bold text-[11px]"
+                                      wrapperStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#07599A' }}
+                                    />
+                                    {graphDataTypes.includes("revenue") && <Area type="linear" dataKey="Payments" stroke="none" fill="url(#mtGlowPayments)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("expenses") && <Area type="linear" dataKey="Expenses" stroke="none" fill="url(#mtGlowExpenses)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("profit") && <Area type="linear" dataKey="Net" stroke="none" fill="url(#mtGlowNet)" isAnimationActive={false} legendType="none" tooltipType="none" />}
+                                    {graphDataTypes.includes("revenue") && <Line type="linear" dataKey="Payments" stroke="#168BFF" strokeWidth={3} dot={diamondDot("#168BFF")} activeDot={{ r: 7 }} name="Payments Collected" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #168BFF) drop-shadow(0 0 16px rgba(22,139,255,0.65)) drop-shadow(0 0 34px rgba(22,139,255,0.42))' }} />}
+                                    {graphDataTypes.includes("expenses") && <Line type="linear" dataKey="Expenses" stroke="#FF6E91" strokeWidth={3} dot={diamondDot("#FF6E91")} activeDot={{ r: 7 }} name="Expenses" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #FF6E91) drop-shadow(0 0 16px rgba(255,110,145,0.62)) drop-shadow(0 0 34px rgba(255,110,145,0.40))' }} />}
+                                    {graphDataTypes.includes("profit") && <Line type="linear" dataKey="Net" stroke="#14E6D1" strokeWidth={3} dot={diamondDot("#14E6D1")} activeDot={{ r: 7 }} name="Net Revenue" isAnimationActive={false} style={{ filter: 'drop-shadow(0 0 7px #14E6D1) drop-shadow(0 0 16px rgba(20,230,209,0.68)) drop-shadow(0 0 34px rgba(20,230,209,0.44))' }} />}
+                                  </ComposedChart>
+                                  </ResponsiveContainer>
+                                  {pinnedChartPoint && (
+                                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 min-w-[190px] bg-[#e2f3ff]/95 border border-white shadow-[0_0_20px_rgba(56,189,248,0.45)] p-3 rounded-lg text-left text-xs font-mono">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPinnedChartPoint(null)}
+                                        aria-label="Close"
+                                        className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-white text-[#07599a] hover:bg-[#c7e3fa] cursor-pointer"
+                                      >
+                                        ✕
+                                      </button>
+                                      <p className="font-bold text-[#07599a] mb-1.5 pr-5 border-b border-sky-500/20 pb-1">{new Date(pinnedChartPoint.label).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                                      <div className="space-y-1">
+                                        {pinnedChartPoint.payload.map((entry: any, index: number) => (
+                                          <div key={index} className="flex items-center justify-between gap-6">
+                                            <span className="flex items-center gap-1.5 font-semibold text-[#2473aa] text-[11px]">
+                                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color, boxShadow: `0 0 6px ${entry.color}` }} />
+                                              {entry.name}:
+                                            </span>
+                                            <span className="font-mono font-bold text-[#07599a] text-[11px]">
+                                              ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Graph series toggles, then View Financial Reports */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {([
+                                  { value: "revenue",  label: "Payments Collected" },
+                                  { value: "expenses", label: "Expenses" },
+                                  { value: "profit",   label: "Net Revenue" },
+                                ] as const).map(({ value, label }) => {
+                                  const selected = graphDataTypes.includes(value);
+                                  return (
+                                    <button
+                                      key={value}
+                                      onClick={() => setGraphDataTypes(current => selected ? current.filter(v => v !== value) : [...current, value])}
+                                      className={`min-h-10 px-3 py-2 text-[10.5px] font-mono rounded-md font-bold transition-all duration-200 cursor-pointer ${
+                                        selected
+                                          ? "bg-[#dff4ff] text-[#07599a] border border-white shadow-[0_0_15px_rgba(56,189,248,0.52),inset_0_0_10px_rgba(255,255,255,0.95)]"
+                                          : "bg-[#cce8fb]/85 border border-white/80 text-[#2473aa]/65 hover:text-[#07599a]"
+                                      }`}
+                                    >
+                                      {selected ? "✓ " : ""}{label}
+                                    </button>
+                                  );
+                                })}
+                                <button
+                                  onClick={() => setIsFinancialSnapshotOpen(true)}
+                                  className="min-h-10 px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-md bg-gradient-to-r from-[#0EA5E9] to-[#1485F4] text-white cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_18px_rgba(14,165,233,0.72),inset_0_0_7px_rgba(255,255,255,0.42)]"
+                                >
+                                  <Landmark className="w-3.5 h-3.5" /> View Financial Reports
+                                </button>
+                              </div>
+
+                              {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Revenue Breakdown</p>
+                                  {revenueSlices.length === 0 ? (
+                                    <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No revenue this period yet.</p>
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <div style={{ filter: 'drop-shadow(0 0 8px rgba(34,211,238,0.5))' }}>
+                                        <ResponsiveContainer width={90} height={90}>
+                                          <PieChart>
+                                            <Pie data={revenueSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                              {revenueSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                            </Pie>
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </div>
+                                      <div className="space-y-1.5 flex-1 min-w-0">
+                                        {revenueSlices.map((s, i) => (
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                                            <span className="flex items-center gap-1.5 truncate text-[#07599a] font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} /> {s.label}
+                                            </span>
+                                            <span className="font-mono font-bold text-[#07599a] shrink-0">{Math.round((s.value / revenueSlicesTotal) * 100)}%</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Expense Breakdown</p>
+                                  {expenseSlices.length === 0 ? (
+                                    <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No expenses this period yet.</p>
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <div style={{ filter: 'drop-shadow(0 0 8px rgba(251,113,133,0.5))' }}>
+                                        <ResponsiveContainer width={90} height={90}>
+                                          <PieChart>
+                                            <Pie data={expenseSlices} dataKey="value" nameKey="label" innerRadius={26} outerRadius={40} paddingAngle={2} stroke="none">
+                                              {expenseSlices.map((s, i) => <Cell key={i} fill={s.color} />)}
+                                            </Pie>
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </div>
+                                      <div className="space-y-1.5 flex-1 min-w-0">
+                                        {expenseSlices.map((s, i) => (
+                                          <div key={i} className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                                            <span className="flex items-center gap-1.5 truncate text-[#07599a] font-semibold">
+                                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }} /> {s.label}
+                                            </span>
+                                            <span className="font-mono font-bold text-[#07599a] shrink-0">{Math.round((s.value / expenseSlicesTotal) * 100)}%</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Cash Flow</p>
+                                  <div style={{ filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.4))' }}>
+                                    <ResponsiveContainer width="100%" height={100}>
+                                      <BarChart data={cashFlowSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                                        <XAxis dataKey="time" stroke="#12689E" fontSize={8} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#12689E" fontSize={8} tickLine={false} axisLine={false} tickFormatter={(v) => Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} width={30} />
+                                        <Tooltip formatter={(v: number) => [`$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Net"]} contentStyle={{ background: "#E2F3FF", border: "1px solid #FFFFFF", borderRadius: 8, fontFamily: "monospace", fontSize: 11, color: "#07599A" }} />
+                                        <Bar dataKey="Profit" radius={[3, 3, 0, 0]}>
+                                          {cashFlowSeries.map((row, i) => <Cell key={i} fill={row.Profit >= 0 ? "#4ADE80" : "#FB7185"} />)}
+                                        </Bar>
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* REAL STAT TILES -- own row, below the breakdowns */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {([
+                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "#22D3EE", bg: "bg-cyan-400/10" },
+                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "#FB7185", bg: "bg-rose-400/10" },
+                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "#4ADE80", bg: "bg-emerald-400/10" }
+                                ]).map((tile, idx) => (
+                                  <div key={idx} className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[9px] font-mono font-bold text-[#07599a] uppercase tracking-widest">{tile.label}</span>
+                                      <div className={`w-7 h-7 rounded-full border flex items-center justify-center ${tile.bg}`} style={{ borderColor: tile.color, color: tile.color, boxShadow: `0 0 8px ${tile.color}66` }}>
+                                        <tile.icon className="w-3.5 h-3.5" />
+                                      </div>
+                                    </div>
+                                    <p className="text-lg font-mono font-black" style={{ color: tile.color, textShadow: `0 0 10px ${tile.color}88` }}>{fmt(tile.val)}</p>
+                                    {tile.pct !== null && (
+                                      <p className={`text-[9.5px] font-mono font-bold mt-0.5 ${tile.pct >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                                        {tile.pct >= 0 ? "▲" : "▼"} {Math.abs(tile.pct).toFixed(1)}% vs last period
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Upcoming Job Payments (left) and Upcoming Bills & Expenses (right) --
+                                  two independent scrolling columns, bottom to top */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Upcoming Job Payments</p>
+                                  {renderTicker(upcomingJobs, "No upcoming jobs yet.", "income")}
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Upcoming Bills &amp; Expenses</p>
+                                  {renderTicker(upcomingBills, "No upcoming bills yet.", "expense")}
+                                </div>
+                              </div>
+
+                              {/* Plaid connect -- lives at the bottom of the card, out of the way of the graph and quick actions */}
+                              <div className="flex justify-end pt-1">
+                                <PlaidConnectButton />
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* TWO STATEMENT TABLES - PAYMENTS (TOP), THEN EXPENSES (BELOW) */}
+                      {(() => {
+                        const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                        const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                        const allPaymentItems = [
+                          ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount, source: "Completed Job Revenue" })),
+                          ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, source: "Logged Income" }))
+                        ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const paymentItems = paymentsTableFilter === "all" ? allPaymentItems : allPaymentItems.filter(i => i.source === paymentsTableFilter);
+                        const paymentsTotal = paymentItems.reduce((s, i) => s + i.amount, 0);
+
+                        const getCategoryItems = (name: string) => {
+                          if (name === "Bills") {
+                            return bills.filter(b => b.status !== "void").map(b => ({
+                              id: b.id,
+                              date: b.issuedDate,
+                              memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
+                              amount: b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)
+                            }));
+                          }
+                          if (name === "Material Expenses") {
+                            return transactions
+                              .filter(t => t.type === "expense" && materialCategories.has(t.category || ""))
+                              .map(t => ({ id: t.id, date: t.date, memo: t.description || "Material expense", amount: t.amount }));
+                          }
+                          return transactions
+                            .filter(t => t.type === "expense" && t.category === name)
+                            .map(t => ({ id: t.id, date: t.date, memo: t.description || name, amount: t.amount }));
+                        };
+                        const allExpenseItems = EXPENSE_CATEGORY_NAMES.flatMap(name =>
+                          getCategoryItems(name).map(item => ({ ...item, category: name as string }))
+                        ).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+                        const expenseItems = expensesTableFilter === "all" ? allExpenseItems : allExpenseItems.filter(i => i.category === expensesTableFilter);
+                        const expensesTotal = expenseItems.reduce((s, i) => s + i.amount, 0);
+
+                        const saveTotalStatement = () => downloadCsv(
+                          `Total Statement - ${new Date().toISOString().slice(0, 10)}.csv`,
+                          ["Type", "Category / Source", "Date", "Description", "Amount"],
+                          [
+                            ...allPaymentItems.map(i => ["Payment", i.source, i.date, i.memo, i.amount.toFixed(2)]),
+                            ...allExpenseItems.map(i => ["Expense", i.category, i.date, i.memo, i.amount.toFixed(2)])
+                          ]
+                        );
+
+                        return (
+                          <div className="space-y-5">
+                            {/* PAYMENTS TABLE */}
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center px-1">
+                                <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Payments</h3>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{paymentItems.length} line item{paymentItems.length === 1 ? "" : "s"}</span>
+                              </div>
+                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={paymentsTableFilter}
+                                    onChange={(e) => setPaymentsTableFilter(e.target.value)}
+                                    className="bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="all">All Payments</option>
+                                    <option value="Completed Job Revenue">Completed Job Revenue</option>
+                                    <option value="Logged Income">Logged Income</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadCsv(
+                                      `Payments - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                      ["Source", "Date", "Description", "Amount"],
+                                      paymentItems.map(i => [i.source, i.date, i.memo, i.amount.toFixed(2)])
+                                    )}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Save Payments as CSV
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
+                                  <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
+                                  <span className="text-base font-black text-[#1F3557]">{fmt(paymentsTotal)}</span>
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/20">
+                                  {paymentItems.length === 0 ? (
+                                    <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">No payments in this selection yet.</div>
+                                  ) : (
+                                    paymentItems.map((item, idx) => (
+                                      <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs bg-white/40">
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                          <p className="text-[10px] text-[#5E7393] font-mono">{item.date} — {item.source}</p>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* EXPENSES TABLE */}
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center px-1">
+                                <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses</h3>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{expenseItems.length} line item{expenseItems.length === 1 ? "" : "s"}</span>
+                              </div>
+                              <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={expensesTableFilter}
+                                    onChange={(e) => setExpensesTableFilter(e.target.value)}
+                                    className="bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="all">All Expenses</option>
+                                    {EXPENSE_CATEGORY_NAMES.map(name => <option key={name} value={name}>{name}</option>)}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadCsv(
+                                      `Expenses - ${new Date().toISOString().slice(0, 10)}.csv`,
+                                      ["Category", "Date", "Description", "Amount"],
+                                      expenseItems.map(i => [i.category, i.date, i.memo, i.amount.toFixed(2)])
+                                    )}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-white text-[#315C9F] border border-[#9EC8EF] hover:bg-[#EAF5FF] cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Save Expenses as CSV
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2.5">
+                                  <span className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wide">Total</span>
+                                  <span className="text-base font-black text-[#1F3557]">{fmt(expensesTotal)}</span>
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-[#9EC8EF]/50 divide-y divide-[#9EC8EF]/20">
+                                  {expenseItems.length === 0 ? (
+                                    <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">No expenses in this selection yet.</div>
+                                  ) : (
+                                    expenseItems.map((item, idx) => (
+                                      <div key={`${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-3 py-2 text-xs bg-white/40">
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                          <p className="text-[10px] text-[#5E7393] font-mono">{item.date} — {item.category}</p>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#1F3557] shrink-0">{fmt(item.amount)}</span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="flex justify-end pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={saveTotalStatement}
+                                    className="px-3.5 py-2 text-[11px] font-bold rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> Compile and Save Total Statement as CSV
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
+                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
+                        <div className="border-b border-[#9EC8EF]/30 pb-3">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
+                          <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          {[
+                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
+                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
+                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
+                          ].map((integ, idx) => (
+                            <div
+                              key={idx}
+                              className="border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2.5 opacity-80 bg-[#EAF5FF]/50 hover:opacity-100 transition-opacity"
+                            >
+                              <div className="w-9 h-9 rounded-full bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] flex items-center justify-center text-sm shadow-sm">
+                                <integ.icon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-extrabold text-[#1F3557] leading-none">{integ.name}</p>
+                                <p className="text-[9px] text-[#5E7393] font-medium mt-0.5">{integ.desc}</p>
+                              </div>
+                              <span className="px-2 py-0.5 bg-[#9EC8EF]/30 text-[#1F3557] border border-[#9EC8EF]/50 text-[8.5px] font-bold rounded">
+                                Coming Soon
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="text-center pt-2">
+                          <button
+                            onClick={() => {
+                              const matched = OS_SCREENS.find(s => s.id === "integrations");
+                              if (matched) {
+                                setActiveScreen(matched);
+                                triggerNotification("Navigated to Integrations & Gateways Settings");
+                              }
+                            }}
+                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            View All Integrations ➔
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* FINANCIAL REPORTS FLOATING PANE */}
+                      {isFinancialSnapshotOpen && (
+                        <div
+                          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-xs"
+                          onClick={() => setIsFinancialSnapshotOpen(false)}
+                        >
+                          <div
+                            className="bg-[#EAF5FF] max-w-lg w-full rounded-3xl p-6 border border-[#9EC8EF] shadow-2xl flex flex-col gap-4 text-left max-h-[85vh]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3">
+                              <div>
+                                <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
+                                  Financial Reports
+                                </h3>
+                                <p className="text-[11px] text-[#5E7393] font-sans font-semibold">
+                                  Live numbers from Accounting &amp; Bookkeeping
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setIsFinancialSnapshotOpen(false)}
+                                className="text-sm text-[#5E7393] hover:text-[#1F3557] font-bold p-1 hover:bg-white/40 rounded-xl transition-colors cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={financialSnapshotCategory}
+                                onChange={(e) => setFinancialSnapshotCategory(e.target.value as typeof financialSnapshotCategory)}
+                                className="flex-1 bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-xs font-bold text-[#1F3557] focus:outline-none"
+                              >
+                                <option value="all">All Transactions</option>
+                                <option value="balance">Current Balance</option>
+                                <option value="unpaid_invoices">Unpaid Invoices</option>
+                                <option value="outstanding_expenses">Outstanding Expenses</option>
+                                <option value="payments_collected">Payments Collected</option>
+                                <option value="expenses_paid">Expenses Paid</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={handleGenerateFinancialStatementPdf}
+                                disabled={isGeneratingFinancialStatement}
+                                className="shrink-0 px-3.5 py-2 bg-[#315C9F] hover:bg-[#27498C] disabled:opacity-60 text-white rounded-xl text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                {isGeneratingFinancialStatement ? "Generating…" : "Generate PDF"}
+                              </button>
+                            </div>
+
+                            {(() => {
+                              const category = financialSnapshotData[financialSnapshotCategory];
+                              return (
+                                <>
+                                  <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] flex items-center justify-between shrink-0">
+                                    <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{category.label}</span>
+                                    <span className="text-xl font-black text-[#1F3557]">{fmtMoney(category.total)}</span>
+                                  </div>
+
+                                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px]">
+                                    {category.items.length === 0 ? (
+                                      <div className="py-10 text-center text-xs text-[#5E7393] font-sans font-medium">
+                                        Nothing here yet.
+                                      </div>
+                                    ) : (
+                                      category.items.map((item) => (
+                                        <div
+                                          key={item.id}
+                                          className="flex items-center justify-between gap-3 p-2.5 bg-white border border-[#9EC8EF]/50 rounded-xl text-xs"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-[#1F3557] truncate">{item.memo}</p>
+                                            <p className="text-[10px] text-[#5E7393] font-mono">{item.date}</p>
+                                          </div>
+                                          <span className={`font-mono font-bold shrink-0 ${item.amount < 0 ? "text-rose-600" : "text-[#1F3557]"}`}>
+                                            {fmtMoney(Math.abs(item.amount))}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                    )
+
+                  ) : activeScreen.id === "payroll" ? (
+                    !getVisibleScreens().some(screen => screen.id === "payroll") ? (
+                      <div className="p-8 bg-slate-900 border border-red-500/30 rounded-[28px] text-center max-w-md mx-auto my-12 space-y-4">
+                        <ShieldAlert className="w-16 h-16 text-red-500 mx-auto animate-bounce" />
+                        <h2 className="text-xl font-bold text-white">Restricted Access</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account does not have permission to access Payroll.
+                        </p>
+                        <button
+                          onClick={() => setActiveScreen(OS_SCREENS[0])}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Return to Dashboard
+                        </button>
+                      </div>
+                    ) : (
                       <div className="space-y-6 animate-fade-in text-left">
-                      {/* HEADER SECTION - Separate clean header block */}
+                      {/* HEADER SECTION */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                           <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
-                            <span className="select-none text-xl">📈</span> Company Revenue Tracking
+                            <span className="select-none text-xl">💵</span> Payroll
                           </h2>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Track revenue, labor costs, expenses, and estimated taxes</p>
-                        </div>
-                        <PlaidConnectButton />
-                      </div>
-
-                      {/* CHOOSE GRAPH DATA BLOCK */}
-                      <div className="bg-[#C7E3FA] p-4 rounded-2xl border border-[#9EC8EF] shadow-sm space-y-2.5">
-                        <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Choose Graph Data</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "revenue",  label: "Total Revenue" },
-                            { value: "expenses", label: "Total Expenses" },
-                            { value: "profit",   label: "Total Profit" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setGraphDataType(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                graphDataType === value
-                                  ? "bg-[#4A86F7] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        {graphDataType === "expenses" && <div className="space-y-2 rounded-xl border border-[#9EC8EF] bg-[#EAF5FF]/70 p-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setExpenseGraphMode("individual")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "individual" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Separate Categories</button>
-                            <button onClick={() => setExpenseGraphMode("combined")} className={`rounded-lg px-3 py-1.5 text-[10px] font-black ${expenseGraphMode === "combined" ? "bg-[#315C9F] text-white" : "bg-white text-[#5E7393] border border-[#9EC8EF]"}`}>Combined Total Expenses</button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {([ ["Bills", "Bills — service/provider obligations"], ["MaterialExpenses", "Material / Operational Expenses"], ["Payroll", "Payroll"], ["OtherExpenses", "Other Expenses"] ] as const).map(([key, label]) => {
-                              const selected = selectedExpenseSeries.includes(key);
-                              return <button key={key} onClick={() => setSelectedExpenseSeries(current => selected ? current.filter(item => item !== key) : [...current, key])} className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold ${selected ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-400"}`}>{selected ? "✓ " : ""}{label}</button>;
-                            })}
-                          </div>
-                          <p className="text-[9px] text-[#5E7393]">Materials, equipment, fuel, tools, inventory purchases, and supplies stay under Material / Operational Expenses—not Bills.</p>
-                        </div>}
-                        <div className="flex flex-wrap gap-2">
-                          {([
-                            { value: "Day",        label: "Day" },
-                            { value: "Week",       label: "Week" },
-                            { value: "Pay Period", label: "Pay Period" },
-                            { value: "Quarter",    label: "Quarter" },
-                            { value: "Annual",     label: "Annual" },
-                          ] as const).map(({ value, label }) => (
-                            <button
-                              key={value}
-                              onClick={() => setRevenuePageFilter(value)}
-                              className={`px-3 py-1.5 text-[10.5px] rounded-lg font-bold transition-all duration-200 cursor-pointer ${
-                                revenuePageFilter === value
-                                  ? "bg-[#1F3557] text-white shadow-sm"
-                                  : "bg-[#EAF5FF] text-[#5E7393] border border-[#9EC8EF] hover:text-[#1F3557]"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Run payroll, track hours, and manage pay periods for your crew</p>
                         </div>
                       </div>
 
-                      {/* TOP SECTION - LARGE REVENUE OVERVIEW CARD WITH MULTI-LINE GRAPH */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-5">
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Financial Ledger</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Revenue Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-medium mt-0.5">
-                              Period: <strong className="text-[#315C9F]">
-                                {(() => {
-                                  const now = new Date();
-                                  if (revenuePageFilter === "Day") return `Daily activity — last 30 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Week") return `Daily activity — last 7 days (through ${now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`;
-                                  if (revenuePageFilter === "Pay Period") return "Running totals — current 14-day pay period";
-                                  if (revenuePageFilter === "Quarter") return "Running totals — current quarter";
-                                  if (revenuePageFilter === "Annual") return `Running totals — ${now.getFullYear()}`;
-                                  return "Running totals — complete financial history";
-                                })()}
-                              </strong>
-                            </p>
-                          </div>
-
-                          {/* Filter Button Group */}
-                          <div className="bg-[#EAF5FF] p-1 rounded-xl border border-[#9EC8EF] flex flex-wrap gap-1">
-                            {[
-                              { value: "Day", label: "View by Day" },
-                              { value: "Week", label: "View by Week" },
-                              { value: "Pay Period", label: "View by Pay Period" },
-                              { value: "Quarter", label: "View by Quarter" },
-                              { value: "Annual", label: "View Annual" },
-                              { value: "Total", label: "View Total" }
-                            ].map(({ value, label }) => {
-                              const isActive = revenuePageFilter === value;
-                              return (
-                                <button
-                                  key={value}
-                                  onClick={() => {
-                                    setRevenuePageFilter(value);
-                                    triggerNotification(`Adjusted graph filter to: ${label}`);
-                                  }}
-                                  className={`px-3 py-1.5 text-[10.5px] rounded-lg transition-all duration-200 cursor-pointer font-bold ${
-                                    isActive
-                                      ? "bg-[#4A86F7] text-white shadow-sm"
-                                      : "text-[#5E7393] hover:text-[#1F3557]"
-                                  }`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Summary Display on Graph card */}
-                        {(() => {
-                          const { currentTotal, currentExpenseTotal, priorTotal, priorExpenseTotal } = getRevenueChartData(balanceView, revenueEvents, transactions, bills);
-                          const balance = currentTotal - currentExpenseTotal;
-                          const priorBalance = priorTotal - priorExpenseTotal;
-                          const hasPrior = priorBalance !== 0;
-                          const pct = hasPrior ? ((balance - priorBalance) / Math.abs(priorBalance)) * 100 : null;
-                          const isUp = pct === null ? balance > 0 : pct >= 0;
-                          const balanceLabel = balanceView === "Total" ? "Total Balance" : `${balanceView} Balance`;
-                          return (
-                            <div className="flex flex-wrap items-end gap-3 sm:gap-4">
-                              <div>
-                                <p className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393] mb-1">{balanceLabel}</p>
-                                <span className="text-3xl font-sans font-black text-[#1F3557] tracking-tight">
-                                  {`${balance < 0 ? "-" : ""}$${Math.abs(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                </span>
-                              </div>
-                              <select
-                                aria-label="Balance view"
-                                value={balanceView}
-                                onChange={(e) => {
-                                  changeBalanceView(e.target.value);
-                                  triggerNotification(`Balance view updated to: ${e.target.options[e.target.selectedIndex].text}`);
-                                }}
-                                className="text-[10.5px] font-bold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
-                              >
-                                <option value="Day">View by Day</option>
-                                <option value="Pay Period">View by Pay Period</option>
-                                <option value="Quarter">View by Quarter</option>
-                                <option value="Annual">View Annual</option>
-                                <option value="Total">View Total Balance</option>
-                              </select>
-                              <span className={`text-xs font-bold flex items-center px-2.5 py-1 rounded-lg ${isUp ? "text-emerald-600 bg-emerald-500/10" : "text-red-600 bg-red-500/10"}`}>
-                                {isUp ? <TrendingUp className="w-3.5 h-3.5 mr-1 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 mr-1 shrink-0" />}
-                                {pct === null ? (balance !== 0 ? "Current" : "—") : `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
-                              </span>
-                              <span className="text-xs text-[#5E7393] font-sans font-medium">income minus expenses</span>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Log real income/expenses, run real payroll */}
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Income
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer flex items-center gap-1"
-                          >
-                            + Log Expense
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isRunningPayroll}
-                            onClick={handleRunPayroll}
-                            className="px-3 py-1.5 text-[10.5px] font-bold rounded-lg bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] hover:bg-white cursor-pointer flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
-                          </button>
-                        </div>
-
-                        {logTransactionType && (
-                          <LogTransactionModal
-                            type={logTransactionType}
-                            createdBy={loggedInUser?.email}
-                            onSave={handleSaveTransaction}
-                            onClose={() => { sessionStorage.removeItem("ownerslocal_pending_financial_scan"); setLogTransactionType(null); }}
-                          />
-                        )}
-
-                        {/* Recharts Live Multi-line Graph — horizontally scrollable */}
-                        {(() => {
-                          const baseSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
-                          const chartSeries = baseSeries.map(row => ({ ...row, SelectedExpenses: selectedExpenseSeries.reduce((sum, key) => sum + row[key], 0) }));
-                          const chartWidth = Math.max(340, chartSeries.length * 78);
-                          return (
-                            <div className="pt-2">
-                              {chartSeries.length > 5 && (
-                                <p className="text-[10px] text-[#5E7393] font-sans text-right pr-2 pb-1 opacity-60 select-none">← swipe to scroll →</p>
-                              )}
-                              <div className="overflow-x-auto overflow-y-hidden rounded-xl" style={{ WebkitOverflowScrolling: 'touch' as any }}>
-                                <LineChart
-                                  width={chartWidth}
-                                  height={280}
-                                  data={chartSeries}
-                                  margin={{ top: 10, right: 24, left: 14, bottom: 0 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#9EC8EF" vertical={false} />
-                                  <XAxis
-                                    dataKey="time"
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    dy={10}
-                                    className="font-mono"
-                                  />
-                                  <YAxis
-                                    stroke="#5E7393"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`}
-                                    className="font-mono"
-                                    width={48}
-                                  />
-                                  <Tooltip content={
-                                    ({ active, payload, label }) => {
-                                      if (active && payload && payload.length) {
-                                        return (
-                                          <div className="bg-[#EAF5FF] border border-[#9EC8EF] p-3 rounded-xl shadow-md text-left text-xs font-sans">
-                                            <p className="font-bold text-[#1F3557] mb-1.5 border-b border-[#9EC8EF]/50 pb-1">{label}</p>
-                                            <div className="space-y-1">
-                                              {payload.map((entry: any, index: number) => (
-                                                <div key={index} className="flex items-center justify-between gap-6">
-                                                  <span className="flex items-center gap-1.5 font-semibold text-[#5E7393] text-[11px]">
-                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                    {entry.name}:
-                                                  </span>
-                                                  <span className="font-mono font-bold text-[#1F3557] text-[11px]">
-                                                    ${entry.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    }
-                                  } />
-                                  <Legend
-                                    verticalAlign="top"
-                                    height={36}
-                                    iconType="circle"
-                                    iconSize={8}
-                                    className="font-sans font-bold text-[11px]"
-                                    wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-                                  />
-                                  {graphDataType === "revenue" && <Line type="monotone" dataKey="Revenue" stroke="#4A86F7" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Revenue" />}
-                                  {graphDataType === "profit" && <Line type="monotone" dataKey="Profit" stroke="#22C55E" strokeWidth={3} dot={{ r: 4, strokeWidth: 1 }} activeDot={{ r: 6 }} name="Profit" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "combined" && <Line type="monotone" dataKey="SelectedExpenses" stroke="#F43F5E" strokeWidth={3} dot={{ r: 4 }} name="Total Expenses (Selected)" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Bills") && <Line type="monotone" dataKey="Bills" stroke="#E11D48" strokeWidth={2.5} dot={{ r: 3 }} name="Bills" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("MaterialExpenses") && <Line type="monotone" dataKey="MaterialExpenses" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 3 }} name="Material / Operational Expenses" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("Payroll") && <Line type="monotone" dataKey="Payroll" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} name="Payroll" />}
-                                  {graphDataType === "expenses" && expenseGraphMode === "individual" && selectedExpenseSeries.includes("OtherExpenses") && <Line type="monotone" dataKey="OtherExpenses" stroke="#64748B" strokeWidth={2.5} dot={{ r: 3 }} name="Other Expenses" />}
-                                </LineChart>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* SUMMARY CARDS - FIVE SEPARATE FLOATING BLUE CARDS */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {(() => {
-                          const { currentPayrollTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
-                          // Accounting's dashboard is all-time. Keep these headline cards
-                          // on that same basis; the chart and comparison cards below remain
-                          // controlled by revenuePageFilter.
-                          const transactionExpenseTotal = transactions
-                            .filter(transaction => transaction.type === "expense")
-                            .reduce((sum, transaction) => sum + transaction.amount, 0);
-                          const allTimeBillTotal = bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0);
-                          const allTimeExpenseTotal = transactionExpenseTotal + allTimeBillTotal;
-                          const netProfit = completedJobsRevenue - allTimeExpenseTotal;
-                          const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                          return [
-                          {
-                            label: "Total Revenue",
-                            key: "revenue",
-                            val: `$${completedJobsRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                            change: null,
-                            isUp: true,
-                            comp: "All-time recognized revenue",
-                            icon: DollarSign,
-                            color: "text-emerald-500",
-                            bgColor: "bg-emerald-500/10"
-                          },
-                          {
-                            label: "Net Profit",
-                            key: "profit",
-                            val: fmt(netProfit),
-                            change: null,
-                            isUp: netProfit >= 0,
-                            comp: "All-time revenue minus logged expenses",
-                            icon: TrendingUp,
-                            color: "text-blue-500",
-                            bgColor: "bg-blue-500/10"
-                          },
-                          {
-                            label: "Total Expenses",
-                            key: "expenses",
-                            val: fmt(allTimeExpenseTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "All-time logged expenses",
-                            icon: TrendingDown,
-                            color: "text-rose-500",
-                            bgColor: "bg-rose-500/10"
-                          },
-                          {
-                            label: "Gross Payroll",
-                            key: "payroll",
-                            val: fmt(currentPayrollTotal),
-                            change: null,
-                            isUp: true,
-                            comp: "Real payroll runs, this period",
-                            icon: Users,
-                            color: "text-purple-500",
-                            bgColor: "bg-purple-500/10"
-                          },
-                          {
-                            label: "Accrued Taxes",
-                            key: "taxes",
-                            val: "$0.00",
-                            change: null,
-                            isUp: false,
-                            comp: "Tax tracking not built yet",
-                            icon: Landmark,
-                            color: "text-amber-500",
-                            bgColor: "bg-amber-500/10"
-                          }
-                          ];
-                        })().map((card, idx) => (
-                          <div key={idx} className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-3 text-left">
-                            <div className="flex justify-between items-start">
-                              <span className="text-[10.5px] font-bold text-[#5E7393] uppercase tracking-wide">{card.label}</span>
-                              <div className={`p-1.5 rounded-lg ${card.bgColor} ${card.color}`}>
-                                <card.icon className="w-3.5 h-3.5" />
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight">{card.val}</p>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                {card.change && (
-                                  <span className={`text-[10px] font-bold flex items-center ${card.isUp ? "text-emerald-600 bg-emerald-500/10" : "text-rose-600 bg-rose-500/10"} px-1.5 py-0.5 rounded`}>
-                                    {card.isUp ? "+" : "-"}{card.change}
-                                  </span>
-                                )}
-                                <span className="text-[9.5px] text-[#5E7393] font-sans font-medium">{card.comp}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* EXPENSE CATEGORIES GRID - 12 SEPARATE FLOATING BLUE CARDS */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center px-1">
-                          <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses by Operational Category</h3>
-                          <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">Financial expense categories</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          {[
-                            { name: "Bills", target: "accounting", label: "Bills" },
-                            { name: "Material Expenses", target: "inventory", label: "Inventory / Job Costs" },
-                            { name: "Fuel", target: "placeholder_fuel", label: "Expenses" },
-                            { name: "Vehicle Maintenance", target: "placeholder_vehicle", label: "Expenses" },
-                            { name: "Equipment", target: "inventory", label: "Inventory" },
-                            { name: "Tools", target: "inventory", label: "Inventory" },
-                            { name: "Insurance", target: "documents", label: "Documents" },
-                            { name: "Taxes", target: "documents", label: "Documents" },
-                            { name: "Marketing", target: "integrations", label: "Web Integration" },
-                            { name: "Software & Subs", target: "integrations", label: "Integrations" },
-                            { name: "Utilities", target: "placeholder_utilities", label: "Expenses" },
-                            { name: "Office Supplies", target: "inventory", label: "Inventory" },
-                            { name: "Custom Expense", target: "placeholder_custom", label: "Expenses" }
-                          ].map((cat, idx) => {
-                            const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-                            const categoryTotal = cat.name === "Bills"
-                              ? bills.filter(bill => bill.status !== "void").reduce((sum, bill) => sum + (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((lineSum, item) => lineSum + item.quantity * item.unitPrice, 0)), 0)
-                              : cat.name === "Material Expenses"
-                                ? transactions.filter((t) => t.type === "expense" && materialCategories.has(t.category || "")).reduce((sum, t) => sum + t.amount, 0)
-                                : transactions.filter((t) => t.type === "expense" && t.category === cat.name).reduce((sum, t) => sum + t.amount, 0);
-                            const currentAmt = `$${categoryTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-                            return (
-                              <div
-                                key={idx}
-                                onClick={() => {
-                                  if (cat.target === "inventory" || cat.target === "documents" || cat.target === "integrations" || cat.target === "accounting") {
-                                    const matched = OS_SCREENS.find(s => s.id === cat.target);
-                                    if (matched) {
-                                      setActiveScreen(matched);
-                                      triggerNotification(`Navigated to: ${matched.label}`);
-                                    }
-                                  } else {
-                                    openPlaceholderPage(cat.name + " Expense Logs", "💳");
-                                  }
-                                }}
-                                className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] hover:border-[#4A86F7] shadow-sm hover:shadow transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 text-left group"
-                              >
-                                <div>
-                                  <span className="text-[9.5px] text-[#5E7393] font-bold uppercase tracking-wider block truncate">{cat.name}</span>
-                                  <span className="text-base font-sans font-black text-[#1F3557] tracking-tight block mt-0.5">{currentAmt}</span>
-                                </div>
-                                
-                                <div className="flex items-center justify-between border-t border-[#9EC8EF]/30 pt-2 mt-1">
-                                  <span className="text-[8.5px] font-bold text-[#315C9F] group-hover:underline flex items-center gap-0.5 shrink-0">
-                                    {cat.label} ➔
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */}
+                      /* PAYROLL SECTION - PAYROLL OVERVIEW AND SEARCHABLE TABLE */
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#9EC8EF]/30 pb-4">
                           <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Ledger</span>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Overview</span>
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
                             <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
                           </div>
@@ -7383,236 +8131,14 @@ Access to full financial telemetry is restricted.`;
                         
                         <div className="text-center pt-2">
                           <button
-                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wage Ledger", icon: "👥" })}
+                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wages", icon: "👥" })}
                             className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
                           >
                             View All Employees ➔
                           </button>
                         </div>
                       </div>
-
-                      {/* FINANCIAL INSIGHTS & QUICK ACTIONS SECTION (Bento Style Grid) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        
-                        {/* Compact on-demand AI Financial Insights widget */}
-                        <div className="bg-[#C7E3FA] rounded-2xl p-3 border border-[#9EC8EF] shadow-sm lg:col-span-2 text-left self-start">
-                          <button
-                            type="button"
-                            onClick={() => setIsFinancialInsightsOpen(open => !open)}
-                            aria-expanded={isFinancialInsightsOpen}
-                            className="w-full flex items-center gap-3 rounded-xl bg-[#EAF5FF] border border-[#9EC8EF] px-4 py-3 text-left hover:bg-[#BDDDF8] transition-colors"
-                          >
-                            <span className="p-2 rounded-lg bg-[#315C9F] text-white shadow-sm">
-                              <Sparkles className="w-4 h-4" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">On-demand analysis</span>
-                              <span className="block text-sm font-sans font-black text-[#1F3557]">AI Financial Insights</span>
-                            </span>
-                            <ChevronDown className={`w-4 h-4 text-[#315C9F] transition-transform ${isFinancialInsightsOpen ? "rotate-180" : ""}`} />
-                          </button>
-
-                          {isFinancialInsightsOpen && (
-                          <div className="space-y-3 pt-3">
-                            {(() => {
-                              // Real insights only, each gated on having a real prior period to
-                              // compare against — no invoice or tax-liability system exists in the
-                              // app to back "overdue invoices" / "quarterly tax due" style claims,
-                              // so those insight types were removed rather than left fabricated.
-                              const now = new Date();
-                              const periodDays = 14;
-                              const curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays);
-                              const curEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                              const priorStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - periodDays * 2);
-                              const priorEnd = curStart;
-                              const sumBetween = (category: string | null, start: Date, end: Date) =>
-                                transactions
-                                  .filter(t => t.type === "expense" && (!category || t.category === category) && new Date(t.date) >= start && new Date(t.date) < end)
-                                  .reduce((s, t) => s + t.amount, 0);
-                              const pctChange = (cur: number, prior: number) => ((cur - prior) / prior) * 100;
-
-                              const insights: Array<{ text: string; link: string; color: string; icon: any; action: string }> = [];
-
-                              const curPayroll = sumBetween("Payroll", curStart, curEnd);
-                              const priorPayroll = sumBetween("Payroll", priorStart, priorEnd);
-                              if (curPayroll > 0 && priorPayroll > 0) {
-                                const pct = pctChange(curPayroll, priorPayroll);
-                                insights.push({
-                                  text: `Payroll is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review payroll details ➔",
-                                  color: "border-[#9EC8EF] bg-purple-500/5 text-purple-700",
-                                  icon: Users,
-                                  action: "Payroll Ledger Analysis"
-                                });
-                              }
-
-                              const curFuel = sumBetween("Fuel", curStart, curEnd);
-                              const priorFuel = sumBetween("Fuel", priorStart, priorEnd);
-                              if (curFuel > 0 && priorFuel > 0) {
-                                const pct = pctChange(curFuel, priorFuel);
-                                insights.push({
-                                  text: `Fuel expenses are ${pct >= 0 ? "up" : "down"} ${Math.abs(pct).toFixed(1)}% vs the prior ${periodDays} days ($${curFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })} vs $${priorFuel.toLocaleString(undefined, { maximumFractionDigits: 0 })}).`,
-                                  link: "Review fuel expenses ➔",
-                                  color: "border-[#9EC8EF] bg-amber-500/5 text-amber-700",
-                                  icon: Landmark,
-                                  action: "Fuel Receipts & Fleet Usage"
-                                });
-                              }
-
-                              const curIncomeTx = transactions.filter(t => t.type === "income" && new Date(t.date) >= curStart && new Date(t.date) < curEnd).reduce((s, t) => s + t.amount, 0);
-                              const curRevenue = revenueEvents.filter(e => new Date(e.date) >= curStart && new Date(e.date) < curEnd).reduce((s, e) => s + e.amount, 0) + curIncomeTx;
-                              const curExpenses = sumBetween(null, curStart, curEnd);
-                              if (curRevenue > 0) {
-                                const margin = ((curRevenue - curExpenses) / curRevenue) * 100;
-                                insights.push({
-                                  text: `Profit margin over the last ${periodDays} days is ${margin.toFixed(1)}% ($${(curRevenue - curExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })} profit on $${curRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue).`,
-                                  link: "View profit report ➔",
-                                  color: "border-[#9EC8EF] bg-emerald-500/5 text-emerald-700",
-                                  icon: TrendingUp,
-                                  action: "Net Profitability Margin Analyzer"
-                                });
-                              }
-
-                              if (insights.length === 0) {
-                                return (
-                                  <div className="p-4 rounded-2xl border border-dashed border-[#9EC8EF] text-[11px] text-[#5E7393] font-sans font-medium text-center">
-                                    Not enough transaction history yet to generate real insights — log income/expenses and run payroll to build up a comparison period.
-                                  </div>
-                                );
-                              }
-
-                              return insights.map((insight, idx) => (
-                                <div
-                                  key={idx}
-                                  onClick={() => openPlaceholderPage(insight.action, "🔍")}
-                                  className={`p-3.5 rounded-2xl border ${insight.color} flex items-start gap-3 hover:scale-[1.01] transition-transform cursor-pointer text-xs`}
-                                >
-                                  <span className="p-1.5 bg-[#EAF5FF] rounded-lg shadow-sm border border-[#9EC8EF]/30 mt-0.5 shrink-0">
-                                    <insight.icon className="w-3.5 h-3.5 text-[#315C9F]" />
-                                  </span>
-                                  <div>
-                                    <p className="font-semibold leading-normal text-[#1F3557]">{insight.text}</p>
-                                    <p className="text-[10px] font-bold mt-1 inline-block text-[#315C9F] hover:underline">
-                                      {insight.link}
-                                    </p>
-                                  </div>
-                                </div>
-                              ));
-                            })()}
-                          </div>
-                          )}
-                        </div>
-
-                        {/* Quick Actions Card */}
-                        <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm flex flex-col justify-between gap-4 text-left">
-                          <div className="border-b border-[#9EC8EF]/30 pb-3">
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Ledger Actions</span>
-                            <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Quick Actions</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Execute double-entry bookkeeping actions</p>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-3 flex-1 py-1">
-                            {[
-                              { label: "Record Expense", action: "expense", icon: DollarSign },
-                              { label: "Run Payroll", action: "payroll", icon: Users },
-                              { label: "Create Invoice", action: "invoice", icon: FileText },
-                              { label: "Reconcile Bank", action: "reconcile_soon", icon: Landmark }
-                            ].map((btn, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  if (btn.action === "reconcile_soon") {
-                                    triggerNotification("Reconcile Bank is coming soon.");
-                                    return;
-                                  }
-                                  if (btn.action === "expense") {
-                                    sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
-                                    setLogTransactionType("expense");
-                                    return;
-                                  }
-                                  if (btn.action === "payroll") {
-                                    handleRunPayroll();
-                                    return;
-                                  }
-                                  const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                                  if (accounting) setActiveScreen(accounting);
-                                  triggerNotification(btn.action === "invoice" ? "Open Invoices to create a customer invoice." : "Open Banking to reconcile accounts.");
-                                }}
-                                className="bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] hover:border-[#4A86F7] rounded-xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer transition-all hover:scale-[1.02]"
-                              >
-                                <span className="p-1.5 bg-[#EAF5FF] border border-[#9EC8EF]/30 rounded-lg text-[#315C9F] shadow-sm">
-                                  <btn.icon className="w-4 h-4" />
-                                </span>
-                                <span className="text-[10.5px] font-extrabold text-[#1F3557] uppercase tracking-wide leading-tight">
-                                  {btn.label}
-                                </span>
-                                {btn.action === "reconcile_soon" && <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase text-amber-700">Coming Soon</span>}
-                              </button>
-                            ))}
-                          </div>
-                          
-                          <button
-                            onClick={() => {
-                              const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
-                              if (accounting) setActiveScreen(accounting);
-                              triggerNotification("Open Reports for current financial statements.");
-                            }}
-                            className="w-full py-3 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center uppercase tracking-wider shadow-sm"
-                          >
-                            View Financial Reports
-                          </button>
-                        </div>
                       </div>
-
-                      {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
-                      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <div className="border-b border-[#9EC8EF]/30 pb-3">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
-                          <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          {[
-                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
-                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
-                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
-                          ].map((integ, idx) => (
-                            <div
-                              key={idx}
-                              className="border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2.5 opacity-80 bg-[#EAF5FF]/50 hover:opacity-100 transition-opacity"
-                            >
-                              <div className="w-9 h-9 rounded-full bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] flex items-center justify-center text-sm shadow-sm">
-                                <integ.icon className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-extrabold text-[#1F3557] leading-none">{integ.name}</p>
-                                <p className="text-[9px] text-[#5E7393] font-medium mt-0.5">{integ.desc}</p>
-                              </div>
-                              <span className="px-2 py-0.5 bg-[#9EC8EF]/30 text-[#1F3557] border border-[#9EC8EF]/50 text-[8.5px] font-bold rounded">
-                                Coming Soon
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        <div className="text-center pt-2">
-                          <button
-                            onClick={() => {
-                              const matched = OS_SCREENS.find(s => s.id === "integrations");
-                              if (matched) {
-                                setActiveScreen(matched);
-                                triggerNotification("Navigated to Integrations & Gateways Settings");
-                              }
-                            }}
-                            className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            View All Integrations ➔
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
                     )
 
                   ) : activeScreen.id === "scheduling" ? (
@@ -7781,11 +8307,7 @@ Access to full financial telemetry is restricted.`;
                     </div>
 
                   ) : activeScreen.id === "notifications" ? (
-                    
-                    <NotificationsPage
-                      dashboardLeads={dashboardLeads}
-                      setDashboardLeads={setDashboardLeads}
-                    />
+                    <NotificationsPage />
 
                   ) : activeScreen.id === "missed_call_textback" ? (
 
@@ -7851,7 +8373,7 @@ Access to full financial telemetry is restricted.`;
             }`}
           >
             <option value="light-basic">Light Mode Basic</option>
-            <option value="light-extreme">Light Mode Extreme</option>
+            <option value="light-extreme">Light Mode Dynamic</option>
             <option value="dark-basic">Dark Mode Basic</option>
             <option value="dark-dynamic">Dark Mode Dynamic</option>
           </select>
@@ -7989,7 +8511,7 @@ Access to full financial telemetry is restricted.`;
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <div className="w-2.5 h-2.5 bg-[#315C9F] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  <span>AI Agent is analyzing workspace ledger...</span>
+                  <span>AI Agent is analyzing workspace data...</span>
                 </div>
               )}
 
@@ -8000,7 +8522,7 @@ Access to full financial telemetry is restricted.`;
                     <div>
                       <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider">Financial Data Clearance Check</h4>
                       <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                        Your query involves sensitive ledger parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
+                        Your query involves sensitive financial parameters (e.g. lifetime value, unpaid balances, or margin indexes). Do you confirm you have authorization to reveal these metrics in this session?
                       </p>
                     </div>
                   </div>
@@ -8142,7 +8664,7 @@ Access to full financial telemetry is restricted.`;
                 { id: "ask", label: "Ask AI", icon: "💬" },
                 { id: "actions", label: "Actions", icon: "⚡" },
                 { id: "settings", label: "Settings", icon: "⚙️" },
-                { id: "recent", label: "Ledger", icon: "📋" }
+                { id: "recent", label: "Activity", icon: "📋" }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -8223,7 +8745,7 @@ Access to full financial telemetry is restricted.`;
                         <div>
                           <h4 className="text-[10px] font-black text-red-800 uppercase tracking-wider">Access Clearance Confirmation</h4>
                           <p className="text-[9.5px] text-slate-600 mt-0.5 leading-relaxed font-semibold">
-                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt ledgers requires session verification. Do you confirm your Owner/Admin permission level?
+                            Revealing company accounts, VIP Lifetime Values (LTV), or past-due debt records requires session verification. Do you confirm your Owner/Admin permission level?
                           </p>
                         </div>
                       </div>

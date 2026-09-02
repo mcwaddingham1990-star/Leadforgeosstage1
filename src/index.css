@@ -7,6 +7,24 @@
   --font-display: "Space Grotesk", sans-serif;
 }
 
+/* Money Tracker's upcoming-jobs/bills ticker: the content is rendered twice
+   back to back and this scrolls the wrapper up by exactly one copy's height,
+   which loops seamlessly since the second copy is identical to the first. */
+@keyframes ticker-scroll {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
+/* Money Tracker's HUD panel: a faint light sweeps down the whole card,
+   the way a cockpit display idles. Applied to a full-height translucent
+   bar inside an overflow-hidden wrapper so it loops seamlessly. */
+@keyframes hud-scan {
+  0% { transform: translateY(-120%); }
+  100% { transform: translateY(120%); }
+}
+
+/* LIGHT MODE BASIC — no animation added. */
+
 /* ==========================================================================
    WORKSPACE THEME OVERRIDES (EXCLUDING LOGIN)
    This block perfectly implements the exact color specifications and design
@@ -15,7 +33,8 @@
 
 /* 1. Global Workspace Background and Font Colors */
 .workspace-theme {
-  background-color: #EAF5FF !important;
+  background-color: #E5F1FF !important;
+  background-image: linear-gradient(145deg, #EAF6FF 0%, #D8ECFC 48%, #E5F3FF 100%) !important;
   color: #1F3557 !important;
   color-scheme: light !important;
 }
@@ -32,14 +51,14 @@
 .workspace-theme .bg-gray-200,
 .workspace-theme .bg-zinc-50,
 .workspace-theme .bg-zinc-100,
-.workspace-theme .bg-[#F5FAFF],
-.workspace-theme .bg-[#EAF5FF],
-.workspace-theme .bg-[#E3F3FF],
-.workspace-theme .bg-[#A9CDEE],
-.workspace-theme .bg-[#A9CDEF],
-.workspace-theme .bg-[#E1EFFD],
-.workspace-theme .bg-[#BDDDF8],
-.workspace-theme .bg-[#BCD8F0],
+.workspace-theme .bg-\[\#F5FAFF\],
+.workspace-theme .bg-\[\#EAF5FF\],
+.workspace-theme .bg-\[\#E3F3FF\],
+.workspace-theme .bg-\[\#A9CDEE\],
+.workspace-theme .bg-\[\#A9CDEF\],
+.workspace-theme .bg-\[\#E1EFFD\],
+.workspace-theme .bg-\[\#BDDDF8\],
+.workspace-theme .bg-\[\#BCD8F0\],
 .workspace-theme .bg-blue-50,
 .workspace-theme .bg-blue-100,
 .workspace-theme .bg-blue-200,
@@ -49,8 +68,12 @@
 .workspace-theme [class*="bg-gradient-to-"]:not(button):not(.text-white),
 .workspace-theme [class*="from-"]:not(button):not(.text-white),
 .workspace-theme [class*="to-"]:not(button):not(.text-white) {
-  background-color: #EAF5FF !important;
-  background-image: none !important;
+  background-color: rgba(207, 233, 252, 0.92) !important;
+  background-image: linear-gradient(145deg, rgba(225, 243, 255, 0.96), rgba(194, 227, 251, 0.96)) !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.30), inset 0 0 18px rgba(255, 255, 255, 0.82) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(118%) !important;
+  backdrop-filter: blur(10px) saturate(118%) !important;
 }
 
 /* Ensure any ghost white transparencies become fully transparent or match the theme card blue */
@@ -66,7 +89,11 @@
 .workspace-theme .bg-slate-50\/50,
 .workspace-theme .bg-slate-100\/50,
 .workspace-theme .bg-blue-50\/50 {
-  background-color: transparent !important;
+  background-color: rgba(224, 242, 255, 0.46) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.50), rgba(190, 225, 251, 0.34)) !important;
+  box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.60) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
 /* 3. Sub-Containers, Spacers, Inputs, and Inner Slots (Must NOT be white; must be #EAF5FF - lighter workspace bg) */
@@ -76,57 +103,78 @@
 .workspace-theme .filter-container,
 .workspace-theme .date-picker-button,
 .workspace-theme .filter-button-group {
-  background-color: #EAF5FF !important;
+  background-color: rgba(229, 244, 255, 0.88) !important;
+  background-image: linear-gradient(145deg, rgba(239, 249, 255, 0.96), rgba(207, 234, 253, 0.90)) !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.24), inset 0 0 10px rgba(255, 255, 255, 0.88) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
 /* Nested lists or table items must be styled to match card/subcard rules */
 .workspace-theme tr.bg-white,
 .workspace-theme tr.bg-slate-50,
 .workspace-theme tr:nth-child(even) {
-  background-color: #EAF5FF !important; /* Alternating table row color using spacing/divider bg */
+  background-color: rgba(221, 240, 254, 0.76) !important; /* Alternating table row color using spacing/divider bg */
+  background-image: linear-gradient(90deg, rgba(235, 247, 255, 0.82), rgba(207, 233, 252, 0.72)) !important;
 }
 .workspace-theme tr:nth-child(odd) {
-  background-color: #EAF5FF !important; /* Main content card blue */
+  background-color: rgba(206, 233, 253, 0.82) !important; /* Main content card blue */
+  background-image: linear-gradient(90deg, rgba(222, 241, 255, 0.88), rgba(194, 227, 251, 0.76)) !important;
 }
 
 /* 4. Inputs, Textareas, Selects (EAF5FF Background, 1F3557 Text, 9EC8EF Border) */
 .workspace-theme input,
 .workspace-theme select,
 .workspace-theme textarea {
-  background-color: #EAF5FF !important;
+  background-color: rgba(232, 246, 255, 0.94) !important;
+  background-image: linear-gradient(145deg, rgba(242, 251, 255, 0.98), rgba(213, 237, 254, 0.92)) !important;
   color: #1F3557 !important;
-  border-color: #9EC8EF !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 0 9px rgba(56, 189, 248, 0.23), inset 0 0 9px rgba(255, 255, 255, 0.88) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
 .workspace-theme select option,
 select,
 option,
 select option {
-  background-color: #ffffff !important;
+  background-color: #EAF6FF !important;
   color: #1F3557 !important;
   color-scheme: light !important;
 }
 
 /* Custom Dropdown popovers and options styled to stay bright white and legible */
 .custom-dropdown-popover {
-  background-color: #ffffff !important;
+  background-color: rgba(232, 246, 255, 0.98) !important;
+  background-image: linear-gradient(145deg, #F1FAFF, #D8EEFF) !important;
   color: #1F3557 !important;
+  border-color: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.38), inset 0 0 12px rgba(255, 255, 255, 0.78) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
   color-scheme: light !important;
 }
 
 .custom-dropdown-item {
-  background-color: #ffffff !important;
+  background-color: rgba(232, 246, 255, 0.90) !important;
+  background-image: linear-gradient(90deg, rgba(242, 250, 255, 0.94), rgba(216, 238, 255, 0.88)) !important;
   color: #1F3557 !important;
 }
 
 .custom-dropdown-item:hover {
-  background-color: #EAF5FF !important;
-  color: #4A86F7 !important;
+  background-color: #C7E8FF !important;
+  background-image: linear-gradient(90deg, #DDF3FF, #B9DFFF) !important;
+  color: #07599A !important;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.86), 0 0 10px rgba(56, 189, 248, 0.28) !important;
 }
 
 .custom-dropdown-item-active {
-  background-color: #EAF5FF !important;
-  color: #4A86F7 !important;
+  background-color: #B9DFFF !important;
+  background-image: linear-gradient(90deg, #D9F2FF, #ADD8FA) !important;
+  color: #07599A !important;
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.88), 0 0 12px rgba(56, 189, 248, 0.38) !important;
 }
 
 /* Force light color scheme on date inputs and browser select dropdown lists */
@@ -139,7 +187,7 @@ select option {
 .workspace-theme input::placeholder,
 .workspace-theme textarea::placeholder {
   color: #5E7393 !important;
-  opacity: 1;
+  opacity: 0.84;
 }
 
 /* 5. Precise Border Color Override System (#9EC8EF) */
@@ -147,111 +195,133 @@ select option {
 .workspace-theme *,
 .workspace-theme ::before,
 .workspace-theme ::after {
-  border-color: #9EC8EF !important;
+  border-color: rgba(255, 255, 255, 0.94) !important;
 }
 
 /* 6. Typography & Text Colors */
-/* Primary Text (#1F3557) */
-.workspace-theme text,
-.workspace-theme h1,
-.workspace-theme h2,
-.workspace-theme h3,
-.workspace-theme h4,
-.workspace-theme h5,
-.workspace-theme h6,
-.workspace-theme th,
-.workspace-theme .text-slate-900,
-.workspace-theme .text-slate-800,
-.workspace-theme .text-slate-700,
-.workspace-theme .text-gray-900,
-.workspace-theme .text-[#342D7E],
-.workspace-theme .text-blue-900,
-.workspace-theme .text-indigo-900 {
+/* Primary Text (#1F3557). Excludes the Money Tracker card (.mt-card) --
+   that card sets its own deliberate per-element text colors (headings,
+   glowing stat values, breakdown labels) via Tailwind arbitrary-value
+   classes, which these blanket tag selectors would otherwise stomp flat
+   since a stylesheet !important always beats a plain utility class or an
+   inline style regardless of the color it was actually given. */
+.workspace-theme text:not(.mt-card *),
+.workspace-theme h1:not(.mt-card *),
+.workspace-theme h2:not(.mt-card *),
+.workspace-theme h3:not(.mt-card *),
+.workspace-theme h4:not(.mt-card *),
+.workspace-theme h5:not(.mt-card *),
+.workspace-theme h6:not(.mt-card *),
+.workspace-theme th:not(.mt-card *),
+.workspace-theme .text-slate-900:not(.mt-card *),
+.workspace-theme .text-slate-800:not(.mt-card *),
+.workspace-theme .text-slate-700:not(.mt-card *),
+.workspace-theme .text-gray-900:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]:not(.mt-card *),
+.workspace-theme .text-blue-900:not(.mt-card *),
+.workspace-theme .text-indigo-900:not(.mt-card *) {
   color: #1F3557 !important;
 }
 
-/* Secondary Text (#5E7393) */
-.workspace-theme p,
-.workspace-theme span,
-.workspace-theme label,
-.workspace-theme td,
-.workspace-theme .text-slate-500,
-.workspace-theme .text-slate-400,
-.workspace-theme .text-slate-600,
-.workspace-theme .text-gray-500,
-.workspace-theme .text-gray-400,
-.workspace-theme .text-[#342D7E]/75,
-.workspace-theme .text-[#342D7E]/60,
-.workspace-theme .text-[#342D7E]/50 {
+/* Secondary Text (#5E7393) -- same .mt-card exclusion as above. */
+.workspace-theme p:not(.mt-card *),
+.workspace-theme span:not(.mt-card *),
+.workspace-theme label:not(.mt-card *),
+.workspace-theme td:not(.mt-card *),
+.workspace-theme .text-slate-500:not(.mt-card *),
+.workspace-theme .text-slate-400:not(.mt-card *),
+.workspace-theme .text-slate-600:not(.mt-card *),
+.workspace-theme .text-gray-500:not(.mt-card *),
+.workspace-theme .text-gray-400:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/75:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/60:not(.mt-card *),
+.workspace-theme .text-\[\#342D7E\]\/50:not(.mt-card *) {
   color: #5E7393 !important;
 }
 
 /* Exceptions: White text on dark buttons or badges */
 .workspace-theme .text-white,
 .workspace-theme .text-slate-50,
-.workspace-theme button.bg-[#4A9BFF] *,
+.workspace-theme button.bg-\[\#4A9BFF\] *,
 .workspace-theme button.bg-blue-600 *,
 .workspace-theme button.bg-indigo-600 *,
-.workspace-theme .bg-[#4A86F7] *,
-.workspace-theme .bg-[#3977EE] * {
+.workspace-theme .bg-\[\#4A86F7\] *,
+.workspace-theme .bg-\[\#3977EE\] * {
   color: #ffffff !important;
 }
 
 /* 7. Icon Colors (No longer forced to #315C9F, they now respect their parent colors or Tailwind text classes, defaulting to the deep slate #1F3557) */
-.workspace-theme .text-[#315C9F] {
-  color: #1F3557 !important;
+.workspace-theme .text-\[\#315C9F\] {
+  color: #07599A !important;
 }
 
-/* 8. Primary Buttons (#4A86F7 with hover #3977EE) */
-.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent),
-.workspace-theme .bg-[#4A9BFF],
-.workspace-theme .bg-[#4A86F7],
-.workspace-theme .bg-blue-600,
-.workspace-theme .bg-indigo-600,
-.workspace-theme button.bg-[#4A9BFF] {
-  background-color: #4A86F7 !important;
+/* 8. Primary Buttons (#4A86F7 with hover #3977EE). Excludes .mt-card --
+   the Money Tracker card's own buttons (Log Income/Log Expense/Run
+   Payroll, series toggles) are deliberately color-coded per action and
+   none of them match this rule's exclusion classes (which are old plain
+   Tailwind names, not MT's arbitrary hex classes), so without this
+   exclusion every one of them would get forced to the same flat blue. */
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *),
+.workspace-theme .bg-\[\#4A9BFF\]:not(.mt-card *),
+.workspace-theme .bg-\[\#4A86F7\]:not(.mt-card *),
+.workspace-theme .bg-blue-600:not(.mt-card *),
+.workspace-theme .bg-indigo-600:not(.mt-card *),
+.workspace-theme button.bg-\[\#4A9BFF\]:not(.mt-card *) {
+  background-color: #158CEB !important;
   color: #ffffff !important;
-  border-color: #4A86F7 !important;
-  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
+  background-image: linear-gradient(135deg, #29B7F6 0%, #1485F4 58%, #3977EE 100%) !important;
+  box-shadow: 0 0 18px rgba(14, 165, 233, 0.66), inset 0 0 8px rgba(255, 255, 255, 0.44) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
-.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):hover,
-.workspace-theme .bg-[#4A9BFF]:hover,
-.workspace-theme .bg-[#4A86F7]:hover,
-.workspace-theme .bg-blue-600:hover,
-.workspace-theme .bg-indigo-600:hover,
-.workspace-theme button.bg-[#4A9BFF]:hover {
-  background-color: #3977EE !important;
-  border-color: #3977EE !important;
-  background-image: none !important;
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *):hover,
+.workspace-theme .bg-\[\#4A9BFF\]:not(.mt-card *):hover,
+.workspace-theme .bg-\[\#4A86F7\]:not(.mt-card *):hover,
+.workspace-theme .bg-blue-600:not(.mt-card *):hover,
+.workspace-theme .bg-indigo-600:not(.mt-card *):hover,
+.workspace-theme button.bg-\[\#4A9BFF\]:not(.mt-card *):hover {
+  background-color: #0D7DE0 !important;
+  border-color: #ffffff !important;
+  background-image: linear-gradient(135deg, #35C5FF 0%, #0D8CF2 55%, #2E6DE3 100%) !important;
+  box-shadow: 0 0 23px rgba(14, 165, 233, 0.78), inset 0 0 10px rgba(255, 255, 255, 0.54) !important;
 }
 
 /* Reset for transparent buttons or active tabs */
 .workspace-theme button.bg-transparent,
 .workspace-theme button.border-transparent {
-  background-color: transparent !important;
-  border-color: transparent !important;
+  background-color: rgba(222, 241, 255, 0.72) !important;
+  background-image: linear-gradient(145deg, rgba(241, 250, 255, 0.88), rgba(197, 228, 250, 0.76)) !important;
+  border-color: rgba(255, 255, 255, 0.90) !important;
   color: #5E7393 !important;
+  box-shadow: inset 0 0 9px rgba(255, 255, 255, 0.72), 0 0 8px rgba(56, 189, 248, 0.18) !important;
 }
 .workspace-theme button.bg-transparent:hover {
-  background-color: #BDDDF8 !important;
+  background-color: #C5E5FB !important;
+  background-image: linear-gradient(145deg, #E4F5FF, #B9DFFA) !important;
   color: #1F3557 !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.38), inset 0 0 10px rgba(255, 255, 255, 0.82) !important;
 }
 
 /* 9. Card Hovers (#BDDDF8) */
 .workspace-theme .hover\:bg-slate-50:hover,
 .workspace-theme .hover\:bg-slate-100:hover,
-.workspace-theme .hover\:bg-[#E3F3FF]/80:hover,
-.workspace-theme .hover\:bg-[#E3F3FF]/50:hover,
-.workspace-theme .hover\:bg-[#C7E3FA]:hover,
+.workspace-theme .hover\:bg-\[\#E3F3FF\]\/80:hover,
+.workspace-theme .hover\:bg-\[\#E3F3FF\]\/50:hover,
+.workspace-theme .hover\:bg-\[\#C7E3FA\]:hover,
 .workspace-theme .group:hover {
-  background-color: #BDDDF8 !important;
+  background-color: #C5E5FB !important;
+  background-image: linear-gradient(145deg, rgba(232, 247, 255, 0.98), rgba(183, 220, 248, 0.94)) !important;
+  box-shadow: 0 0 17px rgba(56, 189, 248, 0.42), inset 0 0 13px rgba(255, 255, 255, 0.84) !important;
 }
 
 /* Selected/Active Item (#A9CEF5) */
-.workspace-theme .bg-[#A9CEF5],
-.workspace-theme .bg-[#342D7E]/10 {
-  background-color: #A9CEF5 !important;
+.workspace-theme .bg-\[\#A9CEF5\],
+.workspace-theme .bg-\[\#342D7E\]\/10 {
+  background-color: #B7DEFB !important;
+  background-image: linear-gradient(145deg, #DDF3FF, #A9D5F7) !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.48), inset 0 0 12px rgba(255, 255, 255, 0.86) !important;
 }
 
 /* 10. Semantic Alert/State Colors */
@@ -260,13 +330,15 @@ select option {
 .workspace-theme .text-emerald-600,
 .workspace-theme .text-green-600,
 .workspace-theme .text-emerald-400 {
-  color: #22C55E !important;
+  color: #16A968 !important;
 }
 .workspace-theme .bg-emerald-500,
 .workspace-theme .bg-emerald-600,
 .workspace-theme .bg-green-600 {
   background-color: #22C55E !important;
-  background-image: none !important;
+  background-image: linear-gradient(135deg, #43DD7B, #16B95A) !important;
+  border-color: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.48), inset 0 0 7px rgba(255, 255, 255, 0.36) !important;
 }
 
 /* Warning (#F59E0B) */
@@ -274,12 +346,14 @@ select option {
 .workspace-theme .text-amber-600,
 .workspace-theme .text-amber-800,
 .workspace-theme .text-amber-400 {
-  color: #F59E0B !important;
+  color: #E68A00 !important;
 }
 .workspace-theme .bg-amber-500,
 .workspace-theme .bg-amber-600 {
   background-color: #F59E0B !important;
-  background-image: none !important;
+  background-image: linear-gradient(135deg, #FFC54A, #F08A00) !important;
+  border-color: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.44), inset 0 0 7px rgba(255, 255, 255, 0.32) !important;
 }
 
 /* Error (#EF4444) */
@@ -287,14 +361,16 @@ select option {
 .workspace-theme .text-rose-600,
 .workspace-theme .text-red-500,
 .workspace-theme .text-red-600 {
-  color: #EF4444 !important;
+  color: #E84862 !important;
 }
 .workspace-theme .bg-rose-500,
 .workspace-theme .bg-rose-600,
 .workspace-theme .bg-red-500,
 .workspace-theme .bg-red-600 {
   background-color: #EF4444 !important;
-  background-image: none !important;
+  background-image: linear-gradient(135deg, #FF7086, #E83E58) !important;
+  border-color: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.44), inset 0 0 7px rgba(255, 255, 255, 0.32) !important;
 }
 
 /* Chart customizations to prevent white/light backgrounds in tooltip */
@@ -302,9 +378,13 @@ select option {
 .workspace-theme .recharts-default-tooltip,
 .workspace-theme .recharts-tooltip-wrapper *,
 .workspace-theme .recharts-default-tooltip * {
-  background-color: #C7E3FA !important;
-  border-color: #9EC8EF !important;
+  background-color: rgba(220, 240, 255, 0.96) !important;
+  background-image: linear-gradient(145deg, rgba(236, 248, 255, 0.98), rgba(199, 229, 251, 0.96)) !important;
+  border-color: rgba(255, 255, 255, 0.96) !important;
   color: #1F3557 !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.40), inset 0 0 10px rgba(255, 255, 255, 0.76) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(10px) !important;
 }
 
 /* Increase spacing between sections/panels inside workspace to match user rules */
@@ -321,15 +401,17 @@ select option {
 /* Shared compact form control used by Jobs' Event Engine record editor. */
 .input {
   width: 100%;
-  border: 1px solid #9ec8ef;
+  border: 1px solid rgba(255, 255, 255, 0.96);
   border-radius: 0.75rem;
-  background: white;
+  background-color: rgba(232, 246, 255, 0.94);
+  background-image: linear-gradient(145deg, rgba(242, 251, 255, 0.98), rgba(213, 237, 254, 0.92));
+  box-shadow: 0 0 9px rgba(56, 189, 248, 0.23), inset 0 0 9px rgba(255, 255, 255, 0.88);
   padding: 0.625rem 0.75rem;
   color: #1f3557;
   font-size: 0.75rem;
   outline: none;
 }
-.input:focus { border-color: #4a86f7; box-shadow: 0 0 0 3px rgba(74,134,247,.12); }
+.input:focus { border-color: #ffffff; box-shadow: 0 0 0 3px rgba(56,189,248,.16), 0 0 15px rgba(56,189,248,.38), inset 0 0 9px rgba(255,255,255,.90); }
 
 /* ==========================================================================
    DARK MODE BASIC

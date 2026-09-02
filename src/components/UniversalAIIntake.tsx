@@ -11,7 +11,8 @@ import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { useVisualViewportBottomRight } from "../hooks/useVisualViewportBottomRight";
 import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
 import type { ScannedLineItem } from "../types/scannedReceipt";
-import type { InventoryItem } from "../types/domain";
+import type { InventoryItem, Customer, Lead, Estimate } from "../types/domain";
+import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 
 type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
 
@@ -229,11 +230,66 @@ export function UniversalAIIntake() {
       data.setBills(prev => [...prev, bill]);
       data.setJournalEntries(prev => [...prev, postBillCreatedEntry(bill, actor)]);
     } else if (recordType === "customer") {
-      data.setCustomers(prev => [...prev, { id: id("cust"), company: String(fields.company || fields.name || fields.contact || "New Customer"), contact: String(fields.contact || fields.name || ""), phone: String(fields.phone || ""), email: String(fields.email || ""), address: String(fields.address || ""), city: String(fields.city || ""), state: String(fields.state || ""), zip: String(fields.zip || ""), source: "AI Snapshot", createdAt } as any]);
+      // Same real Customer shape every other creation path builds (manual
+      // add, CSV import, lead/estimate conversion) -- so a scanned customer
+      // shows up identically everywhere the others do instead of leaving
+      // fields blank/NaN (openJobs, lifetimeValue, status, type, isVIP).
+      const customer: Customer = {
+        id: id("cust"),
+        company: String(fields.company || fields.name || fields.contact || "New Customer"),
+        contact: String(fields.contact || fields.name || ""),
+        phone: String(fields.phone || ""),
+        email: String(fields.email || ""),
+        address: [fields.address, fields.city, fields.state, fields.zip].filter(Boolean).join(", "),
+        openJobs: 0,
+        outstandingBalance: 0,
+        lifetimeValue: 0,
+        status: "Active",
+        type: "Residential",
+        isVIP: false,
+        recentlyAdded: true
+      };
+      data.setCustomers(prev => [customer, ...prev]);
     } else if (recordType === "lead") {
-      data.setLeads(prev => [...prev, { id: id("lead"), name: String(fields.name || fields.contact || fields.company || "New Lead"), company: String(fields.company || ""), phone: String(fields.phone || ""), email: String(fields.email || ""), address: String(fields.address || ""), notes: String(fields.notes || fields.description || ""), status: "New", source: "AI Snapshot", createdAt } as any]);
+      // Same real Lead shape LeadsPage's own add-lead form builds, so a
+      // scanned lead sorts/filters/displays identically (dateAdded,
+      // addedDaysAgo, estimatedValue, salesRep) instead of showing blank.
+      const lead: Lead = {
+        id: id("lead"),
+        name: String(fields.name || fields.contact || fields.company || "New Lead"),
+        company: String(fields.company || ""),
+        phone: String(fields.phone || ""),
+        email: String(fields.email || ""),
+        source: "Other",
+        salesRep: loggedInUser?.name || actor || "Self",
+        status: "New",
+        estimatedValue: Number(fields.amount || fields.estimatedValue || 0),
+        dateAdded: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+        addedDaysAgo: 0,
+        address: String(fields.address || ""),
+        notes: String(fields.notes || fields.description || "")
+      };
+      data.setLeads(prev => [lead, ...prev]);
     } else if (recordType === "estimate") {
-      data.setEstimates(prev => [...prev, { id: id("estimate"), customer: String(fields.company || fields.name || fields.contact || "Unassigned"), title: String(fields.description || fields.serviceProvided || "AI Snapshot estimate"), amount: Number(fields.amount || fields.estimatedCost || 0), status: "Draft", date: today(), createdAt } as any]);
+      // Same real Estimate shape EstimatesPage's manual form and the
+      // lead-conversion pipeline build (customerName/number/salesRep/
+      // expirationDate), so a scanned estimate shows up identically
+      // instead of rendering blank or failing to match a customer later.
+      const estimate: Estimate = {
+        id: id("estimate"),
+        number: generateEstimateNumber(),
+        customerName: String(fields.contact || fields.name || fields.company || "Unassigned"),
+        company: String(fields.company || fields.name || "Unassigned"),
+        status: "Draft",
+        salesRep: loggedInUser?.name || actor || "Self",
+        amount: Number(fields.amount || fields.estimatedCost || 0),
+        createdDate: formatEstimateDate(new Date()),
+        expirationDate: estimateExpirationDate(),
+        notes: String(fields.notes || fields.description || ""),
+        address: String(fields.address || ""),
+        phone: String(fields.phone || "")
+      };
+      data.setEstimates(prev => [estimate, ...prev]);
     } else if (recordType === "inventory") {
       data.setInventoryList(prev => [...prev, { id: id("inventory"), name: String(fields.name || fields.description || "Scanned item"), category: String(fields.category || "Materials"), quantity: Number(fields.quantity || 0), unitCost: Number(fields.unitCost || fields.amount || 0), supplier: String(fields.company || fields.payee || ""), source: "AI Snapshot", createdAt } as any]);
     } else if (recordType === "onboarding") {

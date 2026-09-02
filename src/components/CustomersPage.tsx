@@ -12,7 +12,6 @@ import {
   Users,
   CheckCircle,
   AlertTriangle,
-  Clock,
   DollarSign,
   Building,
   Home,
@@ -22,14 +21,12 @@ import {
   CreditCard,
   MessageSquare,
   FolderOpen,
-  ArrowUpRight,
   Activity,
   User,
   MapPin,
   Mail,
   Phone,
   Filter,
-  Check,
   Sparkles,
   Camera,
   Trash2,
@@ -204,6 +201,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   // Modal & Details States
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  // Which summary tile's customer list is showing in the floating popup.
+  const [activeInsightPopup, setActiveInsightPopup] = useState<"Total" | "Active" | "PastDue" | "Ltv" | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -508,7 +507,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setIsAddModalOpen(false);
 
     if (logOperationalEvent) {
-      logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤");
+      logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤", { screen: "customers", customerId: newCust.id });
     }
     if (openPdf) void generateCustomerPdf(newCust);
   };
@@ -535,7 +534,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     setSelectedCustomer(null);
 
     if (logOperationalEvent) {
-      logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝");
+      logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝", { screen: "customers", customerId: updated.id });
     }
     if (openPdf) void generateCustomerPdf(updated);
   };
@@ -603,45 +602,19 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     return { total, active, pastDue, totalLtv };
   }, [customers]);
 
-  // Insights filter arrays
-  const recentlyAdded = useMemo(() => {
-    return customers.filter((c) => c.recentlyAdded);
-  }, [customers]);
-
-  const highestLtv = useMemo(() => {
-    return [...customers].sort((a, b) => b.lifetimeValue - a.lifetimeValue).slice(0, 2);
-  }, [customers]);
-
-  const upcomingJobs = useMemo(() => {
-    return customers.filter((c) => c.upcomingJobDate);
-  }, [customers]);
-
-  const requiresFollowUp = useMemo(() => {
-    return customers.filter((c) => c.requireFollowUp);
-  }, [customers]);
-
-  // Real customer flags instead of a fabricated activity log -- there's
-  // no real per-customer event-history collection to derive individual
-  // "invoice paid"/"review received" timestamped events from, so this
-  // surfaces real, currently-true facts about real customers instead.
-  const activities = useMemo(() => {
-    const items: Array<{ id: string; type: string; desc: string; time: string; customer: string }> = [];
-    customers.forEach((c) => {
-      if (c.recentlyAdded) {
-        items.push({ id: `${c.id}_new`, type: "New Customer", desc: `${c.contact} (${c.company}) added to your customer list`, time: "New", customer: c.contact });
-      }
-      if (c.requireFollowUp) {
-        items.push({ id: `${c.id}_followup`, type: "Follow-Up Needed", desc: `${c.contact} (${c.company}) is flagged for follow-up`, time: "Open", customer: c.contact });
-      }
-      if (c.upcomingJobDate) {
-        items.push({ id: `${c.id}_job`, type: "Upcoming Job", desc: `${c.contact} (${c.company}) has a job scheduled ${c.upcomingJobDate}`, time: c.upcomingJobDate, customer: c.contact });
-      }
-      if (c.status === "Past Due") {
-        items.push({ id: `${c.id}_pastdue`, type: "Past Due", desc: `${c.contact} (${c.company}) has an outstanding balance of $${c.outstandingBalance.toLocaleString()}`, time: "Past Due", customer: c.contact });
-      }
-    });
-    return items.slice(0, 6);
-  }, [customers]);
+  // Which customers to list in the floating popup for each clickable
+  // summary tile. Lifetime Value has no single matching status, so its
+  // popup shows everyone ranked by LTV -- the customers that make up the
+  // total shown on that tile.
+  const insightPopupData = useMemo(() => {
+    const configs: Record<NonNullable<typeof activeInsightPopup>, { title: string; customers: Customer[] }> = {
+      Total: { title: "All Customers", customers },
+      Active: { title: "Active Customers", customers: customers.filter((c) => c.status === "Active") },
+      PastDue: { title: "Past Due Customers", customers: customers.filter((c) => c.status === "Past Due") },
+      Ltv: { title: "Customers by Lifetime Value", customers: [...customers].sort((a, b) => b.lifetimeValue - a.lifetimeValue) }
+    };
+    return activeInsightPopup ? configs[activeInsightPopup] : null;
+  }, [customers, activeInsightPopup]);
 
   return (
     <div className="space-y-6 animate-fade-in text-left">
@@ -763,10 +736,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         </div>
       </div>
 
-      {/* 2. SUMMARY CARDS */}
+      {/* 2. SUMMARY CARDS -- each opens a popup listing the customers it counts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* CARD 1 */}
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => setActiveInsightPopup("Total")}
+          className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5 cursor-pointer transition-colors text-left"
+        >
           <div className="w-10 h-10 rounded-xl bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF] flex items-center justify-center">
             <Users className="w-5 h-5" />
           </div>
@@ -778,10 +755,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               {metrics.total}
             </p>
           </div>
-        </div>
+        </button>
 
         {/* CARD 2 */}
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => setActiveInsightPopup("Active")}
+          className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5 cursor-pointer transition-colors text-left"
+        >
           <div className="w-10 h-10 rounded-xl bg-[#EAF5FF] text-emerald-600 border border-[#9EC8EF] flex items-center justify-center">
             <CheckCircle className="w-5 h-5" />
           </div>
@@ -793,10 +774,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               {metrics.active}
             </p>
           </div>
-        </div>
+        </button>
 
         {/* CARD 3 */}
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => setActiveInsightPopup("PastDue")}
+          className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5 cursor-pointer transition-colors text-left"
+        >
           <div className="w-10 h-10 rounded-xl bg-[#EAF5FF] text-rose-600 border border-[#9EC8EF] flex items-center justify-center">
             <AlertTriangle className="w-5 h-5" />
           </div>
@@ -808,10 +793,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               {metrics.pastDue}
             </p>
           </div>
-        </div>
+        </button>
 
         {/* CARD 4 */}
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => setActiveInsightPopup("Ltv")}
+          className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex items-center gap-3.5 cursor-pointer transition-colors text-left"
+        >
           <div className="w-10 h-10 rounded-xl bg-[#EAF5FF] text-[#1F3557] border border-[#9EC8EF] flex items-center justify-center">
             <DollarSign className="w-5 h-5" />
           </div>
@@ -823,52 +812,13 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               ${metrics.totalLtv.toLocaleString()}
             </p>
           </div>
-        </div>
+        </button>
       </div>
 
-      {/* Grid containing FILTERS + TABLE */}
+      {/* Grid containing QUICK ACTIONS + TABLE */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* FILTERS PANEL */}
-        <div className="space-y-4 lg:col-span-1">
-          <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm">
-            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-[#9EC8EF]/40 pb-2">
-              <Filter className="w-3.5 h-3.5 text-[#1F3557]" />
-              Database Filters
-            </h3>
-            
-            <div className="flex flex-col gap-1.5">
-              {(
-                [
-                  "All",
-                  "Residential",
-                  "Commercial",
-                  "Active",
-                  "Inactive",
-                  "Past Due",
-                  "VIP",
-                  "Recently Added"
-                ] as const
-              ).map((filter) => {
-                const isActive = activeFilter === filter;
-                return (
-                  <button
-                    key={filter}
-                    onClick={() => setActiveFilter(filter)}
-                    className={`px-3 py-2.5 rounded-xl border font-bold text-xs uppercase tracking-wider text-left transition-all cursor-pointer flex items-center justify-between ${
-                      isActive
-                        ? "bg-[#EAF5FF] border-[#9EC8EF] text-[#1F3557]"
-                        : "bg-transparent border-transparent text-[#5E7393] hover:bg-[#EAF5FF]/40 hover:text-[#1F3557]"
-                    }`}
-                  >
-                    <span>{filter}</span>
-                    {isActive && <Check className="w-3.5 h-3.5 text-[#1F3557]" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
+        <div className="space-y-4 lg:col-span-1">
           {/* QUICK ACTIONS CARD */}
           <div className="bg-[#C7E3FA] rounded-2xl p-4.5 border border-[#9EC8EF] shadow-sm">
             <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-[#9EC8EF]/40 pb-2">
@@ -946,6 +896,35 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
         {/* CUSTOMER TABLE */}
         <div className="lg:col-span-3 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm flex flex-col justify-between overflow-hidden">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
+              Customer List
+            </h3>
+            <div className="relative">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5E7393] pointer-events-none" />
+              <select
+                value={activeFilter}
+                onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)}
+                className="pl-8 pr-3 py-2 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] uppercase tracking-wider focus:outline-none focus:border-[#4A86F7] cursor-pointer appearance-none"
+              >
+                {(
+                  [
+                    "All",
+                    "Residential",
+                    "Commercial",
+                    "Active",
+                    "Inactive",
+                    "Past Due",
+                    "VIP",
+                    "Recently Added"
+                  ] as const
+                ).map((filter) => (
+                  <option key={filter} value={filter}>{filter}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -1029,162 +1008,72 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         
       </div>
 
-      {/* 3. CUSTOMER INSIGHTS */}
-      <div className="space-y-3.5">
-        <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5" />
-          Customer Insights & Actionable Analytics
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* INSIGHT 1: Recently Added */}
+      {/* Summary tile popup -- lists the customers behind whichever tile was clicked */}
+      {insightPopupData && (
+        <div
+          className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          onClick={() => setActiveInsightPopup(null)}
+        >
           <div
-            onClick={() => onOpenPlaceholder("estimates")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
+            className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div>
-              <div className="flex justify-between items-start">
-                <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Recently Added
-                </span>
-                <Clock className="w-4 h-4 text-[#1F3557]" />
-              </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">New Sign-ups (This Week)</p>
-              <div className="mt-1 space-y-0.5">
-                {recentlyAdded.map((c) => (
-                  <p key={c.id} className="text-[10px] text-[#5E7393] font-medium truncate">
-                    • {c.company || c.contact}
-                  </p>
-                ))}
-              </div>
+            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between shrink-0">
+              <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">
+                {insightPopupData.title} ({insightPopupData.customers.length})
+              </h3>
+              <button
+                onClick={() => setActiveInsightPopup(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              View details <ArrowUpRight className="w-3 h-3" />
-            </p>
-          </div>
 
-          {/* INSIGHT 2: Highest LTV */}
-          <div
-            onClick={() => onOpenPlaceholder("estimates")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
-            <div>
-              <div className="flex justify-between items-start">
-                <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Highest Value
-                </span>
-                <DollarSign className="w-4 h-4 text-[#1F3557]" />
-              </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">VIP Accounts (Top LTV)</p>
-              <div className="mt-1 space-y-0.5">
-                {highestLtv.map((c) => (
-                  <p key={c.id} className="text-[10px] text-[#5E7393] font-medium truncate">
-                    • {c.company} (${c.lifetimeValue.toLocaleString()})
-                  </p>
-                ))}
-              </div>
+            <div className="overflow-y-auto p-4 space-y-2">
+              {insightPopupData.customers.length === 0 ? (
+                <p className="text-xs text-[#5E7393] font-medium py-8 text-center">No customers in this group yet.</p>
+              ) : (
+                insightPopupData.customers.map((cust) => (
+                  <button
+                    key={cust.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveInsightPopup(null);
+                      setSelectedCustomer(cust);
+                    }}
+                    className="w-full text-left bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl px-4 py-3 flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#1F3557] flex items-center gap-1.5 truncate">
+                        {cust.company || cust.contact}
+                        {cust.isVIP && (
+                          <span className="px-1 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-extrabold uppercase rounded shrink-0">VIP</span>
+                        )}
+                      </p>
+                      <p className="text-[10.5px] text-[#5E7393] font-medium truncate">{cust.contact} · {cust.phone}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold font-mono text-[#1F3557]">${cust.lifetimeValue.toLocaleString()}</p>
+                      <span
+                        className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase ${
+                          cust.status === "Active"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : cust.status === "Past Due"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {cust.status}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              Review accounts <ArrowUpRight className="w-3 h-3" />
-            </p>
           </div>
-
-          {/* INSIGHT 3: Upcoming Jobs */}
-          <div
-            onClick={() => {
-              if (onNavigateToScreen) {
-                onNavigateToScreen("scheduling");
-              } else {
-                onOpenPlaceholder("scheduling", "📅");
-              }
-            }}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
-            <div>
-              <div className="flex justify-between items-start">
-                <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Upcoming Jobs
-                </span>
-                <Calendar className="w-4 h-4 text-[#1F3557]" />
-              </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Scheduled Maintenance</p>
-              <div className="mt-1 space-y-0.5">
-                {upcomingJobs.slice(0, 2).map((c) => (
-                  <p key={c.id} className="text-[10px] text-[#5E7393] font-medium truncate">
-                    • {c.company || c.contact} ({c.upcomingJobDate})
-                  </p>
-                ))}
-              </div>
-            </div>
-            <p className="text-[10px] font-bold text-[#1F3557] hover:underline inline-flex items-center gap-1 mt-2">
-              View calendar <ArrowUpRight className="w-3 h-3" />
-            </p>
-          </div>
-
-          {/* INSIGHT 4: Requiring Follow-up */}
-          <div
-            onClick={() => onOpenPlaceholder("estimates")}
-            className="bg-[#C7E3FA] hover:bg-[#BDDDF8] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm cursor-pointer transition-all flex flex-col justify-between h-40 text-left"
-          >
-            <div>
-              <div className="flex justify-between items-start">
-                <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-rose-600 px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Follow-up Required
-                </span>
-                <AlertTriangle className="w-4 h-4 text-rose-600" />
-              </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Outstanding Touchpoints</p>
-              <div className="mt-1 space-y-0.5">
-                {requiresFollowUp.slice(0, 2).map((c) => (
-                  <p key={c.id} className="text-[10px] text-[#5E7393] font-medium truncate">
-                    • {c.company} (Balance Due)
-                  </p>
-                ))}
-              </div>
-            </div>
-            <p className="text-[10px] font-bold text-rose-600 hover:underline inline-flex items-center gap-1 mt-2">
-              Initiate follow-up <ArrowUpRight className="w-3 h-3" />
-            </p>
-          </div>
-
         </div>
-      </div>
-
-      {/* 4. CUSTOMER ACTIVITY FEED */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
-          Customer Activity Feed
-        </h3>
-        
-        <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm divide-y divide-[#9EC8EF]/40">
-          {activities.length === 0 ? (
-            <p className="text-xs text-[#5E7393] font-medium py-3 text-center">Nothing needs attention right now.</p>
-          ) : activities.map((act) => (
-            <div
-              key={act.id}
-              onClick={() => onOpenPlaceholder("estimates")}
-              className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-4 cursor-pointer hover:bg-[#BDDDF8]/40 px-2 rounded-xl transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-base select-none">
-                  {act.type === "New Customer" ? "🆕" :
-                   act.type === "Past Due" ? "💳" :
-                   act.type === "Upcoming Job" ? "💼" :
-                   act.type === "Follow-Up Needed" ? "📅" : "📌"}
-                </span>
-                <div>
-                  <p className="text-xs font-bold text-[#1F3557]">{act.desc}</p>
-                  <p className="text-[10px] text-[#5E7393] font-medium mt-0.5">
-                    Account: {act.customer}
-                  </p>
-                </div>
-              </div>
-              <span className="text-[10.5px] font-mono text-[#5E7393]">{act.time}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Add Customer Modal */}
       {isAddModalOpen && (

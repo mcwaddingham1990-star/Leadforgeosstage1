@@ -3,7 +3,7 @@
 // sample document). Used by every "Generate PDF" / "Compile Documents"
 // button across Estimates, Accounting (Invoices), Customers, and Documents.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib";
-import type { Estimate, Customer, DocumentItem } from "../types/domain";
+import type { Estimate, Customer, DocumentItem, Lead } from "../types/domain";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
 
 export interface BusinessProfile {
@@ -210,9 +210,45 @@ export async function buildEstimatePdf(estimate: Estimate, customer: Customer | 
   writer.heading("Estimated total");
   writer.text(money(estimate.amount), { size: 16, font: bold, color: NAVY, gap: 10 });
 
+  if (estimate.projectSpecifics) {
+    writer.heading("Project specifics");
+    writer.text(estimate.projectSpecifics, { gap: 4 });
+  }
+
   if (estimate.notes) {
     writer.heading("Scope of work / notes");
     writer.text(estimate.notes, { gap: 4 });
+  }
+
+  return doc.save();
+}
+
+export async function buildLeadPdf(lead: Lead, business: BusinessProfile): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const writer = new PdfWriter(doc, font, bold, doc.addPage([PAGE_W, PAGE_H]));
+  await drawLetterhead(writer, business, "LEAD SUMMARY", lead.id);
+
+  writer.heading("Contact");
+  writer.text(lead.name, { font: bold, gap: 1 });
+  if (lead.company) writer.text(lead.company, { gap: 1 });
+  if (lead.phone) writer.text(lead.phone, { gap: 1 });
+  if (lead.email) writer.text(lead.email, { gap: 1 });
+  if (lead.address) writer.text(lead.address, { gap: 1 });
+  writer.spacer(10);
+
+  writer.heading("Details");
+  writer.text(`Source: ${lead.source}`, { gap: 1 });
+  writer.text(`Status: ${lead.status}`, { gap: 1 });
+  writer.text(`Sales rep: ${lead.salesRep || "—"}`, { gap: 1 });
+  writer.text(`Estimated value: ${money(lead.estimatedValue)}`, { gap: 1 });
+  writer.text(`Date added: ${lead.dateAdded}`, { gap: 8 });
+  writer.rule();
+
+  if (lead.notes) {
+    writer.heading("Notes");
+    writer.text(lead.notes, { gap: 4 });
   }
 
   return doc.save();

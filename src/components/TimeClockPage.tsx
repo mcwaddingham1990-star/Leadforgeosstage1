@@ -186,11 +186,15 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     return Promise.race([geolocationAttempt, hardTimeout]);
   };
 
-  // Is current user allowed to edit records? (Owner, Manager, Office, Payroll)
-  const canEditAllRecords = useMemo(() => {
+  // Is current user allowed to edit records, and see the whole team's data
+  // at all? (Owner, Manager, Office, Payroll). Everyone else -- Technicians,
+  // Drivers, Laborers, etc. -- only ever sees their own time clock data.
+  const isManagementRole = useMemo(() => {
     const rolesWithPermission = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Payroll", "Accountant / Bookkeeper", "Accountant"];
     return rolesWithPermission.includes(activeRole);
   }, [activeRole]);
+  const canEditAllRecords = isManagementRole;
+  const canViewAllRecords = isManagementRole;
 
   // List of active jobs for dropdowns
   const activeJobs = useMemo(() => {
@@ -357,10 +361,13 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     });
   }, [employees, searchQuery, activeSummaryFilter, filterDepartment, filterStatus, filterJob]);
 
-  // Selected Employee object
+  // Selected Employee object -- non-management roles always resolve to
+  // themselves, regardless of what selectedEmpId holds.
   const selectedEmployee = useMemo(() => {
-    return employees.find(e => e.id === selectedEmpId) || employees.find(e => e.id === loggedInUser?.email) || employees[0];
-  }, [employees, selectedEmpId, loggedInUser]);
+    const ownRecord = employees.find(e => e.id === loggedInUser?.email);
+    if (!canViewAllRecords) return ownRecord || employees[0];
+    return employees.find(e => e.id === selectedEmpId) || ownRecord || employees[0];
+  }, [employees, selectedEmpId, loggedInUser, canViewAllRecords]);
 
   // Top Summary Metric Cards calculations
   const summaryMetrics = useMemo(() => {
@@ -710,10 +717,14 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             <span className="p-1.5 bg-[#E3F3FF] text-[#4A9BFF] rounded-xl border border-[#A9CDEE]">
               <Clock className="w-5 h-5" />
             </span>
-            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Corporate Time Clock Dashboard</h2>
+            <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
+              {canViewAllRecords ? "Corporate Time Clock Dashboard" : "My Time Clock"}
+            </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-sans font-semibold">
-            Track shifts and breaks, then send approved hours to payroll.
+            {canViewAllRecords
+              ? "Track shifts and breaks, then send approved hours to payroll."
+              : "Clock in, take breaks, and see your own hours and pay estimate."}
           </p>
         </div>
         
@@ -778,19 +789,21 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
               Break End
             </button>
 
-            <button
-              onClick={() => {
-                setShowFiltersPanel(!showFiltersPanel);
-              }}
-              className={`px-4 py-2.5 border rounded-xl text-xs uppercase font-extrabold tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
-                showFiltersPanel || filterDepartment !== "All" || filterStatus !== "All" || filterJob !== "All"
-                  ? "bg-[#315C9F] text-white border-[#315C9F]"
-                  : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              Filters
-            </button>
+            {canViewAllRecords && (
+              <button
+                onClick={() => {
+                  setShowFiltersPanel(!showFiltersPanel);
+                }}
+                className={`px-4 py-2.5 border rounded-xl text-xs uppercase font-extrabold tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  showFiltersPanel || filterDepartment !== "All" || filterStatus !== "All" || filterJob !== "All"
+                    ? "bg-[#315C9F] text-white border-[#315C9F]"
+                    : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                Filters
+              </button>
+            )}
 
             <button
               onClick={() => {
@@ -806,22 +819,24 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             </button>
           </div>
 
-          {/* Quick Search Box */}
-          <div className="relative w-full lg:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search employee name/title..."
-              className="w-full text-xs bg-white border border-slate-200 rounded-xl pl-9.5 pr-4 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
-            />
-          </div>
+          {/* Quick Search Box -- only meaningful when viewing the whole team */}
+          {canViewAllRecords && (
+            <div className="relative w-full lg:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search employee name/title..."
+                className="w-full text-xs bg-white border border-slate-200 rounded-xl pl-9.5 pr-4 py-2.5 focus:outline-none focus:border-[#4A9BFF] font-medium text-slate-700"
+              />
+            </div>
+          )}
 
         </div>
 
         {/* ADVANCED FILTER PANEL */}
-        {showFiltersPanel && (
+        {canViewAllRecords && showFiltersPanel && (
           <div className="bg-white border border-slate-200 p-4 rounded-xl mt-3 grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
             <div className="space-y-1">
               <label className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Role</label>
@@ -872,86 +887,91 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
         )}
       </div>
 
-      {/* SUMMARY STATS METRIC CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3.5">
-        {[
-          { key: "ClockedIn", label: "Clocked In", value: summaryMetrics.clockedIn, sub: "Active shift", color: "text-[#315C9F] border-blue-200 bg-blue-50/50" },
-          { key: "Working", label: "Working", value: summaryMetrics.working, sub: "Field & dispatch", color: "text-emerald-700 border-emerald-200 bg-emerald-50/40" },
-          { key: "OnBreak", label: "On Break", value: summaryMetrics.onBreak, sub: "Rest periods", color: "text-amber-700 border-amber-200 bg-amber-50/40" },
-          { key: "TotalHours", label: "Labor Hours Today", value: `${summaryMetrics.totalHoursToday} hrs`, sub: "Accrued shift total", color: "text-slate-800 border-slate-200 bg-slate-50/50" },
-          { key: "Payroll", label: "Payroll Projected", value: `$${summaryMetrics.totalPayroll.toLocaleString()}`, sub: "This period gross", color: "text-purple-700 border-purple-200 bg-purple-50/40" },
-          { key: "Overtime", label: "Overtime Hours", value: `${summaryMetrics.overtimeHours} hrs`, sub: "1.5x Premium rate", color: "text-rose-700 border-rose-200 bg-rose-50/40" }
-        ].map((card) => {
-          const isSelected = activeSummaryFilter === card.key;
-          return (
-            <div
-              key={card.key}
-              onClick={() => {
-                if (card.key === "TotalHours" || card.key === "Payroll") return; // static metrics
-                setActiveSummaryFilter(prev => prev === card.key ? "All" : card.key);
-              }}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-left space-y-1 hover:scale-[1.02] shadow-xs ${card.color} ${
-                isSelected ? "ring-2 ring-blue-500 ring-offset-2 scale-[1.02]" : ""
-              }`}
-            >
-              <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 font-sans leading-none">{card.label}</p>
-              <p className="text-lg font-black font-mono tracking-tight leading-none mt-1">{card.value}</p>
-              <p className="text-[9.5px] font-sans font-bold text-slate-500 leading-none">{card.sub}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* TEAM STATUS ROW (LIVE INDICATORS) */}
-      <div className="bg-[#E3F3FF] p-4 rounded-2xl border border-[#A9CDEE]">
-        <h4 className="text-[10px] font-black uppercase tracking-widest text-[#342D7E] mb-3 flex items-center gap-1.5">
-          <Activity className="w-3.5 h-3.5 text-[#4A9BFF] animate-pulse" /> Live Operational Team Status
-        </h4>
-        <div className="flex flex-wrap gap-2.5">
-          {employees.map((emp) => {
-            const statusColors: Record<string, string> = {
-              "Off Duty": "bg-slate-100 text-slate-600 border-slate-200",
-              "Clocked In": "bg-blue-100 text-[#315C9F] border-[#9EC8EF]",
-              "On Break": "bg-amber-100 text-amber-700 border-amber-200",
-              "Traveling": "bg-teal-50 text-teal-700 border-teal-200 animate-pulse",
-              "Working": "bg-emerald-100 text-emerald-800 border-emerald-200",
-              "Overtime": "bg-rose-100 text-rose-700 border-rose-200",
-              "Clocked Out": "bg-slate-100 text-slate-400 border-slate-200"
-            };
-
+      {/* SUMMARY STATS METRIC CARDS -- company-wide, management only */}
+      {canViewAllRecords && (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3.5">
+          {[
+            { key: "ClockedIn", label: "Clocked In", value: summaryMetrics.clockedIn, sub: "Active shift", color: "text-[#315C9F] border-blue-200 bg-blue-50/50" },
+            { key: "Working", label: "Working", value: summaryMetrics.working, sub: "Field & dispatch", color: "text-emerald-700 border-emerald-200 bg-emerald-50/40" },
+            { key: "OnBreak", label: "On Break", value: summaryMetrics.onBreak, sub: "Rest periods", color: "text-amber-700 border-amber-200 bg-amber-50/40" },
+            { key: "TotalHours", label: "Labor Hours Today", value: `${summaryMetrics.totalHoursToday} hrs`, sub: "Accrued shift total", color: "text-slate-800 border-slate-200 bg-slate-50/50" },
+            { key: "Payroll", label: "Payroll Projected", value: `$${summaryMetrics.totalPayroll.toLocaleString()}`, sub: "This period gross", color: "text-purple-700 border-purple-200 bg-purple-50/40" },
+            { key: "Overtime", label: "Overtime Hours", value: `${summaryMetrics.overtimeHours} hrs`, sub: "1.5x Premium rate", color: "text-rose-700 border-rose-200 bg-rose-50/40" }
+          ].map((card) => {
+            const isSelected = activeSummaryFilter === card.key;
             return (
               <div
-                key={emp.id}
-                onClick={() => setSelectedEmpId(emp.id)}
-                className={`px-3 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all hover:translate-y-[-1px] shadow-xs bg-white ${
-                  selectedEmpId === emp.id ? "ring-2 ring-blue-400" : ""
+                key={card.key}
+                onClick={() => {
+                  if (card.key === "TotalHours" || card.key === "Payroll") return; // static metrics
+                  setActiveSummaryFilter(prev => prev === card.key ? "All" : card.key);
+                }}
+                className={`p-3.5 rounded-2xl border transition-all cursor-pointer text-left space-y-1 hover:scale-[1.02] shadow-xs ${card.color} ${
+                  isSelected ? "ring-2 ring-blue-500 ring-offset-2 scale-[1.02]" : ""
                 }`}
               >
-                <div className="w-2.5 h-2.5 rounded-full bg-slate-300 relative">
-                  <span className={`absolute inset-0 rounded-full ${
-                    emp.status === "Off Duty" ? "bg-slate-400" :
-                    emp.status === "On Break" ? "bg-amber-500" :
-                    emp.status === "Traveling" ? "bg-teal-500 animate-ping" :
-                    emp.status === "Working" ? "bg-emerald-500" :
-                    emp.status === "Overtime" ? "bg-rose-500 animate-pulse" : "bg-blue-500"
-                  }`} />
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-black text-slate-800 font-sans leading-tight">{emp.name}</p>
-                  <p className={`text-[9px] font-bold tracking-wider uppercase ${statusColors[emp.status] || "text-slate-500"}`}>
-                    {emp.status}
-                  </p>
-                </div>
+                <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 font-sans leading-none">{card.label}</p>
+                <p className="text-lg font-black font-mono tracking-tight leading-none mt-1">{card.value}</p>
+                <p className="text-[9.5px] font-sans font-bold text-slate-500 leading-none">{card.sub}</p>
               </div>
             );
           })}
         </div>
-      </div>
+      )}
+
+      {/* TEAM STATUS ROW (LIVE INDICATORS) -- other employees, management only */}
+      {canViewAllRecords && (
+        <div className="bg-[#E3F3FF] p-4 rounded-2xl border border-[#A9CDEE]">
+          <h4 className="text-[10px] font-black uppercase tracking-widest text-[#342D7E] mb-3 flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-[#4A9BFF] animate-pulse" /> Live Operational Team Status
+          </h4>
+          <div className="flex flex-wrap gap-2.5">
+            {employees.map((emp) => {
+              const statusColors: Record<string, string> = {
+                "Off Duty": "bg-slate-100 text-slate-600 border-slate-200",
+                "Clocked In": "bg-blue-100 text-[#315C9F] border-[#9EC8EF]",
+                "On Break": "bg-amber-100 text-amber-700 border-amber-200",
+                "Traveling": "bg-teal-50 text-teal-700 border-teal-200 animate-pulse",
+                "Working": "bg-emerald-100 text-emerald-800 border-emerald-200",
+                "Overtime": "bg-rose-100 text-rose-700 border-rose-200",
+                "Clocked Out": "bg-slate-100 text-slate-400 border-slate-200"
+              };
+
+              return (
+                <div
+                  key={emp.id}
+                  onClick={() => setSelectedEmpId(emp.id)}
+                  className={`px-3 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all hover:translate-y-[-1px] shadow-xs bg-white ${
+                    selectedEmpId === emp.id ? "ring-2 ring-blue-400" : ""
+                  }`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-slate-300 relative">
+                    <span className={`absolute inset-0 rounded-full ${
+                      emp.status === "Off Duty" ? "bg-slate-400" :
+                      emp.status === "On Break" ? "bg-amber-500" :
+                      emp.status === "Traveling" ? "bg-teal-500 animate-ping" :
+                      emp.status === "Working" ? "bg-emerald-500" :
+                      emp.status === "Overtime" ? "bg-rose-500 animate-pulse" : "bg-blue-500"
+                    }`} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black text-slate-800 font-sans leading-tight">{emp.name}</p>
+                    <p className={`text-[9px] font-bold tracking-wider uppercase ${statusColors[emp.status] || "text-slate-500"}`}>
+                      {emp.status}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* CORE TWO-COLUMN GRID (EMPLOYEE LIST VS SELECTED DETAILS) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
-        
-        {/* EMPLOYEE LIST TABLE (7 cols) */}
+
+        {/* EMPLOYEE LIST TABLE (7 cols) -- other employees, management only */}
+        {canViewAllRecords && (
         <div className="xl:col-span-7 bg-white rounded-2xl border border-[#A9CDEE] overflow-hidden shadow-sm">
           <div className="bg-[#E3F3FF]/50 px-4 py-3.5 border-b border-[#A9CDEE] flex items-center justify-between">
             <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider font-sans">
@@ -1042,9 +1062,10 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
             </table>
           </div>
         </div>
+        )}
 
-        {/* EMPLOYEE DETAILS PANEL (5 cols) */}
-        <div className="xl:col-span-5 bg-white rounded-2xl border border-[#A9CDEE] shadow-sm overflow-hidden flex flex-col">
+        {/* EMPLOYEE DETAILS PANEL (5 cols, or full width when the roster list is hidden) */}
+        <div className={`${canViewAllRecords ? "xl:col-span-5" : "xl:col-span-12"} bg-white rounded-2xl border border-[#A9CDEE] shadow-sm overflow-hidden flex flex-col`}>
           <div className="bg-[#E3F3FF]/50 px-4 py-3.5 border-b border-[#A9CDEE] flex items-center justify-between">
             <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider font-sans">
               Employee Ledger Details
@@ -1292,7 +1313,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
       </div>
 
-      {/* PAYROLL REPORT ARCHIVE GRID & HISTORY */}
+      {/* PAYROLL REPORT ARCHIVE GRID & HISTORY -- company-wide totals, management only */}
+      {canViewAllRecords && (
       <div className="bg-white rounded-2xl border border-[#A9CDEE] p-5 space-y-4">
         <div>
           <h4 className="text-xs font-black uppercase text-[#342D7E] tracking-wider font-sans">
@@ -1348,6 +1370,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           </button>
         </div>
       </div>
+      )}
 
       {/* CLOCK IN MODAL */}
       {showClockInModal && (

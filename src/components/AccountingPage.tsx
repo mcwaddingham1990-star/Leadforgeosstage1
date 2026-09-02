@@ -421,7 +421,7 @@ function DashboardTab({
 }) {
   const cards = [
     { label: "Current Balance", val: cashBalance, icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-    { label: "Invoices Paid", val: invoicesPaid, icon: CreditCard, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { label: "Payments Collected", val: invoicesPaid, icon: CreditCard, color: "text-emerald-600", bg: "bg-emerald-500/10" },
     { label: "Unpaid Invoices", val: arBalance, icon: FileText, color: "text-blue-600", bg: "bg-blue-500/10", sub: `${openInvoiceCount} open invoice${openInvoiceCount === 1 ? "" : "s"}` },
     { label: "Expenses Paid", val: expensesPaid, icon: Receipt, color: "text-rose-600", bg: "bg-rose-500/10" },
     { label: "Outstanding Expenses", val: apBalance, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-500/10", sub: `${openBillCount} open bill${openBillCount === 1 ? "" : "s"}` }
@@ -1372,6 +1372,7 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
   };
 
   const comingSoon = [
+    "Reconcile Bank",
     "Automatic Bank Sync",
     "Credit Card Sync",
     "Automatic Transaction Import",

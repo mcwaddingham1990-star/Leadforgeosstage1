@@ -71,6 +71,10 @@ export interface Estimate {
   notes?: string;
   address?: string;
   phone?: string;
+  /** Free-text description of the actual work to be done -- separate from
+   * the general scope-of-work `notes`, and specifically what gets pulled
+   * into the generated PDF as the job-specifics section. */
+  projectSpecifics?: string;
 }
 
 export interface InventoryItem {
@@ -257,8 +261,10 @@ export interface AppNotification {
   description: string;
   time: string;
   isRead: boolean;
+  icon?: string;
   screenId?: string;
   relatedLogId?: string;
+  relatedCustomerId?: string;
   actionable?: boolean;
   actionedAt?: string;
   createdAt: string;

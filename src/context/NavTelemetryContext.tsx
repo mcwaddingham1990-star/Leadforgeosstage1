@@ -17,8 +17,16 @@ export interface NavTelemetryContextValue {
    * "many roads lead to the same record" behaves identically everywhere,
    * instead of each page redefining its own copy of this logic.
    */
-  navigateToScreen: (screenId: string, params?: { customerId?: string; date?: string; section?: string; estimateId?: string }) => void;
-  logOperationalEvent: (type: string, desc: string, icon?: string) => void;
+  navigateToScreen: (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => void;
+  /**
+   * `target` lets the caller say where the notification this creates should
+   * take you when clicked. Defaults to the screen the event's own type maps
+   * to (e.g. "Estimate Created" -> the Estimates screen) with no specific
+   * record selected -- pass `customerId` when the event is about one real
+   * customer so Notifications can deep-link straight to them, same as any
+   * other navigateToScreen call.
+   */
+  logOperationalEvent: (type: string, desc: string, icon?: string, target?: { screen?: string; customerId?: string }) => void;
   takeSnapshot: (pageId: string, pageName: string, metaData?: any) => void;
   deleteSnapshot: (id: string) => void;
   openPageAIAnalysis: (pageId: string, pageName: string, customContext?: string) => void;
