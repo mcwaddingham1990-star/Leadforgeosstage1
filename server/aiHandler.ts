@@ -158,6 +158,12 @@ const RECEIPT_SCHEMA = {
  * hardcoded fixtures. Every field is nullable: the model is instructed to
  * leave a field null rather than guess/fabricate a value it can't actually
  * read from the image.
+ *
+ * Also handles a photo of the physical stock itself (a pile of lumber, a
+ * stack of cardboard boxes, a shelf of supplies) with no text/label visible
+ * at all -- there `items` holds a visual best-effort count per distinct item
+ * type instead of an OCR read, and sku/barcode/unitCost/manufacturer stay
+ * null since nothing legible backs them.
  */
 export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanReceiptResponse> {
   const ai = getClient();
@@ -170,12 +176,10 @@ export async function handleScanReceipt(req: ScanReceiptRequest): Promise<ScanRe
           { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
           {
             text: [
-              "This image is a photo of an inventory receipt, packing slip, or product label/barcode for a local service business (plumbing/HVAC/electrical supplies).",
-              "If this is a receipt or packing slip with multiple distinct line items, extract EACH one as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer). If it's a single product label/barcode, return exactly one entry in `items`.",
-              "Extract only what you can actually read in the image. Do not guess or fabricate values.",
-              "If this is a receipt, also read its printed total amount (including tax) into `total` -- this is the number actually printed at the bottom of the receipt, separate from any per-item price. Do not compute it yourself by summing items.",
-              "Also extract the vendor/store name and the purchase date if visible.",
-              "If a field isn't visible or legible, set it to null. Set unreadable=true only if the image doesn't contain a legible receipt/label at all."
+              "This image is either (a) a photo of an inventory receipt, packing slip, or product label/barcode for a local service business (plumbing/HVAC/electrical supplies), or (b) a direct photo of physical stock/materials themselves -- e.g. a pile of lumber, a stack of cardboard boxes, a shelf of supplies -- with no text or label legible at all.",
+              "Case (a): extract EACH distinct line item as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer). If it's a single product label/barcode, return exactly one entry. Extract only what you can actually read -- do not guess or fabricate sku/barcode/cost values. Also read the receipt's printed total (including tax) into `total` (the number actually printed, not computed by summing items), and the vendor/store name and purchase date if visible.",
+              "Case (b): there is no receipt/label to read, so instead visually identify each distinct type of item shown and give your best-effort count as its own entry in `items` (e.g. five cardboard boxes -> one entry, name \"Cardboard boxes\", quantity 5, unit \"boxes\"). Count discrete items when you can; for a non-discrete pile or stack, still give your best visual estimate of quantity with a fitting unit (e.g. \"pieces\", \"bundle\", \"boards\") rather than leaving quantity null -- only leave quantity null if a reasonable estimate truly isn't possible. Leave sku, barcode, unitCost, and manufacturer null (nothing legible backs them), and leave `vendor`, `purchaseDate`, and `total` null.",
+              "If a field isn't visible, legible, or (for case b) visually determinable, set it to null. Set unreadable=true only if the image contains neither a legible receipt/label nor any identifiable physical stock at all."
             ].join(" ")
           }
         ]
@@ -298,11 +302,14 @@ export async function handleScanBusinessRecord(req: ScanBusinessRecordRequest): 
     contents: [{ role: "user", parts: [
       { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
       { text: [
-        "Classify this completed paper form, bill, invoice, receipt, customer sheet, lead sheet, estimate, inventory record, address form, onboarding sheet, material or operational expense, payroll record, or other business financial record.",
-        "Use bill only for a service/provider obligation. Use material_expense for materials, equipment, fuel, tools, supplies, inventory purchases, and similar operational costs. Use payroll for wages, salaries, pay stubs, or payroll reports. Use financial only when none of those specific financial destinations applies.",
+        "Classify this image. It is either a completed paper form, bill, invoice, receipt, customer sheet, lead sheet, estimate, inventory record, address form, onboarding sheet, material or operational expense, payroll record, other business financial record -- OR a direct photo of physical stock/materials themselves (e.g. a pile of lumber, a stack of cardboard boxes, a shelf of supplies) with no text or form visible at all.",
+        "Use bill only for a service/provider obligation. Use material_expense for materials, equipment, fuel, tools, supplies, inventory purchases, and similar operational costs. Use payroll for wages, salaries, pay stubs, or payroll reports. Use financial only when none of those specific financial destinations applies. Use inventory both for a completed inventory record/form AND for a bare photo of physical stock with no text at all.",
         preferred ? `The user opened the scanner for ${preferred}; prefer that type only when the document supports it.` : "",
         "Extract only legible values. Never invent missing data. Use YYYY-MM-DD for dates. Put extracted values in the matching fields object and null for anything not visible.",
-        "If recordType is material_expense or inventory and this is a receipt or packing slip with multiple distinct purchased items, also extract each one as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer) and put the receipt's own printed total (including tax) into fields.totalCost -- read the total directly, don't compute it by summing items. Leave `items` empty for anything that isn't a multi-item receipt/packing slip.",
+        "If recordType is material_expense or inventory and this is a receipt or packing slip with multiple distinct purchased items, also extract each one as its own entry in `items` (name, sku, barcode, quantity, unit, unitCost, category, manufacturer) and put the receipt's own printed total (including tax) into fields.totalCost -- read the total directly, don't compute it by summing items.",
+        "If recordType is inventory and this is instead a bare photo of the physical stock/materials themselves (no receipt or label), visually identify each distinct type of item shown and give your best-effort count as its own entry in `items` (e.g. five cardboard boxes -> one entry, name \"Cardboard boxes\", quantity 5, unit \"boxes\"). Count discrete items when you can; for a non-discrete pile or stack, still give your best visual estimate of quantity with a fitting unit (e.g. \"pieces\", \"bundle\", \"boards\") rather than leaving quantity null. Leave sku, barcode, unitCost, and manufacturer null in that case, and leave fields.totalCost null too.",
+        "Leave `items` empty only when this is neither a multi-item receipt/packing slip nor a bare photo of physical stock.",
+        "Set unreadable=true only if the image contains neither a legible document/form nor any identifiable physical stock at all.",
         "This output will be shown to a human for correction before it can be saved."
       ].filter(Boolean).join(" ") }
     ] }],
