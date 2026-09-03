@@ -16,13 +16,11 @@ import {
   Edit3,
   Copy,
   Sparkles,
-  CheckCircle2,
   XCircle,
   Building,
   Phone,
   Mail,
   User,
-  Info,
   CalendarDays,
   ShieldAlert,
   ArrowRight
@@ -139,6 +137,11 @@ export const SchedulingPage: React.FC = () => {
   // New/Edit Event Form Fields
   const [formType, setFormType] = useState("Job");
   const [formCustomType, setFormCustomType] = useState("");
+  // The only other required field besides the date -- everything else
+  // (customer, employee, crew, location, etc.) is optional context you can
+  // fill in later. Doubles as the event's display label when no customer
+  // is attached.
+  const [formDescriptor, setFormDescriptor] = useState("");
   const [formDate, setFormDate] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -230,6 +233,7 @@ export const SchedulingPage: React.FC = () => {
   const resetForm = (dateStr?: string) => {
     setFormType("Job");
     setFormCustomType("");
+    setFormDescriptor("");
     setFormDate(dateStr || formatDateString(currentDate));
     setFormStartHour("09");
     setFormStartMin("00");
@@ -238,14 +242,16 @@ export const SchedulingPage: React.FC = () => {
     setFormEndMin("30");
     setFormEndAmPm("AM");
     setFormCustomerMode("search");
-    setSelectedCustomerId(selectableCustomers[0]?.id || "");
+    // Nothing pre-selected -- customer and employee are optional, so the
+    // form shouldn't open looking like they're already (or need to be) set.
+    setSelectedCustomerId("");
     setFormCustomName("");
     setFormCustomPhone("");
     setFormCustomEmail("");
     setFormCustomAddress("");
     setFormCustomCityState("");
     setFormCustomZip("");
-    setFormEmployee(EMPLOYEES[0] || "");
+    setFormEmployee("");
     setFormCrew("None");
     setFormLocation("");
     setFormPriority("Medium");
@@ -448,6 +454,12 @@ export const SchedulingPage: React.FC = () => {
       return;
     }
 
+    const descriptor = formDescriptor.trim();
+    if (!descriptor) {
+      triggerNotification("Please enter a description for this event.");
+      return;
+    }
+
     let customerName = formCustomName.trim();
     let customerPhone = formCustomPhone.trim();
     let customerEmail = formCustomEmail.trim();
@@ -463,13 +475,15 @@ export const SchedulingPage: React.FC = () => {
         customerAddress = match.address || "";
       }
     }
+    // No customer attached -- the descriptor doubles as the display label
+    // everywhere this event's .customer field is read.
+    if (!customerName) customerName = descriptor;
 
-    if (!customerName) {
-      triggerNotification("Please select or enter a customer name.");
-      return;
-    }
-
-    if (formCustomerMode === "custom") {
+    // Only create a customer record if a real contact name was actually
+    // typed -- not just because "Add Customer" mode was left selected while
+    // the field itself stayed empty (customerName would otherwise silently
+    // fall back to the descriptor text above).
+    if (formCustomerMode === "custom" && formCustomName.trim()) {
       resolvedCustomerId = `cust_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       setCustomers(prev => [{
         id: resolvedCustomerId, company: customerName, contact: customerName,
@@ -500,6 +514,7 @@ export const SchedulingPage: React.FC = () => {
         endTime: tEnd,
         customerId: resolvedCustomerId,
         customer: customerName,
+        title: descriptor,
         customerPhone,
         customerEmail,
         customerAddress,
@@ -525,6 +540,7 @@ export const SchedulingPage: React.FC = () => {
         endTime: tEnd,
         customerId: resolvedCustomerId,
         customer: customerName,
+        title: descriptor,
         customerPhone,
         customerEmail,
         customerAddress,
@@ -560,6 +576,7 @@ export const SchedulingPage: React.FC = () => {
     setSelectedEvent(evt);
     setFormType(evt.eventType);
     setFormCustomType(evt.customType || "");
+    setFormDescriptor(evt.title || evt.description || "");
     setFormDate(evt.date);
 
     const startFields = parse24hTime(evt.startTime);
@@ -754,6 +771,86 @@ export const SchedulingPage: React.FC = () => {
 
     setFormDate(formatDateString(currentDate));
     setIsNewEventOpen(true);
+  };
+
+  // This week's (Sun-Sat) jobs, split into two live-scrolling tickers --
+  // same rolling-ticker treatment as Money Tracker's upcoming jobs/bills.
+  // Still-upcoming jobs scroll on the left in green; once a job's date
+  // passes without it being marked Completed, it drops off the left and
+  // starts scrolling on the right in red instead.
+  const renderJobTickers = () => {
+    const todayStr = formatDateString(new Date());
+    const weekStart = new Date(currentDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const weekStartStr = formatDateString(weekStart);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = formatDateString(weekEnd);
+
+    const thisWeeksJobs = events.filter(evt =>
+      evt.date >= weekStartStr && evt.date <= weekEndStr && evt.status !== "Completed" && evt.status !== "Cancelled"
+    );
+    const upcoming = thisWeeksJobs
+      .filter(evt => evt.date >= todayStr)
+      .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date < b.date ? -1 : 1))
+      .map(evt => ({ id: evt.id, label: evt.title || evt.customer || "Job", sub: evt.date }));
+    const pastDue = thisWeeksJobs
+      .filter(evt => evt.date < todayStr)
+      .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date < b.date ? -1 : 1))
+      .map(evt => ({ id: evt.id, label: evt.title || evt.customer || "Job", sub: evt.date }));
+
+    const renderTicker = (items: Array<{ id: string; label: string; sub: string }>, emptyText: string, tone: "upcoming" | "pastDue") => (
+      <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-40 overflow-hidden relative">
+        {items.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">{emptyText}</div>
+        ) : (
+          <div
+            className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+            style={{ animation: `ticker-scroll ${Math.max(12, items.length * 3)}s linear infinite` }}
+          >
+            {[0, 1].map(copy => (
+              <div key={copy}>
+                {items.map((item, idx) => (
+                  <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-sky-500/15 text-xs font-mono">
+                    <span
+                      className={`font-semibold truncate ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
+                      style={{ textShadow: tone === "upcoming" ? "0 0 6px rgba(0,230,118,0.85), 0 0 14px rgba(0,200,83,0.5)" : "0 0 6px rgba(255,23,68,0.85), 0 0 14px rgba(255,23,68,0.5)" }}
+                    >
+                      {item.label}
+                    </span>
+                    <span
+                      className={`font-mono font-bold shrink-0 ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
+                      style={{ textShadow: tone === "upcoming" ? "0 0 7px rgba(0,230,118,0.9), 0 0 16px rgba(0,200,83,0.6)" : "0 0 7px rgba(255,23,68,0.9), 0 0 16px rgba(255,23,68,0.55)" }}
+                    >
+                      {new Date(item.sub + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm">
+        <div className="border-b border-[#9EC8EF] pb-3 mb-4 text-left">
+          <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">This Week's Jobs</h3>
+          <p className="text-xs text-slate-500">Sun–Sat &middot; unfinished jobs drop to Past Due once their date passes</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Upcoming</p>
+            {renderTicker(upcoming, "Nothing left scheduled this week.", "upcoming")}
+          </div>
+          <div>
+            <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Past Due</p>
+            {renderTicker(pastDue, "Nothing overdue -- nice.", "pastDue")}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1277,65 +1374,8 @@ export const SchedulingPage: React.FC = () => {
         )}
       </div>
 
-      {/* 4. FRAMEWORK CONNECTIONS LIST SECTION */}
-      <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-        <div className="border-b border-[#9EC8EF] pb-3 text-left">
-          <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">
-            How Scheduling Connects
-          </h3>
-          <p className="text-xs text-slate-500">See how schedule changes update the rest of the app</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-          {/* Connected Now */}
-          <div className="bg-[#EBF5FF] p-4 rounded-2xl border border-[#9EC8EF] space-y-2.5">
-            <h4 className="text-[11px] font-black uppercase text-[#315C9F] tracking-wide flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              Connected Workflows Now (Active State Sync)
-            </h4>
-            <ul className="space-y-2 text-slate-600 text-left pl-1">
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Customers:</strong> Use Schedule Job to open the scheduling form for that customer.</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Dashboard Operational KPIs:</strong> Active live schedules pull from shared event records dynamically.</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Leads CRM Module:</strong> Schedule appointment buttons skip placeholders and launch the scheduling popup directly.</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                <span><strong>Estimates & Proposals:</strong> Standard conversions to Jobs or scheduling estimates connect dynamically.</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Ready to connect later */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 space-y-2.5">
-            <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wide flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              Deferred Modules Ready to Link (Placeholder Fallbacks)
-            </h4>
-            <ul className="space-y-2 text-slate-500 text-left pl-1">
-              <li className="flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <span><strong>Dispatch Board & Fleet Hub:</strong> GPS telemetry and truck staging matrices awaiting conversion from layout placeholders.</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <span><strong>Employee Time Clock Ledger:</strong> Geo-staged check-ins will synchronize with event schedule times.</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <span><strong>Inventory Auto-Reorder Monitors:</strong> Materials consumption logging when jobs transition to 'Completed'.</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      {/* 4. UPCOMING / PAST DUE JOBS TICKERS */}
+      {renderJobTickers()}
 
       {/* 5. POPUP: NEW / EDIT EVENT CREATION FORM (FLOATING MODAL) */}
       {isNewEventOpen && (
@@ -1401,6 +1441,21 @@ export const SchedulingPage: React.FC = () => {
                     type="date"
                     required
                     className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 focus:outline-none focus:border-[#315C9F] font-medium font-mono"
+                  />
+                </div>
+
+                {/* Descriptor -- the only other required field. Everything
+                    below (customer, employee, crew, location...) is optional
+                    context you can fill in now or leave for later. */}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Description</label>
+                  <input
+                    value={formDescriptor}
+                    onChange={(e) => setFormDescriptor(e.target.value)}
+                    placeholder="e.g. Mow & trim, Site visit, Follow up call..."
+                    required
+                    type="text"
+                    className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 focus:outline-none focus:border-[#315C9F] font-medium"
                   />
                 </div>
               </div>
@@ -1534,7 +1589,6 @@ export const SchedulingPage: React.FC = () => {
                         value={formCustomName}
                         onChange={(e) => setFormCustomName(e.target.value)}
                         placeholder="e.g. Jane Smith"
-                        required={formCustomerMode === "custom"}
                         type="text"
                         className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"
                       />
