@@ -6792,61 +6792,43 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
-                        {/* MIDDLE ROW: 4 SEPARATE SQUARE SHAPED NEUTRAL CARDS */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        {/* MIDDLE ROW: 3 SEPARATE SQUARE SHAPED NEUTRAL CARDS */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                           {renderCardSlot(customCardTargets.card1, "Slot 1")}
                           {renderCardSlot(customCardTargets.card2, "Slot 2")}
                           {renderCardSlot(customCardTargets.card3, "Slot 3")}
-
-                          {/* Card 4: Customize Daily View */}
-                          <div 
-                            onClick={() => {
-                              if (!isAuthorizedToCustomize) {
-                                triggerNotification("Access Denied: Only Owners, Managers, and Accountants can customize the daily view panels.");
-                                return;
-                              }
-                              setIsCustomizingDailyViewOpen(true);
-                              triggerNotification("Opening dashboard daily view customizer...");
-                            }}
-                            className="bg-[#C7E3FA] border border-[#9EC8EF] p-4 rounded-[24px] shadow-sm flex flex-col justify-between h-[240px] transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer text-left group"
-                          >
-                            <div className="flex items-center gap-1.5 text-[#1F3557]">
-                              {getScreenIcon("settings", "w-4 h-4 text-[#315C9F]")}
-                              <span className="text-[10px] font-black tracking-wider uppercase">CUSTOMIZE DAILY VIEW</span>
-                            </div>
-
-                            <div className="my-1 text-left flex-1 flex flex-col justify-center">
-                              <p className="text-xs font-black text-[#1F3557] leading-relaxed">
-                                Rearrange dashboard panel metrics instantly.
-                              </p>
-                              <p className="text-[10.5px] text-[#5E7393] leading-normal font-sans font-medium mt-1">
-                                Choose which metrics you want displayed on your primary three operational panels.
-                              </p>
-                            </div>
-
-                            <button 
-                              className={`w-full py-2 rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                                isAuthorizedToCustomize
-                                  ? "bg-[#4A86F7] hover:bg-[#3977EE] text-white shadow-sm"
-                                  : "bg-blue-100/50 text-blue-400 border border-blue-200/50 cursor-not-allowed"
-                              }`}
-                            >
-                              {isAuthorizedToCustomize ? (
-                                <>
-                                  <Sliders className="w-3.5 h-3.5" />
-                                  <span>Configure Slots ➔</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span>Restricted To Management 🔒</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
                         </div>
 
+                        {/* Configure Dashboard -- opens the same slot-picker modal the old
+                            "Customize Daily View" card used to trigger, now a single button
+                            sitting directly above Company Bulletins instead of its own card. */}
+                        <button
+                          onClick={() => {
+                            if (!isAuthorizedToCustomize) {
+                              triggerNotification("Access Denied: Only Owners, Managers, and Accountants can customize the daily view panels.");
+                              return;
+                            }
+                            setIsCustomizingDailyViewOpen(true);
+                            triggerNotification("Opening dashboard daily view customizer...");
+                          }}
+                          className={`w-full py-2.5 rounded-xl text-[10.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            isAuthorizedToCustomize
+                              ? "bg-[#4A86F7] hover:bg-[#3977EE] text-white shadow-sm"
+                              : "bg-blue-100/50 text-blue-400 border border-blue-200/50 cursor-not-allowed"
+                          }`}
+                        >
+                          {isAuthorizedToCustomize ? (
+                            <>
+                              <Sliders className="w-3.5 h-3.5" />
+                              <span>Configure Dashboard ➔</span>
+                            </>
+                          ) : (
+                            <span>Restricted To Management 🔒</span>
+                          )}
+                        </button>
+
                         {/* BOTTOM ROW: COMPANY BULLETINS (Side to side rectangular card) */}
-                        <div 
+                        <div
                           onClick={() => {
                             const matched = OS_SCREENS.find(s => s.id === "bulletins");
                             if (matched) setActiveScreen(matched);
