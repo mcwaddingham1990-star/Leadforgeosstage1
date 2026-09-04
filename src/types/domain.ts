@@ -132,7 +132,7 @@ export interface DocumentItem {
   uploadedBy: string;
   date: string;
   size: string;
-  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
+  status: "Signed" | "Unsigned" | "Pending" | "Archived" | "Draft" | "Completed" | "Awaiting Signature" | "Sent" | "Viewed" | "Declined" | "Expired";
   isFavorite: boolean;
   isArchived: boolean;
   notes: string;
@@ -157,10 +157,24 @@ export interface DocumentItem {
     documentVersion?: string;
     hash?: string;
   }>;
+  // PDF Editor's own eSign state (features/fields/placements/etc.) plus the
+  // remote-signing handoff fields below -- loosely typed since the editor
+  // dumps its whole internal shape here via a generic metaProperties bag.
   signingOptions?: {
     signingOption?: "in_person" | "remote";
+    // How the signer is expected to provide their mark: type a full legal
+    // name, draw it with a stylus/finger on a signature pad, or (remote
+    // only) let the signer pick either when they open the link.
+    signMethod?: "typed" | "drawn" | "both";
+    // Set when "Send remotely" generates a signing link -- a random,
+    // single-use token the unauthenticated /sign page presents back to the
+    // server to prove it's allowed to read/write this one document.
+    remoteToken?: string;
+    remoteTokenExpiresAt?: string;
+    remoteTokenUsedAt?: string;
     enforceSigningOrder?: boolean;
     requireWitness?: boolean;
+    [key: string]: any;
   };
 }
 

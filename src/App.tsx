@@ -13,6 +13,8 @@ import { registerForPushNotifications } from "./lib/pushNotifications";
 import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
 import { downloadCsv } from "./lib/csv";
+import { getRemoteSigningTokenFromUrl } from "./lib/remoteSigningClient";
+import RemoteSigningPage from "./components/RemoteSigningPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1537,6 +1539,15 @@ const EventEngineEffects: React.FC = () => {
 };
 
 export default function App() {
+  // A remote-signing link (texted/emailed from the PDF Editor's "Send
+  // remotely" option) has no OwnersLocal login of its own -- render the
+  // public signing page instead of the normal logged-in app shell entirely.
+  // Safe ahead of every hook below: window.location.search is fixed for the
+  // life of this mounted instance, so which branch runs never changes
+  // between re-renders of the same instance.
+  const remoteSignToken = getRemoteSigningTokenFromUrl();
+  if (remoteSignToken) return <RemoteSigningPage token={remoteSignToken} />;
+
   // Logged in user profile (null if guest/default owner, or set when authenticated)
   const [loggedInUser, setLoggedInUser] = useState<{
     email: string;
@@ -1725,7 +1736,7 @@ export default function App() {
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
   const [estimatePrefill, setEstimatePrefill] = useState<EstimatePrefill | null>(null);
-  const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string } | null>(null);
+  const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string; customerPhone?: string; customerEmail?: string } | null>(null);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
   // Read-only mirror for the Dashboard's Messages summary card -- MessagesPage

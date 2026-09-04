@@ -6,6 +6,7 @@ import {handleAiAsk, handleScanReceipt, handleScanFinancialDocument} from './ser
 import {getClientIp} from './server/clientInfo';
 import {createPlaidLinkToken, exchangePlaidPublicToken} from './server/plaidHandler';
 import {sendPushToRecipients} from './server/pushNotifications';
+import {getRemoteSigningInfo, submitRemoteSignature} from './server/remoteSigning';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 // Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
@@ -78,6 +79,41 @@ function aiApiDevMiddleware(): Plugin {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to send push notification' }));
         }
+      });
+      // Remote e-signing: same two endpoints as server.ts, mirrored here so
+      // `npm run dev` (pure Vite, no separate process) serves them too.
+      // Connect middleware has no route params, so the token is pulled off
+      // the tail of req.url instead of an Express :token segment.
+      server.middlewares.use('/api/sign', async (req: IncomingMessage, res: ServerResponse) => {
+        res.setHeader('Content-Type', 'application/json');
+        const token = decodeURIComponent((req.url || '').replace(/^\/+/, '').split('?')[0]);
+        if (req.method === 'GET') {
+          try {
+            const result = await getRemoteSigningInfo(token);
+            res.statusCode = result.ok ? 200 : 404;
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Could not load this signing link' }));
+          }
+          return;
+        }
+        if (req.method === 'POST') {
+          try {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) chunks.push(chunk as Buffer);
+            const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
+            const result = await submitRemoteSignature({ ...body, token });
+            res.statusCode = result.ok ? 200 : 400;
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Could not submit this signature' }));
+          }
+          return;
+        }
+        res.statusCode = 405;
+        res.end('Method Not Allowed');
       });
     },
   };

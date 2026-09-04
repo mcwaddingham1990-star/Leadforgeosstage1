@@ -8,6 +8,7 @@ import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHa
 import { sendPushToRecipients } from './server/pushNotifications';
 import { handleWebLeadFormSubmit, WebLeadFormSubmission } from './server/webLeadFormHandler';
 import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
+import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -127,6 +128,27 @@ app.post('/api/leads/submit-web-form', async (req, res) => {
     res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Lead form submission failed' });
+  }
+});
+
+// Remote e-signing: a customer opening a "sign this remotely" link has no
+// OwnersLocal login, so these two endpoints are the only way that flow can
+// read/write the one document its token points to (see server/remoteSigning.ts).
+app.get('/api/sign/:token', async (req, res) => {
+  try {
+    const result = await getRemoteSigningInfo(req.params.token);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load this signing link' });
+  }
+});
+app.post('/api/sign/:token', async (req, res) => {
+  try {
+    const body = { ...(req.body as RemoteSignSubmission), token: req.params.token };
+    const result = await submitRemoteSignature(body);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit this signature' });
   }
 });
 

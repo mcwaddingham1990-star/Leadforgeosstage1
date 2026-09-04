@@ -1681,6 +1681,8 @@ export const DocumentsPage: React.FC = () => {
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
           initialDraft={generatedPdfDraft?.pdfBase64 ? null : generatedPdfDraft}
           signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : signatureCaptureHint}
+          customerPhone={generatedPdfDraft?.customerPhone || pendingSignatureCapture?.customerPhone}
+          customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail}
           autoCaptureSignatures={generatedPdfDraft?.autoCaptureSignatures}
           businessProfile={businessProfile}
           onClose={closePDFEditor}
