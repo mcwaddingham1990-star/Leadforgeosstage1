@@ -92,7 +92,8 @@ export const MissedCallTextBackPage: React.FC = () => {
       triggerNotification("💾 Saved. The companion Android app will pick this up next time it syncs.");
     } catch (err) {
       console.error("Error saving missed-call settings:", err);
-      triggerNotification("Couldn't save settings — check your connection and try again.");
+      const reason = err instanceof Error ? err.message : "unknown error";
+      triggerNotification(`Couldn't save settings: ${reason}`);
     } finally {
       setIsSaving(false);
     }
