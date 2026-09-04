@@ -7100,6 +7100,7 @@ Access to full financial telemetry is restricted.`;
                           ].map((btn, idx) => (
                             <button
                               key={idx}
+                              disabled={btn.action === "payroll" && isRunningPayroll}
                               onClick={() => {
                                 if (btn.action === "expense") {
                                   sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
@@ -7124,11 +7125,14 @@ Access to full financial telemetry is restricted.`;
                                 if (accounting) setActiveScreen(accounting);
                                 triggerNotification("Open Invoices to create a customer invoice.");
                               }}
-                              className="shrink-0 bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] hover:from-[#1E6EE0] hover:to-[#0D5FCB] border border-white/40 rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all shadow-[0_0_10px_rgba(20,133,244,0.35)]"
+                              className="shrink-0 bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] hover:from-[#1E6EE0] hover:to-[#0D5FCB] border border-white/40 rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all shadow-[0_0_10px_rgba(20,133,244,0.35)] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              <btn.icon className="w-3.5 h-3.5 text-white shrink-0" />
-                              <span className="text-[10.5px] font-extrabold text-white uppercase tracking-wide whitespace-nowrap">
-                                {btn.label}
+                              <btn.icon className="w-3.5 h-3.5 text-white shrink-0" style={{ filter: 'drop-shadow(0 1px 2px rgba(4,20,46,0.85))' }} />
+                              <span
+                                className="text-[10.5px] font-extrabold text-white uppercase tracking-wide whitespace-nowrap"
+                                style={{ textShadow: '0 1px 2px rgba(4,20,46,0.85), 0 0 1px rgba(4,20,46,0.9)' }}
+                              >
+                                {btn.action === "payroll" && isRunningPayroll ? "Running Payroll..." : btn.label}
                               </span>
                             </button>
                           ))}
@@ -7322,32 +7326,6 @@ Access to full financial telemetry is restricted.`;
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
                                   Live Data
                                 </span>
-                              </div>
-
-                              {/* Log real income/expenses, run real payroll */}
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "income"); setLogTransactionType("income"); }}
-                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#078e64] border border-white hover:shadow-[0_0_15px_rgba(52,211,153,0.5)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
-                                >
-                                  + Log Income
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => { sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense"); setLogTransactionType("expense"); }}
-                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#d8435c] border border-white hover:shadow-[0_0_15px_rgba(216,67,92,0.45)] cursor-pointer flex items-center justify-center gap-1 transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
-                                >
-                                  + Log Expense
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isRunningPayroll}
-                                  onClick={handleRunPayroll}
-                                  className="min-h-11 px-3 py-2 text-[10.5px] font-mono font-black uppercase rounded-md bg-[#d8efff]/90 text-[#07599a] border border-white hover:shadow-[0_0_15px_rgba(56,189,248,0.55)] cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_10px_rgba(56,189,248,0.30),inset_0_0_10px_rgba(255,255,255,0.88)]"
-                                >
-                                  {isRunningPayroll ? "Running Payroll..." : "Run Selected Payroll"}
-                                </button>
                               </div>
 
                               {logTransactionType && (
