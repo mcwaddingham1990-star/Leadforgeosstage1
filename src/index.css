@@ -281,6 +281,29 @@ select option {
   backdrop-filter: blur(8px) !important;
 }
 
+/* 8b. Descendants of one of the force-blue buttons above (same exclusion
+   list as rule 8) that still carry their OWN explicit grey OR navy
+   Tailwind class -- a modal close-icon's text-slate-400, a KPI-card
+   label's text-[#5E7393], a KPI-card value's text-[#1F3557], etc. An
+   element's own explicit color class always wins over a parent's
+   inherited color regardless of !important on the parent, so rule 8's
+   button-level "color: #fff" alone never reached these; they rendered
+   dark/grey text or icons on top of the forced blue gradient everywhere
+   a button had a plain dark/grey label or icon and no light/transparent
+   background to opt it out of rule 8 in the first place. */
+.workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *) :is(
+  .text-slate-300, .text-slate-400, .text-slate-500, .text-slate-600, .text-slate-700, .text-slate-800, .text-slate-900,
+  .text-gray-300, .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-900,
+  .text-neutral-400, .text-neutral-500, .text-zinc-400, .text-zinc-500,
+  .text-blue-900, .text-indigo-900,
+  .text-\[\#5E7393\], .text-\[\#5E7393\]\/80, .text-\[\#5E7393\]\/75, .text-\[\#5E7393\]\/60, .text-\[\#5E7393\]\/50,
+  .text-\[\#8896AC\], .text-\[\#94A3B8\], .text-\[\#64748B\], .text-\[\#6B7280\], .text-\[\#9CA3AF\],
+  .text-\[\#1F3557\], .text-\[\#342D7E\], .text-\[\#342D7E\]\/75, .text-\[\#342D7E\]\/60, .text-\[\#342D7E\]\/50,
+  .text-\[\#315C9F\]
+) {
+  color: #ffffff !important;
+}
+
 .workspace-theme button:not(.bg-rose-50):not(.bg-emerald-500):not(.bg-rose-500):not(.text-red-500):not(.bg-transparent):not(.border-transparent):not(.mt-card *):hover,
 .workspace-theme .bg-\[\#4A9BFF\]:not(.mt-card *):hover,
 .workspace-theme .bg-\[\#4A86F7\]:not(.mt-card *):hover,
