@@ -232,7 +232,16 @@ service cloud.firestore {
     }
     match /active_shifts/{docId} {
       allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      // clockInTransaction/clockOutTransaction (timeClockService.ts) always
+      // read this doc inside a transaction before creating/deleting it, to
+      // guard against a double clock-in. Without the `resource == null`
+      // branch, that very first read -- on a doc that doesn't exist yet --
+      // can't evaluate resource.data at all and is denied outright, so the
+      // whole feature silently fell back to the legacy business_profiles
+      // compatibility store on every business's very first clock-in, every
+      // time, and active_shifts (and therefore live GPS tracking, which
+      // only reads from this collection) never actually got populated.
+      allow read, delete: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
     }
     match /timeclock_states/{docId} {
       allow read, write: if isAuthenticated() && request.auth.token.email == docId;
