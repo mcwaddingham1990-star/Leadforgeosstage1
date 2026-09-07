@@ -1,4 +1,4 @@
-import { deleteDoc, doc, runTransaction, updateDoc } from "firebase/firestore";
+import { arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, query, runTransaction, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { TimeClockLog } from "../types/domain";
 
@@ -9,6 +9,26 @@ export interface LiveLocationFix {
   heading?: number | null;
   speed?: number | null;
   capturedAt: string; // ISO timestamp of the real device fix, not of the write
+}
+
+/**
+ * The full breadcrumb trail of real GPS fixes for one clocked-in shift,
+ * keyed by that shift's own clock-in log id (doc id == clockInLogId) so a
+ * shift's route is always exactly one document to look up. Only exists for
+ * shifts where the employee had GPS tracking enabled; a shift with tracking
+ * off simply has no matching document -- never a fabricated/empty route.
+ * Once the employee clocks out, nothing ever appends to this doc again, so
+ * it becomes a fixed historical record -- not a live feed.
+ */
+export interface ShiftRoute {
+  id: string;
+  businessId: string;
+  employeeEmail: string;
+  employeeName: string;
+  clockInLogId: string;
+  startedAt: string;
+  updatedAt: string;
+  points: LiveLocationFix[];
 }
 
 const activeShiftId = (businessId: string, employeeEmail: string) =>
@@ -108,14 +128,19 @@ const isNotFoundError = (error: unknown) =>
 // Real field GPS tracking, one fix at a time, while an employee is clocked
 // in -- distinct from the single fix captured on the clock-in/out punch
 // itself. Written onto the same active_shifts doc the clock-in transaction
-// already owns, so location automatically stops updating (and the last
-// position simply goes stale) the moment that doc is deleted at clock-out;
-// nothing here needs its own start/stop bookkeeping. Best-effort: a location
-// ping must never surface an error or block the caller the way a real punch
-// does, so failures are swallowed after the compatibility fallback.
+// already owns, so the live position automatically stops updating (and the
+// last position simply goes stale) the moment that doc is deleted at
+// clock-out; nothing here needs its own start/stop bookkeeping. Best-effort:
+// a location ping must never surface an error or block the caller the way a
+// real punch does, so failures are swallowed after the compatibility
+// fallback. Also appends the same fix onto this shift's permanent route
+// record (see ShiftRoute) so the path survives clock-out for later review,
+// even though the live position on active_shifts does not.
 export async function updateLiveLocation(
   businessId: string,
   employeeEmail: string,
+  employeeName: string,
+  clockInLogId: string | undefined,
   location: LiveLocationFix
 ): Promise<void> {
   const activeRef = doc(db, "active_shifts", activeShiftId(businessId, employeeEmail));
@@ -125,6 +150,75 @@ export async function updateLiveLocation(
     if (!isPermissionError(error) && !isNotFoundError(error)) return;
     await updateLiveLocationViaBusinessProfile(businessId, employeeEmail, location);
   }
+  if (clockInLogId) {
+    await appendRoutePoint(businessId, employeeEmail, employeeName, clockInLogId, location).catch(() => {
+      // Best-effort, same as the rest of this function -- a route point
+      // that fails to save must never block the live-location update above.
+    });
+  }
+}
+
+async function appendRoutePoint(
+  businessId: string,
+  employeeEmail: string,
+  employeeName: string,
+  clockInLogId: string,
+  location: LiveLocationFix
+): Promise<void> {
+  const routeRef = doc(db, "shift_routes", clockInLogId);
+  // startedAt is intentionally NOT written here -- this runs on every fix
+  // for the whole shift via a merge write, so re-sending it each time would
+  // overwrite the real shift start with whatever fix happens to land last.
+  // The true start is derived from points[0] wherever a ShiftRoute is read
+  // back (see toShiftRoute below) instead of tracked as a separate field
+  // that could drift from the data it's supposed to describe.
+  await setDoc(routeRef, {
+    businessId,
+    employeeEmail,
+    employeeName,
+    clockInLogId,
+    updatedAt: location.capturedAt,
+    points: arrayUnion(location)
+  }, { merge: true });
+}
+
+function toShiftRoute(id: string, data: Record<string, unknown>): ShiftRoute {
+  const points = (data.points as LiveLocationFix[] | undefined) || [];
+  return {
+    id,
+    businessId: data.businessId as string,
+    employeeEmail: data.employeeEmail as string,
+    employeeName: data.employeeName as string,
+    clockInLogId: data.clockInLogId as string,
+    points,
+    startedAt: points[0]?.capturedAt || (data.updatedAt as string),
+    updatedAt: data.updatedAt as string
+  };
+}
+
+/** One shift's full route, or null if tracking was never on for it. */
+export async function fetchShiftRoute(clockInLogId: string): Promise<ShiftRoute | null> {
+  const snap = await getDoc(doc(db, "shift_routes", clockInLogId));
+  if (!snap.exists()) return null;
+  return toShiftRoute(snap.id, snap.data());
+}
+
+/**
+ * An employee's most recent recorded routes, newest first. Sorted client
+ * side (not via a Firestore orderBy) so this never needs a composite index
+ * beyond the two plain equality filters below.
+ */
+export async function fetchRecentRoutes(businessId: string, employeeEmail: string, limitCount = 20): Promise<ShiftRoute[]> {
+  const q = query(
+    collection(db, "shift_routes"),
+    where("businessId", "==", businessId),
+    where("employeeEmail", "==", employeeEmail)
+  );
+  const snap = await getDocs(q);
+  const routes = snap.docs.map(d => toShiftRoute(d.id, d.data()));
+  return routes
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, limitCount);
 }
 
 async function updateLiveLocationViaBusinessProfile(

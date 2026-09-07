@@ -243,6 +243,13 @@ service cloud.firestore {
       // only reads from this collection) never actually got populated.
       allow read, delete: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
     }
+    // One employee's real GPS breadcrumb trail for one shift (doc id ==
+    // that shift's clock-in log id) -- survives clock-out for historical
+    // review, unlike active_shifts' live-only position.
+    match /shift_routes/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow read, delete: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
+    }
     match /timeclock_states/{docId} {
       allow read, write: if isAuthenticated() && request.auth.token.email == docId;
     }

@@ -10,6 +10,8 @@ import { Search, UserPlus, Edit3, X, Copy, Shield, Phone, Mail, MapPin } from "l
 import type { EmployeeRecord } from "../types/domain";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { isManagerRole } from "../lib/notificationsService";
+import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
+import { RecentRoutesSection } from "./RecentRoutesSection";
 
 function genInviteCode(role: string): string {
   const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -384,8 +386,12 @@ export const RosterPage: React.FC = () => {
             </label>
             <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3">
               <input type="checkbox" checked={!!editingEmployee.gpsTrackingEnabled} onChange={e => setEditingEmployee({ ...editingEmployee, gpsTrackingEnabled: e.target.checked })} className="mt-0.5" />
-              <span><strong className="block text-[#1F3557]">Enable field GPS tracking</strong><span className="text-[9px] text-slate-500">While clocked in, this employee's real device location reports periodically so their live position shows on the Interactive Map. Off by default.</span></span>
+              <span><strong className="block text-[#1F3557]">Enable field GPS tracking</strong><span className="text-[9px] text-slate-500">While clocked in, this employee's real device location reports periodically so their live position and route show on the Interactive Map. Off by default -- turn off any time, right here.</span></span>
             </label>
+            <GpsPrivacyNotice />
+            {editingEmployee.gpsTrackingEnabled && (
+              <RecentRoutesSection businessId={businessId} employeeEmail={editingEmployee.email} />
+            )}
             {editingEmployee.requireTimeClockVerification && (
               <label className="flex flex-col gap-1 text-[10px] font-bold text-[#5E7393] pl-1">
                 Assigned manager (optional)
@@ -460,8 +466,9 @@ export const RosterPage: React.FC = () => {
                 </label>
                 <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <input type="checkbox" checked={inviteGpsTrackingEnabled} onChange={e => setInviteGpsTrackingEnabled(e.target.checked)} className="mt-0.5" />
-                  <span><strong className="block text-[#1F3557]">Enable field GPS tracking</strong><span className="text-[9px] text-slate-500">While clocked in, this employee's real device location reports periodically so their live position shows on the Interactive Map. Off by default -- can be turned on or off any time from Settings.</span></span>
+                  <span><strong className="block text-[#1F3557]">Enable field GPS tracking</strong><span className="text-[9px] text-slate-500">While clocked in, this employee's real device location reports periodically so their live position and route show on the Interactive Map. Off by default -- can be turned on or off any time from Settings or Roster.</span></span>
                 </label>
+                {inviteGpsTrackingEnabled && <GpsPrivacyNotice />}
                 <button disabled={!inviteMode || !inviteRoleId || (inviteMode === "custom" && !customRoleReady)} onClick={handleGenerateInvite} className="w-full py-2 bg-[#315C9F] text-white rounded-xl font-bold mt-2 disabled:opacity-40">Generate Invite Code</button>
               </>
             ) : (

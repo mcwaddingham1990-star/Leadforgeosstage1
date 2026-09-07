@@ -56,9 +56,11 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, Marker, Polyline, useMap } from "@vis.gl/react-google-maps";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { subscribeToCollection } from "../lib/firestoreService";
+import { fetchRecentRoutes, ShiftRoute } from "../lib/timeClockService";
+import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
 
@@ -296,6 +298,39 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // also naturally re-centers the map on them, since FitMapToPins fits to
   // whatever filteredPins ends up containing.
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("All");
+
+  // Real past-shift routes for whichever technician is selected above --
+  // fetched on demand (not for every technician up front), and always the
+  // real ShiftRoute records timeClockService.ts writes while GPS tracking
+  // was on for that shift. Nothing here is a live feed: once a shift ends,
+  // its route is a fixed historical record.
+  const [technicianRoutes, setTechnicianRoutes] = useState<ShiftRoute[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedTechnicianId === "All" || !businessId) {
+      setTechnicianRoutes([]);
+      setSelectedRouteId(null);
+      return;
+    }
+    let cancelled = false;
+    setRoutesLoading(true);
+    fetchRecentRoutes(businessId, selectedTechnicianId, 10)
+      .then(routes => {
+        if (cancelled) return;
+        setTechnicianRoutes(routes);
+        setSelectedRouteId(routes[0]?.id || null);
+      })
+      .catch(() => { if (!cancelled) setTechnicianRoutes([]); })
+      .finally(() => { if (!cancelled) setRoutesLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedTechnicianId, businessId]);
+
+  const selectedRoutePoints = useMemo(
+    () => technicianRoutes.find(r => r.id === selectedRouteId)?.points || [],
+    [technicianRoutes, selectedRouteId]
+  );
 
   const [markerClusterActive, setMarkerClusterActive] = useState(true);
 
@@ -1745,6 +1780,29 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               </select>
             </div>
 
+            {selectedTechnicianId !== "All" && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Past Route:</span>
+                {routesLoading ? (
+                  <span className="text-[10px] text-slate-400 font-semibold">Loading real GPS history…</span>
+                ) : technicianRoutes.length === 0 ? (
+                  <span className="text-[10px] text-slate-400 font-semibold">No recorded routes for this technician</span>
+                ) : (
+                  <select
+                    value={selectedRouteId || ""}
+                    onChange={(e) => setSelectedRouteId(e.target.value || null)}
+                    className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                  >
+                    {technicianRoutes.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {new Date(r.startedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} — {r.points.length} pts
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
             {/* LASSO / MULTI-SELECT TOGGLE CONTROL */}
             <div className="ml-auto flex items-center gap-2 border-l border-white/10 pl-4">
               <button
@@ -1763,6 +1821,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             </div>
 
           </div>
+
+          {selectedTechnicianId !== "All" && <GpsPrivacyNotice dark />}
 
           {/* MAP CANVAS (REAL GOOGLE MAP OR HIGH-FIDELITYFALLBACK VECTOR CANVAS) */}
           <div className="bg-slate-950/60 rounded-[32px] p-2.5 border-2 border-white/10 overflow-hidden relative shadow-[0_12px_48px_rgba(0,0,0,0.5)]" style={{ height: "660px" }}>
@@ -1805,7 +1865,15 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       well outside the APIProvider/Map tree entirely, so it
                       threw "failed to retrieve APIProviderContext" and never
                       actually fit the camera to the pins. */}
-                  <FitMapToPins pins={filteredPins} />
+                  <FitMapToPins pins={selectedRoutePoints.length > 1 ? selectedRoutePoints : filteredPins} />
+                  {selectedRoutePoints.length > 1 && (
+                    <Polyline
+                      path={selectedRoutePoints.map(p => ({ lat: p.lat, lng: p.lng }))}
+                      strokeColor="#4A9BFF"
+                      strokeOpacity={0.9}
+                      strokeWeight={4}
+                    />
+                  )}
                   {/* Standard markers do not require a cloud Map ID and are
                       substantially more reliable on mobile browsers. */}
                   {filteredPins.map(pin => (
@@ -1916,6 +1984,30 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       </g>
                     );
                   })}
+
+                  {/* SELECTED TECHNICIAN'S PAST ROUTE -- real recorded GPS points, same coordinate projection as the territory polygons above */}
+                  {selectedRoutePoints.length > 1 && (() => {
+                    const latCenter = DFW_FALLBACK.lat;
+                    const lngCenter = DFW_FALLBACK.lng;
+                    const projected = selectedRoutePoints.map(p => ({
+                      x: 450 + (p.lng - lngCenter) * 1100,
+                      y: 300 - (p.lat - latCenter) * 1200
+                    }));
+                    return (
+                      <g>
+                        <polyline
+                          points={projected.map(p => `${p.x},${p.y}`).join(" ")}
+                          fill="none"
+                          stroke="#4A9BFF"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx={projected[0].x} cy={projected[0].y} r="6" fill="#10b981" stroke="white" strokeWidth="1.5" />
+                        <circle cx={projected[projected.length - 1].x} cy={projected[projected.length - 1].y} r="6" fill="#ef4444" stroke="white" strokeWidth="1.5" />
+                      </g>
+                    );
+                  })()}
 
                   {/* REVENUE HEATMAP GRADIENT BUBBLES -- one per real customer, sized by their actual lifetime value */}
                   {showRevenueHeatmap && (

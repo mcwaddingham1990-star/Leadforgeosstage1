@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
 import { ONBOARDING_ROLE_TEMPLATES } from "./RosterPage";
+import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { defaultGranularFromModuleList } from "../types/permissions";
 import type { SelectedRole, WorkspaceTheme } from "../App";
 
@@ -1126,7 +1127,8 @@ export default function SettingsPage({
                   {canManageClockVerification && employees.length > 0 && (
                     <div className="space-y-2">
                       <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Field GPS Tracking</h3>
-                      <p className="text-[10px] text-slate-500">Choose which employees report their real device location while clocked in, so their live position shows on the Interactive Map. Off by default -- addable or removable here any time.</p>
+                      <p className="text-[10px] text-slate-500">Choose which employees report their real device location while clocked in, so their live position and route show on the Interactive Map. Off by default -- addable or removable here any time.</p>
+                      <GpsPrivacyNotice />
                       <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                         {employees.map(employee => (
                           <label key={employee.email} className="flex items-center justify-between gap-3 p-3 bg-white border border-[#A9CDEE] rounded-xl cursor-pointer">

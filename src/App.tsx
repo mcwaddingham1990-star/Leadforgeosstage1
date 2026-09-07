@@ -1852,6 +1852,17 @@ export default function App() {
   // (set at invite time or later from Settings/Roster) -- an owner has no
   // employees record at all and is never tracked by this.
   const currentEmployeeGpsTrackingEnabled = !!employees.find(e => e.email === loggedInUser?.email)?.gpsTrackingEnabled;
+  // The specific clock-in log this GPS trail belongs to -- lets every fix
+  // get appended onto that one shift's permanent route record (see
+  // ShiftRoute) in addition to the live position, without a second lookup.
+  const currentClockInLogId = useMemo(() => {
+    if (!loggedInUser?.email) return undefined;
+    const myLogs = timeClockLogs
+      .filter(log => log.employeeEmail === loggedInUser.email)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    if (!myLogs.length || myLogs[myLogs.length - 1].type === "Clock Out") return undefined;
+    return [...myLogs].reverse().find(log => log.type === "Clock In")?.id;
+  }, [timeClockLogs, loggedInUser?.email]);
   useEffect(() => {
     if (!isClockedIn || !loggedInUser?.email || !businessId) return;
     if (!currentEmployeeGpsTrackingEnabled) return;
@@ -1865,7 +1876,7 @@ export default function App() {
         const now = Date.now();
         if (now - lastSentAt < MIN_INTERVAL_MS) return;
         lastSentAt = now;
-        void updateLiveLocation(businessId, loggedInUser.email, {
+        void updateLiveLocation(businessId, loggedInUser.email, loggedInUser.name || loggedInUser.email, currentClockInLogId, {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
@@ -1883,7 +1894,7 @@ export default function App() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [isClockedIn, loggedInUser?.email, businessId, currentEmployeeGpsTrackingEnabled]);
+  }, [isClockedIn, loggedInUser?.email, businessId, currentEmployeeGpsTrackingEnabled, currentClockInLogId]);
 
   // Firestore clock events are the source of truth. Rebuild the active
   // shift after navigation, reload, or returning from another page so the
