@@ -327,11 +327,6 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedBasketIds, setSelectedBasketIds] = useState<string[]>([]);
 
-  // Vehicles are real — one per technician who has a vehicle name assigned
-  // (no fleet CRUD exists yet, so this list starts empty for a new company
-  // instead of showing fabricated trucks).
-  const [vehicles, setVehicles] = useState<Array<{ id: string; name: string; driver: string; fuel: number; speed: number; eta: number; currentRoute: string; assignedJobs: number }>>([]);
-
   // Real technicians — one per real employee. Name and clocked-in/on-break/
   // off-duty status come from the real employees + time_clock_logs
   // collections. Position comes from the most real fix available: a live
@@ -366,6 +361,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     routeProgress?: number; // 0 to 100
     routePath?: Array<{ lat: number; lng: number }>;
     lastLocationAt?: string; // real timestamp of the fix behind lat/lng, when known
+    speedMph?: number; // real device-reported speed from the live GPS fix, when the device provided one
   }>>([]);
 
   const parseGpsString = (gps: string): { lat: number; lng: number } | null => {
@@ -390,10 +386,18 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       const liveFix = myShift?.lastLocation;
       const lastRealFix = liveFix || (lastLog ? parseGpsString(lastLog.gps) : null);
       const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Dallas, TX", er.email);
+      // The device's own real reported speed (Geolocation API coords.speed,
+      // meters/second) -- only present on a live fix, and only when the
+      // device actually reported one. Converted to mph; never guessed or
+      // interpolated when absent.
+      const speedMph = liveFix?.speed != null ? liveFix.speed * 2.23694 : undefined;
       return {
         id: er.email,
         name: `${er.firstName} ${er.lastName}`.trim(),
-        vehicle: existing?.vehicle || "Unassigned",
+        // The vehicle this employee actually typed in at their last
+        // clock-in (TimeClockLog.vehicle) -- real, not a separate dispatch
+        // field that nothing in this app ever sets.
+        vehicle: lastLog?.vehicle || "Unassigned",
         // Preserve an in-progress local dispatch ("Traveling" to a job)
         // rather than overwrite it with the plain clocked-in state.
         status: existing?.jobId ? "Traveling" : realStatus,
@@ -402,11 +406,29 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         jobId: existing?.jobId,
         routeProgress: existing?.routeProgress,
         routePath: existing?.routePath,
-        lastLocationAt: existing?.jobId ? existing.lastLocationAt : (myShift?.lastLocationAt ?? existing?.lastLocationAt)
+        lastLocationAt: existing?.jobId ? existing.lastLocationAt : (myShift?.lastLocationAt ?? existing?.lastLocationAt),
+        speedMph
       };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employees, timeClockLogs, businessAddresses, activeShifts]);
+
+  // Vehicles are real — one per technician who's clocked in and typed a
+  // vehicle name at clock-in (no separate fleet CRUD exists). Speed is that
+  // technician's own real device-reported speed. There is no fuel-telemetry
+  // integration of any kind (no OBD-II/fleet API), so fuel is never shown
+  // rather than invented -- same reasoning as removing the old jitter
+  // animation for technician position.
+  const vehicles = useMemo(() => activeTechnicians
+    .filter(t => t.vehicle !== "Unassigned" && t.status !== "Offline")
+    .map(t => ({
+      id: `veh_${t.id}`,
+      name: t.vehicle,
+      driver: t.name,
+      driverId: t.id,
+      speedMph: t.speedMph,
+      assignedJobs: schedulingEvents.filter(e => e.assignedEmployee === t.name && e.status !== "Completed").length
+    })), [activeTechnicians, schedulingEvents]);
 
   // Service territories start empty. Only owner-created, real territories belong here.
   const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([]);
@@ -795,22 +817,21 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       });
     }
 
-    // 8. Vehicles (Truck icons)
+    // 8. Vehicles (Truck icons) -- always co-located with their real driver;
+    // there's no separate vehicle GPS device, so no fabricated offset from
+    // the technician's own real fix.
     if (showVehicles) {
       vehicles.forEach(v => {
-        // Retrieve matching tech coordinates
-        const tech = activeTechnicians.find(t => t.name === v.driver);
-        const fallback = geocodeAddress(v.currentRoute || v.name, v.id);
-        const lat = tech ? tech.lat + 0.003 : fallback.lat;
-        const lng = tech ? tech.lng - 0.003 : fallback.lng;
+        const tech = activeTechnicians.find(t => t.id === v.driverId);
+        if (!tech) return;
         list.push({
           id: v.id,
           type: "Vehicle",
           title: v.name,
-          subtitle: `Driver: ${v.driver} | Fuel: ${v.fuel}% | Speed: ${v.speed} mph`,
-          address: `Current Route: ${v.currentRoute}`,
-          lat,
-          lng,
+          subtitle: `Driver: ${v.driver} | Speed: ${v.speedMph != null ? `${Math.round(v.speedMph)} mph` : "GPS speed unavailable"}`,
+          address: `GPS fix (${tech.lat.toFixed(4)}, ${tech.lng.toFixed(4)})`,
+          lat: tech.lat,
+          lng: tech.lng,
           raw: v
         });
       });
@@ -896,32 +917,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   }, [filteredPins]);
   const maxHeatValue = Math.max(1, ...revenueHeatBubbles.map(b => b.value));
 
-  // Technician position is never simulated here -- it's driven entirely by
-  // the real GPS fixes wired up above (live location while clocked in, or
-  // the last clock-event fix), which update this component through the
-  // employees/timeClockLogs/activeShifts effect on their own. Vehicle
-  // fuel/speed still have no real telemetry integration to source from, so
-  // that half stays a clearly-scoped decorative simulation.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setVehicles(prev => {
-        return prev.map(veh => {
-          const matchingTech = activeTechnicians.find(t => t.name === veh.driver);
-          if (!matchingTech || matchingTech.status === "Offline") {
-            return { ...veh, speed: 0, fuel: Math.max(2, veh.fuel - 0.05) };
-          }
-          const speedOffset = Math.round((Math.random() - 0.5) * 8);
-          return {
-            ...veh,
-            speed: Math.max(0, Math.min(65, (matchingTech.status === "Traveling" ? 40 : 0) + speedOffset)),
-            fuel: Math.max(5, Math.round(veh.fuel - (Math.random() * 0.4))) // burn fuel slowly
-          };
-        });
-      });
-    }, 4500);
-
-    return () => clearInterval(timer);
-  }, [activeTechnicians]);
+  // Nothing here is simulated or animated on a timer anymore -- technician
+  // position and vehicle speed are both driven entirely by real GPS fixes
+  // (see the activeShifts/activeTechnicians/vehicles derivations above),
+  // which already re-render this component whenever a new real fix lands.
 
   // Handle estimate approvals & conversion directly from the map
   const handleApproveEstimate = (estId: string) => {
@@ -2393,6 +2392,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       <div className="space-y-2 text-xs font-sans text-slate-300">
                         <p className="flex justify-between"><span className="text-slate-400">Vehicle:</span> <strong>{selectedPin.raw.vehicle}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Status:</span> <strong className="text-emerald-400">{selectedPin.raw.status}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Speed:</span> <strong>{selectedPin.raw.speedMph != null ? `${Math.round(selectedPin.raw.speedMph)} mph` : "GPS speed unavailable"}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Latitude:</span> <strong>{selectedPin.raw.lat.toFixed(5)}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Longitude:</span> <strong>{selectedPin.raw.lng.toFixed(5)}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">GPS Fix:</span> <strong className={selectedPin.raw.lastLocationAt && formatFixAge(selectedPin.raw.lastLocationAt) === "Live" ? "text-emerald-400" : "text-amber-400"}>{selectedPin.raw.lastLocationAt ? formatFixAge(selectedPin.raw.lastLocationAt) : "From last clock-in"}</strong></p>
@@ -2402,8 +2402,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     {selectedPin.type === "Vehicle" && (
                       <div className="space-y-2 text-xs font-sans text-slate-300">
                         <p className="flex justify-between"><span className="text-slate-400">Driver:</span> <strong>{selectedPin.raw.driver}</strong></p>
-                        <p className="flex justify-between"><span className="text-slate-400">Fuel Level:</span> <strong className={selectedPin.raw.fuel < 30 ? "text-rose-400" : "text-cyan-400"}>{selectedPin.raw.fuel}%</strong></p>
-                        <p className="flex justify-between"><span className="text-slate-400">Speed:</span> <strong>{selectedPin.raw.speed} mph</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">Speed:</span> <strong className="text-cyan-400">{selectedPin.raw.speedMph != null ? `${Math.round(selectedPin.raw.speedMph)} mph` : "GPS speed unavailable"}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Active Jobs:</span> <strong>{selectedPin.raw.assignedJobs}</strong></p>
                       </div>
                     )}
