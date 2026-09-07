@@ -58,8 +58,22 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map, Marker, useMap } from "@vis.gl/react-google-maps";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
+import { subscribeToCollection } from "../lib/firestoreService";
 
 const DFW_FALLBACK = { lat: 32.7767, lng: -96.7970 };
+
+// Human-readable age of a real GPS fix ("Live", "3m ago", ...) -- never
+// invented for a fix that doesn't exist, callers only pass a real timestamp.
+function formatFixAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "Live";
+  if (ms < 90000) return "Live";
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
 
 const FitMapToPins: React.FC<{ pins: Array<{ lat: number; lng: number }> }> = ({ pins }) => {
   const map = useMap();
@@ -112,6 +126,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 }) => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  // Same multi-tenant scoping key every other collection in the app keys off
+  // (see App.tsx) -- needed here to subscribe to the real active_shifts feed
+  // that live technician GPS fixes land in.
+  const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
   const {
     customers,
     setCustomers,
@@ -311,11 +329,27 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
   // Real technicians — one per real employee. Name and clocked-in/on-break/
   // off-duty status come from the real employees + time_clock_logs
-  // collections; a real last-known GPS fix (captured at their last clock
-  // event) anchors their starting position when one exists. There is no
-  // real live GPS feed, so once placed they still animate via the jitter
-  // simulation below rather than actual tracked movement — that part
-  // remains a known limitation, not something faked as real.
+  // collections. Position comes from the most real fix available: a live
+  // GPS update reported while clocked in (see activeShifts below and the
+  // watchPosition effect in App.tsx) when one exists, otherwise the single
+  // fix captured at their last clock event. Nothing here is ever animated
+  // with fabricated movement — a technician's dot only moves when a real
+  // device fix says it did.
+  const [activeShifts, setActiveShifts] = useState<Array<{
+    id: string;
+    employeeEmail: string;
+    lastLocation?: { lat: number; lng: number; accuracy?: number; heading?: number | null; speed?: number | null; capturedAt: string };
+    lastLocationAt?: string;
+  }>>([]);
+
+  useEffect(() => {
+    if (!businessId) {
+      setActiveShifts([]);
+      return;
+    }
+    return subscribeToCollection("active_shifts", businessId, docs => setActiveShifts(docs as any));
+  }, [businessId]);
+
   const [activeTechnicians, setActiveTechnicians] = useState<Array<{
     id: string;
     name: string;
@@ -326,6 +360,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     jobId?: string;
     routeProgress?: number; // 0 to 100
     routePath?: Array<{ lat: number; lng: number }>;
+    lastLocationAt?: string; // real timestamp of the fix behind lat/lng, when known
   }>>([]);
 
   const parseGpsString = (gps: string): { lat: number; lng: number } | null => {
@@ -346,7 +381,9 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       const realStatus: "Available" | "Lunch" | "Offline" =
         !lastLog || lastLog.type === "Clock Out" ? "Offline" :
         lastLog.type === "Break Start" ? "Lunch" : "Available";
-      const lastRealFix = lastLog ? parseGpsString(lastLog.gps) : null;
+      const myShift = activeShifts.find(s => s.employeeEmail === er.email);
+      const liveFix = myShift?.lastLocation;
+      const lastRealFix = liveFix || (lastLog ? parseGpsString(lastLog.gps) : null);
       const fallbackFix = geocodeAddress(businessAddresses?.[0] || "Dallas, TX", er.email);
       return {
         id: er.email,
@@ -359,11 +396,12 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         lng: existing?.jobId ? existing.lng : (lastRealFix?.lng ?? existing?.lng ?? fallbackFix.lng),
         jobId: existing?.jobId,
         routeProgress: existing?.routeProgress,
-        routePath: existing?.routePath
+        routePath: existing?.routePath,
+        lastLocationAt: existing?.jobId ? existing.lastLocationAt : (myShift?.lastLocationAt ?? existing?.lastLocationAt)
       };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employees, timeClockLogs, businessAddresses]);
+  }, [employees, timeClockLogs, businessAddresses, activeShifts]);
 
   // Service territories start empty. Only owner-created, real territories belong here.
   const [serviceTerritories, setServiceTerritories] = useState<ServiceTerritory[]>([]);
@@ -743,8 +781,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           id: t.id,
           type: "Technician",
           title: `Tech: ${t.name}`,
-          subtitle: `Status: ${t.status} | Vehicle: ${t.vehicle}`,
-          address: `Mobile Location - DFW Metro`,
+          subtitle: `Status: ${t.status} | Vehicle: ${t.vehicle} | ${t.lastLocationAt ? formatFixAge(t.lastLocationAt) : "Last clock-in fix"}`,
+          address: `GPS fix (${t.lat.toFixed(4)}, ${t.lng.toFixed(4)})`,
           lat: t.lat,
           lng: t.lng,
           raw: t
@@ -848,36 +886,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   }, [filteredPins]);
   const maxHeatValue = Math.max(1, ...revenueHeatBubbles.map(b => b.value));
 
-  // Live Simulated Movements of Technicians & Vehicles every few seconds
+  // Technician position is never simulated here -- it's driven entirely by
+  // the real GPS fixes wired up above (live location while clocked in, or
+  // the last clock-event fix), which update this component through the
+  // employees/timeClockLogs/activeShifts effect on their own. Vehicle
+  // fuel/speed still have no real telemetry integration to source from, so
+  // that half stays a clearly-scoped decorative simulation.
   useEffect(() => {
     const timer = setInterval(() => {
-      setActiveTechnicians(prev => {
-        return prev.map(tech => {
-          // If Offline or Clocked out, don't move
-          if (tech.status === "Offline" || tech.status === "Clocked Out") return tech;
-
-          // Introduce minor coordinate jitter to animate movement beautifully
-          const latJitter = (Math.random() - 0.5) * 0.002;
-          const lngJitter = (Math.random() - 0.5) * 0.002;
-
-          let updatedLat = tech.lat + latJitter;
-          let updatedLng = tech.lng + lngJitter;
-
-          // Keep simulated movement within the DFW fallback area.
-          if (updatedLat < 32.60) updatedLat = 32.62;
-          if (updatedLat > 32.95) updatedLat = 32.93;
-          if (updatedLng < -97.05) updatedLng = -97.03;
-          if (updatedLng > -96.55) updatedLng = -96.57;
-
-          return {
-            ...tech,
-            lat: updatedLat,
-            lng: updatedLng
-          };
-        });
-      });
-
-      // Also simulate fuel and speeds
       setVehicles(prev => {
         return prev.map(veh => {
           const matchingTech = activeTechnicians.find(t => t.name === veh.driver);
@@ -2344,6 +2360,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                         <p className="flex justify-between"><span className="text-slate-400">Status:</span> <strong className="text-emerald-400">{selectedPin.raw.status}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Latitude:</span> <strong>{selectedPin.raw.lat.toFixed(5)}</strong></p>
                         <p className="flex justify-between"><span className="text-slate-400">Longitude:</span> <strong>{selectedPin.raw.lng.toFixed(5)}</strong></p>
+                        <p className="flex justify-between"><span className="text-slate-400">GPS Fix:</span> <strong className={selectedPin.raw.lastLocationAt && formatFixAge(selectedPin.raw.lastLocationAt) === "Live" ? "text-emerald-400" : "text-amber-400"}>{selectedPin.raw.lastLocationAt ? formatFixAge(selectedPin.raw.lastLocationAt) : "From last clock-in"}</strong></p>
                       </div>
                     )}
 

@@ -14,6 +14,7 @@ import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
 import { downloadCsv } from "./lib/csv";
 import { getRemoteSigningTokenFromUrl } from "./lib/remoteSigningClient";
+import { updateLiveLocation } from "./lib/timeClockService";
 import RemoteSigningPage from "./components/RemoteSigningPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
@@ -1839,6 +1840,46 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [isClockedIn]);
+
+  // Real field GPS tracking: while the employee is clocked in, keep
+  // reporting real device fixes (not a fabricated moving dot) so managers
+  // can see where field staff actually are on the Interactive Map, not just
+  // their position at the moment they punched in. Runs app-wide (not just
+  // while the Time Clock page is open) so tracking doesn't stop the second
+  // someone navigates away, and stops the instant they clock out because the
+  // effect's own dependency on isClockedIn tears the watch down -- no
+  // separate location keeps reporting off the clock.
+  useEffect(() => {
+    if (!isClockedIn || !loggedInUser?.email || !businessId) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    let lastSentAt = 0;
+    const MIN_INTERVAL_MS = 30000; // throttle writes; watchPosition can fire far more often than that
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSentAt < MIN_INTERVAL_MS) return;
+        lastSentAt = now;
+        void updateLiveLocation(businessId, loggedInUser.email, {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          capturedAt: new Date(pos.timestamp).toISOString()
+        });
+      },
+      () => {
+        // Denied/unavailable -- the map simply keeps showing the last real
+        // fix it has (clock-in punch or an earlier live update) rather than
+        // a fabricated position.
+      },
+      { enableHighAccuracy: true, maximumAge: 20000, timeout: 25000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isClockedIn, loggedInUser?.email, businessId]);
 
   // Firestore clock events are the source of truth. Rebuild the active
   // shift after navigation, reload, or returning from another page so the
