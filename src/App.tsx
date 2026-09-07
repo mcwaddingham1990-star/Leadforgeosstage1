@@ -1848,9 +1848,13 @@ export default function App() {
   // while the Time Clock page is open) so tracking doesn't stop the second
   // someone navigates away, and stops the instant they clock out because the
   // effect's own dependency on isClockedIn tears the watch down -- no
-  // separate location keeps reporting off the clock.
+  // separate location keeps reporting off the clock. Opt-in per employee
+  // (set at invite time or later from Settings/Roster) -- an owner has no
+  // employees record at all and is never tracked by this.
+  const currentEmployeeGpsTrackingEnabled = !!employees.find(e => e.email === loggedInUser?.email)?.gpsTrackingEnabled;
   useEffect(() => {
     if (!isClockedIn || !loggedInUser?.email || !businessId) return;
+    if (!currentEmployeeGpsTrackingEnabled) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
     let lastSentAt = 0;
@@ -1879,7 +1883,7 @@ export default function App() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [isClockedIn, loggedInUser?.email, businessId]);
+  }, [isClockedIn, loggedInUser?.email, businessId, currentEmployeeGpsTrackingEnabled]);
 
   // Firestore clock events are the source of truth. Rebuild the active
   // shift after navigation, reload, or returning from another page so the
@@ -4000,6 +4004,7 @@ Access to full financial telemetry is restricted.`;
     let invitePermissions = ["dashboard", "routes", "jobs", "timeclock", "messages"];
     let inviteGranularPermissions: GranularPermissions = defaultGranularFromModuleList(invitePermissions, "view");
     let inviteRequiresClockVerification = false;
+    let inviteGpsTrackingEnabled = false;
     let businessEmail: string | null = null;
 
     try {
@@ -4019,6 +4024,7 @@ Access to full financial telemetry is restricted.`;
       invitePermissions = inviteData.permissions || invitePermissions;
       inviteGranularPermissions = inviteData.granularPermissions || inviteGranularPermissions;
       inviteRequiresClockVerification = !!inviteData.requireTimeClockVerification;
+      inviteGpsTrackingEnabled = !!inviteData.gpsTrackingEnabled;
       businessEmail = inviteData.businessEmail || null;
       if (!businessEmail) {
         triggerNotification("This invite is missing a business account. Please ask your owner for a new invite.");
@@ -4067,6 +4073,7 @@ Access to full financial telemetry is restricted.`;
         permissions: invitePermissions,
         granularPermissions: inviteGranularPermissions,
         requireTimeClockVerification: inviteRequiresClockVerification,
+        gpsTrackingEnabled: inviteGpsTrackingEnabled,
         businessEmail,
         // Also tagged as businessId (same value) so this collection is
         // queryable through the same convention every other Firestore

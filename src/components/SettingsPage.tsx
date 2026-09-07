@@ -1123,6 +1123,35 @@ export default function SettingsPage({
                       </div>
                     </div>
                   )}
+                  {canManageClockVerification && employees.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Field GPS Tracking</h3>
+                      <p className="text-[10px] text-slate-500">Choose which employees report their real device location while clocked in, so their live position shows on the Interactive Map. Off by default -- addable or removable here any time.</p>
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {employees.map(employee => (
+                          <label key={employee.email} className="flex items-center justify-between gap-3 p-3 bg-white border border-[#A9CDEE] rounded-xl cursor-pointer">
+                            <span>
+                              <span className="block text-xs font-extrabold text-slate-800">{employee.firstName} {employee.lastName}</span>
+                              <span className="block text-[9.5px] text-slate-400">{employee.role} • {employee.email}</span>
+                            </span>
+                            <span className="flex items-center gap-2 text-[9px] font-bold uppercase text-[#315C9F]">
+                              {employee.gpsTrackingEnabled ? "Tracking On" : "Tracking Off"}
+                              <input
+                                type="checkbox"
+                                checked={!!employee.gpsTrackingEnabled}
+                                onChange={e => {
+                                  const enabled = e.target.checked;
+                                  setEmployees(current => current.map(item => item.email === employee.email ? { ...item, gpsTrackingEnabled: enabled } : item));
+                                  triggerNotification(`Field GPS tracking ${enabled ? "enabled" : "disabled"} for ${employee.firstName} ${employee.lastName}.`);
+                                }}
+                                className="w-4 h-4 accent-[#4A9BFF]"
+                              />
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {/* Active Users Table list */}
                   <div className="space-y-2">
                     <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Active Corporate Roster</h3>

@@ -220,6 +220,13 @@ export interface EmployeeRecord {
    * this employee's clock in/out events. When unset, every Owner/Manager-role
    * staff member for the business is notified and any one of them may act. */
   assignedManagerEmail?: string;
+  /** Opt-in, per employee: while this employee is clocked in, their real
+   * device GPS is reported periodically (see updateLiveLocation in
+   * timeClockService.ts) so the Interactive Map can show their live field
+   * position instead of only their last clock-in fix. Off by default --
+   * offered during invite/onboarding alongside permissions, and addable or
+   * removable any time from Settings or the Roster employee editor. */
+  gpsTrackingEnabled?: boolean;
   createdAt: string;
 }
 

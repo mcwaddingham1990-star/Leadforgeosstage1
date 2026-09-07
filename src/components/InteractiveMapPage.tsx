@@ -291,6 +291,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const [filterLeadStatus, setFilterLeadStatus] = useState("All"); // All, New, Contacted, Qualified, Estimate Sent, Won, Lost
   const [filterCategory, setFilterCategory] = useState("All"); // All, Residential, Commercial
   const [filterTechStatus, setFilterTechStatus] = useState("All"); // All, Available, Traveling, Lunch, Offline, Clocked Out
+  // "Technician Location" filter -- narrows the map to one specific
+  // technician's real GPS pin ("All" shows every technician). Selecting one
+  // also naturally re-centers the map on them, since FitMapToPins fits to
+  // whatever filteredPins ends up containing.
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState("All");
 
   const [markerClusterActive, setMarkerClusterActive] = useState(true);
 
@@ -846,6 +851,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         if (pin.raw.status !== filterTechStatus) return false;
       }
 
+      // 5b. Technician Location -- narrow to one specific technician
+      if (selectedTechnicianId !== "All" && pin.type === "Technician") {
+        if (pin.id !== selectedTechnicianId) return false;
+      }
+
       // 6. Business Sector (Customers)
       if (filterCategory !== "All" && pin.type === "Customer") {
         if (pin.raw.type !== filterCategory) return false;
@@ -863,7 +873,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
       return true;
     });
-  }, [allPins, searchQuery, filterType, filterPriority, filterJobStatus, filterLeadStatus, filterTechStatus, filterCategory]);
+  }, [allPins, searchQuery, filterType, filterPriority, filterJobStatus, filterLeadStatus, filterTechStatus, filterCategory, selectedTechnicianId]);
 
   // Real revenue heatmap -- one bubble per real customer pin, sized and
   // positioned from that customer's actual lifetime value and geocoded
@@ -1708,6 +1718,31 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 <option value="All">All Sectors</option>
                 <option value="Residential">Residential</option>
                 <option value="Commercial">Commercial</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Technician Location:</span>
+              <select
+                value={selectedTechnicianId}
+                onChange={(e) => {
+                  const techId = e.target.value;
+                  setSelectedTechnicianId(techId);
+                  setSelectedPin(null);
+                  if (techId !== "All") {
+                    // Selecting one technician is a request to see just them --
+                    // make sure the layer/type filters that gate technician
+                    // pins from appearing at all aren't hiding the result.
+                    setShowTechnicians(true);
+                    setFilterType("Technician");
+                  }
+                }}
+                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+              >
+                <option value="All">All Technicians</option>
+                {activeTechnicians.map(tech => (
+                  <option key={tech.id} value={tech.id}>{tech.name}</option>
+                ))}
               </select>
             </div>
 
