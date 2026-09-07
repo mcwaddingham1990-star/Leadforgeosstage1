@@ -1852,6 +1852,13 @@ export default function App() {
   // (set at invite time or later from Settings/Roster) -- an owner has no
   // employees record at all and is never tracked by this.
   const currentEmployeeGpsTrackingEnabled = !!employees.find(e => e.email === loggedInUser?.email)?.gpsTrackingEnabled;
+  // Opt-in, per employee: the Snapshot camera feature (receipts, fuel
+  // purchases, forms) is off for a field employee until an owner/manager
+  // grants it from Documents -> Employee Snapshot -> Customize Employee
+  // Folder. The owner and every non-employee account keep full access
+  // regardless -- this only ever restricts an *employee* account.
+  const currentEmployeeSnapshotPermissionEnabled = !!employees.find(e => e.email === loggedInUser?.email)?.snapshotPermissionEnabled;
+  const canUseSnapshot = !loggedInUser?.isEmployee || currentEmployeeSnapshotPermissionEnabled;
   // The specific clock-in log this GPS trail belongs to -- lets every fix
   // get appended onto that one shift's permanent route record (see
   // ShiftRoute) in addition to the live position, without a second lookup.
@@ -4259,7 +4266,9 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
-    {isLoggedIn && <UniversalAIIntake />}
+    {isLoggedIn && canUseSnapshot && (
+      <UniversalAIIntake snapshotFolder={loggedInUser?.isEmployee ? "Employee Snapshot" : undefined} />
+    )}
     <div
       className={`min-h-screen ${isLoggedIn ? (isDarkTheme ? 'bg-[#050f1a]' : 'bg-[#F5FAFF]') : isDarkTheme ? 'login-theme-dark-basic' : 'login-theme-light-basic'} text-[#342D7E] flex flex-col justify-between font-sans overflow-x-hidden relative select-none`}
       style={!isLoggedIn ? { backgroundImage: `url(${isDarkTheme ? darkLoginBackground : lightLoginBackground})` } : undefined}

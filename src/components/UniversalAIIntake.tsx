@@ -31,6 +31,16 @@ const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString
 const today = () => new Date().toISOString().slice(0, 10);
 const labels: Record<RecordType, string> = { bill: "Bill / Invoice", customer: "Customer", lead: "Lead", estimate: "Estimate", inventory: "Inventory", address: "Address", onboarding: "Onboarding", material_expense: "Material / Operational Expense", payroll: "Payroll Record", financial: "Other Financial Record", unknown: "Auto-detect" };
 const asBoolean = (value: unknown) => value === true || String(value).trim().toLowerCase() === "true" || String(value).trim().toLowerCase() === "yes";
+// "Fuel" is its own recognized Material Expenses category everywhere this
+// app rolls up reporting (see the materialCategories set in App.tsx and
+// AccountingPage.tsx) -- a gas/diesel receipt gets that specific label
+// instead of the generic "Material Expenses" bucket every other scanned
+// material_expense record gets, purely from what the AI/reviewer actually
+// typed into the category or description field.
+const isFuelExpense = (scanFields: Fields) => {
+  const haystack = `${scanFields.category || ""} ${scanFields.description || ""} ${scanFields.company || scanFields.payee || ""}`.toLowerCase();
+  return /\bfuel\b|\bgas(oline)?\b|\bdiesel\b/.test(haystack);
+};
 const canonicalFinancialCategory = (value: unknown): "Bills" | "Material Expenses" | "Payroll" | "Other Expenses" | null => {
   const category = String(value || "").trim().toLowerCase();
   if (["bill", "bills", "vendor bill", "service provider"].includes(category)) return "Bills";
@@ -53,7 +63,16 @@ const presetFields: Record<RecordType, Fields> = {
   unknown: { name: "", phone: "", email: "", address: "", description: "", amount: "" }
 };
 
-export function UniversalAIIntake() {
+export interface UniversalAIIntakeProps {
+  /** Set only for an employee using their own granted Snapshot permission --
+   * files their scanned photos under Documents > Employee Snapshot (scoped
+   * to them via the employee field) instead of the owner's general
+   * Snapshots folder. Undefined for the owner/managers, who keep the
+   * original Snapshots folder. */
+  snapshotFolder?: string;
+}
+
+export function UniversalAIIntake({ snapshotFolder }: UniversalAIIntakeProps = {}) {
   const data = useDomainData();
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
   const { loggedInUser, businessId } = useAuth();
@@ -98,7 +117,8 @@ export function UniversalAIIntake() {
       vendor: params.vendor,
       date: params.date,
       docType,
-      uploadedBy: loggedInUser?.name
+      uploadedBy: loggedInUser?.name,
+      folder: snapshotFolder
     }), ...prev]);
   };
   const scan = async (file?: File) => {
@@ -316,7 +336,9 @@ export function UniversalAIIntake() {
     } else if (recordType === "financial" || recordType === "material_expense" || recordType === "payroll") {
       const amount = Number(fields.amount || fields.totalCost || 0);
       if (!Number.isFinite(amount) || amount <= 0) return triggerNotification("Review requires a valid financial amount before saving.");
-      const category = recordType === "material_expense" ? "Material Expenses" : recordType === "payroll" ? "Payroll" : canonicalFinancialCategory(fields.category);
+      const category = recordType === "material_expense"
+        ? (isFuelExpense(fields) ? "Fuel" : "Material Expenses")
+        : recordType === "payroll" ? "Payroll" : canonicalFinancialCategory(fields.category);
       if (category === "Bills") return triggerNotification("Service/provider obligations must be saved as a Bill so they remain linked to the provider.");
       if (!category) return triggerNotification("Choose Material / Operational Expense, Payroll Record, or enter a recognized category before saving.");
       // Goes through saveTransaction (not a raw setTransactions push) so a

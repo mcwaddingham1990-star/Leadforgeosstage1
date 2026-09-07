@@ -227,6 +227,15 @@ export interface EmployeeRecord {
    * offered during invite/onboarding alongside permissions, and addable or
    * removable any time from Settings or the Roster employee editor. */
   gpsTrackingEnabled?: boolean;
+  /** Opt-in, per employee: lets this employee use the Snapshot camera
+   * feature at all (receipts, fuel purchases, forms, etc.). Off by default
+   * -- granted from Documents -> Employee Snapshot -> Customize Employee
+   * Folder, which offers the whole roster as a multi-select. A photo this
+   * employee captures files into their own folder under the business's
+   * "Employee Snapshot" documents folder instead of the owner's general
+   * Snapshots folder, and a fuel receipt still posts a real Material
+   * Expense the same way the owner's own scans do. */
+  snapshotPermissionEnabled?: boolean;
   createdAt: string;
 }
 
