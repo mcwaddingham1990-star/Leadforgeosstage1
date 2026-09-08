@@ -32,6 +32,7 @@ export const MODULE_CATALOG: Array<{ id: string; label: string }> = [
   { id: "dispatch", label: "Dispatch" },
   { id: "routes", label: "Routes" },
   { id: "interactive_map", label: "Interactive Map" },
+  { id: "employee_locations", label: "Employee Locations" },
   { id: "inventory", label: "Inventory" },
   { id: "documents", label: "Documents" },
   { id: "pdf_editor", label: "PDF Editor" },

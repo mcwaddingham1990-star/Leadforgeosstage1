@@ -119,6 +119,7 @@ import { JobsPage } from "./components/JobsPage";
 import { TimeClockPage } from "./components/TimeClockPage";
 import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
+import { EmployeeLocationsPage } from "./components/EmployeeLocationsPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
 import { PlaidConnectButton } from "./components/PlaidConnectButton";
@@ -643,27 +644,27 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   owner: {
     name: "Owner",
     description: "Everything",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
   },
   general_manager: {
     name: "General Manager",
     description: "Everything except ownership and account deletion",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
   },
   office_manager: {
     name: "Office Manager",
     description: "Day-to-day office and field operations",
-    permissions: ["dashboard", "revenue", "accounting", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "roster", "training", "settings"]
+    permissions: ["dashboard", "revenue", "accounting", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "inventory", "documents", "messages", "roster", "training", "settings"]
   },
   operations_manager: {
     name: "Operations Manager",
     description: "Dashboard, Scheduling, Dispatch, Routes, Jobs, Inventory, etc.",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "training", "settings"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "inventory", "documents", "messages", "training", "settings"]
   },
   dispatcher: {
     name: "Dispatcher",
     description: "Dispatch, Routes, Map, Jobs, Sched",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "jobs", "customers", "messages", "settings"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "customers", "messages", "settings"]
   },
   scheduler: {
     name: "Scheduler",
@@ -688,12 +689,12 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   project_manager: {
     name: "Project Manager",
     description: "Dashboard, Customers, Scheduling, Dispatch, Routes, Jobs, Inventory, Documents, Messages",
-    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "jobs", "inventory", "documents", "messages", "settings"]
+    permissions: ["dashboard", "customers", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "inventory", "documents", "messages", "settings"]
   },
   field_supervisor: {
     name: "Field Supervisor",
     description: "Dashboard, Jobs, Scheduling, Dispatch, Routes, Inventory, Documents, Messages, Training",
-    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "inventory", "documents", "messages", "training", "settings"]
+    permissions: ["dashboard", "jobs", "scheduling", "dispatch", "routes", "employee_locations", "inventory", "documents", "messages", "training", "settings"]
   },
   technician: {
     name: "Technician",
@@ -758,7 +759,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   it_administrator: {
     name: "IT Administrator",
     description: "Everything except Owner company settings",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "training", "settings"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "training", "settings"]
   }
 };
 
@@ -829,6 +830,7 @@ const OS_SCREENS = [
   { id: "scheduling", label: "Scheduling", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightscheduling.jpg", icon: "📅", top: "37%", bottom: "42%" },
   { id: "dispatch", label: "Dispatch", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdispatch.jpg", icon: "🚚", top: "42%", bottom: "47%" },
   { id: "routes", label: "Interactive Map & Routes", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightroutes.jpg", icon: "🗺️", top: "52%", bottom: "57%" },
+  { id: "employee_locations", label: "Employee Locations", url: "", icon: "📍", top: "52%", bottom: "57%" },
   { id: "jobs", label: "Jobs", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightjobs.jpg", icon: "💼", top: "22%", bottom: "27%" },
   { id: "timeclock", label: "Time Clock", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lighttimeclock.jpg", icon: "⏱️", top: "47%", bottom: "52%" },
   { id: "payroll", label: "Payroll", url: "", icon: "💵", top: "47%", bottom: "52%" },
@@ -1281,6 +1283,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Truck className={className} />;
     case "routes":
       return <Compass className={className} />;
+    case "employee_locations":
+      return <MapPin className={className} />;
     case "jobs":
       return <Briefcase className={className} />;
     case "timeclock":
@@ -1813,6 +1817,7 @@ export default function App() {
   // Roster's "Manage Roles" button) instead of dead-ending in an alert/toast
   // telling the user to go find it themselves.
   const [preSelectedSettingsSection, setPreSelectedSettingsSection] = useState<string | undefined>(undefined);
+  const [preSelectedTechnicianId, setPreSelectedTechnicianId] = useState<string | undefined>(undefined);
 
   // Test connection on boot
   useEffect(() => {
@@ -3180,10 +3185,11 @@ Access to full financial telemetry is restricted.`;
   // row, dropdown, card) should route through this so "many roads lead to the
   // same record" behaves identically everywhere, instead of each page call
   // site redefining its own copy of this logic.
-  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string }) => {
+  const navigateToScreen = (screenId: string, params?: { customerId?: string; date?: string; section?: string; technicianId?: string }) => {
     setPreSelectedCustomerId(params?.customerId ?? undefined);
     setPreSelectedDate(params?.date ?? undefined);
     setPreSelectedSettingsSection(params?.section ?? undefined);
+    setPreSelectedTechnicianId(params?.technicianId ?? undefined);
     const matched = OS_SCREENS.find(s => s.id === screenId);
     if (matched) {
       setActiveScreen(matched);
@@ -3241,7 +3247,7 @@ Access to full financial telemetry is restricted.`;
       const user = userCredential.user;
 
       // 2. Create owner user profile document
-      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
+      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
       const userProfile = {
         uid: user.uid,
         email: cleanEmail,
@@ -5681,7 +5687,7 @@ Access to full financial telemetry is restricted.`;
                               } catch (err) {
                                 console.error("Error setting onboarded flag:", err);
                               }
-                              const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
+                              const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
                               setLoggedInUser({
                                 email,
                                 role: "Owner",
@@ -8193,8 +8199,12 @@ Access to full financial telemetry is restricted.`;
                     <MapPageErrorBoundary>
                       <InteractiveMapPage
                         businessAddresses={businessAddresses}
+                        initialTechnicianId={preSelectedTechnicianId}
                       />
                     </MapPageErrorBoundary>
+
+                  ) : activeScreen.id === "employee_locations" ? (
+                    <EmployeeLocationsPage />
 
                   ) : activeScreen.id === "bulletins" ? (
                     
