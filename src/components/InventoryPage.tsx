@@ -6,6 +6,7 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { hasPermission } from "../types/permissions";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
+import { authedFetch } from "../lib/apiClient";
 import {
   Search,
   Plus,
@@ -802,7 +803,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setSnapshotStage("processing");
     setOcrError(null);
     try {
-      const res = await fetch("/api/ai/scan-receipt", {
+      const res = await authedFetch("/api/ai/scan-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64, mimeType })

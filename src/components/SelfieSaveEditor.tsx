@@ -636,7 +636,11 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       const bytes=await currentPdfBytes();
       const pdfBase64=bytesToBase64(bytes);
       const tooLargeToSave=pdfBase64.length>900_000;
-      const token=`sign_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
+      // Cryptographically random -- this token alone (no login) is what
+      // gates read/write access to this document via /api/sign/:token, so
+      // Math.random()+Date.now() (guessable/narrow search space) would let
+      // an attacker brute-force or predict a live signing link.
+      const token=`sign_${crypto.randomUUID().replace(/-/g,"")}`;
       const remoteTokenExpiresAt=new Date(Date.now()+14*24*60*60*1000).toISOString();
       persist("Awaiting Signature",{
         ...(tooLargeToSave?{}:{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"}),

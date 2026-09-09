@@ -9,12 +9,21 @@ import { sendPushToRecipients } from './server/pushNotifications';
 import { handleWebLeadFormSubmit, WebLeadFormSubmission } from './server/webLeadFormHandler';
 import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
+import { requireAuth } from './server/verifyAuth';
+import { rateLimit } from './server/rateLimit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));
+
+// Every /api/ai/* route below spends real Gemini API quota on each call and
+// previously had no authentication at all -- anyone on the internet could
+// call them directly (bypassing the app entirely) for free, unmetered use
+// of this server's paid AI key. requireAuth confines them to real signed-in
+// app users; the rate limit caps how much any single account can spend.
+app.use('/api/ai', requireAuth, rateLimit('ai', 60_000, 20));
 
 app.post('/api/ai/ask', async (req, res) => {
   try {
@@ -59,15 +68,20 @@ app.get('/api/client-info', (req, res) => {
   res.json({ ip: getClientIp(req) });
 });
 
-app.post('/api/plaid/create-link-token', async (req, res) => {
+// Plaid endpoints return real bank account numbers/balances and previously
+// had no authentication -- require a signed-in user. The link-token
+// identifier is derived from the verified caller's own uid rather than the
+// client-supplied clientUserId, so it can't be used to impersonate another
+// account inside Plaid's own Link session.
+app.post('/api/plaid/create-link-token', requireAuth, async (req, res) => {
   try {
-    res.json(await createPlaidLinkToken(String(req.body?.clientUserId || 'ownerslocal-sandbox-owner')));
+    res.json(await createPlaidLinkToken(req.firebaseUser!.uid));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to start Plaid Link' });
   }
 });
 
-app.post('/api/plaid/exchange-public-token', async (req, res) => {
+app.post('/api/plaid/exchange-public-token', requireAuth, async (req, res) => {
   try {
     res.json(await exchangePlaidPublicToken(req.body?.publicToken, req.body?.institutionName));
   } catch (err) {
@@ -75,14 +89,14 @@ app.post('/api/plaid/exchange-public-token', async (req, res) => {
   }
 });
 
-app.post('/api/notifications/send-push', async (req, res) => {
+app.post('/api/notifications/send-push', requireAuth, async (req, res) => {
   try {
     const { recipientEmails, title, body, data } = req.body || {};
     if (!Array.isArray(recipientEmails) || !recipientEmails.length || !title || !body) {
       res.status(400).json({ error: 'recipientEmails (non-empty array), title, and body are required' });
       return;
     }
-    const result = await sendPushToRecipients({ recipientEmails, title, body, data });
+    const result = await sendPushToRecipients({ recipientEmails, title, body, data, callerUid: req.firebaseUser!.uid });
     if (!result.configured) {
       // Expected/normal until FIREBASE_SERVICE_ACCOUNT_JSON is configured --
       // the in-app notification (Firestore `notifications` collection,
@@ -121,7 +135,7 @@ app.options('/api/leads/submit-web-form', (req, res) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.sendStatus(204);
 });
-app.post('/api/leads/submit-web-form', async (req, res) => {
+app.post('/api/leads/submit-web-form', rateLimit('web-lead-form', 60_000, 10), async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   try {
     const result = await handleWebLeadFormSubmit(req.body as WebLeadFormSubmission);
@@ -134,7 +148,9 @@ app.post('/api/leads/submit-web-form', async (req, res) => {
 // Remote e-signing: a customer opening a "sign this remotely" link has no
 // OwnersLocal login, so these two endpoints are the only way that flow can
 // read/write the one document its token points to (see server/remoteSigning.ts).
-app.get('/api/sign/:token', async (req, res) => {
+// Rate-limited since the token is the only thing standing between a
+// visitor and someone else's document/signature.
+app.get('/api/sign/:token', rateLimit('sign-get', 60_000, 20), async (req, res) => {
   try {
     const result = await getRemoteSigningInfo(req.params.token);
     res.status(result.ok ? 200 : 404).json(result);
@@ -142,7 +158,7 @@ app.get('/api/sign/:token', async (req, res) => {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load this signing link' });
   }
 });
-app.post('/api/sign/:token', async (req, res) => {
+app.post('/api/sign/:token', rateLimit('sign-post', 60_000, 10), async (req, res) => {
   try {
     const body = { ...(req.body as RemoteSignSubmission), token: req.params.token };
     const result = await submitRemoteSignature(body);

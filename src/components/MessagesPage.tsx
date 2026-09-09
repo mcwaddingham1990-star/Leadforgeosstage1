@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { authedFetch } from "../lib/apiClient";
 import {
   MessageSquare,
   Users,
@@ -486,7 +487,7 @@ export const MessagesPage: React.FC = () => {
 
     let aiContent = "Couldn't reach the AI right now — check your connection and try again.";
     try {
-      const res = await fetch("/api/ai/ask", {
+      const res = await authedFetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

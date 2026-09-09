@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { BankAccount } from "../types/accounting";
+import { authedFetch } from "../lib/apiClient";
 
 interface PlaidConnectButtonProps {
   className?: string;
@@ -23,7 +24,7 @@ export const PlaidConnectButton: React.FC<PlaidConnectButtonProps> = ({ classNam
     onSuccess: async (publicToken, metadata) => {
       try {
         setIsConnecting(true);
-        const response = await fetch("/api/plaid/exchange-public-token", {
+        const response = await authedFetch("/api/plaid/exchange-public-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ publicToken, institutionName: metadata.institution?.name }),
@@ -71,7 +72,7 @@ export const PlaidConnectButton: React.FC<PlaidConnectButtonProps> = ({ classNam
   const connect = async () => {
     try {
       setIsConnecting(true);
-      const response = await fetch("/api/plaid/create-link-token", {
+      const response = await authedFetch("/api/plaid/create-link-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientUserId: businessId || "ownerslocal-sandbox-owner" }),

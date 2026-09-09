@@ -7,29 +7,47 @@ import {getClientIp} from './server/clientInfo';
 import {createPlaidLinkToken, exchangePlaidPublicToken} from './server/plaidHandler';
 import {sendPushToRecipients} from './server/pushNotifications';
 import {getRemoteSigningInfo, submitRemoteSignature} from './server/remoteSigning';
+import {verifyFirebaseIdToken} from './server/verifyAuth';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 // Dev-only middleware so `npm run dev` (pure Vite, no separate process) can
 // serve /api/ai/* the same way the production server.ts does. GEMINI_API_KEY
 // is read from process.env here (Node/server context) and is never bundled
 // into client code — do not add it to the `define` block below.
-function jsonRoute(handler: (body: any) => Promise<unknown>): Connect.NextHandleFunction {
+//
+// requireAuth mirrors server.ts's requireAuth middleware: these routes cost
+// real API quota / touch real account data, so dev mode enforces the same
+// signed-in-user check production does (rather than being an unauthenticated
+// back door during local development).
+async function requireAuth(req: IncomingMessage): Promise<{ uid: string } | null> {
+  const header = String(req.headers['authorization'] || '');
+  const token = header.replace(/^Bearer\s+/i, '').trim();
+  const user = await verifyFirebaseIdToken(token);
+  return user ? { uid: user.uid } : null;
+}
+
+function jsonRoute(handler: (body: any, auth: { uid: string }) => Promise<unknown>): Connect.NextHandleFunction {
   return async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== 'POST') {
       res.statusCode = 405;
       res.end('Method Not Allowed');
       return;
     }
+    res.setHeader('Content-Type', 'application/json');
+    const auth = await requireAuth(req);
+    if (!auth) {
+      res.statusCode = 401;
+      res.end(JSON.stringify({ error: 'Sign in required.' }));
+      return;
+    }
     try {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
       const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}');
-      const result = await handler(body);
-      res.setHeader('Content-Type', 'application/json');
+      const result = await handler(body, auth);
       res.end(JSON.stringify(result));
     } catch (err) {
       res.statusCode = 500;
-      res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'AI request failed' }));
     }
   };
@@ -39,11 +57,11 @@ function aiApiDevMiddleware(): Plugin {
   return {
     name: 'ai-api-dev-middleware',
     configureServer(server) {
-      server.middlewares.use('/api/ai/ask', jsonRoute(handleAiAsk));
-      server.middlewares.use('/api/ai/scan-receipt', jsonRoute(handleScanReceipt));
-      server.middlewares.use('/api/ai/scan-financial-document', jsonRoute(handleScanFinancialDocument));
-      server.middlewares.use('/api/plaid/create-link-token', jsonRoute(body =>
-        createPlaidLinkToken(String(body?.clientUserId || 'ownerslocal-sandbox-owner'))
+      server.middlewares.use('/api/ai/ask', jsonRoute(body => handleAiAsk(body)));
+      server.middlewares.use('/api/ai/scan-receipt', jsonRoute(body => handleScanReceipt(body)));
+      server.middlewares.use('/api/ai/scan-financial-document', jsonRoute(body => handleScanFinancialDocument(body)));
+      server.middlewares.use('/api/plaid/create-link-token', jsonRoute((_body, auth) =>
+        createPlaidLinkToken(auth.uid)
       ));
       server.middlewares.use('/api/plaid/exchange-public-token', jsonRoute(body =>
         exchangePlaidPublicToken(body?.publicToken, body?.institutionName)
@@ -59,6 +77,12 @@ function aiApiDevMiddleware(): Plugin {
           return;
         }
         res.setHeader('Content-Type', 'application/json');
+        const auth = await requireAuth(req);
+        if (!auth) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: 'Sign in required.' }));
+          return;
+        }
         try {
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -68,7 +92,7 @@ function aiApiDevMiddleware(): Plugin {
             res.end(JSON.stringify({ error: 'recipientEmails (non-empty array), title, and body are required' }));
             return;
           }
-          const result = await sendPushToRecipients({ recipientEmails, title, body, data });
+          const result = await sendPushToRecipients({ recipientEmails, title, body, data, callerUid: auth.uid });
           if (!result.configured) {
             res.statusCode = 503;
             res.end(JSON.stringify({ error: 'Push notifications are not configured yet', sent: 0 }));

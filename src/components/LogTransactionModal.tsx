@@ -3,6 +3,7 @@ import { Camera, Keyboard, X, AlertTriangle, Loader2, DollarSign } from "lucide-
 import { Transaction } from "../types/domain";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
+import { authedFetch } from "../lib/apiClient";
 import { useDomainData } from "../context/DomainDataContext";
 
 interface LogTransactionModalProps {
@@ -70,7 +71,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     try {
       const { base64, mimeType } = await downscaleImageToBase64(file);
       setScannedPhoto({ base64, mimeType });
-      const res = await fetch("/api/ai/scan-financial-document", {
+      const res = await authedFetch("/api/ai/scan-financial-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64, mimeType })

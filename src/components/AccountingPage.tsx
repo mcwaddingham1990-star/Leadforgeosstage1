@@ -4,6 +4,7 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { hasPermission } from "../types/permissions";
+import { authedFetch } from "../lib/apiClient";
 import {
   Account,
   JournalEntry,
@@ -2179,7 +2180,7 @@ function AIInsightsTab({ totalRevenue, totalExpenses, netIncome, cashBalance, ar
     ].join(" ");
 
     try {
-      const res = await fetch("/api/ai/ask", {
+      const res = await authedFetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

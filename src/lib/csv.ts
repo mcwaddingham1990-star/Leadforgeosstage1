@@ -2,8 +2,21 @@
 // page's Import/Export buttons instead of each hand-rolling its own.
 
 export function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number>>) {
+  // Guards against CSV/Excel "formula injection": a text cell starting with
+  // =, +, -, @, tab, or CR can be interpreted as a live formula (up to
+  // arbitrary command execution via legacy DDE) by whatever spreadsheet app
+  // opens this export. Exploitable via any exported field that ultimately
+  // comes from untrusted input -- e.g. a name/company/notes value entered
+  // through the public, unauthenticated website lead-capture form (see
+  // server/webLeadFormHandler.ts) and later exported from the Leads page.
+  // Only applies to actual string cells -- numeric values (including
+  // legitimately negative amounts) are never at risk and pass through as-is.
+  const FORMULA_INJECTION_PATTERN = /^[=+\-@\t\r]/;
   const escape = (val: string | number) => {
-    const str = String(val ?? "");
+    let str = String(val ?? "");
+    if (typeof val === "string" && FORMULA_INJECTION_PATTERN.test(str)) {
+      str = `'${str}`;
+    }
     return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
   };
   const csvContent = [headers, ...rows].map(row => row.map(escape).join(",")).join("\r\n");

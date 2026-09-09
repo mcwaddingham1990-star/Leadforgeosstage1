@@ -35,6 +35,10 @@ export interface SendPushRequest {
   title: string;
   body: string;
   data?: Record<string, string>;
+  /** Firebase Auth uid of the caller, from the verified ID token (see
+   *  server/verifyAuth.ts) -- used to confine delivery to the caller's own
+   *  business (see the tenant-scoping comment below). */
+  callerUid: string;
 }
 
 export interface SendPushResult {
@@ -49,6 +53,17 @@ export async function sendPushToRecipients(req: SendPushRequest): Promise<SendPu
 
   const db = getFirestore(app);
 
+  // Tenant scoping: recipientEmails is caller-supplied, so without this a
+  // signed-in user at Business A could push arbitrary notification text to
+  // any email address registered anywhere in the system, including
+  // Business B's staff, just by naming their address. Resolve the caller's
+  // own business from their profile (the same tenant key every other
+  // collection is scoped by) and only ever deliver to subscriptions tagged
+  // with that businessId.
+  const callerProfile = await db.collection("user_profiles").doc(req.callerUid).get();
+  const callerBusinessId = callerProfile.data()?.businessEmail;
+  if (!callerBusinessId) return { sent: 0, configured: true };
+
   // Firestore 'in' queries cap at 30 values -- batch defensively for
   // businesses with a lot of managers assigned as approvers.
   const emailBatches: string[][] = [];
@@ -60,7 +75,9 @@ export async function sendPushToRecipients(req: SendPushRequest): Promise<SendPu
   for (const batch of emailBatches) {
     const snap = await db.collection("push_subscriptions").where("email", "in", batch).get();
     snap.forEach(doc => {
-      const token = doc.data()?.token;
+      const data = doc.data();
+      if (data?.businessId !== callerBusinessId) return;
+      const token = data?.token;
       if (typeof token === "string" && token) tokens.push(token);
     });
   }

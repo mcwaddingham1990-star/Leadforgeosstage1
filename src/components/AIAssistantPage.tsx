@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { buildStyleGuidance } from "../lib/aiStyle";
+import { authedFetch } from "../lib/apiClient";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import {
   Sparkles,
@@ -105,7 +106,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
       `Logged transactions: ${transactions.length}.`
     ].join(" ");
     try {
-      const res = await fetch("/api/ai/ask", {
+      const res = await authedFetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +161,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
     ].join(" ");
 
     try {
-      const res = await fetch("/api/ai/ask", {
+      const res = await authedFetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

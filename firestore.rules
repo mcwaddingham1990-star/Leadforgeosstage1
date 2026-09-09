@@ -48,9 +48,33 @@ service cloud.firestore {
         || job.assignedCrew == profile.name;
     }
 
-    // Profiles collection: users can read/write their own profiles
+    // Profiles collection: users can read/write their own profiles.
+    //
+    // SECURITY: `businessEmail` and `role` on this document are the roots of
+    // trust for the whole ruleset -- isBusinessMember() and isManager() above
+    // read them straight off this doc. The original rule let a user
+    // (request.auth.uid == uid) write *any* field of their own profile
+    // unconditionally, which meant any authenticated user could self-edit
+    // businessEmail to a victim business's email and role to "Owner" and
+    // instantly gain full read/write over that business's data in every
+    // other collection below -- a complete tenant-isolation and
+    // privilege-escalation bypass. Self-writes may still touch every other
+    // field (name, goals, permissions, etc., same as before); only
+    // businessEmail/role are pinned once a profile exists. The other-member
+    // branch (in practice: the business owner, whose auth token email
+    // equals businessEmail -- see isBusinessMember's comment above) keeps
+    // its original, unrestricted ability to edit an employee's profile
+    // (e.g. RosterPage's role editor), unchanged from before.
     match /user_profiles/{uid} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
+      allow read: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == uid
+          && request.resource.data.businessEmail == resource.data.businessEmail
+          && request.resource.data.role == resource.data.role)
+        || resource.data.businessEmail == request.auth.token.email
+      );
+      allow delete: if isAuthenticated() && resource.data.businessEmail == request.auth.token.email;
     }
 
     // Business profiles: owners can read/write their business profile
@@ -58,9 +82,23 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && isBusinessMember(email);
     }
 
-    // Employee invites: can be read during signup/onboarding
+    // Employee invites: the code must stay readable pre-signup (an
+    // unauthenticated visitor looks it up by code before they have an
+    // account to prove tenancy with), but creating/updating one now requires
+    // being a real member of the business the invite is being issued for --
+    // it was previously `if true`, letting anyone on the internet mint an
+    // invite for any business (e.g. role: "Owner") and then use it during
+    // signup to join that business with any role they chose.
     match /employee_invites/{code} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessEmail);
+      // Update also covers the invited user marking their own invite
+      // "completed" right after they create their account -- by then their
+      // own user_profile.businessEmail already matches this invite's
+      // businessEmail (set in the same signup flow, just before this call),
+      // so isBusinessMember(resource.data.businessEmail) covers them too.
+      allow update: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
     }
 
     // Employees collection
