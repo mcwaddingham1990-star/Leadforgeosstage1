@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -117,6 +117,38 @@ const CATEGORY_SHORTCUTS_STORAGE_KEY = "owners-inventory-category-shortcuts";
 // concrete, electrical supplies, etc. could be added without ever reducing
 // company cash.
 const MATERIAL_EXPENSE_CATEGORIES = MATERIAL_CATEGORY_SET;
+
+/**
+ * Converts an uploaded Excel file's first sheet into the same plain,
+ * comma-joined line format handleImport already expects (it does its own
+ * naive `line.split(",")` below -- no quoting -- so this matches that,
+ * rather than producing a fully quoted/escaped CSV that parser can't read
+ * anyway). Cell values are read as plain text/numbers -- formulas resolve
+ * to their last calculated result, not the formula itself.
+ */
+async function excelFileToImportLines(buffer: ArrayBuffer): Promise<string> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return "";
+  const lines: string[] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row) => {
+    const cells = (row.values as unknown[]).slice(1).map((value) => {
+      if (value == null) return "";
+      if (value instanceof Date) return value.toISOString();
+      if (typeof value === "object") {
+        const rich = value as { text?: string; result?: unknown; richText?: Array<{ text: string }> };
+        if (typeof rich.text === "string") return rich.text;
+        if (Array.isArray(rich.richText)) return rich.richText.map((t) => t.text).join("");
+        if (rich.result != null) return String(rich.result);
+        return "";
+      }
+      return String(value);
+    });
+    lines.push(cells.join(","));
+  });
+  return lines.join("\n");
+}
 
 export const TimeClockPage: React.FC = () => null; // Placeholder to avoid compilation issues if imported directly
 export const TimeClockPageProps: any = null;
@@ -2570,17 +2602,20 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       const fileExt = file.name.split('.').pop()?.toLowerCase();
                       if (fileExt === 'xlsx' || fileExt === 'xls') {
                         const fileReader = new FileReader();
-                        fileReader.onload = (event) => {
+                        fileReader.onload = async (event) => {
                           try {
-                            const data = new Uint8Array(event.target?.result as ArrayBuffer);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            const firstSheetName = workbook.SheetNames[0];
-                            const worksheet = workbook.Sheets[firstSheetName];
-                            const csv = XLSX.utils.sheet_to_csv(worksheet);
-                            setImportText(csv);
+                            const buffer = event.target?.result as ArrayBuffer;
+                            const importLines = await excelFileToImportLines(buffer);
+                            setImportText(importLines);
                             triggerToast(`📂 Excel sheet loaded: ${file.name}`);
                           } catch (err) {
-                            triggerToast("⚠️ Failed to parse Excel spreadsheet file.");
+                            // Legacy .xls (pre-2007 binary format) isn't readable this way --
+                            // give a specific, actionable message instead of a generic failure.
+                            triggerToast(
+                              fileExt === 'xls'
+                                ? "⚠️ Old .xls files aren't supported -- open it in Excel/Sheets and save as .xlsx, then try again."
+                                : "⚠️ Failed to parse Excel spreadsheet file."
+                            );
                           }
                         };
                         fileReader.readAsArrayBuffer(file);
