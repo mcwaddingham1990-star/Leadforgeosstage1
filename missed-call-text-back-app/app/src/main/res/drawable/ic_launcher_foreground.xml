@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder icon: replace with a real adaptive launcher icon via
+     Android Studio's Image Asset tool before shipping this. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,34 C43,34 34,43 34,54 C34,65 43,74 54,74 C65,74 74,65 74,54 C74,43 65,34 54,34 Z M54,42 C60.6,42 66,47.4 66,54 C66,60.6 60.6,66 54,66 C47.4,66 42,60.6 42,54 C42,47.4 47.4,42 54,42 Z" />
+</vector>
