@@ -1723,7 +1723,17 @@ function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, es
   ];
 
   const exportCsv = (rows: Array<[string, number]>, filename: string) => {
-    const csv = "Label,Amount\n" + rows.map(([l, v]) => `"${l}",${v.toFixed(2)}`).join("\n");
+    // Guards against CSV/Excel "formula injection" (see src/lib/csv.ts) --
+    // these labels are customer/vendor/employee/service names, which can
+    // ultimately trace back to unauthenticated input (the public website
+    // lead form). Also escapes embedded quotes, which this line previously
+    // didn't (a label containing a literal `"` would otherwise corrupt
+    // the CSV's column structure).
+    const safeLabel = (label: string) => {
+      const text = /^[=+\-@\t\r]/.test(label) ? `'${label}` : label;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const csv = "Label,Amount\n" + rows.map(([l, v]) => `${safeLabel(l)},${v.toFixed(2)}`).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

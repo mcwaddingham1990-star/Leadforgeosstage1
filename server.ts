@@ -6,7 +6,7 @@ import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScan
 import { getClientIp } from './server/clientInfo';
 import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 import { sendPushToRecipients } from './server/pushNotifications';
-import { handleWebLeadFormSubmit, WebLeadFormSubmission } from './server/webLeadFormHandler';
+import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } from './server/webLeadFormHandler';
 import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
@@ -142,6 +142,26 @@ app.post('/api/leads/submit-web-form', rateLimit('web-lead-form', 60_000, 10), a
     res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Lead form submission failed' });
+  }
+});
+
+// Daily + total visitor count for the same embedded website (see the
+// Integrations page's embed snippet) -- fires once per real page load, not
+// per keystroke like a form submit, so this gets a much higher rate-limit
+// ceiling than the form itself; it's just a cheap atomic counter increment.
+app.options('/api/leads/track-visit', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+app.post('/api/leads/track-visit', rateLimit('site-visit', 60_000, 120), async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  try {
+    const result = await recordWebsiteVisit(String(req.body?.token || ''));
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not record this visit' });
   }
 });
 

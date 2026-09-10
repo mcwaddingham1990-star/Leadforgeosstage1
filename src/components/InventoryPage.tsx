@@ -370,9 +370,20 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
   };
 
   const handleExport = () => {
-    const csvContent = "data:text/csv;charset=utf-8," 
+    // Guards against CSV/Excel "formula injection" and escapes embedded
+    // quotes (neither was handled before) -- item names/vendors/etc. can be
+    // freehand text, including from an AI-scanned receipt/label.
+    const csvCell = (value: string | number) => {
+      let text = String(value ?? "");
+      if (typeof value === "string" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const csvContent = "data:text/csv;charset=utf-8,"
       + ["Name,Category,Vendor,SKU,Barcode,Quantity,Unit,UnitCost,SellingPrice,Location"].join(",") + "\n"
-      + inventoryList.map(item => `"${item.name}","${item.category}","${item.vendor}","${item.sku}","${item.barcode}",${item.quantity},"${item.unit}",${item.unitCost},${item.sellingPrice},"${item.location}"`).join("\n");
+      + inventoryList.map(item => [
+          csvCell(item.name), csvCell(item.category), csvCell(item.vendor), csvCell(item.sku), csvCell(item.barcode),
+          item.quantity, csvCell(item.unit), item.unitCost, item.sellingPrice, csvCell(item.location)
+        ].join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);

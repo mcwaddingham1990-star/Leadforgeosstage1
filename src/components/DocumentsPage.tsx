@@ -718,24 +718,31 @@ export const DocumentsPage: React.FC = () => {
   };
 
   // Export actions
+  // Guards against CSV/Excel "formula injection" -- a text cell starting
+  // with =, +, -, @, tab, or CR can run as a live formula in whatever
+  // spreadsheet app opens this export. These document fields (name,
+  // customer, employee, vendor, notes, etc.) can ultimately trace back to
+  // unauthenticated input (the public website lead-capture form).
+  const protectFormula = (value: string) => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
+
   const convertToCSV = (docs: DocumentItem[]) => {
     const headers = ["ID", "Document Name", "Customer Link", "Employee Link", "Vendor Link", "Job Link", "Type", "Uploaded By", "Date Created", "File Size", "Status", "Is Favorite", "Is Archived", "Notes", "Tags", "Estimate ID", "Invoice ID", "Last Modified"];
     const rows = docs.map(d => [
       d.id,
-      `"${(d.name || "").replace(/"/g, '""')}"`,
-      `"${(d.customer || "").replace(/"/g, '""')}"`,
-      `"${(d.employee || "").replace(/"/g, '""')}"`,
-      `"${(d.vendor || "").replace(/"/g, '""')}"`,
-      `"${(d.job || "").replace(/"/g, '""')}"`,
-      `"${(d.type || "").replace(/"/g, '""')}"`,
-      `"${(d.uploadedBy || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.name || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.customer || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.employee || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.vendor || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.job || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.type || "").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.uploadedBy || "").replace(/"/g, '""')}"`,
       d.date,
       d.size,
       d.status,
       d.isFavorite ? "TRUE" : "FALSE",
       d.isArchived ? "TRUE" : "FALSE",
-      `"${(d.notes || "").replace(/"/g, '""')}"`,
-      `"${(d.tags || []).join(", ").replace(/"/g, '""')}"`,
+      `"${protectFormula(d.notes || "").replace(/"/g, '""')}"`,
+      `"${protectFormula((d.tags || []).join(", ")).replace(/"/g, '""')}"`,
       d.estimateId,
       d.invoiceId,
       d.lastModified
@@ -747,20 +754,20 @@ export const DocumentsPage: React.FC = () => {
     const headers = ["ID", "Document Name", "Customer Link", "Employee Link", "Vendor Link", "Job Link", "Type", "Uploaded By", "Date Created", "File Size", "Status", "Is Favorite", "Is Archived", "Notes", "Tags", "Estimate ID", "Invoice ID", "Last Modified"];
     const rows = docs.map(d => [
       d.id,
-      (d.name || "").replace(/\t/g, ' '),
-      (d.customer || "").replace(/\t/g, ' '),
-      (d.employee || "").replace(/\t/g, ' '),
-      (d.vendor || "").replace(/\t/g, ' '),
-      (d.job || "").replace(/\t/g, ' '),
-      (d.type || "").replace(/\t/g, ' '),
-      (d.uploadedBy || "").replace(/\t/g, ' '),
+      protectFormula((d.name || "").replace(/\t/g, ' ')),
+      protectFormula((d.customer || "").replace(/\t/g, ' ')),
+      protectFormula((d.employee || "").replace(/\t/g, ' ')),
+      protectFormula((d.vendor || "").replace(/\t/g, ' ')),
+      protectFormula((d.job || "").replace(/\t/g, ' ')),
+      protectFormula((d.type || "").replace(/\t/g, ' ')),
+      protectFormula((d.uploadedBy || "").replace(/\t/g, ' ')),
       d.date,
       d.size,
       d.status,
       d.isFavorite ? "TRUE" : "FALSE",
       d.isArchived ? "TRUE" : "FALSE",
-      (d.notes || "").replace(/\t/g, ' '),
-      (d.tags || []).join(", ").replace(/\t/g, ' '),
+      protectFormula((d.notes || "").replace(/\t/g, ' ')),
+      protectFormula((d.tags || []).join(", ").replace(/\t/g, ' ')),
       d.estimateId,
       d.invoiceId,
       d.lastModified

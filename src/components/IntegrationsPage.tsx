@@ -68,6 +68,8 @@ export interface Integration {
   apiSecret?: string;
   webhookUrl?: string;
   redirectUri?: string;
+  /** Shown as a disabled "Coming Soon" card instead of a real (if unwired) Connect button. */
+  comingSoon?: boolean;
 }
 
 export interface SyncLogEntry {
@@ -202,6 +204,42 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       apiSecret: "",
       webhookUrl: "",
       redirectUri: ""
+    },
+    {
+      id: "facebook_business_profile",
+      name: "Facebook Business Profile",
+      category: "Marketing",
+      developer: "Meta",
+      apiType: "REST",
+      logo: "📘",
+      description: "Coming soon — sync leads and reviews from your Facebook Business Page.",
+      connected: false,
+      lastSync: "Never",
+      aiEnabled: false,
+      aiMode: "OFF",
+      apiUsage: { current: 0, limit: 0 },
+      scopes: [],
+      permissions: ["Owner", "Manager"],
+      syncFrequency: "Manual",
+      comingSoon: true
+    },
+    {
+      id: "google_business_profile",
+      name: "Google Business Profile",
+      category: "Marketing",
+      developer: "Google",
+      apiType: "REST",
+      logo: "🇬",
+      description: "Coming soon — sync reviews and listing info from your Google Business Profile.",
+      connected: false,
+      lastSync: "Never",
+      aiEnabled: false,
+      aiMode: "OFF",
+      apiUsage: { current: 0, limit: 0 },
+      scopes: [],
+      permissions: ["Owner", "Manager"],
+      syncFrequency: "Manual",
+      comingSoon: true
     }
   ]);
 
@@ -238,6 +276,11 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   const [isLoadingWebFormToken, setIsLoadingWebFormToken] = useState(true);
   const [isGeneratingWebFormToken, setIsGeneratingWebFormToken] = useState(false);
   const [webFormCopySuccess, setWebFormCopySuccess] = useState(false);
+  // Visitor counts written server-side by /api/leads/track-visit (see the
+  // embed snippet's tracking ping below) -- real page-load counts, not a
+  // fabricated number, so both start at 0 until a real visitor lands.
+  const [websiteVisitsTotal, setWebsiteVisitsTotal] = useState(0);
+  const [websiteVisitsToday, setWebsiteVisitsToday] = useState(0);
 
   useEffect(() => {
     if (!businessId) {
@@ -248,7 +291,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     (async () => {
       try {
         const snap = await getDoc(doc(db, "business_profiles", businessId));
-        if (!cancelled) setWebFormToken(snap.exists() ? (snap.data().webFormToken || "") : "");
+        const data = snap.exists() ? snap.data() : {};
+        if (!cancelled) {
+          setWebFormToken(data.webFormToken || "");
+          const visits = data.websiteVisits || {};
+          const today = new Date().toISOString().slice(0, 10);
+          setWebsiteVisitsTotal(Number(visits.total) || 0);
+          setWebsiteVisitsToday(Number(visits.daily?.[today]) || 0);
+        }
       } catch (err) {
         console.error("Error loading website lead form token:", err);
       } finally {
@@ -282,6 +332,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   };
 
   const webLeadFormEndpoint = `${typeof window !== "undefined" ? window.location.origin : ""}/api/leads/submit-web-form`;
+  const webVisitTrackEndpoint = `${typeof window !== "undefined" ? window.location.origin : ""}/api/leads/track-visit`;
 
   const webLeadFormEmbedSnippet = useMemo(() => {
     if (!webFormToken) return "";
@@ -299,6 +350,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 </form>
 <script>
 (function () {
+  // Counts this page load toward your Daily/Total Visitors in Integrations
+  // -- fire-and-forget, never blocks or affects the page either way.
+  fetch("${webVisitTrackEndpoint}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "${webFormToken}" })
+  }).catch(function () {});
+
   var form = document.getElementById("ownerslocal-lead-form");
   var status = document.getElementById("ownerslocal-lead-form-status");
   form.addEventListener("submit", function (e) {
@@ -326,7 +385,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   });
 })();
 </script>`;
-  }, [webFormToken, webLeadFormEndpoint]);
+  }, [webFormToken, webLeadFormEndpoint, webVisitTrackEndpoint]);
 
   const handleCopyWebFormSnippet = async () => {
     try {
@@ -340,8 +399,12 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
   // Computations for the plain-language status row
   const summaryCounts = useMemo(() => {
-    const connected = integrations.filter((i) => i.connected).length;
-    const available = integrations.length - connected;
+    // "Coming soon" placeholders aren't actionable yet, so they're excluded
+    // from both counts here -- otherwise "Not Set Up" would imply a user
+    // could go set them up right now, which isn't true.
+    const actionable = integrations.filter((i) => !i.comingSoon);
+    const connected = actionable.filter((i) => i.connected).length;
+    const available = actionable.length - connected;
     const errors = syncLogs.filter((l) => l.status === "Failed").length;
     return {
       connected,
@@ -358,7 +421,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
   const filteredIntegrations = useMemo(() => {
     if (!activeSummaryFilter) return integrations;
     return integrations.filter((item) =>
-      activeSummaryFilter === "Connected" ? item.connected : !item.connected
+      activeSummaryFilter === "Connected" ? item.connected : (!item.connected && !item.comingSoon)
     );
   }, [integrations, activeSummaryFilter]);
 
@@ -567,10 +630,12 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                       className={`text-[8.5px] px-1.5 py-0.5 rounded-lg font-bold uppercase border shrink-0 ${
                         item.connected
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-[#F5FAFF] text-slate-400 border-[#A9CDEE]"
+                          : item.comingSoon
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-[#F5FAFF] text-slate-400 border-[#A9CDEE]"
                       }`}
                     >
-                      {item.connected ? "Working" : "Not Set Up"}
+                      {item.connected ? "Working" : item.comingSoon ? "Coming Soon" : "Not Set Up"}
                     </span>
                   </div>
 
@@ -613,6 +678,14 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                           ⋯
                         </button>
                       </>
+                    ) : item.comingSoon ? (
+                      <button
+                        disabled
+                        title={`${item.name} is coming soon`}
+                        className="flex-1 px-2.5 py-2 bg-slate-300 text-white rounded-xl text-[11px] font-bold font-sans cursor-not-allowed opacity-60 text-center"
+                      >
+                        Coming Soon
+                      </button>
                     ) : (
                       <>
                         <button
@@ -1026,6 +1099,19 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                     pasted anywhere, so only do that if the old code was compromised or you're
                     starting over.
                   </div>
+
+                  {!isLoadingWebFormToken && webFormToken && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-[#F5FAFF] border border-[#A9CDEE]/50 rounded-lg text-center">
+                        <div className="text-[9px] font-bold uppercase text-slate-400">Visitors Today</div>
+                        <div className="text-lg font-extrabold text-[#342D7E] mt-0.5">{websiteVisitsToday.toLocaleString()}</div>
+                      </div>
+                      <div className="p-3 bg-[#F5FAFF] border border-[#A9CDEE]/50 rounded-lg text-center">
+                        <div className="text-[9px] font-bold uppercase text-slate-400">Total Visitors</div>
+                        <div className="text-lg font-extrabold text-[#342D7E] mt-0.5">{websiteVisitsTotal.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  )}
 
                   {isLoadingWebFormToken ? (
                     <p className="text-slate-500 font-sans">Loading…</p>

@@ -1,5 +1,5 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 
@@ -87,6 +87,37 @@ export async function handleWebLeadFormSubmit(body: WebLeadFormSubmission): Prom
 
   await notifyNewWebsiteLead(db, businessId, name);
 
+  return { ok: true };
+}
+
+export interface RecordWebsiteVisitResult {
+  ok: boolean;
+}
+
+/**
+ * Counts one page view of a business's embedded website (the same public
+ * page the lead form snippet lives on), keyed by the same webFormToken --
+ * so "visitors" only ever means people who actually loaded that business's
+ * real website, not just anyone hitting this endpoint with a guessed
+ * token. Uses atomic Firestore increments (not read-then-write) so
+ * concurrent visitors from different page loads never clobber each other.
+ */
+export async function recordWebsiteVisit(token: string): Promise<RecordWebsiteVisitResult> {
+  const app = getAdminApp();
+  if (!app) return { ok: false };
+  const cleanToken = (token || "").trim();
+  if (!cleanToken) return { ok: false };
+
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  const ownerSnap = await db.collection("business_profiles").where("webFormToken", "==", cleanToken).limit(1).get();
+  if (ownerSnap.empty) return { ok: false };
+  const businessId = ownerSnap.docs[0].id;
+  const today = new Date().toISOString().slice(0, 10);
+
+  await db.collection("business_profiles").doc(businessId).update({
+    "websiteVisits.total": FieldValue.increment(1),
+    [`websiteVisits.daily.${today}`]: FieldValue.increment(1)
+  });
   return { ok: true };
 }
 

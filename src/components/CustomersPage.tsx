@@ -245,10 +245,19 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       c.isVIP ? "Yes" : "No"
     ]);
 
+    // Guards against CSV/Excel "formula injection" -- a text cell starting
+    // with =, +, -, @, tab, or CR can run as a live formula in whatever
+    // spreadsheet app opens this export. company/contact/address ultimately
+    // trace back to lead/customer data, which can originate from the
+    // public, unauthenticated website lead-capture form.
+    const FORMULA_INJECTION_PATTERN = /^[=+\-@\t\r]/;
     const csvContent = [
       headers.join(","),
       ...rows.map(fields => fields.map(val => {
-        const strVal = String(val);
+        let strVal = String(val);
+        if (typeof val === "string" && FORMULA_INJECTION_PATTERN.test(strVal)) {
+          strVal = `'${strVal}`;
+        }
         if (strVal.includes(",") || strVal.includes('"') || strVal.includes("\n")) {
           return `"${strVal}"`;
         }
