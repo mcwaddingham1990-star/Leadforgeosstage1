@@ -11,10 +11,19 @@ import { processDueRecurringTransactions, startRecurringScheduler } from './serv
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
 import { rateLimit } from './server/rateLimit';
+import { handleStripeWebhook } from './server/stripeWebhook';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+
+// Stripe webhook signature verification needs the exact raw request body
+// Stripe signed, not the parsed-and-reserialized object the global
+// express.json() below would produce -- so this has to be registered (with
+// its own express.raw()) before that global JSON parser runs, or the body
+// would already be consumed/transformed by the time this route sees it.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));
 
