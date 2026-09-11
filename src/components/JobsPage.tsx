@@ -79,6 +79,7 @@ export const JobsPage: React.FC = () => {
     setPreSelectedCustomerId(undefined);
   }, [preSelectedCustomerId, customers, setPreSelectedCustomerId]);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [quickFilter, setQuickFilter] = useState<"" | "open" | "active" | "overdue">("");
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");
   const [viewMode, setViewMode] = useState<ViewMode>("board");
@@ -105,14 +106,20 @@ export const JobsPage: React.FC = () => {
     if (!canManageCompletion && !isAssignedWorker(job)) return triggerNotification("Only assigned workers or authorized management can access this completion plan.");
     setCompletionJobId(job.id);
   };
+  const today = new Date().toISOString().slice(0, 10);
   const visibleJobs = useMemo(() => jobs.filter(job => {
     const q = search.toLowerCase();
     const haystack = [displayNumber(job), job.title, job.customer, job.customerPhone, job.location, job.assignedEmployee, job.notes].join(" ").toLowerCase();
+    const matchesQuick = quickFilter === "" ? true
+      : quickFilter === "open" ? !["Completed", "Cancelled"].includes(normalizedStatus(job))
+      : quickFilter === "active" ? ["En Route", "Arrived", "Working"].includes(normalizedStatus(job))
+      : !["Completed", "Cancelled"].includes(normalizedStatus(job)) && job.date < today;
     return (!q || haystack.includes(q)) &&
       (statusFilter === "All" || normalizedStatus(job) === statusFilter) &&
       (priorityFilter === "All" || job.priority === priorityFilter) &&
-      (assigneeFilter === "All" || (assigneeFilter === "Unassigned" ? !job.assignedEmployee : job.assignedEmployee === assigneeFilter));
-  }), [jobs, search, statusFilter, priorityFilter, assigneeFilter]);
+      (assigneeFilter === "All" || (assigneeFilter === "Unassigned" ? !job.assignedEmployee : job.assignedEmployee === assigneeFilter)) &&
+      matchesQuick;
+  }), [jobs, search, statusFilter, priorityFilter, assigneeFilter, quickFilter, today]);
 
   const stats = useMemo(() => ({
     open: jobs.filter(j => !["Completed", "Cancelled"].includes(normalizedStatus(j))).length,
@@ -259,7 +266,13 @@ export const JobsPage: React.FC = () => {
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
-        {[["Open Jobs",stats.open,Briefcase],["Unassigned",stats.unassigned,AlertTriangle],["In Progress",stats.active,Clock],["Overdue",stats.overdue,Calendar],["Completed",stats.completed,CheckCircle2]].map(([label,value,Icon]: any)=><button key={label} onClick={()=>label==="Unassigned"&&setStatusFilter("Unassigned")} className="rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-3 text-left"><Icon className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-xl font-black text-[#1F3557]">{value}</p><p className="text-[9px] font-bold uppercase tracking-wide text-[#5E7393]">{label}</p></button>)}
+        {([
+          ["Open Jobs", stats.open, Briefcase, quickFilter === "open", () => { setStatusFilter("All"); setQuickFilter(prev => prev === "open" ? "" : "open"); }],
+          ["Unassigned", stats.unassigned, AlertTriangle, statusFilter === "Unassigned", () => { setQuickFilter(""); setStatusFilter(prev => prev === "Unassigned" ? "All" : "Unassigned"); }],
+          ["In Progress", stats.active, Clock, quickFilter === "active", () => { setStatusFilter("All"); setQuickFilter(prev => prev === "active" ? "" : "active"); }],
+          ["Overdue", stats.overdue, Calendar, quickFilter === "overdue", () => { setStatusFilter("All"); setQuickFilter(prev => prev === "overdue" ? "" : "overdue"); }],
+          ["Completed", stats.completed, CheckCircle2, statusFilter === "Completed", () => { setQuickFilter(""); setStatusFilter(prev => prev === "Completed" ? "All" : "Completed"); }],
+        ] as const).map(([label, value, Icon, isActive, onClick]) => <button key={label} onClick={onClick} className={`rounded-2xl border p-3 text-left transition ${isActive ? "border-[#315C9F] bg-[#C7E3FA] ring-2 ring-[#315C9F]" : "border-[#9EC8EF] bg-[#EAF5FF]"}`}><Icon className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-xl font-black text-[#1F3557]">{value}</p><p className="text-[9px] font-bold uppercase tracking-wide text-[#5E7393]">{label}</p></button>)}
       </div>
     </div>
 
