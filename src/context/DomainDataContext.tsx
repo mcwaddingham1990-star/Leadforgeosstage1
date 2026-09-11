@@ -46,6 +46,8 @@ export interface DomainDataContextValue {
   setTimeClockLogs: Dispatch<SetStateAction<TimeClockLog[]>>;
   /** Forces a fresh server read of time clock logs — recovers a view stuck on stale data if the realtime listener died (Firestore listeners don't auto-retry after a permission/unavailable error). */
   refreshTimeClockLogs: () => Promise<void>;
+  /** 0 (Sunday) - 6 (Saturday): the business's configured start-of-workweek day (Settings > Payroll), the same value real payroll runs use to bucket hours into FLSA workweeks for overtime. Job costing uses this too, so its overtime math lines up with actual payroll instead of assuming Sunday. */
+  payrollWorkweekStart: number;
   transactions: Transaction[];
   setTransactions: Dispatch<SetStateAction<Transaction[]>>;
   /** Atomically persists a transaction and its balanced journal entry. */

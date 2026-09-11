@@ -4175,6 +4175,7 @@ Access to full financial telemetry is restricted.`;
     timeClockLogs,
     setTimeClockLogs,
     refreshTimeClockLogs,
+    payrollWorkweekStart,
     transactions,
     setTransactions,
     saveTransaction: handleSaveTransaction,

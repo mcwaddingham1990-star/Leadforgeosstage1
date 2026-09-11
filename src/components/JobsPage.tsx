@@ -47,7 +47,7 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -93,8 +93,8 @@ export const JobsPage: React.FC = () => {
 
   const selected = jobs.find(j => j.id === selectedId) || null;
   const jobCosting = useMemo(
-    () => selected ? computeJobCosting(selected, estimates, timeClockLogs, employees, transactions) : null,
-    [selected, estimates, timeClockLogs, employees, transactions]
+    () => selected ? computeJobCosting(selected, estimates, timeClockLogs, employees, transactions, payrollWorkweekStart) : null,
+    [selected, estimates, timeClockLogs, employees, transactions, payrollWorkweekStart]
   );
   const completionJob = jobs.find(j => j.id === completionJobId) || null;
   const isAssignedWorker = (job: SchedulingEvent) => {
