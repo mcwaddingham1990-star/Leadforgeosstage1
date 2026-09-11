@@ -321,6 +321,8 @@ export interface Transaction {
   inventoryItemId?: string; // links inventory purchases/adjustments to their expense entry
   /** Links a cash receipt to the invoice it paid so Revenue and Accounting share one economic event. */
   invoiceId?: string;
+  /** Links an expense to the job it was incurred for (same convention as Invoice.jobId / MileageLog.jobId), so Jobs' cost breakdown can roll it up as an "other cost" alongside labor and materials. Payroll-sourced transactions intentionally don't use this — labor cost is computed directly from time_clock_logs instead, to avoid double-counting. */
+  jobId?: string;
 }
 
 export interface SchedulingEvent {

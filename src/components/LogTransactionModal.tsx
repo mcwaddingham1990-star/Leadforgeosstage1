@@ -32,7 +32,8 @@ const INCOME_CATEGORIES = ["Job Payment", "Check Deposit", "Deposit", "Refund", 
  * user confirming the form, typed or scanned.
  */
 export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTransactionModalProps) {
-  const { setDocuments } = useDomainData();
+  const { setDocuments, schedulingEvents } = useDomainData();
+  const jobs = React.useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
   const [mode, setMode] = useState<Mode>("choose");
   const [source, setSource] = useState<"manual" | "ai_scan">("manual");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -47,6 +48,9 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [date, setDate] = useState(todayStr());
+  // Optional job link (expenses only) so Jobs' cost breakdown can roll this
+  // up as an "other cost" alongside labor and materials.
+  const [jobId, setJobId] = useState("");
 
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const label = type === "income" ? "Income" : "Expense";
@@ -58,6 +62,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     setDescription("");
     setCategory("");
     setDate(todayStr());
+    setJobId("");
     setScanError(null);
     setMode("form");
   };
@@ -89,6 +94,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
       }
       setCategory("");
       setDate(data.date || todayStr());
+      setJobId("");
       setMode("form");
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Scan failed. Make sure GEMINI_API_KEY is configured on the server.");
@@ -97,6 +103,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
       setDescription("");
       setCategory("");
       setDate(todayStr());
+      setJobId("");
       setMode("form");
     }
   };
@@ -116,7 +123,8 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
         category: category || undefined,
         date,
         createdAt: new Date().toISOString(),
-        createdBy
+        createdBy,
+        jobId: type === "expense" && jobId ? jobId : undefined
       });
       if (scannedPhoto && scannedPhoto.base64.length <= SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) {
         setDocuments(prev => [buildScanSnapshotDocument({
@@ -239,6 +247,20 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
                 />
               </div>
             </div>
+            {type === "expense" && jobs.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Job (optional)</label>
+                <select
+                  value={jobId}
+                  onChange={(e) => setJobId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 font-semibold focus:outline-none focus:border-blue-400"
+                >
+                  <option value="">Not job-specific</option>
+                  {jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber || j.title || j.customer}</option>)}
+                </select>
+                <p className="text-[9.5px] text-slate-400 font-sans">Links this cost to the job's Job Costing breakdown.</p>
+              </div>
+            )}
           </form>
         )}
 

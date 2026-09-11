@@ -14,6 +14,7 @@ import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { hasPermission } from "../types/permissions";
 import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
+import { computeJobCosting } from "../lib/jobCostingEngine";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -46,7 +47,7 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -91,6 +92,10 @@ export const JobsPage: React.FC = () => {
   const [completionJobId, setCompletionJobId] = useState<string | null>(null);
 
   const selected = jobs.find(j => j.id === selectedId) || null;
+  const jobCosting = useMemo(
+    () => selected ? computeJobCosting(selected, estimates, timeClockLogs, employees, transactions) : null,
+    [selected, estimates, timeClockLogs, employees, transactions]
+  );
   const completionJob = jobs.find(j => j.id === completionJobId) || null;
   const isAssignedWorker = (job: SchedulingEvent) => {
     const identity = [loggedInUser?.name, loggedInUser?.email].filter(Boolean).map(value => String(value).trim().toLowerCase());
@@ -238,8 +243,6 @@ export const JobsPage: React.FC = () => {
   };
 
   const estimatedAmount = (job: SchedulingEvent) => estimates.find(e => e.id === job.sourceEstimateId)?.amount || job.budget || 0;
-  const laborHours = (job: SchedulingEvent) => timeClockLogs.filter(l => l.jobId === job.id && l.type === "Clock Out").length;
-  const materialCost = (job: SchedulingEvent) => (job.materials || []).reduce((s, m) => s + m.quantity * m.unitCost, 0);
   const generateJobPdf = (job: SchedulingEvent) => {
     setGeneratedPdfDraft({filename:`${displayNumber(job)}.pdf`,title:`Job ${displayNumber(job)}`,sourceType:"Job",sourceId:job.id,customerName:job.customer,customerPhone:job.customerPhone,customerEmail:job.customerEmail,representativeName:job.assignedEmployee||actor,lines:[`Customer: ${job.customer}`,`Phone: ${job.customerPhone||"—"}`,`Address: ${job.location||job.customerAddress||"—"}`,`Date: ${job.date} ${job.startTime||""}`,`Status: ${normalizedStatus(job)}`,`Priority: ${job.priority}`,`Estimated value: $${Number(estimatedAmount(job)).toLocaleString()}`,"",`Description: ${job.description||job.notes||"—"}`]});
     navigateToScreen("documents");
@@ -282,7 +285,29 @@ export const JobsPage: React.FC = () => {
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><div className="flex justify-between"><h4 className="text-xs font-black uppercase text-[#1F3557]"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Work Checklist</h4><b className="text-xs text-[#315C9F]">{selected.progress||0}%</b></div><div className="mt-3 h-2 overflow-hidden rounded bg-blue-100"><div className="h-full bg-emerald-500" style={{width:`${selected.progress||0}%`}}/></div><div className="mt-3 space-y-2">{(selected.checklist||[]).map(t=><label key={t.id} className="flex items-center gap-2 rounded-lg bg-blue-50 p-2 text-xs"><input type="checkbox" checked={t.completed} onChange={()=>toggleTask(t.id)} disabled={!canEdit}/><span className={t.completed?"line-through text-slate-400":"font-semibold text-slate-700"}>{t.label}</span></label>)}{!(selected.checklist||[]).length&&<p className="text-xs text-slate-400">No checklist items yet.</p>}</div>{canEdit&&<div className="mt-3 flex gap-2"><input value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Add work step or inspection item" className="flex-1 rounded-lg border border-[#9EC8EF] px-3 py-2 text-xs"/><button onClick={addTask} className="rounded-lg bg-[#315C9F] px-3 text-white"><Plus className="h-4 w-4"/></button></div>}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]"><Package className="mr-1 inline h-4 w-4"/>Materials & Inventory</h4><div className="mt-3 space-y-2">{(selected.materials||[]).map((m,i)=><div key={`${m.inventoryId}-${i}`} className="flex justify-between rounded-lg bg-blue-50 p-2 text-xs"><span>{m.quantity} × {m.name}</span><b>${(m.quantity*m.unitCost).toFixed(2)}</b></div>)}{!(selected.materials||[]).length&&<p className="text-xs text-slate-400">No material allocated.</p>}</div>{canEdit&&<div className="mt-3 grid grid-cols-[1fr_70px_auto] gap-2"><select value={materialId} onChange={e=>setMaterialId(e.target.value)} className="rounded-lg border border-[#9EC8EF] px-2 text-xs"><option value="">Select inventory item</option>{inventoryList.map(i=><option key={i.id} value={i.id}>{i.name} ({i.quantity} {i.unit})</option>)}</select><input type="number" min="1" value={materialQty} onChange={e=>setMaterialQty(Number(e.target.value))} className="rounded-lg border border-[#9EC8EF] px-2 text-xs"/><button onClick={allocateMaterial} className="rounded-lg bg-[#315C9F] px-3 py-2 text-xs font-bold text-white">Allocate</button></div>}</section>
-        <section className="grid gap-3 sm:grid-cols-3">{[["Estimate / Budget",estimatedAmount(selected),DollarSign],["Materials Used",materialCost(selected),Package],["Clock-out Records",laborHours(selected),Clock]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="text-lg font-black text-[#1F3557]">{l==="Clock-out Records"?v:`$${Number(v).toLocaleString()}`}</p></div>)}</section>
+        {jobCosting && <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-black uppercase text-[#1F3557]"><DollarSign className="mr-1 inline h-4 w-4"/>Job Costing</h4>
+            <span className="text-[9px] font-bold text-[#5E7393]">{jobCosting.laborHours.toFixed(1)} labor hrs</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              ["Estimated Revenue", jobCosting.estimatedRevenue],
+              ["Labor Cost", jobCosting.laborCost],
+              ["Material Cost", jobCosting.materialCost],
+              ["Other Costs", jobCosting.otherCost],
+              ["Total Cost", jobCosting.totalCost],
+              ["Gross Profit", jobCosting.grossProfit],
+            ].map(([l, v]: any) => <div key={l} className="rounded-xl border border-[#9EC8EF] bg-blue-50/60 p-3">
+              <p className="text-[9px] font-bold uppercase text-[#5E7393]">{l}</p>
+              <p className={`text-sm font-black ${l==="Gross Profit"?(v<0?"text-rose-600":"text-emerald-700"):"text-[#1F3557]"}`}>{v<0?"-":""}${Math.abs(Number(v)).toLocaleString(undefined,{maximumFractionDigits:2})}</p>
+            </div>)}
+            <div className="rounded-xl border border-[#9EC8EF] bg-blue-50/60 p-3 sm:col-span-2">
+              <p className="text-[9px] font-bold uppercase text-[#5E7393]">Margin</p>
+              <p className={`text-sm font-black ${jobCosting.marginPercent==null?"text-[#5E7393]":jobCosting.marginPercent<0?"text-rose-600":"text-emerald-700"}`}>{jobCosting.marginPercent==null?"— (no estimate)":`${jobCosting.marginPercent.toFixed(1)}%`}</p>
+            </div>
+          </div>
+        </section>}
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["scheduling","Schedule",Calendar],["dispatch","Dispatch",Truck],["documents","Documents",FileText],["messages","Messages",MessageSquare]].map(([id,label,I]:any)=><button key={id} onClick={()=>navigateToScreen(id)} className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"><I className="mx-auto mb-1 h-4 w-4"/>{label}{id==="documents"&&<span className="ml-1">({documents.filter(d=>d.job===selected.id||d.job===displayNumber(selected)).length})</span>}</button>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
