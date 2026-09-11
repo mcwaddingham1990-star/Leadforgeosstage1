@@ -9,12 +9,13 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { StructuredAddressFields } from "./StructuredAddressFields";
 import SendChoiceModal from "./SendChoiceModal";
-import type { SchedulingEvent } from "../types/domain";
+import type { SchedulingEvent, WorkOrder } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { hasPermission } from "../types/permissions";
 import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { computeJobCosting } from "../lib/jobCostingEngine";
+import { WorkOrderBuilder } from "./WorkOrderBuilder";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -47,7 +48,10 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
+  const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
+  const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -291,7 +295,7 @@ export const JobsPage: React.FC = () => {
       <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Completion</button></div></td></tr>)}</tbody></table></div>}
 
     {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
-      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
+      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
       <div className="space-y-5 p-5">
         <button onClick={()=>openCompletion(selected)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Project Completion Tracking</button>
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
@@ -321,7 +325,21 @@ export const JobsPage: React.FC = () => {
             </div>
           </div>
         </section>}
-        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["scheduling","Schedule",Calendar],["dispatch","Dispatch",Truck],["documents","Documents",FileText],["messages","Messages",MessageSquare]].map(([id,label,I]:any)=><button key={id} onClick={()=>navigateToScreen(id)} className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"><I className="mx-auto mb-1 h-4 w-4"/>{label}{id==="documents"&&<span className="ml-1">({documents.filter(d=>d.job===selected.id||d.job===displayNumber(selected)).length})</span>}</button>)}</section>
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["scheduling","Schedule",Calendar],["dispatch","Dispatch",Truck],["documents","Documents",FileText],["messages","Messages",MessageSquare]].map(([id,label,I]:any)=><button key={id} onClick={()=>navigateToScreen(id)} className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"><I className="mx-auto mb-1 h-4 w-4"/>{label}{id==="documents"&&<span className="ml-1">({documents.filter(d=>d.job===selected.id||d.job===displayNumber(selected)).length})</span>}</button>)}
+          {(() => {
+            const linkedWorkOrders = workOrders.filter(w => w.sourceJobId === selected.id);
+            return <button
+              onClick={() => {
+                if (linkedWorkOrders.length) { setEditingWorkOrder(linkedWorkOrders[0]); setWorkOrderPrefill(undefined); }
+                else { setEditingWorkOrder(null); setWorkOrderPrefill({ sourceJobId: selected.id, customerId: selected.customerId, customerName: selected.customer, jobDescription: selected.description || selected.title || "", date: new Date().toISOString().slice(0, 10) }); }
+                setIsWorkOrderBuilderOpen(true);
+              }}
+              className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"
+            >
+              <span className="mx-auto mb-1 block text-center">🧰</span>Work Orders<span className="ml-1">({linkedWorkOrders.length})</span>
+            </button>;
+          })()}
+        </section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
 
@@ -337,6 +355,7 @@ export const JobsPage: React.FC = () => {
     />}
     {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
     <SendChoiceModal isOpen={isSendOpen} onClose={()=>setIsSendOpen(false)} label={selected?displayNumber(selected):"job"} phone={selected?.customerPhone} email={selected?.customerEmail} />
+    <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={()=>setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} editingWorkOrder={editingWorkOrder} />
   </div>;
 };
 

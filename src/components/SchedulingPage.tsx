@@ -39,6 +39,7 @@ const DEFAULT_EVENT_TYPES = [
   "Consultation",
   "Meeting",
   "Job",
+  "Work Order",
   "Project Review",
   "Site Visit",
   "Follow-Up",

@@ -139,6 +139,7 @@ export interface DocumentItem {
   tags: string[];
   estimateId: string;
   invoiceId: string;
+  workOrderId?: string;
   receiptAmount?: number;
   lastModified: string;
   url?: string;
@@ -327,7 +328,7 @@ export interface Transaction {
 
 export interface SchedulingEvent {
   id: string;
-  eventType: string; // Estimate, Consultation, Meeting, Job, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
+  eventType: string; // Estimate, Consultation, Meeting, Job, Work Order, Project Review, Site Visit, Follow-Up, Inspection, Delivery, Training, PTO, Vacation, Sick Day, Vehicle Maintenance, Equipment Maintenance, Inventory Delivery, Reminder, Task, Custom
   customType?: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM (24-hour)
@@ -361,6 +362,50 @@ export interface SchedulingEvent {
   checklist?: Array<{ id: string; label: string; completed: boolean; completedAt?: string; completedBy?: string }>;
   materials?: Array<{ inventoryId: string; name: string; quantity: number; unitCost: number }>;
   activity?: Array<{ id: string; timestamp: string; action: string; by: string; detail?: string }>;
+  /** Set when this calendar entry (eventType "Work Order") was auto-created so a scheduled Work Order shows up on Scheduling/Dispatch/Map without those pages needing any Work Order-specific code -- see WorkOrderBuilder.tsx. */
+  sourceWorkOrderId?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/**
+ * A real, standalone job-flow document -- distinct from an Estimate (a
+ * single-amount bid) and a Job (the scheduling/dispatch record). Only
+ * `date` and `jobDescription` are ever required to save one; everything
+ * else is optional, so a Work Order can be created from scratch with zero
+ * dependency on an Estimate or Job existing first.
+ *
+ * Anything copied in from an Estimate/Job (customer info, address, line
+ * items, a Flat Rate Pricing Model, etc.) becomes this document's own
+ * independent copy the moment it's saved -- editing a Work Order never
+ * writes back to the Estimate, Job, Invoice, or master Price Book model it
+ * came from. See WorkOrderBuilder.tsx.
+ */
+export interface WorkOrder {
+  id: string;
+  workOrderNumber?: string;
+  date: string; // YYYY-MM-DD -- required
+  jobDescription: string; // required
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  address?: string;
+  /** Independent-copy link back to where this Work Order was built from, for display/navigation only -- never a live reference that gets re-synced. */
+  sourceEstimateId?: string;
+  sourceJobId?: string;
+  assignedEmployees?: string[];
+  scheduledDate?: string;
+  scheduledTime?: string;
+  priority?: "Low" | "Medium" | "High" | "Urgent";
+  notes?: string;
+  materials?: Array<{ inventoryId?: string; name: string; quantity: number; unitCost: number }>;
+  /** Labor/tasks and any Flat Rate Pricing Models added -- each one an independent copy, never a live link back to the master Price Book model. */
+  lineItems?: Array<{ id: string; description: string; quantity: number; unitPrice: number; priceBookModelId?: string }>;
+  status?: "Draft" | "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+  estimatedValue?: number;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
+  activity?: Array<{ id: string; timestamp: string; action: string; by: string; detail?: string }>;
 }

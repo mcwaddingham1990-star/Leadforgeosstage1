@@ -37,9 +37,10 @@ import {
 } from "lucide-react";
 
 export type { Customer } from "../types/domain";
-import type { Customer, DocumentItem } from "../types/domain";
+import type { Customer, DocumentItem, WorkOrder } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
+import { WorkOrderBuilder } from "./WorkOrderBuilder";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
@@ -60,6 +61,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
   const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
+  const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
+  const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
@@ -875,6 +878,23 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               >
                 <CreditCard className="w-3.5 h-3.5 text-[#1F3557]" />
                 Create Invoice
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedCustomer) return;
+                  setWorkOrderPrefill({
+                    customerId: selectedCustomer.id,
+                    customerName: selectedCustomer.contact || selectedCustomer.company,
+                    customerPhone: selectedCustomer.phone,
+                    customerEmail: selectedCustomer.email,
+                    address: selectedCustomer.address,
+                    date: new Date().toISOString().slice(0, 10)
+                  });
+                  setIsWorkOrderBuilderOpen(true);
+                }}
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+              >
+                🧰 Create Work Order
               </button>
               <button
                 onClick={() => selectedCustomer && onNavigateToScreen("messages", { customerId: selectedCustomer.id })}
@@ -1881,6 +1901,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         </div>
       )}
 
+      <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
     </div>
   );
 };

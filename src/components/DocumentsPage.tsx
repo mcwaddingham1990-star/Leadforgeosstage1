@@ -6,6 +6,8 @@ import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import SelfieSaveEditor from "./SelfieSaveEditor";
 import { EmployeeSnapshotFolderBrowser } from "./EmployeeSnapshotFolderBrowser";
 import { EmployeeSnapshotPermissionModal } from "./EmployeeSnapshotPermissionModal";
+import { WorkOrderBuilder } from "./WorkOrderBuilder";
+import type { WorkOrder } from "../types/domain";
 import {
   Search,
   Plus,
@@ -64,6 +66,7 @@ import type { DocumentItem } from "../types/domain";
 // The deliberately small filing structure selected for Owners Local OS.
 export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; subfolders: string[] }> = [
   { id: "Estimates", icon: "📝", subfolders: ["Estimates"] },
+  { id: "Work Orders", icon: "🧰", subfolders: ["Work Orders"] },
   { id: "Invoices", icon: "💳", subfolders: ["Invoices"] },
   { id: "Customer Notes", icon: "🗒️", subfolders: ["Customer Notes"] },
   { id: "Employees", icon: "👤", subfolders: ["Employee Files"] },
@@ -89,6 +92,7 @@ export function inferFolderForDoc(doc: DocumentItem): string {
   if (doc.type === "Employee Files") return "Employees";
   if (doc.type === "Invoices") return "Invoices";
   if (doc.type === "Estimates") return "Estimates";
+  if (doc.type === "Work Orders") return "Work Orders";
   if (doc.type === "Receipts" || doc.type === "Expenses") return "Expenses/Receipts";
   if (doc.type.toLowerCase().includes("tax")) return "Taxes";
   return "Customer Notes";
@@ -106,7 +110,10 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders } = useDomainData();
+  const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
+  const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
+  const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -283,7 +290,7 @@ export const DocumentsPage: React.FC = () => {
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
           job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
-          type: generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : "Contracts",
+          type: generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts",
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : "Draft",
@@ -295,6 +302,7 @@ export const DocumentsPage: React.FC = () => {
           tags: ["Editor", "Draft"],
           estimateId: generatedPdfDraft?.sourceType === "Estimate" ? generatedPdfDraft.sourceId : "None",
           invoiceId: generatedPdfDraft?.sourceType === "Invoice" ? generatedPdfDraft.sourceId : "None",
+          workOrderId: generatedPdfDraft?.sourceType === "Work Order" ? generatedPdfDraft.sourceId : undefined,
           lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
           metaObjects: metaProperties?.objects || []
         };
@@ -944,6 +952,13 @@ export const DocumentsPage: React.FC = () => {
               Upload Document
             </button>
             <button
+              onClick={() => { setEditingWorkOrder(null); setWorkOrderPrefill(undefined); setIsWorkOrderBuilderOpen(true); }}
+              className="px-3.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+              Create Custom Work Order
+            </button>
+            <button
               onClick={() => {
                 setSnapshotStep("camera");
                 setIsSnapshotModalOpen(true);
@@ -1257,6 +1272,37 @@ export const DocumentsPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {selectedFolderFilter === "Work Orders" && (
+        <div className="rounded-2xl border border-[#9EC8EF] bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black uppercase text-[#1F3557]">Work Orders</p>
+            <button
+              onClick={() => { setEditingWorkOrder(null); setWorkOrderPrefill(undefined); setIsWorkOrderBuilderOpen(true); }}
+              className="rounded-xl bg-[#315C9F] px-3.5 py-2 text-xs font-black text-white uppercase tracking-wider"
+            >
+              Create Custom Work Order
+            </button>
+          </div>
+          {workOrders.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">No work orders yet.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {workOrders.map(wo => (
+                <button
+                  key={wo.id}
+                  onClick={() => { setEditingWorkOrder(wo); setWorkOrderPrefill(undefined); setIsWorkOrderBuilderOpen(true); }}
+                  className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] p-3 text-left"
+                >
+                  <p className="font-mono text-[9px] font-black uppercase text-[#315C9F]">{wo.workOrderNumber}</p>
+                  <p className="mt-1 truncate text-xs font-bold text-[#1F3557]">{wo.jobDescription}</p>
+                  <p className="text-[10px] text-[#5E7393]">{wo.date}{wo.customerName ? ` · ${wo.customerName}` : ""}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {selectedFolderFilter === "Employee Snapshot" && (
         <EmployeeSnapshotFolderBrowser
@@ -2725,6 +2771,13 @@ export const DocumentsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <WorkOrderBuilder
+        isOpen={isWorkOrderBuilderOpen}
+        onClose={() => setIsWorkOrderBuilderOpen(false)}
+        prefill={workOrderPrefill}
+        editingWorkOrder={editingWorkOrder}
+      />
     </div>
   );
 };

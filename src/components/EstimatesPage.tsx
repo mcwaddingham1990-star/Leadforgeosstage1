@@ -41,7 +41,8 @@ import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import SendChoiceModal from "./SendChoiceModal";
 import { downloadCsv, parseCsv } from "../lib/csv";
-import type { DocumentItem } from "../types/domain";
+import type { DocumentItem, WorkOrder } from "../types/domain";
+import { WorkOrderBuilder } from "./WorkOrderBuilder";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -84,6 +85,9 @@ export const EstimatesPage: React.FC = () => {
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [sendMatch, setSendMatch] = useState<{ email?: string; phone?: string } | null>(null);
   const [conversionComplete, setConversionComplete] = useState(false);
+  const [lastConvertedJobId, setLastConvertedJobId] = useState<string | null>(null);
+  const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
+  const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [jobDate, setJobDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [jobStartTime, setJobStartTime] = useState("09:00");
   const [jobEndTime, setJobEndTime] = useState("12:00");
@@ -345,7 +349,7 @@ export const EstimatesPage: React.FC = () => {
 
   const handleApproveEstimate = () => {
     if (!selectedEstimate) return;
-    approveEstimateToJob(selectedEstimate.id, {
+    const job = approveEstimateToJob(selectedEstimate.id, {
       date: jobDate,
       startTime: jobStartTime,
       endTime: jobEndTime,
@@ -354,6 +358,7 @@ export const EstimatesPage: React.FC = () => {
       priority: jobPriority,
       notes: jobNotes
     });
+    setLastConvertedJobId(job?.id || null);
     setSelectedEstimate({ ...selectedEstimate, status: "Accepted" });
     setConversionComplete(true);
   };
@@ -1442,6 +1447,28 @@ export const EstimatesPage: React.FC = () => {
                 {!isEditMode && selectedEstimate && !schedulingEvents.some(event => event.sourceEstimateId === selectedEstimate.id) && (
                   <button type="button" onClick={openConversion} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
                 )}
+                {!isEditMode && selectedEstimate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const linkedJob = schedulingEvents.find(event => event.sourceEstimateId === selectedEstimate.id);
+                      setWorkOrderPrefill({
+                        sourceEstimateId: selectedEstimate.id,
+                        sourceJobId: linkedJob?.id,
+                        customerName: selectedEstimate.customerName,
+                        address: selectedEstimate.address,
+                        customerPhone: selectedEstimate.phone,
+                        jobDescription: selectedEstimate.projectSpecifics || selectedEstimate.notes || `${selectedEstimate.company || selectedEstimate.customerName} project`,
+                        estimatedValue: selectedEstimate.amount,
+                        date: new Date().toISOString().slice(0, 10)
+                      });
+                      setIsWorkOrderBuilderOpen(true);
+                    }}
+                    className="px-4 py-2 bg-white border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider"
+                  >
+                    🧰 Create Work Order
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1465,7 +1492,31 @@ export const EstimatesPage: React.FC = () => {
                 <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100"><CheckCircle className="h-8 w-8 text-emerald-600" /></span>
                 <h4 className="mt-4 text-lg font-black text-[#1F3557]">Job scheduled successfully</h4>
                 <p className="mt-2 text-sm text-[#5E7393]">The accepted estimate is now linked to a job and visible in Jobs, Scheduling, and Dispatch.</p>
-                <div className="mt-5 grid grid-cols-2 gap-2">
+                <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <p className="text-xs font-black uppercase text-[#1F3557]">Create Work Order?</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setWorkOrderPrefill({
+                          sourceEstimateId: selectedEstimate.id,
+                          sourceJobId: lastConvertedJobId || undefined,
+                          customerName: selectedEstimate.customerName,
+                          address: selectedEstimate.address,
+                          customerPhone: selectedEstimate.phone,
+                          jobDescription: selectedEstimate.projectSpecifics || selectedEstimate.notes || `${selectedEstimate.company || selectedEstimate.customerName} project`,
+                          estimatedValue: selectedEstimate.amount,
+                          date: new Date().toISOString().slice(0, 10)
+                        });
+                        setIsWorkOrderBuilderOpen(true);
+                      }}
+                      className="rounded-xl bg-[#315C9F] px-4 py-2.5 text-xs font-black uppercase text-white"
+                    >
+                      Yes
+                    </button>
+                    <button onClick={() => setIsConversionOpen(false)} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2.5 text-xs font-black uppercase text-[#315C9F]">Skip for Now</button>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button onClick={() => setIsConversionOpen(false)} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-3 text-xs font-black uppercase text-[#315C9F]">Stay here</button>
                   <button onClick={() => { setIsConversionOpen(false); setSelectedEstimate(null); onNavigateToScreen?.("jobs"); }} className="rounded-xl bg-[#315C9F] px-4 py-3 text-xs font-black uppercase text-white">Open job</button>
                 </div>
@@ -1527,6 +1578,7 @@ export const EstimatesPage: React.FC = () => {
       )}
 
       <SendChoiceModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} label={`Estimate ${selectedEstimate?.number || ""}`} phone={sendMatch?.phone} email={sendMatch?.email} />
+      <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
     </div>
   );
 };

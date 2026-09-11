@@ -1,5 +1,5 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
-import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "../types/domain";
+import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "../types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
@@ -20,6 +20,8 @@ export interface DomainDataContextValue {
   setEstimates: Dispatch<SetStateAction<Estimate[]>>;
   schedulingEvents: SchedulingEvent[];
   setSchedulingEvents: Dispatch<SetStateAction<SchedulingEvent[]>>;
+  workOrders: WorkOrder[];
+  setWorkOrders: Dispatch<SetStateAction<WorkOrder[]>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];

@@ -4,7 +4,7 @@ import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRig
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
-import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction } from "./types/domain";
+import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -1680,6 +1680,7 @@ export default function App() {
   const [leads, setLeads] = useFirestoreCollection<Lead>("leads", businessId);
   const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
   const [schedulingEvents, setSchedulingEvents] = useFirestoreCollection<SchedulingEvent>("scheduling_events", businessId);
+  const [workOrders, setWorkOrders] = useFirestoreCollection<WorkOrder>("work_orders", businessId);
   const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
   const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
   const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
@@ -4152,6 +4153,8 @@ Access to full financial telemetry is restricted.`;
     setEstimates,
     schedulingEvents,
     setSchedulingEvents,
+    workOrders,
+    setWorkOrders,
     inventoryList,
     setInventoryList,
     documents,
