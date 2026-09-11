@@ -16,22 +16,30 @@ function getStripeClient(): Stripe {
 /**
  * Creates a new Stripe Connect connected account for a business, if one
  * doesn't already exist. Controller-based (not a plain "Express" account):
- * the platform (OwnersLOCAL) controls fees and who absorbs payment losses,
- * and the account has no Stripe-hosted dashboard of its own -- the whole
- * point is every Stripe feature this business uses shows up inside
- * OwnersLOCAL's own Payments tab (via embedded components) instead of a
- * separate Stripe-branded page. Each business is still the merchant of
- * record on its own charges (Connect *direct* charges -- see the payment
- * flow once that's built), this only controls who runs the account
- * management/dashboard experience.
+ * the account has no Stripe-hosted dashboard of its own -- the whole point
+ * is every Stripe feature this business uses shows up inside OwnersLOCAL's
+ * own Payments tab (via embedded components) instead of a separate
+ * Stripe-branded page. Each business is still the merchant of record on
+ * its own charges (Connect *direct* charges -- see the payment flow once
+ * that's built); this only controls who runs the account management/
+ * dashboard experience and who Stripe holds liable at the platform level.
+ *
+ * requirement_collection is explicitly "stripe" because onboarding itself
+ * (ConnectAccountOnboarding in PaymentsPage.tsx) is Stripe's own embedded
+ * component collecting the KYC/bank info, not a custom form OwnersLOCAL
+ * built -- Stripe requires that whoever collects those requirements also
+ * be the one liable for negative balances/refunds/chargebacks (losses),
+ * so losses.payments must match at "stripe" too. Fees still route to the
+ * platform, since that's independent of who did the KYC.
  */
 export async function createConnectedAccount(businessEmail: string): Promise<{ accountId: string }> {
   const stripe = getStripeClient();
   const account = await stripe.accounts.create({
     controller: {
       fees: { payer: "application" },
-      losses: { payments: "application" },
+      losses: { payments: "stripe" },
       stripe_dashboard: { type: "none" },
+      requirement_collection: "stripe",
     },
     business_type: "company",
     email: businessEmail,
