@@ -12,6 +12,7 @@ import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } fro
 import { requireAuth } from './server/verifyAuth';
 import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
+import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,6 +98,16 @@ app.post('/api/plaid/exchange-public-token', requireAuth, async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to connect bank account' });
   }
 });
+
+// Stripe Connect: a business's own payments account, embedded inside the
+// Payments tab rather than a separate Stripe-hosted page. All three need
+// the caller's real, verified identity -- the connected account is
+// resolved server-side from their own business (see stripeConnectRoutes.ts's
+// resolveBusinessId), never a client-supplied business id, so one business's
+// member can't touch another business's Stripe account this way.
+app.post('/api/stripe/connect/account', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleGetOrCreateAccount);
+app.post('/api/stripe/connect/account-session', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleCreateAccountSession);
+app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 60_000, 30), handleGetAccountStatus);
 
 app.post('/api/notifications/send-push', requireAuth, async (req, res) => {
   try {

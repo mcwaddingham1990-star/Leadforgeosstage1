@@ -1349,6 +1349,7 @@ function VendorsTab({ vendors, setVendors, bills, canEdit, canDelete, triggerNot
 // BANKING
 // ============================================================================
 function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerNotification, businessId }: any) {
+  const { navigateToScreen } = useNavTelemetry();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<BankAccountType>("checking");
@@ -1385,7 +1386,6 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
     "Transaction Matching",
     "Duplicate Detection",
     "Automatic Categorization",
-    "Payment Processor Sync (Stripe/Square/PayPal)",
     "Payroll Provider Sync",
     "Tax Filing Integration"
   ];
@@ -1401,6 +1401,16 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
           </button>
         </div>}
       </div>
+
+      {canEdit && (
+        <button
+          onClick={() => navigateToScreen("payments")}
+          className="w-full px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-2xl uppercase flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+        >
+          <CreditCard className="w-4 h-4" />
+          Integrate Stripe for financial updates and customer payment options
+        </button>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {bankAccounts.length === 0 && <p className="text-xs text-[#5E7393] col-span-full text-center py-6">No bank/financial accounts added yet.</p>}

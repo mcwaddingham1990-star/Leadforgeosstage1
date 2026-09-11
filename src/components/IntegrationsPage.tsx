@@ -686,6 +686,13 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                       >
                         Coming Soon
                       </button>
+                    ) : item.id === "stripe" ? (
+                      <button
+                        onClick={() => onNavigateToScreen("payments")}
+                        className="flex-1 px-2.5 py-2 bg-[#315C9F] hover:bg-[#254A84] text-white rounded-xl text-[11px] font-bold font-sans transition-all cursor-pointer text-center leading-tight"
+                      >
+                        Integrate Stripe for financial updates and customer payment options
+                      </button>
                     ) : (
                       <>
                         <button

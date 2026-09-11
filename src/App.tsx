@@ -123,6 +123,7 @@ import { InteractiveMapPage } from "./components/InteractiveMapPage";
 import { EmployeeLocationsPage } from "./components/EmployeeLocationsPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
+import { PaymentsPage } from "./components/PaymentsPage";
 import { PlaidConnectButton } from "./components/PlaidConnectButton";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
@@ -825,6 +826,7 @@ const OS_SCREENS = [
   { id: "dashboard", label: "Dashboard", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdashboard.jpg", icon: "📊", top: "12%", bottom: "17%" },
   { id: "revenue", label: "Revenue", url: "", icon: "📈", top: "12%", bottom: "17%" },
   { id: "accounting", label: "Accounting", url: "", icon: "🧮", top: "12%", bottom: "17%" },
+  { id: "payments", label: "Payments", url: "", icon: "💳", top: "12%", bottom: "17%" },
   { id: "customers", label: "Customers", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightcustomers.jpg", icon: "👥", top: "27%", bottom: "32%" },
   { id: "leads", label: "Leads", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightleads.jpg", icon: "🎯", top: "17%", bottom: "22%" },
   { id: "estimates", label: "Estimates & Bids", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightestimatesbids.jpg", icon: "📝", top: "57%", bottom: "62%" },
@@ -1272,6 +1274,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <BrandIcon className={className} />;
     case "accounting":
       return <Landmark className={className} />;
+    case "payments":
+      return <CreditCard className={className} />;
     case "customers":
       return <Users className={className} />;
     case "leads":
@@ -2055,6 +2059,7 @@ export default function App() {
     if (highPrivilegeRoles.includes(activeRole)) {
       if (!perms.includes("revenue")) perms.push("revenue");
       if (!perms.includes("accounting")) perms.push("accounting");
+      if (!perms.includes("payments")) perms.push("payments");
     }
 
     return OS_SCREENS.filter(s => perms.includes(s.id));
@@ -6807,8 +6812,15 @@ Access to full financial telemetry is restricted.`;
 
                     return (
                       <>
-                      <div className="flex justify-end">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <PlaidConnectButton />
+                        <button
+                          onClick={() => navigateToScreen("payments")}
+                          className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          Integrate Stripe for financial updates and customer payment options
+                        </button>
                       </div>
                       <div className="flex-1 flex flex-col gap-5 animate-fade-in text-[#1F3557]">
                         
@@ -7062,6 +7074,9 @@ Access to full financial telemetry is restricted.`;
 
                   ) : activeScreen.id === "accounting" ? (
                     <AccountingPage />
+
+                  ) : activeScreen.id === "payments" ? (
+                    <PaymentsPage />
 
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />
@@ -7658,8 +7673,15 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               {/* Plaid connect -- lives at the bottom of the card, out of the way of the graph and quick actions */}
-                              <div className="flex justify-end pt-1">
+                              <div className="flex flex-wrap justify-end gap-2 pt-1">
                                 <PlaidConnectButton />
+                                <button
+                                  onClick={() => navigateToScreen("payments")}
+                                  className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  Integrate Stripe for financial updates and customer payment options
+                                </button>
                               </div>
                             </>
                           );

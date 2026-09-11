@@ -161,7 +161,12 @@ export default defineConfig(() => {
       // subscription, nothing more) — pairs with the private
       // FIREBASE_SERVICE_ACCOUNT_JSON server-side secret that actually sends
       // pushes. See src/lib/pushNotifications.ts.
-      'process.env.FIREBASE_VAPID_KEY': JSON.stringify(process.env.FIREBASE_VAPID_KEY || '')
+      'process.env.FIREBASE_VAPID_KEY': JSON.stringify(process.env.FIREBASE_VAPID_KEY || ''),
+      // Stripe's publishable key is meant to ship to the browser (it pairs
+      // with the private STRIPE_SECRET_KEY server-side, same relationship as
+      // the Firebase web apiKey) -- required client-side to initialize the
+      // embedded Connect components (see src/components/PaymentsPage.tsx).
+      'process.env.STRIPE_PUBLISHABLE_KEY': JSON.stringify(process.env.STRIPE_PUBLISHABLE_KEY || '')
     },
     resolve: {
       alias: {
