@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScanBusinessRecord, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest, ScanBusinessRecordRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
-import { createPlaidLinkToken, exchangePlaidPublicToken } from './server/plaidHandler';
 import { sendPushToRecipients } from './server/pushNotifications';
 import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } from './server/webLeadFormHandler';
 import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
@@ -82,27 +81,6 @@ app.post('/api/ai/scan-business-record', async (req, res) => {
 
 app.get('/api/client-info', (req, res) => {
   res.json({ ip: getClientIp(req) });
-});
-
-// Plaid endpoints return real bank account numbers/balances and previously
-// had no authentication -- require a signed-in user. The link-token
-// identifier is derived from the verified caller's own uid rather than the
-// client-supplied clientUserId, so it can't be used to impersonate another
-// account inside Plaid's own Link session.
-app.post('/api/plaid/create-link-token', requireAuth, async (req, res) => {
-  try {
-    res.json(await createPlaidLinkToken(req.firebaseUser!.uid));
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to start Plaid Link' });
-  }
-});
-
-app.post('/api/plaid/exchange-public-token', requireAuth, async (req, res) => {
-  try {
-    res.json(await exchangePlaidPublicToken(req.body?.publicToken, req.body?.institutionName));
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unable to connect bank account' });
-  }
 });
 
 // Stripe Connect: a business's own payments account, embedded inside the

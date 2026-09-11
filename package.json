@@ -28,10 +28,8 @@
     "motion": "^12.23.24",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.7.284",
-    "plaid": "^45.0.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "react-plaid-link": "^5.0.0",
     "recharts": "^3.9.2",
     "stripe": "^22.6.2",
     "vite": "^6.2.3"

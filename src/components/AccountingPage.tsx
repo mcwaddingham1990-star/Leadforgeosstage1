@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from "react";
-import { PlaidConnectButton } from "./PlaidConnectButton";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
@@ -1369,7 +1368,6 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
         accountNumberLast4: last4 || undefined,
         openingBalance: parseFloat(openingBalance) || 0,
         openingBalanceDate: todayStr(),
-        isPlaidConnected: false,
         createdAt: new Date().toISOString()
       }
     ]);
@@ -1395,7 +1393,6 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Bank &amp; Financial Accounts</h3>
         {canEdit && <div className="flex gap-2">
-          <PlaidConnectButton />
           <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> Add Manually
           </button>
@@ -1422,8 +1419,7 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
             </div>
             <p className="text-[9px] text-[#5E7393] font-bold uppercase mt-0.5">{BANK_TYPE_LABELS[b.type]}{b.accountNumberLast4 ? ` •••• ${b.accountNumberLast4}` : ""}</p>
             <p className="text-base font-black text-[#1F3557] mt-1.5">{fmt(b.openingBalance)}</p>
-            <p className="text-[8px] text-[#5E7393] mt-0.5">{b.isPlaidConnected ? `Connected through ${b.plaidInstitutionName || 'Plaid'} • Balance checked ${b.openingBalanceDate}` : `Manually entered balance as of ${b.openingBalanceDate}`}</p>
-            {b.isPlaidConnected && <span className="inline-block mt-2 px-2 py-1 bg-emerald-100 text-emerald-700 text-[8px] font-black uppercase rounded-full">Plaid Connected</span>}
+            <p className="text-[8px] text-[#5E7393] mt-0.5">Manually entered balance as of {b.openingBalanceDate}</p>
           </div>
         ))}
       </div>

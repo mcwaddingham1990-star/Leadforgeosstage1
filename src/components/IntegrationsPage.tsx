@@ -45,7 +45,6 @@ import {
 import { SchedulingEvent } from "./SchedulingPage";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
-import { PlaidConnectButton } from "./PlaidConnectButton";
 
 // Let's define interfaces for custom integration items
 export interface Integration {
@@ -160,9 +159,8 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
     // QuickBooks/Twilio/Slack/Zoom/Google Workspace/etc. would otherwise be
     // connected for -- that's the point of the app, so those integrations
     // were removed rather than left as more non-functional "Connect"
-    // buttons. Plaid (real bank-account linking, see PlaidConnectButton)
-    // and Stripe (real payment processing) are the two a business genuinely
-    // still needs a third party for.
+    // buttons. Stripe (real payment processing) is the one a business
+    // genuinely still needs a third party for.
     {
       id: "stripe",
       name: "Stripe",
@@ -547,7 +545,6 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
 
         {/* TOP BUTTON ACTIONS */}
         <div className="flex flex-wrap items-center gap-2">
-          <PlaidConnectButton />
           <button
             onClick={() => setIsAiSetupOpen(true)}
             className="px-3 py-1.5 bg-indigo-550 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold font-sans flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"

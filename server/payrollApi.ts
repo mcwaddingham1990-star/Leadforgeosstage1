@@ -38,12 +38,10 @@ function validateSubmission(body: PayrollSubmission): string[] {
 }
 
 export function getPayrollCapabilities(_req: Request, res: Response) {
-  const plaidConfigured = Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
   const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
   const achConfigured = Boolean(process.env.PAYROLL_ACH_SUBMISSION_URL && process.env.PAYROLL_ACH_API_KEY);
   res.json({
     engine: "owners-native",
-    plaid: { configured: plaidConfigured, purpose: "bank_linking_and_approved_transfer_rail" },
     stripe: { configured: stripeConfigured, purpose: "approved_connect_payment_rail" },
     bankAch: { configured: achConfigured, purpose: "direct_odfi_or_processor_submission" },
     liveDisbursementEnabled: achConfigured,

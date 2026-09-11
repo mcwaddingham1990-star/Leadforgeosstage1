@@ -126,7 +126,6 @@ import { EmployeeLocationsPage } from "./components/EmployeeLocationsPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
 import { PaymentsPage } from "./components/PaymentsPage";
-import { PlaidConnectButton } from "./components/PlaidConnectButton";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
@@ -6775,7 +6774,6 @@ Access to full financial telemetry is restricted.`;
                     return (
                       <>
                       <div className="flex flex-wrap justify-end gap-2">
-                        <PlaidConnectButton />
                         <button
                           onClick={() => navigateToScreen("payments")}
                           className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
@@ -7134,7 +7132,7 @@ Access to full financial telemetry is restricted.`;
                     ) : (
                       /* HIGHLY POLISHED COMPREHENSIVE REVENUE PAGE */
                       <div className="space-y-3 animate-fade-in text-left">
-                      {/* QUICK ACTIONS - 4 BUTTONS + Plaid connect, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
+                      {/* QUICK ACTIONS - 4 BUTTONS, ONE SLEEK LINE (scrolls horizontally rather than wrapping) */}
                       <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' as any }}>
                         <div className="flex flex-nowrap gap-2 w-max">
                           {[
@@ -7710,9 +7708,8 @@ Access to full financial telemetry is restricted.`;
                                 </div>
                               </div>
 
-                              {/* Plaid connect -- lives at the bottom of the card, out of the way of the graph and quick actions */}
+                              {/* Lives at the bottom of the card, out of the way of the graph and quick actions */}
                               <div className="flex flex-wrap justify-end gap-2 pt-1">
-                                <PlaidConnectButton />
                                 <button
                                   onClick={() => navigateToScreen("payments")}
                                   className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
@@ -7893,7 +7890,7 @@ Access to full financial telemetry is restricted.`;
 
                       {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
+                        <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Integrations</h3>
 
                         <div className="text-center pt-2">
                           <button

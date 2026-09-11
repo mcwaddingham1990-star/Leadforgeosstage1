@@ -4,7 +4,6 @@ import path from 'path';
 import {defineConfig, Plugin, Connect} from 'vite';
 import {handleAiAsk, handleScanReceipt, handleScanFinancialDocument} from './server/aiHandler';
 import {getClientIp} from './server/clientInfo';
-import {createPlaidLinkToken, exchangePlaidPublicToken} from './server/plaidHandler';
 import {sendPushToRecipients} from './server/pushNotifications';
 import {getRemoteSigningInfo, submitRemoteSignature} from './server/remoteSigning';
 import {verifyFirebaseIdToken} from './server/verifyAuth';
@@ -60,12 +59,6 @@ function aiApiDevMiddleware(): Plugin {
       server.middlewares.use('/api/ai/ask', jsonRoute(body => handleAiAsk(body)));
       server.middlewares.use('/api/ai/scan-receipt', jsonRoute(body => handleScanReceipt(body)));
       server.middlewares.use('/api/ai/scan-financial-document', jsonRoute(body => handleScanFinancialDocument(body)));
-      server.middlewares.use('/api/plaid/create-link-token', jsonRoute((_body, auth) =>
-        createPlaidLinkToken(auth.uid)
-      ));
-      server.middlewares.use('/api/plaid/exchange-public-token', jsonRoute(body =>
-        exchangePlaidPublicToken(body?.publicToken, body?.institutionName)
-      ));
       server.middlewares.use('/api/client-info', (req: IncomingMessage, res: ServerResponse) => {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ip: getClientIp(req) }));

@@ -129,10 +129,6 @@ export interface BankAccount {
   openingBalance: number;
   openingBalanceDate: string;
   linkedAccountId?: string; // Chart of Accounts account this rolls up into
-  isPlaidConnected: boolean;
-  plaidAccountId?: string;
-  plaidItemId?: string;
-  plaidInstitutionName?: string;
   createdAt: string;
 }
 
