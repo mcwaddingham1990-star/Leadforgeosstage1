@@ -12,6 +12,7 @@ import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } fro
 import { requireAuth } from './server/verifyAuth';
 import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
+import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,11 @@ const app = express();
 // its own express.raw()) before that global JSON parser runs, or the body
 // would already be consumed/transformed by the time this route sees it.
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
+// Separate endpoint, separate signing secret (STRIPE_CONNECT_WEBHOOK_SECRET)
+// for events on businesses' own connected accounts (connect: true in the
+// Stripe Dashboard) -- see server/stripeConnectWebhook.ts.
+app.post('/api/stripe/connect-webhook', express.raw({ type: 'application/json' }), handleStripeConnectWebhook);
 
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));
