@@ -310,10 +310,10 @@ export const JobsPage: React.FC = () => {
               ["Material Cost", jobCosting.materialCost],
               ["Other Costs", jobCosting.otherCost],
               ["Total Cost", jobCosting.totalCost],
-              ["Gross Profit", jobCosting.grossProfit],
+              ["Profit", jobCosting.grossProfit],
             ].map(([l, v]: any) => <div key={l} className="rounded-xl border border-[#9EC8EF] bg-blue-50/60 p-3">
               <p className="text-[9px] font-bold uppercase text-[#5E7393]">{l}</p>
-              <p className={`text-sm font-black ${l==="Gross Profit"?(v<0?"text-rose-600":"text-emerald-700"):"text-[#1F3557]"}`}>{v<0?"-":""}${Math.abs(Number(v)).toLocaleString(undefined,{maximumFractionDigits:2})}</p>
+              <p className={`text-sm font-black ${l==="Profit"?(v<0?"text-rose-600":"text-emerald-700"):"text-[#1F3557]"}`}>{v<0?"-":""}${Math.abs(Number(v)).toLocaleString(undefined,{maximumFractionDigits:2})}</p>
             </div>)}
             <div className="rounded-xl border border-[#9EC8EF] bg-blue-50/60 p-3 sm:col-span-2">
               <p className="text-[9px] font-bold uppercase text-[#5E7393]">Margin</p>

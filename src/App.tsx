@@ -17,6 +17,7 @@ import { downloadCsv } from "./lib/csv";
 import { getRemoteSigningTokenFromUrl } from "./lib/remoteSigningClient";
 import { updateLiveLocation } from "./lib/timeClockService";
 import { computePayrollHoursForRange } from "./lib/payrollHours";
+import { computeJobCosting } from "./lib/jobCostingEngine";
 import RemoteSigningPage from "./components/RemoteSigningPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
@@ -7249,6 +7250,19 @@ Access to full financial telemetry is restricted.`;
                             .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))
                             .map(b => ({ id: b.id, label: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor, amount: Math.max(0, b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0) - b.amountPaid) }));
 
+                          // Job Costing ticker: same computeJobCosting engine the Jobs tab's
+                          // detail panel uses (see lib/jobCostingEngine.ts), one row per job
+                          // that actually has an estimate/budget or real cost activity --
+                          // brand-new jobs with nothing logged yet would just be a row of
+                          // zeros, so they're left out until there's something to show.
+                          const jobCostingRows = schedulingEvents
+                            .filter(e => e.eventType === "Job")
+                            .map(job => {
+                              const jc = computeJobCosting(job, estimates, timeClockLogs, employees, transactions, payrollWorkweekStart);
+                              return { id: job.id, label: job.jobNumber || job.title || job.customer || "Job", ...jc };
+                            })
+                            .filter(row => row.estimatedRevenue > 0 || row.totalCost > 0);
+
                           const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                           const xTickFormat = (ms: number) => {
                             const d = new Date(ms);
@@ -7620,6 +7634,69 @@ Access to full financial telemetry is restricted.`;
                                 ))}
                               </div>
 
+                              {/* JOB COSTING TICKER -- same computeJobCosting numbers as the Jobs
+                                  tab's detail panel, one job per scrolling row. Column headers stay
+                                  fixed above the scroll, same title styling used on every other
+                                  card on this page. */}
+                              {(() => {
+                                const jobCostingColumns: Array<{ key: string; header: string; bold: boolean; color: string; get: (r: typeof jobCostingRows[number]) => string }> = [
+                                  { key: "estPlus", header: "Estimated +", bold: false, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
+                                  { key: "estMinus", header: "Estimated -", bold: false, color: "#FF1744", get: r => fmt(r.totalCost) },
+                                  { key: "labor", header: "Labor -", bold: false, color: "#FF1744", get: r => fmt(r.laborCost) },
+                                  { key: "material", header: "Material -", bold: false, color: "#FF1744", get: r => fmt(r.materialCost) },
+                                  { key: "other", header: "Other -", bold: false, color: "#FF1744", get: r => fmt(r.otherCost) },
+                                  { key: "totalMinus", header: "Total -", bold: true, color: "#FF1744", get: r => fmt(r.totalCost) },
+                                  { key: "totalPlus", header: "Total +", bold: true, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
+                                  { key: "profit", header: "Profit +", bold: true, color: "#168BFF", get: r => fmt(r.grossProfit) },
+                                  { key: "margin", header: "Margin %", bold: true, color: "#168BFF", get: r => r.marginPercent == null ? "—" : `${r.marginPercent.toFixed(1)}%` },
+                                ];
+                                return (
+                                  <div>
+                                    <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Job Costing</p>
+                                    <div className="overflow-x-auto">
+                                      <div className="min-w-[760px]">
+                                        <div className="grid grid-cols-9 gap-1 px-3 pb-1.5">
+                                          {jobCostingColumns.map(col => (
+                                            <span key={col.key} className="text-[8px] font-mono font-black text-[#07599a] uppercase tracking-widest text-center truncate">{col.header}</span>
+                                          ))}
+                                        </div>
+                                        <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-36 overflow-hidden relative">
+                                          {jobCostingRows.length === 0 ? (
+                                            <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">No job costing data yet.</div>
+                                          ) : (
+                                            <div
+                                              className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+                                              style={{ animation: `ticker-scroll ${Math.max(12, jobCostingRows.length * 4)}s linear infinite` }}
+                                            >
+                                              {[0, 1].map(copy => (
+                                                <div key={copy}>
+                                                  {jobCostingRows.map((row, idx) => (
+                                                    <div key={`${copy}_${row.id}_${idx}`} className="px-3 py-2 border-b border-sky-500/15">
+                                                      <p className="text-[8.5px] font-mono font-semibold text-[#2473aa]/70 truncate mb-1">{row.label}</p>
+                                                      <div className="grid grid-cols-9 gap-1 items-center">
+                                                        {jobCostingColumns.map(col => (
+                                                          <span
+                                                            key={col.key}
+                                                            className={`truncate text-center font-mono ${col.bold ? "text-[10px] font-black" : "text-[9px] font-semibold"}`}
+                                                            style={{ color: col.color, textShadow: `0 0 6px ${col.color}99` }}
+                                                          >
+                                                            {col.get(row)}
+                                                          </span>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {/* Upcoming Job Payments (left) and Upcoming Bills & Expenses (right) --
                                   two independent scrolling columns, bottom to top */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -7816,36 +7893,8 @@ Access to full financial telemetry is restricted.`;
 
                       {/* FUTURE INTEGRATIONS SECTION (Bottom Card) */}
                       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm space-y-4">
-                        <div className="border-b border-[#9EC8EF]/30 pb-3">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Automations & Ecosystems</span>
-                          <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Connect OwnersLOCAL with your accounting software</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          {[
-                            { name: "Plaid", icon: Landmark, desc: "Bank account connectivity" },
-                            { name: "Teller", icon: Landmark, desc: "Secure banking data" },
-                            { name: "Stripe", icon: CreditCard, desc: "Payment processing" }
-                          ].map((integ, idx) => (
-                            <div
-                              key={idx}
-                              className="border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2.5 opacity-80 bg-[#EAF5FF]/50 hover:opacity-100 transition-opacity"
-                            >
-                              <div className="w-9 h-9 rounded-full bg-[#EAF5FF] text-[#315C9F] border border-[#9EC8EF] flex items-center justify-center text-sm shadow-sm">
-                                <integ.icon className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-extrabold text-[#1F3557] leading-none">{integ.name}</p>
-                                <p className="text-[9px] text-[#5E7393] font-medium mt-0.5">{integ.desc}</p>
-                              </div>
-                              <span className="px-2 py-0.5 bg-[#9EC8EF]/30 text-[#1F3557] border border-[#9EC8EF]/50 text-[8.5px] font-bold rounded">
-                                Coming Soon
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        
+                        <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Future Integrations</h3>
+
                         <div className="text-center pt-2">
                           <button
                             onClick={() => {
