@@ -49,6 +49,7 @@ import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
 import { ONBOARDING_ROLE_TEMPLATES } from "./RosterPage";
 import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { defaultGranularFromModuleList } from "../types/permissions";
+import { STATE_SALES_TAX_DEFAULTS, SALES_TAX_DATASET_VERSION } from "../data/stateSalesTaxDefaults";
 import type { SelectedRole, WorkspaceTheme } from "../App";
 
 // Types for SettingsPage
@@ -111,6 +112,12 @@ const INITIAL_DEFAULTS = {
     nextPayday: ""
   },
   taxes: {
+    // Selected state (postal abbreviation) and the dataset version its
+    // stateTaxRate was prefilled from -- lets the UI detect when a future
+    // dataset update has a newer default for this state without silently
+    // overwriting a rate the owner may have already customized.
+    state: "",
+    stateTaxRateDatasetVersion: "",
     stateTaxRate: 0,
     countyTaxRate: 0,
     taxOnServices: true,
@@ -1561,28 +1568,108 @@ export default function SettingsPage({
               {activeCategory === "taxes" && (
                 <div className="space-y-4">
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Corporate & Local Sales Taxes</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-slate-500">State Sales Tax Rate (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={localConfig.taxes.stateTaxRate}
-                        onChange={(e) => handleConfigChange("taxes", "stateTaxRate", Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-slate-500">County Sales Tax Rate (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={localConfig.taxes.countyTaxRate}
-                        onChange={(e) => handleConfigChange("taxes", "countyTaxRate", Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                      />
-                    </div>
-                  </div>
+                  {(() => {
+                    const selectedStateData = STATE_SALES_TAX_DEFAULTS.find(s => s.abbreviation === localConfig.taxes.state);
+                    const hasNewerDefault = !!selectedStateData
+                      && localConfig.taxes.stateTaxRateDatasetVersion
+                      && localConfig.taxes.stateTaxRateDatasetVersion !== SALES_TAX_DATASET_VERSION
+                      && selectedStateData.statewideDefaultRatePercent !== localConfig.taxes.stateTaxRate;
+                    return (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase font-bold text-slate-500">State</label>
+                          <select
+                            value={localConfig.taxes.state}
+                            onChange={(e) => {
+                              const abbreviation = e.target.value;
+                              const match = STATE_SALES_TAX_DEFAULTS.find(s => s.abbreviation === abbreviation);
+                              setLocalConfig(prev => ({
+                                ...prev,
+                                taxes: {
+                                  ...prev.taxes,
+                                  state: abbreviation,
+                                  // Prefills the editable rate from the statewide default --
+                                  // never a guaranteed final customer rate, just a starting
+                                  // point (see the label below and STATE_SALES_TAX_DEFAULTS's
+                                  // own header comment). Only happens on an actual state
+                                  // change here, never as a background overwrite.
+                                  stateTaxRate: match ? match.statewideDefaultRatePercent : prev.taxes.stateTaxRate,
+                                  stateTaxRateDatasetVersion: match ? SALES_TAX_DATASET_VERSION : prev.taxes.stateTaxRateDatasetVersion
+                                }
+                              }));
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                          >
+                            <option value="">Select a state…</option>
+                            {STATE_SALES_TAX_DEFAULTS.map(s => (
+                              <option key={s.abbreviation} value={s.abbreviation}>{s.state}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {hasNewerDefault && selectedStateData && (
+                          <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p className="text-[10.5px] text-amber-700 font-sans leading-relaxed">
+                              An updated statewide default is available for {selectedStateData.state}: {selectedStateData.statewideDefaultRatePercent}% (yours is currently {localConfig.taxes.stateTaxRate}%).
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleConfigChange("taxes", "stateTaxRate", selectedStateData.statewideDefaultRatePercent)}
+                              className="shrink-0 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 rounded-lg text-[10px] font-bold cursor-pointer"
+                            >
+                              Use Updated Rate
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-slate-500">
+                              State Sales Tax Rate (%) {selectedStateData && <span className="normal-case font-medium text-slate-400">— statewide default, not a guaranteed final rate</span>}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={localConfig.taxes.stateTaxRate}
+                              onChange={(e) => handleConfigChange("taxes", "stateTaxRate", Number(e.target.value))}
+                              className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase font-bold text-slate-500">County / Local Sales Tax Rate (%)</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={localConfig.taxes.countyTaxRate}
+                              onChange={(e) => handleConfigChange("taxes", "countyTaxRate", Number(e.target.value))}
+                              className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                            />
+                            <p className="text-[9.5px] text-slate-400 font-sans">City/county/special-district rates vary by exact address — enter yours manually.</p>
+                          </div>
+                        </div>
+
+                        {selectedStateData?.note && (
+                          <div className="flex items-start gap-2 bg-[#F5FAFF] border border-[#A9CDEE]/50 rounded-xl p-3">
+                            <Info className="h-3.5 w-3.5 text-[#315C9F] mt-0.5 shrink-0" />
+                            <p className="text-[10.5px] text-slate-600 font-sans leading-relaxed">{selectedStateData.note}</p>
+                          </div>
+                        )}
+                        {selectedStateData && !selectedStateData.hasStatewideGeneralSalesTax && (
+                          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <Info className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                            <p className="text-[10.5px] text-amber-700 font-sans leading-relaxed">
+                              {selectedStateData.state} has no general statewide sales tax
+                              {selectedStateData.localSalesTaxMayApply ? ", but local jurisdictions may still impose one — check your county/city rate." : "."}
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="text-[9.5px] text-slate-400 font-sans">
+                          Sales tax defaults last updated {SALES_TAX_DATASET_VERSION} (Tax Foundation, midyear 2026).
+                        </p>
+                      </>
+                    );
+                  })()}
                   <div className="space-y-2 bg-white p-4 rounded-xl border border-[#A9CDEE]">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input
