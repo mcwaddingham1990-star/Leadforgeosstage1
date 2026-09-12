@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 import {
   Search,
   Filter,
@@ -76,6 +77,7 @@ export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList, employees } = useDomainData();
+  const [isWorkOrderPickerOpen, setIsWorkOrderPickerOpen] = useState(false);
   const AVAILABLE_TECHNICIANS = useMemo(() => employees
     .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
     .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
@@ -387,8 +389,16 @@ export const DispatchPage: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 font-sans font-semibold">Real-time scheduling, tracking, and fleet distribution hub</p>
           </div>
+          {hasWriteAccess && (
+            <button
+              onClick={() => setIsWorkOrderPickerOpen(true)}
+              className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer flex items-center gap-1.5"
+            >
+              🧰 Create Work Order
+            </button>
+          )}
         </div>
-        
+
         {/* Date Selector & Refresh Buttons */}
         <div className="flex items-center gap-2 self-stretch md:self-auto">
           <div 
@@ -1207,6 +1217,7 @@ export const DispatchPage: React.FC = () => {
         </div>
       </div>
 
+      <CreateWorkOrderPicker isOpen={isWorkOrderPickerOpen} onClose={() => setIsWorkOrderPickerOpen(false)} />
     </div>
   );
 };

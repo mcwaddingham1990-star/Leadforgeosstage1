@@ -12,6 +12,7 @@ import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { isManagerRole } from "../lib/notificationsService";
 import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { RecentRoutesSection } from "./RecentRoutesSection";
+import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 
 function genInviteCode(role: string): string {
   const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -61,6 +62,8 @@ export const RosterPage: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
+  const [isWorkOrderPickerOpen, setIsWorkOrderPickerOpen] = useState(false);
+  const [workOrderEmployee, setWorkOrderEmployee] = useState<string>("");
   const [isInviting, setIsInviting] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<InviteRole[]>(DEFAULT_INVITE_ROLES);
   const [inviteMode, setInviteMode] = useState<InviteMode>("");
@@ -312,6 +315,7 @@ export const RosterPage: React.FC = () => {
                   <button disabled={!emp.phone} onClick={() => composeSms({ to: emp.phone })} className="px-2 py-1 bg-white hover:bg-[#EAF5FF] disabled:opacity-40 disabled:cursor-not-allowed border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Text</button>
                   <button onClick={() => composeEmail({ to: emp.email })} className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer">Email</button>
                 </div>
+                <button onClick={() => { setWorkOrderEmployee(`${emp.firstName} ${emp.lastName}`.trim()); setIsWorkOrderPickerOpen(true); }} className="w-full px-2 py-1.5 bg-white hover:bg-[#EAF5FF] border border-dashed border-[#315C9F] rounded-lg text-[9px] font-black text-[#315C9F] uppercase cursor-pointer">🧰 Create Work Order</button>
               </div>
             );
           })}
@@ -492,6 +496,11 @@ export const RosterPage: React.FC = () => {
           </div>
         </div>
       )}
+      <CreateWorkOrderPicker
+        isOpen={isWorkOrderPickerOpen}
+        onClose={() => setIsWorkOrderPickerOpen(false)}
+        prefillBase={{ assignedEmployees: workOrderEmployee ? [workOrderEmployee] : undefined }}
+      />
     </div>
   );
 };

@@ -27,6 +27,12 @@ export interface DomainDataContextValue {
   setPriceBookFolders: Dispatch<SetStateAction<PriceBookFolder[]>>;
   priceBookModels: PriceBookModel[];
   setPriceBookModels: Dispatch<SetStateAction<PriceBookModel[]>>;
+  /** Queued "open the PDF Editor's blank canvas, filed into this Documents
+   * folder" request -- set from any page (e.g. Create Work Order's "Create
+   * Blank Work Order Document" choice), consumed by DocumentsPage on
+   * mount/update since that's the only place the PDF Editor is rendered. */
+  pendingCreateTemplateFolder: string | null;
+  setPendingCreateTemplateFolder: Dispatch<SetStateAction<string | null>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];

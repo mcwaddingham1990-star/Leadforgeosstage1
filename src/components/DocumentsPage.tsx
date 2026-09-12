@@ -110,7 +110,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
@@ -197,20 +197,26 @@ export const DocumentsPage: React.FC = () => {
     setIsPDFEditorOpen(false);
     setGeneratedPdfDraft(null);
     setPendingSignatureCapture(null);
-    setPendingTemplateFolder(null);
+    setPendingCreateTemplateFolder(null);
   };
 
   // "Create Template" -- opens the PDF Editor's real blank-canvas mode
   // (movable/resizable text, font size/color, image insertion -- see
   // SelfieSaveEditor.tsx) for any folder, standard or user-created.
-  // pendingTemplateFolder tells handleSavePDFEditor's new-document branch
-  // which folder to file the result into and to tag it "Template" instead
-  // of the generic Draft tag, without disturbing any other save path.
-  const [pendingTemplateFolder, setPendingTemplateFolder] = useState<string | null>(null);
+  // pendingCreateTemplateFolder tells handleSavePDFEditor's new-document
+  // branch which folder to file the result into and to tag it "Template"
+  // instead of the generic Draft tag. It lives in DomainDataContext (not
+  // local state) so pages other than Documents -- e.g. Create Work
+  // Order's "Create Blank Work Order Document" -- can queue this same
+  // request and navigate here; the effect below picks it up on arrival.
   const handleCreateTemplate = (folderName: string) => {
-    setPendingTemplateFolder(folderName);
+    setPendingCreateTemplateFolder(folderName);
     handleOpenPDFEditor(null, false);
   };
+  useEffect(() => {
+    if (pendingCreateTemplateFolder && !isPDFEditorOpen) handleOpenPDFEditor(null, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCreateTemplateFolder]);
 
   // Dynamic directory lists for Create Folder action
   // Owner-created folders are tenant-scoped and persist beside documents.
@@ -303,16 +309,16 @@ export const DocumentsPage: React.FC = () => {
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
           job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
-          type: pendingTemplateFolder || (generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts"),
+          type: pendingCreateTemplateFolder || (generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts"),
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : "Draft",
           status: metaProperties?.status || "Awaiting Signature",
-          folder: pendingTemplateFolder || "eSign",
+          folder: pendingCreateTemplateFolder || "eSign",
           isFavorite: false,
           isArchived: false,
-          notes: pendingTemplateFolder ? "Created as a template from Documents." : "Generated from OwnersLOCAL Native PDF Editor tool.",
-          tags: pendingTemplateFolder ? ["Template", "Editor"] : ["Editor", "Draft"],
+          notes: pendingCreateTemplateFolder ? "Created as a template from Documents." : "Generated from OwnersLOCAL Native PDF Editor tool.",
+          tags: pendingCreateTemplateFolder ? ["Template", "Editor"] : ["Editor", "Draft"],
           estimateId: generatedPdfDraft?.sourceType === "Estimate" ? generatedPdfDraft.sourceId : "None",
           invoiceId: generatedPdfDraft?.sourceType === "Invoice" ? generatedPdfDraft.sourceId : "None",
           workOrderId: generatedPdfDraft?.sourceType === "Work Order" ? generatedPdfDraft.sourceId : undefined,

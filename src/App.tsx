@@ -2106,6 +2106,7 @@ export default function App() {
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
   const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
+  const [pendingCreateTemplateFolder, setPendingCreateTemplateFolder] = useState<string | null>(null);
   const [pinnedChartPoint, setPinnedChartPoint] = useState<{ label: number; payload: any[] } | null>(null);
   const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
     "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
@@ -4164,6 +4165,8 @@ Access to full financial telemetry is restricted.`;
     setPriceBookFolders,
     priceBookModels,
     setPriceBookModels,
+    pendingCreateTemplateFolder,
+    setPendingCreateTemplateFolder,
     inventoryList,
     setInventoryList,
     documents,

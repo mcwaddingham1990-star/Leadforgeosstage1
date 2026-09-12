@@ -33,6 +33,7 @@ import type { SchedulingEvent } from "../types/domain";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -123,6 +124,7 @@ export const SchedulingPage: React.FC = () => {
   const [filterCrew, setFilterCrew] = useState("All");
   const [filterCustomer, setFilterCustomer] = useState("All");
   const [filterEventType, setFilterEventType] = useState("All");
+  const [isWorkOrderPickerOpen, setIsWorkOrderPickerOpen] = useState(false);
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterCompleted, setFilterCompleted] = useState("All"); // All, Completed, Incomplete
@@ -873,13 +875,21 @@ export const SchedulingPage: React.FC = () => {
           </div>
           <div className="flex flex-wrap gap-2.5">
             {isHighPrivilege ? (
-              <button
-                onClick={() => { resetForm(); setIsNewEventOpen(true); }}
-                className="px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#9EC8EF] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                New Event
-              </button>
+              <>
+                <button
+                  onClick={() => { resetForm(); setIsNewEventOpen(true); }}
+                  className="px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] text-white border border-[#9EC8EF] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Event
+                </button>
+                <button
+                  onClick={() => setIsWorkOrderPickerOpen(true)}
+                  className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  🧰 Create Work Order
+                </button>
+              </>
             ) : (
               <div className="px-3.5 py-2 bg-slate-200 text-slate-500 rounded-xl text-xs font-bold uppercase border border-slate-300 flex items-center gap-1.5 cursor-not-allowed" title="Create is restricted for your role">
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -1950,6 +1960,7 @@ export const SchedulingPage: React.FC = () => {
         </div>
       )}
 
+      <CreateWorkOrderPicker isOpen={isWorkOrderPickerOpen} onClose={() => setIsWorkOrderPickerOpen(false)} />
     </div>
   );
 };
