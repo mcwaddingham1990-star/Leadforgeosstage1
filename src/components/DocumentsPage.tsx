@@ -197,6 +197,19 @@ export const DocumentsPage: React.FC = () => {
     setIsPDFEditorOpen(false);
     setGeneratedPdfDraft(null);
     setPendingSignatureCapture(null);
+    setPendingTemplateFolder(null);
+  };
+
+  // "Create Template" -- opens the PDF Editor's real blank-canvas mode
+  // (movable/resizable text, font size/color, image insertion -- see
+  // SelfieSaveEditor.tsx) for any folder, standard or user-created.
+  // pendingTemplateFolder tells handleSavePDFEditor's new-document branch
+  // which folder to file the result into and to tag it "Template" instead
+  // of the generic Draft tag, without disturbing any other save path.
+  const [pendingTemplateFolder, setPendingTemplateFolder] = useState<string | null>(null);
+  const handleCreateTemplate = (folderName: string) => {
+    setPendingTemplateFolder(folderName);
+    handleOpenPDFEditor(null, false);
   };
 
   // Dynamic directory lists for Create Folder action
@@ -290,16 +303,16 @@ export const DocumentsPage: React.FC = () => {
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
           job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
-          type: generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts",
+          type: pendingTemplateFolder || (generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts"),
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : "Draft",
           status: metaProperties?.status || "Awaiting Signature",
-          folder: "eSign",
+          folder: pendingTemplateFolder || "eSign",
           isFavorite: false,
           isArchived: false,
-          notes: "Generated from OwnersLOCAL Native PDF Editor tool.",
-          tags: ["Editor", "Draft"],
+          notes: pendingTemplateFolder ? "Created as a template from Documents." : "Generated from OwnersLOCAL Native PDF Editor tool.",
+          tags: pendingTemplateFolder ? ["Template", "Editor"] : ["Editor", "Draft"],
           estimateId: generatedPdfDraft?.sourceType === "Estimate" ? generatedPdfDraft.sourceId : "None",
           invoiceId: generatedPdfDraft?.sourceType === "Invoice" ? generatedPdfDraft.sourceId : "None",
           workOrderId: generatedPdfDraft?.sourceType === "Work Order" ? generatedPdfDraft.sourceId : undefined,
@@ -1269,6 +1282,14 @@ export const DocumentsPage: React.FC = () => {
             className="px-3 py-2 rounded-xl text-xs font-black border border-dashed border-[#315C9F] text-[#315C9F] hover:bg-[#C7E3FA] flex items-center gap-1.5"
           >
             <FolderPlus className="w-3.5 h-3.5" /> Add Custom Folder
+          </button>
+        )}
+        {selectedFolderFilter && !["Favorites", "Archived", "Standard Templates", "Employee Snapshot"].includes(selectedFolderFilter) && (
+          <button
+            onClick={() => handleCreateTemplate(selectedFolderFilter)}
+            className="px-3 py-2 rounded-xl text-xs font-black border border-dashed border-emerald-600 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5"
+          >
+            🗂️ Create Template
           </button>
         )}
       </div>

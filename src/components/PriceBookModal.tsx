@@ -5,12 +5,20 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import type { PriceBookModel, PriceBookLineItem, PriceBookCustomField } from "../types/priceBook";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
-import type { WorkOrder } from "../types/domain";
+import type { WorkOrder, Estimate } from "../types/domain";
 import { buildTextDocumentPdf } from "../lib/pdfExport";
+import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-type DocType = "invoice" | "work_order";
+type DocType = "invoice" | "work_order" | "estimate" | "job_costing" | "job_tracking";
+const DOC_TYPE_LABELS: Record<DocType, string> = {
+  invoice: "Invoice",
+  work_order: "Work Order",
+  estimate: "Estimate",
+  job_costing: "Job Costing",
+  job_tracking: "Job Tracking"
+};
 
 export interface PriceBookModalProps {
   isOpen: boolean;
@@ -28,7 +36,7 @@ const EMPTY_LINE = { kind: "labor" as PriceBookLineItem["kind"], description: ""
 
 export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose, pickerMode }) => {
   const { loggedInUser } = useAuth();
-  const { priceBookFolders, setPriceBookFolders, priceBookModels, setPriceBookModels, invoices, setInvoices, workOrders, setWorkOrders, businessProfile } = useDomainData();
+  const { priceBookFolders, setPriceBookFolders, priceBookModels, setPriceBookModels, invoices, setInvoices, workOrders, setWorkOrders, estimates, setEstimates, schedulingEvents, setSchedulingEvents, setTransactions, businessProfile } = useDomainData();
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
   const actor = loggedInUser?.name || loggedInUser?.email || "Staff";
 
@@ -169,6 +177,20 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose,
   // ---- Add To flow (standalone Price Book -> an existing real record) ----
   const invoiceOptions = invoices.filter(i => i.status !== "paid" && i.status !== "void");
   const workOrderOptions = workOrders;
+  const estimateOptions = estimates;
+  const jobOptions = schedulingEvents.filter(e => e.eventType === "Job");
+  // Job Costing/Job Tracking always target a real, already-existing Job --
+  // unlike the others there's no sensible "blank" job to create from here.
+  const targetOptionsFor = (type: DocType) =>
+    type === "invoice" ? invoiceOptions
+    : type === "work_order" ? workOrderOptions
+    : type === "estimate" ? estimateOptions
+    : jobOptions;
+  const targetLabel = (type: DocType, record: any) =>
+    type === "invoice" ? `${record.invoiceNumber} — ${record.customer || "No customer"}`
+    : type === "work_order" ? `${record.workOrderNumber} — ${record.jobDescription}`
+    : type === "estimate" ? `${record.number} — ${record.customerName || "No customer"}`
+    : `${record.jobNumber || record.title || record.customer || "Job"}`;
 
   const chooseAddToTarget = (targetId: string | "blank") => {
     setAddToTargetId(targetId);
@@ -206,8 +228,44 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose,
         setWorkOrders(prev => prev.map(wo => wo.id === addToTargetId ? { ...wo, lineItems: [...(wo.lineItems || []), item], updatedAt: now } : wo));
         triggerNotification(`${addToModel.name} added to work order.`);
       }
+    } else if (addToDocType === "estimate") {
+      const estimateLine = { id: item.id, description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, priceBookModelId: addToModel.id };
+      const lineTotal = item.quantity * item.unitPrice;
+      if (addToTargetId === "blank") {
+        const newEstimate: Estimate = {
+          id: uid("est"), number: generateEstimateNumber(), customerName: "", company: "",
+          status: "Draft", salesRep: actor, amount: lineTotal,
+          createdDate: formatEstimateDate(new Date()), expirationDate: estimateExpirationDate(),
+          lineItems: [estimateLine]
+        };
+        setEstimates(prev => [newEstimate, ...prev]);
+        triggerNotification(`New draft estimate created with ${addToModel.name}. Finish it in Estimates.`);
+      } else {
+        setEstimates(prev => prev.map(est => est.id === addToTargetId ? { ...est, lineItems: [...(est.lineItems || []), estimateLine], amount: est.amount + lineTotal } : est));
+        triggerNotification(`${addToModel.name} added to estimate.`);
+      }
+    } else if (addToDocType === "job_tracking") {
+      setSchedulingEvents(prev => prev.map(e => e.id === addToTargetId ? { ...e, checklist: [...(e.checklist || []), { id: uid("chk"), label: item.description, completed: false }] } : e));
+      triggerNotification(`${addToModel.name} added to job checklist.`);
+    } else if (addToDocType === "job_costing") {
+      const materialLines = addToModel.lineItems.filter(li => li.kind === "material");
+      const otherLines = addToModel.lineItems.filter(li => li.kind !== "material");
+      if (materialLines.length) {
+        setSchedulingEvents(prev => prev.map(e => e.id === addToTargetId ? {
+          ...e, materials: [...(e.materials || []), ...materialLines.map(li => ({ inventoryId: uid("pbmat"), name: li.description, quantity: li.quantity, unitCost: li.unitCost }))]
+        } : e));
+      }
+      const otherTotal = otherLines.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (otherTotal > 0) {
+        setTransactions(prev => [...prev, {
+          id: uid("txn"), type: "expense", source: "manual", amount: otherTotal,
+          description: `${addToModel.name} (Price Book)`, category: "Labor", date: now.slice(0, 10),
+          createdAt: now, createdBy: loggedInUser?.email, jobId: addToTargetId
+        }]);
+      }
+      triggerNotification(`${addToModel.name} costs added to job.`);
     }
-    logOperationalEvent("Price Book: Added To", `${addToModel.name} → ${addToDocType === "invoice" ? "Invoice" : "Work Order"}`, "💲");
+    logOperationalEvent("Price Book: Added To", `${addToModel.name} → ${DOC_TYPE_LABELS[addToDocType]}`, "💲");
     setAddToModel(null); setAddToDocType(null); setAddToTargetId(null);
   };
 
@@ -365,29 +423,35 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose,
             <p className="text-xs font-black uppercase text-[#1F3557]">Add To: {addToModel.name}</p>
 
             {!addToDocType && (
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setAddToDocType("invoice")} className="rounded-xl border border-[#9EC8EF] bg-white p-4 text-sm font-black text-[#1F3557]">Invoice</button>
-                <button onClick={() => setAddToDocType("work_order")} className="rounded-xl border border-[#9EC8EF] bg-white p-4 text-sm font-black text-[#1F3557]">Work Order</button>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {(Object.keys(DOC_TYPE_LABELS) as DocType[]).map(type => (
+                  <button key={type} onClick={() => setAddToDocType(type)} className="rounded-xl border border-[#9EC8EF] bg-white p-4 text-sm font-black text-[#1F3557]">{DOC_TYPE_LABELS[type]}</button>
+                ))}
               </div>
             )}
 
             {addToDocType && !addToTargetId && (
               <div className="space-y-2">
-                <button onClick={() => chooseAddToTarget("blank")} className="w-full rounded-xl border border-dashed border-[#315C9F] p-3 text-left text-xs font-black text-[#315C9F]">
-                  + Add to Blank {addToDocType === "invoice" ? "Invoice" : "Work Order"}
-                </button>
-                {(addToDocType === "invoice" ? invoiceOptions : workOrderOptions).map((record: any) => (
+                {addToDocType !== "job_costing" && addToDocType !== "job_tracking" && (
+                  <button onClick={() => chooseAddToTarget("blank")} className="w-full rounded-xl border border-dashed border-[#315C9F] p-3 text-left text-xs font-black text-[#315C9F]">
+                    + Add to Blank {DOC_TYPE_LABELS[addToDocType]}
+                  </button>
+                )}
+                {targetOptionsFor(addToDocType).map((record: any) => (
                   <button key={record.id} onClick={() => chooseAddToTarget(record.id)} className="w-full rounded-xl border border-[#9EC8EF] bg-white p-3 text-left text-xs">
-                    <span className="font-black text-[#1F3557]">{addToDocType === "invoice" ? record.invoiceNumber : record.workOrderNumber}</span>
-                    <span className="ml-2 text-[#5E7393]">{addToDocType === "invoice" ? record.customer || "No customer" : record.jobDescription}</span>
+                    {targetLabel(addToDocType, record)}
                   </button>
                 ))}
-                {(addToDocType === "invoice" ? invoiceOptions : workOrderOptions).length === 0 && <p className="text-xs text-slate-400">No existing {addToDocType === "invoice" ? "unpaid invoices" : "work orders"} yet — use Add to Blank above.</p>}
+                {targetOptionsFor(addToDocType).length === 0 && (
+                  <p className="text-xs text-slate-400">
+                    {addToDocType === "job_costing" || addToDocType === "job_tracking" ? "No jobs yet." : "Nothing existing yet — use Add to Blank above."}
+                  </p>
+                )}
                 <button onClick={() => setAddToDocType(null)} className="text-xs font-bold text-[#315C9F]">← Back</button>
               </div>
             )}
 
-            {addToDocType && addToTargetId && (
+            {addToDocType && addToTargetId && (addToDocType === "invoice" || addToDocType === "work_order" || addToDocType === "estimate") && (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Description"><input value={reviewItem.description} onChange={e => setReviewItem({ ...reviewItem, description: e.target.value })} className="input" /></Field>
@@ -397,6 +461,35 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose,
                 <div className="flex justify-end gap-2 border-t border-[#9EC8EF] pt-3">
                   <button onClick={() => setAddToTargetId(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Back</button>
                   <button onClick={confirmAddTo} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Add</button>
+                </div>
+              </div>
+            )}
+
+            {addToDocType === "job_tracking" && addToTargetId && (
+              <div className="space-y-3">
+                <Field label="Checklist item"><input value={reviewItem.description} onChange={e => setReviewItem({ ...reviewItem, description: e.target.value })} className="input" /></Field>
+                <div className="flex justify-end gap-2 border-t border-[#9EC8EF] pt-3">
+                  <button onClick={() => setAddToTargetId(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Back</button>
+                  <button onClick={confirmAddTo} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Add</button>
+                </div>
+              </div>
+            )}
+
+            {addToDocType === "job_costing" && addToTargetId && addToModel && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-[#5E7393]">This adds {addToModel.name}'s cost breakdown to the job's Job Costing:</p>
+                <div className="space-y-1.5">
+                  {addToModel.lineItems.filter(li => li.kind === "material").map(li => (
+                    <div key={li.id} className="flex justify-between rounded-lg bg-blue-50 p-2 text-xs"><span>Material: {li.quantity} × {li.description}</span><b>${(li.quantity * li.unitCost).toFixed(2)}</b></div>
+                  ))}
+                  {addToModel.lineItems.filter(li => li.kind !== "material").length > 0 && (
+                    <div className="flex justify-between rounded-lg bg-blue-50 p-2 text-xs"><span>Labor/Other expense</span><b>${addToModel.lineItems.filter(li => li.kind !== "material").reduce((s, li) => s + li.quantity * li.unitCost, 0).toFixed(2)}</b></div>
+                  )}
+                  {!addToModel.lineItems.length && <p className="text-xs text-slate-400">This model has no cost breakdown to add yet — edit it to add labor/materials first.</p>}
+                </div>
+                <div className="flex justify-end gap-2 border-t border-[#9EC8EF] pt-3">
+                  <button onClick={() => setAddToTargetId(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Back</button>
+                  <button disabled={!addToModel.lineItems.length} onClick={confirmAddTo} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white disabled:opacity-40">Add</button>
                 </div>
               </div>
             )}

@@ -1359,6 +1359,18 @@ export const EstimatesPage: React.FC = () => {
                     </div>
                   </div>
 
+                  {!!selectedEstimate.lineItems?.length && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] uppercase font-bold text-[#5E7393]">Line Items</p>
+                      {selectedEstimate.lineItems.map(li => (
+                        <div key={li.id} className="flex justify-between rounded-lg bg-[#EAF5FF]/50 border border-[#9EC8EF]/30 p-2 text-xs">
+                          <span>{li.quantity} × {li.description}</span>
+                          <b>${(li.quantity * li.unitPrice).toLocaleString()}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-[#5E7393]">Scope notes / exclusions</p>
                     <p className="text-xs bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl font-medium text-[#1F3557] min-h-[60px]">

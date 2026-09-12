@@ -75,6 +75,11 @@ export interface Estimate {
    * the general scope-of-work `notes`, and specifically what gets pulled
    * into the generated PDF as the job-specifics section. */
   projectSpecifics?: string;
+  /** Optional itemized breakdown (e.g. from Price Book "Add To"). When
+   * present, `amount` is kept as the sum of these lines rather than a
+   * separately-typed number -- every existing estimate with no lineItems
+   * keeps working exactly as before, amount alone. */
+  lineItems?: Array<{ id: string; description: string; quantity: number; unitPrice: number; priceBookModelId?: string }>;
 }
 
 export interface InventoryItem {
