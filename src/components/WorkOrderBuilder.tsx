@@ -4,12 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import type { WorkOrder } from "../types/domain";
+import { PriceBookModal } from "./PriceBookModal";
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 type MaterialRow = { name: string; quantity: number; unitCost: number };
-type LineItemRow = { id: string; description: string; quantity: number; unitPrice: number };
+type LineItemRow = { id: string; description: string; quantity: number; unitPrice: number; priceBookModelId?: string };
 
 /**
  * The ONE shared Work Order builder -- every entry point (Estimates, Jobs,
@@ -62,6 +63,7 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
   const [lineItems, setLineItems] = useState<LineItemRow[]>([]);
   const [newMaterial, setNewMaterial] = useState<MaterialRow>({ name: "", quantity: 1, unitCost: 0 });
   const [newLineItem, setNewLineItem] = useState({ description: "", quantity: 1, unitPrice: 0 });
+  const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -83,7 +85,7 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
       estimatedValue: source.estimatedValue != null ? String(source.estimatedValue) : ""
     });
     setMaterials((source.materials || []).map(m => ({ name: m.name, quantity: m.quantity, unitCost: m.unitCost })));
-    setLineItems((source.lineItems || []).map(li => ({ id: li.id, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice })));
+    setLineItems((source.lineItems || []).map(li => ({ id: li.id, description: li.description, quantity: li.quantity, unitPrice: li.unitPrice, priceBookModelId: li.priceBookModelId })));
   }, [isOpen, editingWorkOrder, prefill]);
 
   if (!isOpen) return null;
@@ -337,7 +339,7 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
               <input type="number" min="0" step="0.01" value={newLineItem.unitPrice} onChange={e => setNewLineItem({ ...newLineItem, unitPrice: Number(e.target.value) })} placeholder="Price" className="input" />
               <button type="button" onClick={addLineItem} className="rounded-lg bg-[#315C9F] px-3 text-white"><Plus className="h-4 w-4" /></button>
             </div>
-            {/* Add Flat Rate Pricing Model will attach here once the Price Book system is built. */}
+            <button type="button" onClick={() => setIsPriceBookOpen(true)} className="mt-2 w-full rounded-lg border border-dashed border-[#315C9F] py-2 text-xs font-black text-[#315C9F]">💲 Add Flat Rate Pricing Model</button>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -362,6 +364,11 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
           <button type="button" disabled={!canSave} onClick={handleSave} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white disabled:opacity-40">Save Work Order</button>
         </div>
       </div>
+      <PriceBookModal
+        isOpen={isPriceBookOpen}
+        onClose={() => setIsPriceBookOpen(false)}
+        pickerMode={{ onPick: (item) => { setLineItems(prev => [...prev, { id: uid("li"), ...item }]); setIsPriceBookOpen(false); } }}
+      />
     </div>
   );
 };

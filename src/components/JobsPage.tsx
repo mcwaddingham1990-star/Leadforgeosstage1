@@ -16,6 +16,7 @@ import { hasPermission } from "../types/permissions";
 import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { computeJobCosting } from "../lib/jobCostingEngine";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
+import { PriceBookModal } from "./PriceBookModal";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -52,6 +53,7 @@ export const JobsPage: React.FC = () => {
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
+  const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -265,6 +267,7 @@ export const JobsPage: React.FC = () => {
         <div><p className="text-[10px] font-black uppercase tracking-[.2em] text-[#315C9F]">Job Management</p><h2 className="text-xl font-black text-[#1F3557]">Jobs</h2><p className="text-xs font-semibold text-[#5E7393]">Manage job details, status, assignments, and materials in one place.</p></div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => navigateToScreen("dispatch")} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2 text-xs font-bold text-[#315C9F]"><Truck className="mr-1 inline h-4 w-4"/>Dispatch</button>
+          <button onClick={() => setIsPriceBookOpen(true)} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2 text-xs font-bold text-[#315C9F]">💲 Price Book</button>
           <button onClick={() => navigateToScreen("routes")} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] px-3 py-2 text-xs font-bold text-[#315C9F]"><MapPin className="mr-1 inline h-4 w-4"/>Map</button>
           {canEdit && <button onClick={openCreate} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white shadow"><Plus className="mr-1 inline h-4 w-4"/>New Job</button>}
         </div>
@@ -356,6 +359,7 @@ export const JobsPage: React.FC = () => {
     {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
     <SendChoiceModal isOpen={isSendOpen} onClose={()=>setIsSendOpen(false)} label={selected?displayNumber(selected):"job"} phone={selected?.customerPhone} email={selected?.customerEmail} />
     <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={()=>setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} editingWorkOrder={editingWorkOrder} />
+    <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} />
   </div>;
 };
 

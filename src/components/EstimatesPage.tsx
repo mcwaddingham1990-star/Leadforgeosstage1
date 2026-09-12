@@ -43,6 +43,7 @@ import SendChoiceModal from "./SendChoiceModal";
 import { downloadCsv, parseCsv } from "../lib/csv";
 import type { DocumentItem, WorkOrder } from "../types/domain";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
+import { PriceBookModal } from "./PriceBookModal";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -88,6 +89,7 @@ export const EstimatesPage: React.FC = () => {
   const [lastConvertedJobId, setLastConvertedJobId] = useState<string | null>(null);
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
+  const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [jobDate, setJobDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [jobStartTime, setJobStartTime] = useState("09:00");
   const [jobEndTime, setJobEndTime] = useState("12:00");
@@ -491,6 +493,12 @@ export const EstimatesPage: React.FC = () => {
             >
               <Plus className="w-3.5 h-3.5" />
               New Estimate
+            </button>
+            <button
+              onClick={() => setIsPriceBookOpen(true)}
+              className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              💲 Price Book
             </button>
             <button
               onClick={() => importInputRef.current?.click()}
@@ -1579,6 +1587,7 @@ export const EstimatesPage: React.FC = () => {
 
       <SendChoiceModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} label={`Estimate ${selectedEstimate?.number || ""}`} phone={sendMatch?.phone} email={sendMatch?.email} />
       <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
+      <PriceBookModal isOpen={isPriceBookOpen} onClose={() => setIsPriceBookOpen(false)} />
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { hasPermission } from "../types/permissions";
 import { authedFetch } from "../lib/apiClient";
+import { PriceBookModal } from "./PriceBookModal";
 import {
   Account,
   JournalEntry,
@@ -522,6 +523,7 @@ function InvoicesTab({
   const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
+  const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [customer, setCustomer] = useState("");
   const [dueInDays, setDueInDays] = useState(30);
   const [taxRate, setTaxRate] = useState<number>(salesTaxRates.find((r: any) => r.isDefault)?.rate || 0);
@@ -719,18 +721,31 @@ function InvoicesTab({
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Invoices</h3>
-        {canEdit && (
+        <div className="flex gap-2">
           <button
-            onClick={() => {
-              setCustomer(customers.length === 1 ? (customers[0].company || customers[0].contact || "") : "");
-              setIsCreating(true);
-            }}
-            className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase tracking-wide flex items-center gap-1.5 cursor-pointer"
+            onClick={() => setIsPriceBookOpen(true)}
+            className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] text-xs font-bold rounded-xl uppercase tracking-wide flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" /> New Invoice
+            💲 Price Book
           </button>
-        )}
+          {canEdit && (
+            <button
+              onClick={() => {
+                setCustomer(customers.length === 1 ? (customers[0].company || customers[0].contact || "") : "");
+                setIsCreating(true);
+              }}
+              className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase tracking-wide flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> New Invoice
+            </button>
+          )}
+        </div>
       </div>
+      <PriceBookModal
+        isOpen={isPriceBookOpen}
+        onClose={() => setIsPriceBookOpen(false)}
+        pickerMode={isCreating ? { onPick: (item) => { setLineItems(prev => [...prev, { id: genId("li"), description: item.description, quantity: item.quantity, unitPrice: item.unitPrice }]); setIsPriceBookOpen(false); } } : undefined}
+      />
 
       <CustomerStatementPicker invoices={invoices} customers={customers} />
 
@@ -865,6 +880,12 @@ function InvoicesTab({
                   className="text-[#315C9F] font-bold text-[10px] flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" /> Add Line
+                </button>
+                <button
+                  onClick={() => setIsPriceBookOpen(true)}
+                  className="w-full rounded-lg border border-dashed border-[#315C9F] py-1.5 text-[10px] font-black text-[#315C9F]"
+                >
+                  💲 Add Flat Rate Pricing Model
                 </button>
               </div>
               <div className="text-right font-black text-[#1F3557] text-sm pt-2 border-t border-slate-100">

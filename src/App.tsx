@@ -5,6 +5,7 @@ import { db, auth } from "./firebase";
 import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
+import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -18,6 +19,7 @@ import { getRemoteSigningTokenFromUrl } from "./lib/remoteSigningClient";
 import { updateLiveLocation } from "./lib/timeClockService";
 import { computePayrollHoursForRange } from "./lib/payrollHours";
 import { computeJobCosting } from "./lib/jobCostingEngine";
+import { PriceBookModal } from "./components/PriceBookModal";
 import RemoteSigningPage from "./components/RemoteSigningPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
@@ -1681,6 +1683,8 @@ export default function App() {
   const [estimates, setEstimates] = useFirestoreCollection<Estimate>("estimates", businessId);
   const [schedulingEvents, setSchedulingEvents] = useFirestoreCollection<SchedulingEvent>("scheduling_events", businessId);
   const [workOrders, setWorkOrders] = useFirestoreCollection<WorkOrder>("work_orders", businessId);
+  const [priceBookFolders, setPriceBookFolders] = useFirestoreCollection<PriceBookFolder>("price_book_folders", businessId);
+  const [priceBookModels, setPriceBookModels] = useFirestoreCollection<PriceBookModel>("price_book_models", businessId);
   const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
   const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
   const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
@@ -2101,6 +2105,7 @@ export default function App() {
   const [payrollState, setPayrollState] = useState("TX");
   const [revenuePageFilter, setRevenuePageFilter] = useState("Pay Period");
   const [isFinancialSnapshotOpen, setIsFinancialSnapshotOpen] = useState(false);
+  const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [pinnedChartPoint, setPinnedChartPoint] = useState<{ label: number; payload: any[] } | null>(null);
   const [financialSnapshotCategory, setFinancialSnapshotCategory] = useState<
     "all" | "balance" | "unpaid_invoices" | "outstanding_expenses" | "payments_collected" | "expenses_paid"
@@ -4155,6 +4160,10 @@ Access to full financial telemetry is restricted.`;
     setSchedulingEvents,
     workOrders,
     setWorkOrders,
+    priceBookFolders,
+    setPriceBookFolders,
+    priceBookModels,
+    setPriceBookModels,
     inventoryList,
     setInventoryList,
     documents,
@@ -7532,6 +7541,12 @@ Access to full financial telemetry is restricted.`;
                                 >
                                   <Landmark className="w-3.5 h-3.5" /> View Financial Reports
                                 </button>
+                                <button
+                                  onClick={() => setIsPriceBookOpen(true)}
+                                  className="min-h-10 px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-md bg-[#dff4ff] border border-white text-[#07599a] cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.52),inset_0_0_10px_rgba(255,255,255,0.95)]"
+                                >
+                                  💲 Price Book
+                                </button>
                               </div>
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
@@ -7910,6 +7925,8 @@ Access to full financial telemetry is restricted.`;
                           </button>
                         </div>
                       </div>
+
+                      <PriceBookModal isOpen={isPriceBookOpen} onClose={() => setIsPriceBookOpen(false)} />
 
                       {/* FINANCIAL REPORTS FLOATING PANE */}
                       {isFinancialSnapshotOpen && (

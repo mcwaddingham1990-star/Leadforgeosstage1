@@ -30,6 +30,7 @@ export const MODULE_CATALOG: Array<{ id: string; label: string }> = [
   { id: "accounting", label: "Accounting & Bookkeeping" },
   { id: "jobs", label: "Jobs" },
   { id: "work_orders", label: "Work Orders" },
+  { id: "price_book", label: "Price Book" },
   { id: "scheduling", label: "Scheduling" },
   { id: "dispatch", label: "Dispatch" },
   { id: "routes", label: "Routes" },

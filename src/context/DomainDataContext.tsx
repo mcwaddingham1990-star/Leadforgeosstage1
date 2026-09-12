@@ -1,6 +1,7 @@
 import { createContext, useContext, Dispatch, SetStateAction } from "react";
 import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "../types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
+import { PriceBookFolder, PriceBookModel } from "../types/priceBook";
 import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
 export interface RosterEntry {
@@ -22,6 +23,10 @@ export interface DomainDataContextValue {
   setSchedulingEvents: Dispatch<SetStateAction<SchedulingEvent[]>>;
   workOrders: WorkOrder[];
   setWorkOrders: Dispatch<SetStateAction<WorkOrder[]>>;
+  priceBookFolders: PriceBookFolder[];
+  setPriceBookFolders: Dispatch<SetStateAction<PriceBookFolder[]>>;
+  priceBookModels: PriceBookModel[];
+  setPriceBookModels: Dispatch<SetStateAction<PriceBookModel[]>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];
