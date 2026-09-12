@@ -4,7 +4,7 @@ export interface GeneratedPdfDraft {
   lines: string[];
   customerName: string;
   representativeName: string;
-  sourceType: "Estimate" | "Invoice" | "Job" | "Work Order" | "Customer" | "Lead" | "Report";
+  sourceType: "Estimate" | "Invoice" | "Job" | "Work Order" | "Service Agreement" | "Customer" | "Lead" | "Report";
   sourceId: string;
   /** Customer contact info, when known, so the PDF Editor's "Send" button
    * and remote-signing link can go straight to them without another lookup. */

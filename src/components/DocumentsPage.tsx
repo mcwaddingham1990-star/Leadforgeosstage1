@@ -7,7 +7,10 @@ import SelfieSaveEditor from "./SelfieSaveEditor";
 import { EmployeeSnapshotFolderBrowser } from "./EmployeeSnapshotFolderBrowser";
 import { EmployeeSnapshotPermissionModal } from "./EmployeeSnapshotPermissionModal";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
+import { CreateMembershipPicker } from "./CreateMembershipPicker";
+import { MembershipBuilder } from "./MembershipBuilder";
 import type { WorkOrder } from "../types/domain";
+import type { Membership } from "../types/membership";
 import {
   Search,
   Plus,
@@ -67,6 +70,7 @@ import type { DocumentItem } from "../types/domain";
 export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; subfolders: string[] }> = [
   { id: "Estimates", icon: "📝", subfolders: ["Estimates"] },
   { id: "Work Orders", icon: "🧰", subfolders: ["Work Orders"] },
+  { id: "Service Agreements", icon: "📜", subfolders: ["Service Agreements"] },
   { id: "Invoices", icon: "💳", subfolders: ["Invoices"] },
   { id: "Customer Notes", icon: "🗒️", subfolders: ["Customer Notes"] },
   { id: "Employees", icon: "👤", subfolders: ["Employee Files"] },
@@ -93,6 +97,7 @@ export function inferFolderForDoc(doc: DocumentItem): string {
   if (doc.type === "Invoices") return "Invoices";
   if (doc.type === "Estimates") return "Estimates";
   if (doc.type === "Work Orders") return "Work Orders";
+  if (doc.type === "Service Agreements") return "Service Agreements";
   if (doc.type === "Receipts" || doc.type === "Expenses") return "Expenses/Receipts";
   if (doc.type.toLowerCase().includes("tax")) return "Taxes";
   return "Customer Notes";
@@ -110,10 +115,13 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
+  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, memberships, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
+  const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
+  const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
+  const [isMembershipBuilderOpen, setIsMembershipBuilderOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -309,7 +317,7 @@ export const DocumentsPage: React.FC = () => {
           employee: loggedInUser?.name || "Staff Administrator",
           vendor: "None",
           job: generatedPdfDraft?.sourceType === "Job" ? generatedPdfDraft.sourceId : "None",
-          type: pendingCreateTemplateFolder || (generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : "Contracts"),
+          type: pendingCreateTemplateFolder || (generatedPdfDraft?.sourceType === "Invoice" ? "Invoices" : generatedPdfDraft?.sourceType === "Estimate" ? "Estimates" : generatedPdfDraft?.sourceType === "Work Order" ? "Work Orders" : generatedPdfDraft?.sourceType === "Service Agreement" ? "Service Agreements" : "Contracts"),
           uploadedBy: loggedInUser?.name || "Staff Administrator",
           date: new Date().toISOString().split('T')[0],
           size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : "Draft",
@@ -322,6 +330,7 @@ export const DocumentsPage: React.FC = () => {
           estimateId: generatedPdfDraft?.sourceType === "Estimate" ? generatedPdfDraft.sourceId : "None",
           invoiceId: generatedPdfDraft?.sourceType === "Invoice" ? generatedPdfDraft.sourceId : "None",
           workOrderId: generatedPdfDraft?.sourceType === "Work Order" ? generatedPdfDraft.sourceId : undefined,
+          membershipId: generatedPdfDraft?.sourceType === "Service Agreement" ? generatedPdfDraft.sourceId : undefined,
           lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
           metaObjects: metaProperties?.objects || []
         };
@@ -1324,6 +1333,37 @@ export const DocumentsPage: React.FC = () => {
                   <p className="font-mono text-[9px] font-black uppercase text-[#315C9F]">{wo.workOrderNumber}</p>
                   <p className="mt-1 truncate text-xs font-bold text-[#1F3557]">{wo.jobDescription}</p>
                   <p className="text-[10px] text-[#5E7393]">{wo.date}{wo.customerName ? ` · ${wo.customerName}` : ""}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedFolderFilter === "Service Agreements" && (
+        <div className="rounded-2xl border border-[#9EC8EF] bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black uppercase text-[#1F3557]">Service Agreements</p>
+            <button
+              onClick={() => setIsMembershipPickerOpen(true)}
+              className="rounded-xl bg-[#315C9F] px-3.5 py-2 text-xs font-black text-white uppercase tracking-wider"
+            >
+              Create Custom Service Agreement
+            </button>
+          </div>
+          {memberships.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">No service agreements yet.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {memberships.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => { setEditingMembership(m); setIsMembershipBuilderOpen(true); }}
+                  className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] p-3 text-left"
+                >
+                  <p className="font-mono text-[9px] font-black uppercase text-[#315C9F]">{m.membershipNumber}</p>
+                  <p className="mt-1 truncate text-xs font-bold text-[#1F3557]">{m.planName}</p>
+                  <p className="text-[10px] text-[#5E7393]">{m.status}{m.customerName ? ` · ${m.customerName}` : ""}</p>
                 </button>
               ))}
             </div>
@@ -2804,6 +2844,13 @@ export const DocumentsPage: React.FC = () => {
         onClose={() => setIsWorkOrderBuilderOpen(false)}
         prefill={workOrderPrefill}
         editingWorkOrder={editingWorkOrder}
+      />
+      <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} />
+      <MembershipBuilder
+        isOpen={isMembershipBuilderOpen}
+        onClose={() => setIsMembershipBuilderOpen(false)}
+        editingMembership={editingMembership}
+        onSaved={() => setEditingMembership(null)}
       />
     </div>
   );

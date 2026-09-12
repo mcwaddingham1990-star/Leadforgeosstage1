@@ -17,6 +17,9 @@ import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { computeJobCosting } from "../lib/jobCostingEngine";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
 import { PriceBookModal } from "./PriceBookModal";
+import { CreateMembershipPicker } from "./CreateMembershipPicker";
+import { MembershipBuilder } from "./MembershipBuilder";
+import type { Membership } from "../types/membership";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -49,10 +52,14 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, memberships, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
+  const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
+  const [membershipPrefillBase, setMembershipPrefillBase] = useState<Partial<Membership> | undefined>(undefined);
+  const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
+  const [isMembershipBuilderOpen, setIsMembershipBuilderOpen] = useState(false);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [isChecklistPriceBookOpen, setIsChecklistPriceBookOpen] = useState(false);
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
@@ -343,6 +350,21 @@ export const JobsPage: React.FC = () => {
               <span className="mx-auto mb-1 block text-center">🧰</span>Work Orders<span className="ml-1">({linkedWorkOrders.length})</span>
             </button>;
           })()}
+          {(() => {
+            const linkedMemberships = memberships.filter(m => m.sourceJobId === selected.id);
+            return <button
+              onClick={() => {
+                if (linkedMemberships.length) { setEditingMembership(linkedMemberships[0]); setIsMembershipBuilderOpen(true); }
+                else {
+                  setMembershipPrefillBase({ sourceJobId: selected.id, customerId: selected.customerId, customerName: selected.customer, customerPhone: selected.customerPhone, address: selected.location || selected.customerAddress });
+                  setIsMembershipPickerOpen(true);
+                }
+              }}
+              className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"
+            >
+              <span className="mx-auto mb-1 block text-center">📜</span>Memberships<span className="ml-1">({linkedMemberships.length})</span>
+            </button>;
+          })()}
         </section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
@@ -360,6 +382,8 @@ export const JobsPage: React.FC = () => {
     {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
     <SendChoiceModal isOpen={isSendOpen} onClose={()=>setIsSendOpen(false)} label={selected?displayNumber(selected):"job"} phone={selected?.customerPhone} email={selected?.customerEmail} />
     <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={()=>setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} editingWorkOrder={editingWorkOrder} />
+    <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={()=>setIsMembershipPickerOpen(false)} prefillBase={membershipPrefillBase} />
+    <MembershipBuilder isOpen={isMembershipBuilderOpen} onClose={()=>setIsMembershipBuilderOpen(false)} editingMembership={editingMembership} onSaved={()=>setEditingMembership(null)} />
     <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} />
     <PriceBookModal
       isOpen={isChecklistPriceBookOpen}

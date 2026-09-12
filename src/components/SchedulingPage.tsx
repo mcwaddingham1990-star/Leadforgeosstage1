@@ -34,6 +34,9 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
+import { CreateMembershipPicker } from "./CreateMembershipPicker";
+import { MembershipBuilder } from "./MembershipBuilder";
+import type { Membership } from "../types/membership";
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -60,6 +63,76 @@ const DEFAULT_EVENT_TYPES = [
 
 
 const PRIORITIES: Array<"Low" | "Medium" | "High" | "Urgent"> = ["Low", "Medium", "High", "Urgent"];
+
+/** Simple Recurring Maintenance view: shows every Membership's next
+ * service by bucket (overdue / upcoming), plus the real visits the
+ * scheduler has already generated (unscheduled -- generated but nobody's
+ * put a date/tech on it yet -- and completed). Owns its own MembershipBuilder
+ * instance for "View / Edit" so it drops into Scheduling without extra
+ * plumbing on the parent page. */
+const RecurringMaintenanceView: React.FC = () => {
+  const { memberships, workOrders } = useDomainData();
+  const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const activeMemberships = memberships.filter(m => m.status === "Active");
+  const overdue = activeMemberships.filter(m => m.nextMaintenanceDate && m.nextMaintenanceDate < today);
+  const upcoming = activeMemberships.filter(m => m.nextMaintenanceDate && m.nextMaintenanceDate >= today);
+  const membershipVisits = workOrders.filter(w => w.sourceMembershipId);
+  const unscheduledVisits = membershipVisits.filter(w => !w.scheduledDate && w.status !== "Completed" && w.status !== "Cancelled");
+  const completedVisits = membershipVisits.filter(w => w.status === "Completed");
+
+  const Bucket = ({ title, color, children }: { title: string; color: string; children: React.ReactNode }) => (
+    <div className="rounded-2xl border border-[#9EC8EF] bg-white p-4">
+      <p className={`text-xs font-black uppercase ${color}`}>{title}</p>
+      <div className="mt-3 space-y-2">{children}</div>
+    </div>
+  );
+
+  return (
+    <div className="bg-white rounded-3xl border border-[#A9CDEE]/50 p-4 space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Bucket title={`Overdue (${overdue.length})`} color="text-rose-600">
+          {overdue.length === 0 && <p className="text-xs text-slate-400">Nothing overdue.</p>}
+          {overdue.map(m => (
+            <button key={m.id} onClick={() => setEditingMembership(m)} className="w-full rounded-xl border border-rose-200 bg-rose-50 p-3 text-left text-xs">
+              <p className="font-black text-[#1F3557]">{m.planName} — {m.customerName}</p>
+              <p className="text-[10px] text-rose-600">Due {m.nextMaintenanceDate}</p>
+            </button>
+          ))}
+        </Bucket>
+        <Bucket title={`Upcoming (${upcoming.length})`} color="text-[#315C9F]">
+          {upcoming.length === 0 && <p className="text-xs text-slate-400">Nothing scheduled yet.</p>}
+          {upcoming.map(m => (
+            <button key={m.id} onClick={() => setEditingMembership(m)} className="w-full rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] p-3 text-left text-xs">
+              <p className="font-black text-[#1F3557]">{m.planName} — {m.customerName}</p>
+              <p className="text-[10px] text-[#5E7393]">Due {m.nextMaintenanceDate}</p>
+            </button>
+          ))}
+        </Bucket>
+        <Bucket title={`Unscheduled Visits (${unscheduledVisits.length})`} color="text-amber-700">
+          {unscheduledVisits.length === 0 && <p className="text-xs text-slate-400">No generated visits waiting on a date yet.</p>}
+          {unscheduledVisits.map(w => (
+            <div key={w.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs">
+              <p className="font-black text-[#1F3557]">{w.workOrderNumber} — {w.customerName}</p>
+              <p className="text-[10px] text-amber-700">{w.jobDescription}</p>
+            </div>
+          ))}
+        </Bucket>
+        <Bucket title={`Completed (${completedVisits.length})`} color="text-emerald-700">
+          {completedVisits.length === 0 && <p className="text-xs text-slate-400">No completed visits yet.</p>}
+          {completedVisits.slice(0, 10).map(w => (
+            <div key={w.id} className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs">
+              <p className="font-black text-[#1F3557]">{w.workOrderNumber} — {w.customerName}</p>
+              <p className="text-[10px] text-emerald-700">{w.scheduledDate || w.date}</p>
+            </div>
+          ))}
+        </Bucket>
+      </div>
+      <MembershipBuilder isOpen={!!editingMembership} onClose={() => setEditingMembership(null)} editingMembership={editingMembership} />
+    </div>
+  );
+};
 
 export const SchedulingPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
@@ -114,7 +187,7 @@ export const SchedulingPage: React.FC = () => {
     return new Date();
   });
 
-  const [activeView, setActiveView] = useState<"month" | "week" | "day">("month");
+  const [activeView, setActiveView] = useState<"month" | "week" | "day" | "recurring">("month");
   const [timeFormat24, setTimeFormat24] = useState<boolean>(false); // false = 12-hour, true = 24-hour
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -125,6 +198,7 @@ export const SchedulingPage: React.FC = () => {
   const [filterCustomer, setFilterCustomer] = useState("All");
   const [filterEventType, setFilterEventType] = useState("All");
   const [isWorkOrderPickerOpen, setIsWorkOrderPickerOpen] = useState(false);
+  const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
   const [filterPriority, setFilterPriority] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterCompleted, setFilterCompleted] = useState("All"); // All, Completed, Incomplete
@@ -889,6 +963,12 @@ export const SchedulingPage: React.FC = () => {
                 >
                   🧰 Create Work Order
                 </button>
+                <button
+                  onClick={() => setIsMembershipPickerOpen(true)}
+                  className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  📜 Add Membership
+                </button>
               </>
             ) : (
               <div className="px-3.5 py-2 bg-slate-200 text-slate-500 rounded-xl text-xs font-bold uppercase border border-slate-300 flex items-center gap-1.5 cursor-not-allowed" title="Create is restricted for your role">
@@ -969,6 +1049,12 @@ export const SchedulingPage: React.FC = () => {
                 className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${activeView === "day" ? "bg-[#315C9F] text-white shadow-xs" : "text-[#1F3557] hover:bg-[#BDDDF8]/50"}`}
               >
                 Day
+              </button>
+              <button
+                onClick={() => setActiveView("recurring")}
+                className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${activeView === "recurring" ? "bg-[#315C9F] text-white shadow-xs" : "text-[#1F3557] hover:bg-[#BDDDF8]/50"}`}
+              >
+                Recurring Maintenance
               </button>
             </div>
           </div>
@@ -1383,6 +1469,8 @@ export const SchedulingPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {activeView === "recurring" && <RecurringMaintenanceView />}
       </div>
 
       {/* 4. UPCOMING / PAST DUE JOBS TICKERS */}
@@ -1961,6 +2049,7 @@ export const SchedulingPage: React.FC = () => {
       )}
 
       <CreateWorkOrderPicker isOpen={isWorkOrderPickerOpen} onClose={() => setIsWorkOrderPickerOpen(false)} />
+      <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} />
     </div>
   );
 };

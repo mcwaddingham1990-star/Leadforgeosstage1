@@ -41,6 +41,9 @@ import type { Customer, DocumentItem, WorkOrder } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
+import { CreateMembershipPicker } from "./CreateMembershipPicker";
+import { MembershipBuilder } from "./MembershipBuilder";
+import type { Membership } from "../types/membership";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
@@ -60,9 +63,13 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
+  const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
+  const [membershipPrefillBase, setMembershipPrefillBase] = useState<Partial<Membership> | undefined>(undefined);
+  const [editingMembership, setEditingMembership] = useState<Membership | null>(null);
+  const [isMembershipBuilderOpen, setIsMembershipBuilderOpen] = useState(false);
   const {
     takeSnapshot: onTakeSnapshot,
     openPageAIAnalysis: onOpenAIAnalysis,
@@ -895,6 +902,22 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 🧰 Create Work Order
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedCustomer) return;
+                  setMembershipPrefillBase({
+                    customerId: selectedCustomer.id,
+                    customerName: selectedCustomer.contact || selectedCustomer.company,
+                    customerPhone: selectedCustomer.phone,
+                    customerEmail: selectedCustomer.email,
+                    address: selectedCustomer.address
+                  });
+                  setIsMembershipPickerOpen(true);
+                }}
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+              >
+                📜 Add Membership
               </button>
               <button
                 onClick={() => selectedCustomer && onNavigateToScreen("messages", { customerId: selectedCustomer.id })}
@@ -1808,6 +1831,62 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                     </div>
                   </div>
 
+                  {/* Memberships / Service Agreements */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Memberships</span>
+                      <button
+                        onClick={() => {
+                          setMembershipPrefillBase({
+                            customerId: selectedCustomer.id,
+                            customerName: selectedCustomer.contact || selectedCustomer.company,
+                            customerPhone: selectedCustomer.phone,
+                            customerEmail: selectedCustomer.email,
+                            address: selectedCustomer.address
+                          });
+                          setIsMembershipPickerOpen(true);
+                        }}
+                        className="text-[10px] font-black text-[#315C9F]"
+                      >
+                        + Add Membership
+                      </button>
+                    </div>
+                    {memberships.filter(m => m.customerId === selectedCustomer.id).length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-[#9EC8EF] p-3 text-center text-[11px] text-slate-400">No memberships yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {memberships.filter(m => m.customerId === selectedCustomer.id).map(m => (
+                          <div key={m.id} className="rounded-xl border border-[#9EC8EF] bg-[#EAF5FF] p-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-[#1F3557]">{m.planName}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${m.status === "Active" ? "bg-emerald-100 text-emerald-700" : m.status === "Paused" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>{m.status}</span>
+                            </div>
+                            <div className="mt-1 grid grid-cols-3 gap-1 text-[10px] text-[#5E7393]">
+                              <span>Price: ${m.price.toFixed(2)}</span>
+                              <span>Next Service: {m.nextMaintenanceDate || "—"}</span>
+                              <span>Next Payment: {m.nextPaymentDate || "—"}</span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <button onClick={() => { setEditingMembership(m); setIsMembershipBuilderOpen(true); }} className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-[#315C9F] border border-[#9EC8EF]">View / Edit</button>
+                              {m.status === "Active" && (
+                                <button onClick={() => setMemberships(prev => prev.map(x => x.id === m.id ? { ...x, status: "Paused" } : x))} className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-amber-700 border border-amber-200">Pause</button>
+                              )}
+                              {m.status === "Paused" && (
+                                <button onClick={() => setMemberships(prev => prev.map(x => x.id === m.id ? { ...x, status: "Active" } : x))} className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-200">Renew</button>
+                              )}
+                              {(m.status === "Canceled" || m.status === "Expired") && (
+                                <button onClick={() => setMemberships(prev => prev.map(x => x.id === m.id ? { ...x, status: "Active" } : x))} className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-200">Renew</button>
+                              )}
+                              {m.status !== "Canceled" && (
+                                <button onClick={() => setMemberships(prev => prev.map(x => x.id === m.id ? { ...x, status: "Canceled" } : x))} className="rounded-lg bg-white px-2 py-1 text-[10px] font-bold text-rose-600 border border-rose-200">Cancel</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Action Shortcuts */}
                   <div className="space-y-2">
                     <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Quick Actions</span>
@@ -1902,6 +1981,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       )}
 
       <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
+      <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} prefillBase={membershipPrefillBase} />
+      <MembershipBuilder isOpen={isMembershipBuilderOpen} onClose={() => setIsMembershipBuilderOpen(false)} editingMembership={editingMembership} onSaved={() => setEditingMembership(null)} />
     </div>
   );
 };

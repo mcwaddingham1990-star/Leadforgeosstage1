@@ -2,6 +2,7 @@ import { createContext, useContext, Dispatch, SetStateAction } from "react";
 import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent, RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "../types/domain";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
 import { PriceBookFolder, PriceBookModel } from "../types/priceBook";
+import { Membership } from "../types/membership";
 import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
 export interface RosterEntry {
@@ -33,6 +34,8 @@ export interface DomainDataContextValue {
    * mount/update since that's the only place the PDF Editor is rendered. */
   pendingCreateTemplateFolder: string | null;
   setPendingCreateTemplateFolder: Dispatch<SetStateAction<string | null>>;
+  memberships: Membership[];
+  setMemberships: Dispatch<SetStateAction<Membership[]>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];

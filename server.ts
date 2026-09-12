@@ -6,7 +6,7 @@ import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScan
 import { getClientIp } from './server/clientInfo';
 import { sendPushToRecipients } from './server/pushNotifications';
 import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } from './server/webLeadFormHandler';
-import { processDueRecurringTransactions, startRecurringScheduler } from './server/recurringScheduler';
+import { processDueRecurringTransactions, processDueMembershipMaintenance, processDueMembershipBilling, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
 import { rateLimit } from './server/rateLimit';
@@ -122,8 +122,17 @@ app.post('/api/jobs/process-recurring', async (req, res) => {
     return;
   }
   try {
-    const result = await processDueRecurringTransactions();
-    res.status(result.configured ? 200 : 503).json(result.configured ? result : { ...result, error: 'Firebase Admin is not configured' });
+    const [transactions, membershipMaintenance, membershipBilling] = await Promise.all([
+      processDueRecurringTransactions(),
+      processDueMembershipMaintenance(),
+      processDueMembershipBilling(),
+    ]);
+    const configured = transactions.configured;
+    res.status(configured ? 200 : 503).json(
+      configured
+        ? { configured, transactions, membershipMaintenance, membershipBilling }
+        : { configured, transactions, membershipMaintenance, membershipBilling, error: 'Firebase Admin is not configured' }
+    );
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Recurring processing failed' });
   }
