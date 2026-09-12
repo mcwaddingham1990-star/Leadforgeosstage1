@@ -100,6 +100,8 @@ export interface Bill {
   totalCost?: number;
   recurring?: boolean;
   recurringDate?: string;
+  /** Set when this Bill was created from a received Purchase Order, same display/navigation-only convention as every other source*Id link. */
+  purchaseOrderId?: string;
   history?: Array<{
     id: string;
     date: string;

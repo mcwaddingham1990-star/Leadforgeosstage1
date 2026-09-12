@@ -3,6 +3,7 @@ import { Customer, Lead, Estimate, InventoryItem, DocumentItem, SchedulingEvent,
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate } from "../types/accounting";
 import { PriceBookFolder, PriceBookModel } from "../types/priceBook";
 import { Membership } from "../types/membership";
+import { PurchaseOrder } from "../types/purchaseOrder";
 import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
 export interface RosterEntry {
@@ -36,6 +37,8 @@ export interface DomainDataContextValue {
   setPendingCreateTemplateFolder: Dispatch<SetStateAction<string | null>>;
   memberships: Membership[];
   setMemberships: Dispatch<SetStateAction<Membership[]>>;
+  purchaseOrders: PurchaseOrder[];
+  setPurchaseOrders: Dispatch<SetStateAction<PurchaseOrder[]>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];

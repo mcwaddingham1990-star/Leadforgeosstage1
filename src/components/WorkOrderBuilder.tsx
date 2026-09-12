@@ -5,6 +5,9 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import type { WorkOrder } from "../types/domain";
 import { PriceBookModal } from "./PriceBookModal";
+import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
+import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
+import type { PurchaseOrder } from "../types/purchaseOrder";
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -54,7 +57,7 @@ const EMPTY_FORM = {
 
 export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onClose, prefill, editingWorkOrder, onSaved }) => {
   const { loggedInUser } = useAuth();
-  const { customers, recentRoster, workOrders, setWorkOrders, setSchedulingEvents, setGeneratedPdfDraft } = useDomainData();
+  const { customers, recentRoster, workOrders, setWorkOrders, setSchedulingEvents, setGeneratedPdfDraft, purchaseOrders } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const actor = loggedInUser?.name || loggedInUser?.email || "Staff";
 
@@ -64,6 +67,9 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
   const [newMaterial, setNewMaterial] = useState<MaterialRow>({ name: "", quantity: 1, unitCost: 0 });
   const [newLineItem, setNewLineItem] = useState({ description: "", quantity: 1, unitPrice: 0 });
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
+  const [isPurchaseOrderPickerOpen, setIsPurchaseOrderPickerOpen] = useState(false);
+  const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [isPurchaseOrderBuilderOpen, setIsPurchaseOrderBuilderOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -342,6 +348,30 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
             <button type="button" onClick={() => setIsPriceBookOpen(true)} className="mt-2 w-full rounded-lg border border-dashed border-[#315C9F] py-2 text-xs font-black text-[#315C9F]">💲 Add Flat Rate Pricing Model</button>
           </div>
 
+          {editingWorkOrder?.id && (
+            <div className="rounded-2xl border border-[#9EC8EF] bg-white p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black uppercase text-[#1F3557]">Purchase Orders</p>
+                <button
+                  type="button"
+                  onClick={() => setIsPurchaseOrderPickerOpen(true)}
+                  className="rounded-lg bg-[#315C9F] px-2.5 py-1.5 text-[10px] font-black text-white uppercase"
+                >
+                  New PO
+                </button>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {purchaseOrders.filter(p => p.sourceWorkOrderId === editingWorkOrder.id).map(po => (
+                  <button key={po.id} type="button" onClick={() => { setEditingPurchaseOrder(po); setIsPurchaseOrderBuilderOpen(true); }} className="flex w-full items-center justify-between rounded-lg bg-blue-50 p-2 text-left text-xs">
+                    <span>{po.poNumber} — {po.vendor}</span>
+                    <span className="font-bold text-[#5E7393]">{po.status}</span>
+                  </button>
+                ))}
+                {purchaseOrders.filter(p => p.sourceWorkOrderId === editingWorkOrder.id).length === 0 && <p className="text-xs text-slate-400">No purchase orders yet.</p>}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Status">
               <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as WorkOrder["status"] })} className="input">
@@ -368,6 +398,17 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
         isOpen={isPriceBookOpen}
         onClose={() => setIsPriceBookOpen(false)}
         pickerMode={{ onPick: (item) => { setLineItems(prev => [...prev, { id: uid("li"), ...item }]); setIsPriceBookOpen(false); } }}
+      />
+      <CreatePurchaseOrderPicker
+        isOpen={isPurchaseOrderPickerOpen}
+        onClose={() => setIsPurchaseOrderPickerOpen(false)}
+        prefillBase={{ sourceWorkOrderId: editingWorkOrder?.id, sourceJobId: editingWorkOrder?.sourceJobId }}
+      />
+      <PurchaseOrderBuilder
+        isOpen={isPurchaseOrderBuilderOpen}
+        onClose={() => setIsPurchaseOrderBuilderOpen(false)}
+        editingPurchaseOrder={editingPurchaseOrder}
+        onSaved={() => setEditingPurchaseOrder(null)}
       />
     </div>
   );

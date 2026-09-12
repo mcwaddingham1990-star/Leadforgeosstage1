@@ -52,6 +52,9 @@ import {
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 import { postTransactionEntry } from "../lib/accountingEngine";
+import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
+import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
+import type { PurchaseOrder } from "../types/purchaseOrder";
 
 export type { ScannedLineItem, ScannedReceipt } from "../types/scannedReceipt";
 import type { ScannedLineItem, ScannedReceipt } from "../types/scannedReceipt";
@@ -165,8 +168,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
     setTransactions,
     setJournalEntries,
     saveTransaction,
-    setDocuments
+    setDocuments,
+    purchaseOrders
   } = useDomainData();
+  const [isPurchaseOrderPickerOpen, setIsPurchaseOrderPickerOpen] = useState(false);
+  const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [isPurchaseOrderBuilderOpen, setIsPurchaseOrderBuilderOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -1134,6 +1141,13 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
             </button>
 
             <button
+              onClick={() => setIsPurchaseOrderPickerOpen(true)}
+              className="px-3 py-2 bg-[#E3F3FF] text-[#342D7E] border border-[#A9CDEE] hover:bg-[#D5EAFF] text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              🧾 New PO
+            </button>
+
+            <button
               onClick={handleRefresh}
               className="p-2 bg-[#E3F3FF] text-slate-600 border border-[#A9CDEE] hover:bg-[#D5EAFF] rounded-xl transition-all cursor-pointer"
               title="Refresh inventory system state"
@@ -2039,6 +2053,25 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
                       {selectedItem.notes}
                     </div>
                   )}
+
+                  {(() => {
+                    const relatedPOs = purchaseOrders.filter(po => po.items.some(i => i.inventoryId === selectedItem.id));
+                    return (
+                      <div className="border-t border-[#A9CDEE]/20 pt-3 space-y-1.5">
+                        <span className="text-[9px] text-slate-400 block uppercase font-bold">Purchase Orders ({relatedPOs.length})</span>
+                        {relatedPOs.length === 0 ? (
+                          <p className="text-slate-400 text-[11px]">No purchase orders for this item yet.</p>
+                        ) : (
+                          relatedPOs.map(po => (
+                            <button key={po.id} onClick={() => { setEditingPurchaseOrder(po); setIsPurchaseOrderBuilderOpen(true); }} className="flex w-full items-center justify-between rounded-lg bg-blue-50 p-2 text-left text-[11px]">
+                              <span className="font-bold text-[#342D7E]">{po.poNumber} — {po.vendor}</span>
+                              <span className="text-slate-500">{po.status}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* HISTORICAL QUANTITY ADJUSTMENT JOURNAL */}
@@ -2872,6 +2905,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = () => {
         </div>
       )}
 
+      <CreatePurchaseOrderPicker isOpen={isPurchaseOrderPickerOpen} onClose={() => setIsPurchaseOrderPickerOpen(false)} />
+      <PurchaseOrderBuilder isOpen={isPurchaseOrderBuilderOpen} onClose={() => setIsPurchaseOrderBuilderOpen(false)} editingPurchaseOrder={editingPurchaseOrder} onSaved={() => setEditingPurchaseOrder(null)} />
     </div>
   );
 };

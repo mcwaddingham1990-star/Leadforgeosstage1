@@ -7,6 +7,7 @@ import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, Granu
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
 import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
 import { Membership } from "./types/membership";
+import { PurchaseOrder } from "./types/purchaseOrder";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -1687,6 +1688,7 @@ export default function App() {
   const [priceBookFolders, setPriceBookFolders] = useFirestoreCollection<PriceBookFolder>("price_book_folders", businessId);
   const [priceBookModels, setPriceBookModels] = useFirestoreCollection<PriceBookModel>("price_book_models", businessId);
   const [memberships, setMemberships] = useFirestoreCollection<Membership>("memberships", businessId);
+  const [purchaseOrders, setPurchaseOrders] = useFirestoreCollection<PurchaseOrder>("purchase_orders", businessId);
   const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
   const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
   const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
@@ -4171,6 +4173,8 @@ Access to full financial telemetry is restricted.`;
     setPendingCreateTemplateFolder,
     memberships,
     setMemberships,
+    purchaseOrders,
+    setPurchaseOrders,
     inventoryList,
     setInventoryList,
     documents,
