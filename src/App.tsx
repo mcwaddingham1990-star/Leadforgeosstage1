@@ -8,6 +8,7 @@ import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } fr
 import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
 import { Membership } from "./types/membership";
 import { PurchaseOrder } from "./types/purchaseOrder";
+import { ReviewRequest, ReviewAutomationSettings, DEFAULT_REVIEW_AUTOMATION_SETTINGS } from "./types/reviewRequest";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -25,6 +26,7 @@ import { computeJobCosting } from "./lib/jobCostingEngine";
 import { PriceBookModal } from "./components/PriceBookModal";
 import RemoteSigningPage from "./components/RemoteSigningPage";
 import CustomerPortalPage from "./components/CustomerPortalPage";
+import { MarketingAttributionView } from "./components/MarketingAttributionView";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1697,6 +1699,8 @@ export default function App() {
   const [priceBookModels, setPriceBookModels] = useFirestoreCollection<PriceBookModel>("price_book_models", businessId);
   const [memberships, setMemberships] = useFirestoreCollection<Membership>("memberships", businessId);
   const [purchaseOrders, setPurchaseOrders] = useFirestoreCollection<PurchaseOrder>("purchase_orders", businessId);
+  const [reviewRequests, setReviewRequests] = useFirestoreCollection<ReviewRequest>("review_requests", businessId);
+  const [reviewAutomationSettings, setReviewAutomationSettings] = useState<ReviewAutomationSettings>(DEFAULT_REVIEW_AUTOMATION_SETTINGS);
   const [inventoryList, setInventoryList] = useFirestoreCollection<InventoryItem>("inventory", businessId);
   const [documents, setDocuments] = useFirestoreCollection<DocumentItem>("documents", businessId);
   const [recentRoster, setRecentRoster] = useFirestoreCollection<{ id?: string; name: string; role: string; code: string; status: string }>(
@@ -2373,6 +2377,18 @@ export default function App() {
     return () => clearTimeout(handle);
   }, [businessId, globalAiSetting, moduleAiSettings, aiKnowledgeBase]);
 
+  // Same auto-persist pattern as the AI settings above, for Automated
+  // Review Request settings (Settings > Automate Reviews) -- one small
+  // settings blob on the same business profile document, not a new
+  // collection just for a handful of fields.
+  useEffect(() => {
+    if (!businessId || !aiSettingsLoadedRef.current || aiSettingsHydratingRef.current) return;
+    const handle = setTimeout(() => {
+      setDoc(doc(db, "business_profiles", businessId), { reviewAutomationSettings }, { merge: true }).catch(err => console.error("Error saving review automation settings:", err));
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [businessId, reviewAutomationSettings]);
+
   // Floating AI Widget UI States
   const [isFloatingAiOpen, setIsFloatingAiOpen] = useState(false);
   // Draggable position for the Owner's AI floating widget -- null means
@@ -2541,6 +2557,7 @@ export default function App() {
                   if (bizData.globalAiSetting) setGlobalAiSetting(bizData.globalAiSetting);
                   if (bizData.moduleAiSettings) setModuleAiSettings(bizData.moduleAiSettings);
                   if (bizData.aiKnowledgeBase) setAiKnowledgeBase(prev => ({ ...prev, ...bizData.aiKnowledgeBase }));
+                  if (bizData.reviewAutomationSettings) setReviewAutomationSettings(prev => ({ ...prev, ...bizData.reviewAutomationSettings }));
                   aiSettingsHydratingRef.current = false;
                   if (bizData.integrationStatuses) setIntegrationStatuses(bizData.integrationStatuses);
                   if (Array.isArray(bizData.selectedRoles) && bizData.selectedRoles.length) setSelectedRoles(normalizeSelectedRoles(bizData.selectedRoles));
@@ -4183,6 +4200,10 @@ Access to full financial telemetry is restricted.`;
     setMemberships,
     purchaseOrders,
     setPurchaseOrders,
+    reviewRequests,
+    setReviewRequests,
+    reviewAutomationSettings,
+    setReviewAutomationSettings,
     inventoryList,
     setInventoryList,
     documents,
@@ -7731,6 +7752,17 @@ Access to full financial telemetry is restricted.`;
                                   </div>
                                 );
                               })()}
+
+                              {/* Marketing Attribution -- same real Lead -> Customer -> Estimate ->
+                                  Job -> Invoice -> Revenue -> Profit chain shown in Reports, dropped
+                                  in here too (point 5) so an owner sees it without leaving Revenue. */}
+                              <div className="rounded-2xl border border-[#9EC8EF] bg-white/70 p-4">
+                                <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">Marketing Attribution</p>
+                                <MarketingAttributionView
+                                  leads={leads} customers={customers} estimates={estimates} jobs={schedulingEvents} invoices={invoices}
+                                  timeClockLogs={timeClockLogs} employees={employees} transactions={transactions} payrollWorkweekStart={payrollWorkweekStart}
+                                />
+                              </div>
 
                               {/* Upcoming Job Payments (left) and Upcoming Bills & Expenses (right) --
                                   two independent scrolling columns, bottom to top */}

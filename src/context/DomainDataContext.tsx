@@ -4,6 +4,7 @@ import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTra
 import { PriceBookFolder, PriceBookModel } from "../types/priceBook";
 import { Membership } from "../types/membership";
 import { PurchaseOrder } from "../types/purchaseOrder";
+import { ReviewRequest, ReviewAutomationSettings } from "../types/reviewRequest";
 import type { GeneratedPdfDraft, EstimatePrefill } from "../types/generatedPdf";
 
 export interface RosterEntry {
@@ -39,6 +40,11 @@ export interface DomainDataContextValue {
   setMemberships: Dispatch<SetStateAction<Membership[]>>;
   purchaseOrders: PurchaseOrder[];
   setPurchaseOrders: Dispatch<SetStateAction<PurchaseOrder[]>>;
+  reviewRequests: ReviewRequest[];
+  setReviewRequests: Dispatch<SetStateAction<ReviewRequest[]>>;
+  /** Business-wide Automated Review Request settings -- persisted on the business profile the same way globalAiSetting/aiKnowledgeBase are. */
+  reviewAutomationSettings: ReviewAutomationSettings;
+  setReviewAutomationSettings: Dispatch<SetStateAction<ReviewAutomationSettings>>;
   inventoryList: InventoryItem[];
   setInventoryList: Dispatch<SetStateAction<InventoryItem[]>>;
   documents: DocumentItem[];

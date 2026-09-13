@@ -9,7 +9,9 @@ import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
 import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
 import type { PurchaseOrder } from "../types/purchaseOrder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
+import { ReviewRequestControls } from "./ReviewRequestControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
+import { MarketingAttributionView } from "./MarketingAttributionView";
 import {
   Account,
   JournalEntry,
@@ -36,7 +38,7 @@ import {
 import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import SendChoiceModal from "./SendChoiceModal";
-import type { DocumentItem } from "../types/domain";
+import type { DocumentItem, Estimate } from "../types/domain";
 import {
   LayoutDashboard,
   FileText,
@@ -157,7 +159,11 @@ export const AccountingPage: React.FC = () => {
     estimates,
     employees,
     inventoryList,
-    purchaseOrders
+    purchaseOrders,
+    leads,
+    schedulingEvents,
+    timeClockLogs,
+    payrollWorkweekStart
   } = useDomainData();
   const { triggerNotification, logOperationalEvent } = useNavTelemetry();
   const { loggedInUser, simulatedRole, businessId } = useAuth();
@@ -369,6 +375,12 @@ export const AccountingPage: React.FC = () => {
           totalRevenue={totalRevenue}
           totalExpenses={totalExpenses}
           netIncome={netIncome}
+          leads={leads}
+          jobs={schedulingEvents}
+          customers={customers}
+          employees={employees}
+          timeClockLogs={timeClockLogs}
+          payrollWorkweekStart={payrollWorkweekStart}
         />
       )}
 
@@ -630,10 +642,18 @@ function InvoicesTab({
       triggerNotification("Add a customer and at least one line item.");
       return;
     }
+    // Marketing attribution -- prefer the linked estimate's source (most
+    // specific to this actual sale), then the matched customer's source,
+    // over leaving it blank.
+    const linkedEstimate = linkedEstimateId ? estimates.find((e: Estimate) => e.id === linkedEstimateId) : undefined;
+    const matchedCustomerForSource = customers.find((c: any) => c.contact === customer.trim() || c.company === customer.trim());
+    const source = linkedEstimate?.source || matchedCustomerForSource?.source || "Manual Entry";
+    const sourceLeadId = linkedEstimate?.sourceLeadId || matchedCustomerForSource?.sourceLeadId;
     const invoice: Invoice = {
       id: genId("inv"),
       invoiceNumber: `INV-${1000 + invoices.length + 1}`,
       customer: customer.trim(),
+      customerId: matchedCustomerForSource?.id,
       lineItems: lineItems.filter(li => li.description.trim()),
       taxRate,
       issuedDate: todayStr(),
@@ -642,7 +662,9 @@ function InvoicesTab({
       amountPaid: 0,
       createdAt: new Date().toISOString(),
       createdBy: loggedInUser?.email,
-      estimateId: linkedEstimateId || undefined
+      estimateId: linkedEstimateId || undefined,
+      source,
+      sourceLeadId
     };
     setInvoices((prev: Invoice[]) => [...prev, invoice]);
     setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoiceCreatedEntry(invoice, loggedInUser?.email)]);
@@ -954,6 +976,10 @@ function InvoicesTab({
               <div className="space-y-1.5">
                 <p className="text-[10px] uppercase font-bold text-[#5E7393]">Customer Portal</p>
                 <CustomerPortalControls customer={resolveCustomerByIdOrName(customers, viewingInvoice.customerId, viewingInvoice.customer)} />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase font-bold text-[#5E7393]">Review Requests</p>
+                <ReviewRequestControls customer={resolveCustomerByIdOrName(customers, viewingInvoice.customerId, viewingInvoice.customer)} jobId={viewingInvoice.jobId} invoiceId={viewingInvoice.id} />
               </div>
             </div>
             <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between gap-2 shrink-0">
@@ -1751,7 +1777,7 @@ function JournalTab({ journalEntries, setJournalEntries, accounts, canEdit, trig
 // ============================================================================
 // REPORTS
 // ============================================================================
-function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, estimates, inventoryList, accountBalances, totalRevenue, totalExpenses, netIncome }: any) {
+function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, estimates, inventoryList, accountBalances, totalRevenue, totalExpenses, netIncome, leads, jobs, customers, employees, timeClockLogs, payrollWorkweekStart }: any) {
   const [report, setReport] = useState("pnl");
 
   const revenueByCustomer = useMemo(() => {
@@ -1830,7 +1856,8 @@ function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, es
     { id: "exp_vendor", label: "Expenses by Vendor" },
     { id: "sales_tax", label: "Sales Tax" },
     { id: "payroll", label: "Payroll" },
-    { id: "inventory_val", label: "Inventory Valuation" }
+    { id: "inventory_val", label: "Inventory Valuation" },
+    { id: "attribution", label: "Marketing Attribution" }
   ];
 
   const exportCsv = (rows: Array<[string, number]>, filename: string) => {
@@ -1922,6 +1949,12 @@ function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, es
             <p className="text-lg font-black text-[#1F3557]">{fmt(inventoryValuation)}</p>
             <p className="text-[9px] text-[#5E7393] mt-1">Real quantity × unit cost across current Inventory.</p>
           </div>
+        )}
+        {report === "attribution" && (
+          <MarketingAttributionView
+            leads={leads} customers={customers} estimates={estimates} jobs={jobs} invoices={invoices}
+            timeClockLogs={timeClockLogs} employees={employees} transactions={transactions} payrollWorkweekStart={payrollWorkweekStart}
+          />
         )}
       </div>
     </div>

@@ -6,6 +6,8 @@
 // the P&L/Balance Sheet/Cash Flow/Aging reports are all just different
 // slices of that same real ledger.
 
+import type { LeadSource } from "./domain";
+
 export type AccountType = "asset" | "liability" | "equity" | "revenue" | "expense";
 
 export interface Account {
@@ -82,6 +84,9 @@ export interface Invoice {
   notes?: string;
   createdAt: string;
   createdBy?: string;
+  /** Marketing attribution, carried over from the Customer/Job/Estimate this invoice came from (see Customer.source in types/domain.ts). */
+  source?: LeadSource;
+  sourceLeadId?: string;
 }
 
 export interface Bill {

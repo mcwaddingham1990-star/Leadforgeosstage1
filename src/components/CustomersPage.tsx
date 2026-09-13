@@ -45,6 +45,7 @@ import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
+import { ReviewRequestControls } from "./ReviewRequestControls";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
@@ -1836,6 +1837,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                   <div className="space-y-2">
                     <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Customer Portal</span>
                     <CustomerPortalControls customer={selectedCustomer} />
+                  </div>
+
+                  {/* Review Requests */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Review Requests</span>
+                    <ReviewRequestControls customer={selectedCustomer} />
                   </div>
 
                   {/* Memberships / Service Agreements */}

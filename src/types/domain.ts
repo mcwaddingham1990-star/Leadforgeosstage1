@@ -5,6 +5,22 @@
 // imports (e.g. `import { Customer } from "./components/CustomersPage"`)
 // keep working.
 
+/** Where a Lead (and everything it eventually turns into -- Customer,
+ * Estimate, Job, Invoice) came from. Shared so Customer/Estimate/
+ * SchedulingEvent/Invoice can each carry the same source value through the
+ * whole workflow instead of each redefining this union. */
+export type LeadSource =
+  | "Google Business Profile"
+  | "Website"
+  | "Facebook"
+  | "Instagram"
+  | "Referral"
+  | "Phone Call"
+  | "Walk-In"
+  | "Manual Entry"
+  | "Customer Portal"
+  | "Other";
+
 export interface Customer {
   id: string;
   company: string;
@@ -32,6 +48,14 @@ export interface Customer {
   portalEnabled?: boolean;
   portalToken?: string;
   portalTokenCreatedAt?: string;
+  /** Marketing attribution -- the original Lead source this customer came
+   * from (or "Manual Entry" when there was never a Lead at all, e.g. an
+   * estimate typed in for a walk-in). Carried forward onto every Estimate/
+   * Job/Invoice this customer generates so the whole Lead -> Customer ->
+   * Estimate -> Job -> Invoice -> Revenue chain can be rolled up by source
+   * without re-deriving it from scratch each time. */
+  source?: LeadSource;
+  sourceLeadId?: string;
 }
 
 export interface Lead {
@@ -40,17 +64,7 @@ export interface Lead {
   company: string;
   phone: string;
   email: string;
-  source:
-    | "Google Business Profile"
-    | "Website"
-    | "Facebook"
-    | "Instagram"
-    | "Referral"
-    | "Phone Call"
-    | "Walk-In"
-    | "Manual Entry"
-    | "Customer Portal"
-    | "Other";
+  source: LeadSource;
   salesRep: string;
   status:
     | "New"
@@ -104,6 +118,9 @@ export interface Estimate {
    * separately-typed number -- every existing estimate with no lineItems
    * keeps working exactly as before, amount alone. */
   lineItems?: Array<{ id: string; description: string; quantity: number; unitPrice: number; priceBookModelId?: string }>;
+  /** Marketing attribution, carried over from the Lead/Customer this estimate came from (see Customer.source). */
+  source?: LeadSource;
+  sourceLeadId?: string;
 }
 
 export interface InventoryItem {
@@ -404,6 +421,13 @@ export interface SchedulingEvent {
   sourceWorkOrderId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Marketing attribution, carried over from the Estimate/Customer this job came from (see Customer.source). */
+  source?: LeadSource;
+  sourceLeadId?: string;
+  /** Stamped once by the Event Engine's job-completion cascade the moment status first becomes "Completed" -- used to fire a "Review Request X days after completion" without depending on which page/action actually set the status. */
+  completedAt?: string;
+  /** Excludes this one job from Automated Review Requests even when automation is turned on business-wide. */
+  reviewRequestExcluded?: boolean;
 }
 
 /**

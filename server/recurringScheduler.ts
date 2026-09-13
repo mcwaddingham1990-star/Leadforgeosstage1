@@ -359,6 +359,100 @@ export async function processDueMembershipBilling(): Promise<{ configured: boole
   return { configured: true, processed, failed };
 }
 
+/**
+ * Fires the "X days after completion" Automated Review Request trigger --
+ * the one trigger mode that can't be driven by a live client event (nobody
+ * re-opens the app exactly N days later), so it has to be checked on a
+ * schedule instead. Reads each business's own settings straight off its
+ * business_profiles doc (see reviewAutomationSettings in the client), and
+ * guards against duplicates in Job Completed and Invoice Paid the exact
+ * same way: skip if a (non-Canceled or even Canceled -- any) ReviewRequest
+ * already exists for this job.
+ */
+export async function processDueReviewRequests(): Promise<{ configured: boolean; processed: number; failed: number }> {
+  const db = getDatabase();
+  if (!db) return { configured: false, processed: 0, failed: 0 };
+  const today = new Date();
+  let processed = 0;
+  let failed = 0;
+
+  const businessesSnap = await db.collection("business_profiles")
+    .where("reviewAutomationSettings.enabled", "==", true)
+    .where("reviewAutomationSettings.trigger", "==", "days_after_completion")
+    .get();
+
+  for (const bizDoc of businessesSnap.docs) {
+    const businessId = bizDoc.id;
+    const settings = bizDoc.data().reviewAutomationSettings || {};
+    const days = Math.max(0, Number(settings.daysAfterCompletion) || 0);
+    const message = String(settings.message || "").trim();
+    const reviewLink = String(settings.reviewLink || "").trim();
+    if (!message || !reviewLink) continue;
+    const excludedCustomerIds: string[] = Array.isArray(settings.excludedCustomerIds) ? settings.excludedCustomerIds : [];
+
+    try {
+      const jobsSnap = await db.collection("scheduling_events")
+        .where("businessId", "==", businessId)
+        .where("eventType", "==", "Job")
+        .where("status", "==", "Completed")
+        .get();
+
+      for (const jobDoc of jobsSnap.docs) {
+        const job = jobDoc.data();
+        if (!job.completedAt || job.reviewRequestExcluded) continue;
+        const completedAt = new Date(job.completedAt);
+        const dueAt = new Date(completedAt.getTime() + days * 24 * 60 * 60 * 1000);
+        if (dueAt > today) continue;
+
+        const existing = await db.collection("review_requests").where("jobId", "==", jobDoc.id).limit(1).get();
+        if (!existing.empty) continue;
+
+        let customer: FirebaseFirestore.DocumentData | undefined;
+        if (job.customerId) {
+          const custSnap = await db.collection("customers").doc(job.customerId).get();
+          if (custSnap.exists) customer = custSnap.data();
+        }
+        const customerId = customer?.id || job.customerId;
+        if (customerId && excludedCustomerIds.includes(customerId)) continue;
+
+        const now = new Date().toISOString();
+        const reviewId = `review_${jobDoc.id}`;
+        await db.collection("review_requests").doc(reviewId).set({
+          id: reviewId,
+          customerId: customerId || "",
+          customerName: job.customer,
+          customerPhone: customer?.phone || job.customerPhone,
+          customerEmail: customer?.email || job.customerEmail,
+          jobId: jobDoc.id,
+          trigger: "days_after_completion",
+          status: "Scheduled",
+          message,
+          reviewLink,
+          createdAt: now,
+          createdBy: "Automated Review Requests",
+          businessId,
+          activity: [{ id: `act_${Date.now()}`, timestamp: now, action: `Auto-scheduled (${days} days after completion)`, by: "Recurring Scheduler" }]
+        });
+        await db.collection("notifications").doc(`notif_${reviewId}`).set({
+          id: `notif_${reviewId}`,
+          businessId,
+          screenId: "customers",
+          title: "Review request ready to send",
+          message: `${job.customer}'s review request is ready -- send it from Customers or Job Completion.`,
+          isRead: false,
+          timestamp: now
+        });
+        processed++;
+      }
+    } catch (error) {
+      failed++;
+      console.error(`Review request scheduling failed for business ${businessId}:`, error);
+    }
+  }
+
+  return { configured: true, processed, failed };
+}
+
 export function startRecurringScheduler(): void {
   const run = () => {
     void processDueRecurringTransactions().then(result => {
@@ -370,6 +464,9 @@ export function startRecurringScheduler(): void {
     void processDueMembershipBilling().then(result => {
       if (result.processed || result.failed) console.log("Membership billing scheduler run:", result);
     }).catch(error => console.error("Membership billing scheduler run failed:", error));
+    void processDueReviewRequests().then(result => {
+      if (result.processed || result.failed) console.log("Review request scheduler run:", result);
+    }).catch(error => console.error("Review request scheduler run failed:", error));
   };
   setTimeout(run, 10_000);
   setInterval(run, 5 * 60 * 1000);

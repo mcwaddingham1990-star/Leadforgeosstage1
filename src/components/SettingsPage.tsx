@@ -43,7 +43,9 @@ import {
   X,
   Archive,
   ArrowRight,
-  UserPlus
+  UserPlus,
+  Star,
+  Send
 } from "lucide-react";
 import { RolePermissionEditorModal } from "./RolePermissionEditorModal";
 import { ONBOARDING_ROLE_TEMPLATES } from "./RosterPage";
@@ -265,7 +267,7 @@ export default function SettingsPage({
 }: SettingsPageProps) {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions, employees, setEmployees } = useDomainData();
+  const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions, employees, setEmployees, reviewAutomationSettings, setReviewAutomationSettings, reviewRequests, customers } = useDomainData();
   const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
 
   // Completed employee records are the primary roster source. Include active
@@ -409,6 +411,7 @@ export default function SettingsPage({
     { id: "job_defaults", label: "Job Defaults", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
     { id: "document_defaults", label: "Document Defaults", icon: <FileCode className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
     { id: "message_defaults", label: "Message Defaults", icon: <Volume2 className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
+    { id: "review_automation", label: "Automate Reviews", icon: <Star className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
     { id: "training_defaults", label: "Training Defaults", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
 
     { id: "ai_settings", label: "AI Settings", icon: <Sparkles className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
@@ -2067,6 +2070,112 @@ export default function SettingsPage({
                       onChange={(e) => handleConfigChange("message", "autoReplyText", e.target.value)}
                       className="w-full h-16 px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* AUTOMATE REVIEWS */}
+              {activeCategory === "review_automation" && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Automate Reviews</h3>
+                  <label className="flex items-center gap-2 rounded-xl border border-[#A9CDEE] bg-white p-3">
+                    <input
+                      type="checkbox"
+                      checked={reviewAutomationSettings.enabled}
+                      onChange={(e) => setReviewAutomationSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                    />
+                    <span className="text-xs font-bold text-slate-700">Turn on automatic review requests</span>
+                  </label>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-500">Send the request when</label>
+                    <select
+                      value={reviewAutomationSettings.trigger}
+                      onChange={(e) => setReviewAutomationSettings(prev => ({ ...prev, trigger: e.target.value as typeof prev.trigger }))}
+                      className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                    >
+                      <option value="manual">Manual Send Only (no automatic sending)</option>
+                      <option value="job_completed">Job Completed</option>
+                      <option value="invoice_paid">Invoice Paid</option>
+                      <option value="days_after_completion">X Days After Completion</option>
+                    </select>
+                  </div>
+
+                  {reviewAutomationSettings.trigger === "days_after_completion" && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase font-bold text-slate-500">Days after job completion</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={reviewAutomationSettings.daysAfterCompletion}
+                        onChange={(e) => setReviewAutomationSettings(prev => ({ ...prev, daysAfterCompletion: Math.max(0, Number(e.target.value)) }))}
+                        className="w-40 px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-500">Edit Message</label>
+                    <textarea
+                      value={reviewAutomationSettings.message}
+                      onChange={(e) => setReviewAutomationSettings(prev => ({ ...prev, message: e.target.value }))}
+                      placeholder="Write exactly what you want customers to see -- there's no pre-written text."
+                      className="w-full h-24 px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-500">Review Link</label>
+                    <input
+                      type="text"
+                      value={reviewAutomationSettings.reviewLink}
+                      onChange={(e) => setReviewAutomationSettings(prev => ({ ...prev, reviewLink: e.target.value }))}
+                      placeholder="https://g.page/r/your-business/review"
+                      className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-slate-500">Never send to these customers</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (id && !reviewAutomationSettings.excludedCustomerIds.includes(id)) {
+                          setReviewAutomationSettings(prev => ({ ...prev, excludedCustomerIds: [...prev.excludedCustomerIds, id] }));
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                    >
+                      <option value="">Add a customer to exclude…</option>
+                      {customers.filter((c: any) => !reviewAutomationSettings.excludedCustomerIds.includes(c.id)).map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.contact || c.company}</option>
+                      ))}
+                    </select>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {reviewAutomationSettings.excludedCustomerIds.map((id: string) => {
+                        const cust = customers.find((c: any) => c.id === id);
+                        return (
+                          <span key={id} className="flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[10px] font-bold text-rose-700">
+                            {cust?.contact || cust?.company || id}
+                            <button onClick={() => setReviewAutomationSettings(prev => ({ ...prev, excludedCustomerIds: prev.excludedCustomerIds.filter(x => x !== id) }))}><X className="w-3 h-3" /></button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-[#A9CDEE]/50">
+                    <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />Review Requests</h4>
+                    <div className="max-h-64 overflow-y-auto space-y-1.5">
+                      {reviewRequests.length === 0 && <p className="text-xs text-slate-400">No review requests yet.</p>}
+                      {reviewRequests.map((r: any) => (
+                        <div key={r.id} className="flex items-center justify-between rounded-lg bg-white border border-[#A9CDEE]/60 px-3 py-2 text-xs">
+                          <span className="font-bold text-slate-700">{r.customerName}</span>
+                          <span className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase bg-[#E3F3FF] text-[#315C9F]">{r.status}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

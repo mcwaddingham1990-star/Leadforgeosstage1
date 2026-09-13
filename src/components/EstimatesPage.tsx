@@ -261,6 +261,14 @@ export const EstimatesPage: React.FC = () => {
 
   const handleAddEstimate = (action: "save" | "pdf" | "signatures" | "convert" = "save") => {
     if (!formCustomerName.trim()) return;
+    // Inherit the real source from an existing customer record when one
+    // already matches (so a repeat customer's estimates keep rolling up
+    // under their original Lead source); a brand-new name typed straight
+    // into this form has no Lead behind it at all, so "Manual Entry" is
+    // the honest attribution rather than leaving it blank.
+    const matchedCustomer = customers.find(c => c.contact === formCustomerName.trim() || c.company === (formCompany.trim() || formCustomerName.trim() + " Inc"));
+    const source = matchedCustomer?.source || "Manual Entry";
+    const sourceLeadId = matchedCustomer?.sourceLeadId;
     const newEst: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
       number: generateEstimateNumber(),
@@ -274,7 +282,9 @@ export const EstimatesPage: React.FC = () => {
       address: formAddress.trim() || undefined,
       phone: formPhone.trim() || undefined,
       createdDate: formatEstimateDate(new Date()),
-      expirationDate: estimateExpirationDate()
+      expirationDate: estimateExpirationDate(),
+      source,
+      sourceLeadId
     };
 
     if (setEstimates) {
@@ -289,7 +299,7 @@ export const EstimatesPage: React.FC = () => {
     // customerPhone/customerAddress empty on that job no matter what.
     // When the estimate is accepted the status upgrades to "Active"
     // automatically via approveEstimateToJob.
-    upsertPotentialCustomer(newEst.customerName, newEst.company, newEst.phone, newEst.address);
+    upsertPotentialCustomer(newEst.customerName, newEst.company, newEst.phone, newEst.address, source, sourceLeadId);
     if (logOperationalEvent) {
       logOperationalEvent("Estimate Created", `${newEst.number} for ${newEst.customerName}`, "📝");
     }
