@@ -14,6 +14,15 @@ import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
 import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
+import {
+  getServiceProfessionals, redeemInviteCode, acceptRelationship, declineRelationship, removeRelationship,
+  getJobs as getCustomerJobs, getAppointments as getCustomerAppointments, getEstimates as getCustomerEstimates,
+  getInvoices as getCustomerInvoices, getMemberships as getCustomerMemberships, getDocuments as getCustomerDocuments,
+  getDocumentPdf as getCustomerDocumentPdf, submitEstimateDecision as submitCustomerEstimateDecision,
+  submitServiceRequest as submitCustomerServiceRequest, getMessages as getCustomerMessages, submitMessage as submitCustomerMessage,
+  createInvoiceCheckout as createCustomerInvoiceCheckout, getBusinessProfile, createBusinessInviteCode, disconnectCustomer,
+  CustomerServiceRequestSubmission
+} from './server/customerAccounts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -261,6 +270,194 @@ app.post('/api/portal/:token/invoices/:invoiceId/checkout', rateLimit('portal-ch
     res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not start checkout' });
+  }
+});
+
+// Owner'sLOCAL Customer -- the real, global customer-account system
+// (src/types/customerAccount.ts, server/customerAccounts.ts). Every route
+// here requires a real signed-in CustomerAccount and re-derives which
+// business(es) it may touch from that account's own confirmed Active
+// relationships server-side -- never from a client-supplied businessId
+// alone -- so one customer's connection to Business A can never reach
+// Business B's data (point 37/38). Entirely separate from the legacy
+// token-based Customer Portal above, which stays untouched.
+app.get('/api/customer-accounts/service-professionals', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getServiceProfessionals(req.firebaseUser!.uid);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your service professionals' });
+  }
+});
+app.post('/api/customer-accounts/invite/redeem', requireAuth, rateLimit('cust-acct-invite', 60_000, 10), async (req, res) => {
+  try {
+    const result = await redeemInviteCode(req.firebaseUser!.uid, String(req.body?.code || ''));
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not redeem this code' });
+  }
+});
+app.post('/api/customer-accounts/relationships/:relationshipId/accept', requireAuth, rateLimit('cust-acct-write', 60_000, 30), async (req, res) => {
+  try {
+    const result = await acceptRelationship(req.firebaseUser!.uid, req.params.relationshipId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not accept this connection' });
+  }
+});
+app.post('/api/customer-accounts/relationships/:relationshipId/decline', requireAuth, rateLimit('cust-acct-write', 60_000, 30), async (req, res) => {
+  try {
+    const result = await declineRelationship(req.firebaseUser!.uid, req.params.relationshipId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not decline this connection' });
+  }
+});
+app.post('/api/customer-accounts/relationships/:relationshipId/remove', requireAuth, rateLimit('cust-acct-write', 60_000, 30), async (req, res) => {
+  try {
+    const result = await removeRelationship(req.firebaseUser!.uid, req.params.relationshipId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not remove this service professional' });
+  }
+});
+app.get('/api/customer-accounts/jobs', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerJobs(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your jobs' });
+  }
+});
+app.get('/api/customer-accounts/appointments', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerAppointments(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your appointments' });
+  }
+});
+app.get('/api/customer-accounts/estimates', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerEstimates(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your estimates' });
+  }
+});
+app.get('/api/customer-accounts/invoices', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerInvoices(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your invoices' });
+  }
+});
+app.get('/api/customer-accounts/memberships', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerMemberships(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your memberships' });
+  }
+});
+app.get('/api/customer-accounts/documents', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getCustomerDocuments(req.firebaseUser!.uid, typeof req.query.businessId === 'string' ? req.query.businessId : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your documents' });
+  }
+});
+app.get('/api/customer-accounts/documents/:documentId', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const businessId = typeof req.query.businessId === 'string' ? req.query.businessId : '';
+    const result = await getCustomerDocumentPdf(req.firebaseUser!.uid, businessId, req.params.documentId);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load this document' });
+  }
+});
+app.post('/api/customer-accounts/estimates/:estimateId/decision', requireAuth, rateLimit('cust-acct-write', 60_000, 15), async (req, res) => {
+  try {
+    const decision = req.body?.decision === 'Accepted' || req.body?.decision === 'Declined' ? req.body.decision : null;
+    const businessId = String(req.body?.businessId || '');
+    if (!decision) {
+      res.status(400).json({ ok: false, error: 'decision must be Accepted or Declined' });
+      return;
+    }
+    const result = await submitCustomerEstimateDecision(req.firebaseUser!.uid, businessId, req.params.estimateId, decision, typeof req.body?.declineReason === 'string' ? req.body.declineReason : undefined);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit your decision' });
+  }
+});
+app.post('/api/customer-accounts/service-request', requireAuth, rateLimit('cust-acct-write', 60_000, 15), async (req, res) => {
+  try {
+    const businessId = String(req.body?.businessId || '');
+    const result = await submitCustomerServiceRequest(req.firebaseUser!.uid, businessId, req.body as CustomerServiceRequestSubmission);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit your request' });
+  }
+});
+app.get('/api/customer-accounts/messages', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const businessId = typeof req.query.businessId === 'string' ? req.query.businessId : '';
+    const result = await getCustomerMessages(req.firebaseUser!.uid, businessId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your messages' });
+  }
+});
+app.post('/api/customer-accounts/messages', requireAuth, rateLimit('cust-acct-write', 60_000, 30), async (req, res) => {
+  try {
+    const businessId = String(req.body?.businessId || '');
+    const result = await submitCustomerMessage(req.firebaseUser!.uid, businessId, String(req.body?.content || ''));
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not send your message' });
+  }
+});
+app.post('/api/customer-accounts/invoices/:invoiceId/checkout', requireAuth, rateLimit('cust-acct-checkout', 60_000, 10), async (req, res) => {
+  try {
+    const businessId = String(req.body?.businessId || '');
+    const origin = `${req.protocol}://${req.get('host')}/?customerInvoice=${encodeURIComponent(req.params.invoiceId)}`;
+    const result = await createCustomerInvoiceCheckout(req.firebaseUser!.uid, businessId, req.params.invoiceId, origin);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not start checkout' });
+  }
+});
+app.get('/api/customer-accounts/business/:businessId', requireAuth, rateLimit('cust-acct-read', 60_000, 60), async (req, res) => {
+  try {
+    const result = await getBusinessProfile(req.firebaseUser!.uid, req.params.businessId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load this business' });
+  }
+});
+
+// Business side of the same system: a business's own signed-in user
+// generating an invite code for one of their existing Customer records, or
+// disconnecting a customer's app access. resolveCallerBusinessId inside
+// createBusinessInviteCode/disconnectCustomer always re-derives the caller's
+// OWN businessId from their uid, never from the request body.
+app.post('/api/business/customers/:customerId/invite-code', requireAuth, rateLimit('cust-acct-write', 60_000, 20), async (req, res) => {
+  try {
+    const source = req.body?.source === 'bid_accepted' || req.body?.source === 'visit_scheduled' ? req.body.source : 'invite_code';
+    const result = await createBusinessInviteCode(req.firebaseUser!.uid, req.params.customerId, source);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not create an invite code' });
+  }
+});
+app.post('/api/business/customers/:customerId/disconnect', requireAuth, rateLimit('cust-acct-write', 60_000, 20), async (req, res) => {
+  try {
+    const result = await disconnectCustomer(req.firebaseUser!.uid, req.params.customerId);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not disconnect this customer' });
   }
 });
 

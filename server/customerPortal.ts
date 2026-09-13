@@ -506,6 +506,9 @@ export async function applyPortalInvoicePayment(businessId: string, session: Str
       ],
       createdAt: now, businessId
     }),
-    notifyBusinessUsers(db, businessId, "invoices", "Invoice paid online", `Invoice ${inv.invoiceNumber} was paid ($${amount.toFixed(2)}) through the Customer Portal.`, "invoices")
+    notifyBusinessUsers(db, businessId, "invoices", "Invoice paid online", `Invoice ${inv.invoiceNumber} was paid ($${amount.toFixed(2)}) online.`, "invoices"),
+    db.collection("audit_logs").doc(uid("audit")).set({
+      businessId, action: "invoice_paid", detail: `Invoice ${inv.invoiceNumber} paid online ($${amount.toFixed(2)}).`, createdAt: now
+    })
   ]);
 }

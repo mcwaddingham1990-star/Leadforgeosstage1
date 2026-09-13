@@ -9,6 +9,9 @@ import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
 import { Membership } from "./types/membership";
 import { PurchaseOrder } from "./types/purchaseOrder";
 import { ReviewRequest, ReviewAutomationSettings, DEFAULT_REVIEW_AUTOMATION_SETTINGS } from "./types/reviewRequest";
+import type { CustomerSession } from "./types/customerAccount";
+import { CustomerLoginPanel } from "./components/CustomerLoginPanel";
+import { CustomerAppShell } from "./components/CustomerAppShell";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -1611,6 +1614,21 @@ export default function App() {
   // Navigation & Flow states
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  // Owner'sLOCAL Customer -- a real account type, completely separate from
+  // the business Owner/Employee login above. loginMode only controls which
+  // login FORM shows before anyone's authenticated; customerSession is set
+  // once Firebase Auth resolves to a real customer_accounts/{uid} doc (see
+  // the onAuthStateChanged listener below) and gates rendering the entire
+  // customer app shell instead of the business dashboard.
+  // A business's invite link (?joinCode=...) should land straight on the
+  // Customer Login screen, not the business one, even for a first-time
+  // visitor -- static at mount time, same reasoning as the pre-existing
+  // remoteSignToken/customerPortalToken checks that read window.location
+  // once rather than reactively.
+  const [loginMode, setLoginMode] = useState<"business" | "customer">(() => (
+    new URLSearchParams(window.location.search).has("joinCode") ? "customer" : "business"
+  ));
+  const [customerSession, setCustomerSession] = useState<CustomerSession | null>(null);
   const [currentView, setCurrentView] = useState<string>("login");
   const [activeScreen, setActiveScreen] = useState(() => {
     const savedId = sessionStorage.getItem("ownerslocal_active_screen");
@@ -2512,6 +2530,23 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
+          // Owner'sLOCAL Customer accounts are a completely separate uid
+          // space from Owner/Employee accounts -- checking this first, and
+          // returning immediately when it matches, means every existing
+          // business login below runs exactly as it did before this
+          // existed (this lookup only ever finds something for a real
+          // customer account; for every current owner/employee it's just
+          // one extra, harmless "not found" read).
+          const customerAccountSnap = await getDoc(doc(db, "customer_accounts", user.uid));
+          if (customerAccountSnap.exists()) {
+            const accountData = customerAccountSnap.data();
+            setCustomerSession({ uid: user.uid, email: user.email || accountData.email || "", name: accountData.name || "" });
+            setIsLoggedIn(false);
+            setAuthReady(true);
+            return;
+          }
+          setCustomerSession(null);
+
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
@@ -2610,6 +2645,7 @@ export default function App() {
       } else {
         setLoggedInUser(null);
         setIsLoggedIn(false);
+        setCustomerSession(null);
         isTimeClockLoadedRef.current = false;
         setAuthReady(true);
       }
@@ -4286,6 +4322,17 @@ Access to full financial telemetry is restricted.`;
     triggerNotification
   };
 
+  // Owner'sLOCAL Customer: an entirely separate app shell, rendered instead
+  // of everything below once Firebase Auth resolves to a real customer
+  // account. Safe to early-return here (after every hook in this component
+  // has already run for this render) without breaking the Rules of Hooks --
+  // it's the same reasoning as the remote-signing/portal-token early
+  // returns at the very top of this function, just gated on real auth
+  // state instead of a static URL param, so it can't be checked until now.
+  if (customerSession) {
+    return <CustomerAppShell session={customerSession} onSignOut={() => { setCustomerSession(null); auth.signOut(); }} />;
+  }
+
   return (
     <AuthContext.Provider value={authContextValue}>
     <DomainDataContext.Provider value={domainDataContextValue}>
@@ -4339,7 +4386,8 @@ Access to full financial telemetry is restricted.`;
         {/* VIEW 1: INTERACTIVE LOGIN CARD */}
         {!isLoggedIn ? (
           <div className="w-full min-h-[100dvh] sm:min-h-0 flex flex-col items-center justify-center sm:py-6">
-            
+            {loginMode === "customer" && <CustomerLoginPanel onSwitchToBusiness={() => setLoginMode("business")} />}
+            {loginMode === "business" && (<>
             {/* Aspect ratio bounding box for the login card */}
             <div
               id="login-card-container"
@@ -6043,6 +6091,18 @@ Access to full financial telemetry is restricted.`;
               </div>
             )}
 
+            {currentView === "login" && (
+              <button
+                type="button"
+                onClick={() => setLoginMode("customer")}
+                style={{ marginTop: `${10 * scale}px`, ...getFontSize(11) }}
+                className="font-bold text-[#5E7393] hover:text-[#1F3557] hover:underline cursor-pointer"
+              >
+                Customer? Log in to your free account here
+              </button>
+            )}
+
+          </>)}
           </div>
         ) : (
 

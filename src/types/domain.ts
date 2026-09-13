@@ -188,6 +188,13 @@ export interface DocumentItem {
   workOrderId?: string;
   membershipId?: string;
   purchaseOrderId?: string;
+  /** Explicit opt-in for the Customer Portal/app -- a document is NEVER
+   * shown there just because it's tagged with a matching customer name; it
+   * has to be marked true (staff toggle, or auto-set true by the specific
+   * Generate PDF flows that are inherently customer-facing -- estimates,
+   * invoices, work orders, service agreements). Internal attachments
+   * (completion photos, snapshots, uploads) default to unset/false. */
+  customerVisible?: boolean;
   receiptAmount?: number;
   lastModified: string;
   url?: string;
@@ -428,6 +435,11 @@ export interface SchedulingEvent {
   completedAt?: string;
   /** Excludes this one job from Automated Review Requests even when automation is turned on business-wide. */
   reviewRequestExcluded?: boolean;
+  /** Defaults to visible -- unlike Documents, a Job is the customer's own
+   * appointment/work, so hiding it needs an explicit opt-out (set false),
+   * not an opt-in. Only relevant when eventType is "Job"; other calendar
+   * entry types are never customer-facing at all regardless of this flag. */
+  customerVisible?: boolean;
 }
 
 /**
@@ -472,4 +484,6 @@ export interface WorkOrder {
   updatedAt?: string;
   createdBy?: string;
   activity?: Array<{ id: string; timestamp: string; action: string; by: string; detail?: string }>;
+  /** Defaults to visible, same reasoning as SchedulingEvent.customerVisible -- a Work Order is the customer's own order; opt out to hide one, don't opt in. */
+  customerVisible?: boolean;
 }

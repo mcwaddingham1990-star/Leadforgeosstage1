@@ -300,6 +300,21 @@ service cloud.firestore {
       allow read, delete: if isAuthenticated() && resource.data.email == request.auth.token.email;
     }
 
+    // Owner'sLOCAL Customer -- a real, global customer identity (its own
+    // Firebase Auth user), entirely separate from user_profiles/isBusinessMember
+    // above. A signed-in customer manages only their own doc; nothing else
+    // reads or writes this collection client-side (App.tsx's
+    // onAuthStateChanged only ever reads its own uid's doc).
+    // business_relationships and business_invite_codes are deliberately left
+    // unmatched (default-deny) -- every one of those reads/writes goes
+    // through the authenticated /api/customer-accounts/* server endpoints
+    // (server/customerAccounts.ts, Firebase Admin SDK), which re-derive
+    // which businesses a customer may see from their own confirmed Active
+    // relationships instead of trusting anything the client sends.
+    match /customer_accounts/{uid} {
+      allow read, write: if isAuthenticated() && request.auth.uid == uid;
+    }
+
     // Missed Call Text-Back companion app settings: one settings doc per
     // business, keyed by businessId (the owner's email, same tenant key used
     // everywhere else). Written from the OwnersLocal web app, read by the
