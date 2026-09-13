@@ -275,8 +275,15 @@ export const PurchaseOrderBuilder: React.FC<PurchaseOrderBuilderProps> = ({ isOp
       createdBy: loggedInUser?.email,
       history: [{ id: uid("hist"), date: now, action: "Bill created from Purchase Order", note: current.poNumber }]
     };
+    // Inventory items already raised Inventory's own asset value the moment
+    // they were received -- billing them again as an Expense would count
+    // that purchase as both stock on hand and money spent. That slice of
+    // the bill debits Inventory instead (see postBillCreatedEntry).
+    const inventoryPortion = source
+      .filter(i => !!i.inventoryId)
+      .reduce((s, i) => s + (i.receivedQuantity || i.quantity) * (i.receivedUnitCost ?? i.unitCost), 0);
     setBills(prev => [...prev, bill]);
-    setJournalEntries(prev => [...prev, postBillCreatedEntry(bill, loggedInUser?.email)]);
+    setJournalEntries(prev => [...prev, postBillCreatedEntry(bill, loggedInUser?.email, inventoryPortion)]);
     persist(form.status, `Bill ${bill.billNumber} created`, undefined, { linkedBillId: bill.id });
     triggerNotification(`Bill ${bill.billNumber} created.`);
   };

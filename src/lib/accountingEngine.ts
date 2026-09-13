@@ -109,19 +109,34 @@ export function postInvoicePaymentEntry(invoice: Invoice, paymentAmount: number,
   );
 }
 
-/** Bill created (vendor invoice received) -- real Accounts Payable. */
-export function postBillCreatedEntry(bill: Bill, createdBy?: string): JournalEntry {
+/**
+ * Bill created (vendor invoice received) -- real Accounts Payable.
+ *
+ * `inventoryPortion` is the slice of the bill's subtotal that's for real
+ * Inventory items (a received Purchase Order line linked to an Inventory
+ * item) rather than a one-off expense. That slice debits Inventory instead
+ * of an Expense account -- Inventory's own asset value already went up the
+ * moment those items were received (see AccountingPage's inventoryAssetValue,
+ * computed live from Inventory, not from journal entries), so debiting an
+ * Expense account for the same purchase would count it as money spent AND
+ * stock on hand at the same time. Defaults to 0 (the whole bill is a normal
+ * expense), so every existing caller is unaffected.
+ */
+export function postBillCreatedEntry(bill: Bill, createdBy?: string, inventoryPortion = 0): JournalEntry {
   const subtotal = bill.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
+  const cleanInventoryPortion = Math.min(Math.max(0, inventoryPortion), subtotal);
+  const expensePortion = subtotal - cleanInventoryPortion;
   const expenseAccountId = accountIdForExpenseCategory(bill.category);
+  const lines: JournalEntryLine[] = [];
+  if (expensePortion > 0) lines.push({ accountId: expenseAccountId, debit: expensePortion, credit: 0 });
+  if (cleanInventoryPortion > 0) lines.push({ accountId: "acct_inventory", debit: cleanInventoryPortion, credit: 0 });
+  lines.push({ accountId: "acct_ap", debit: 0, credit: subtotal });
   return buildEntry(
     bill.issuedDate,
     `Bill ${bill.billNumber} - ${bill.vendor}`,
     "bill",
     bill.id,
-    [
-      { accountId: expenseAccountId, debit: subtotal, credit: 0 },
-      { accountId: "acct_ap", debit: 0, credit: subtotal }
-    ],
+    lines,
     createdBy
   );
 }
