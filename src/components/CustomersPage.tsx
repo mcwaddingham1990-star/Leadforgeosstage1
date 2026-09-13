@@ -44,6 +44,7 @@ import { WorkOrderBuilder } from "./WorkOrderBuilder";
 import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
+import { CustomerPortalControls } from "./CustomerPortalControls";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
@@ -1829,6 +1830,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       <span className="text-[8px] uppercase font-bold text-[#5E7393] block">Lifetime Value</span>
                       <span className="text-sm font-black font-mono block mt-1">${selectedCustomer.lifetimeValue.toLocaleString()}</span>
                     </div>
+                  </div>
+
+                  {/* Customer Portal */}
+                  <div className="space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-[#5E7393] block">Customer Portal</span>
+                    <CustomerPortalControls customer={selectedCustomer} />
                   </div>
 
                   {/* Memberships / Service Agreements */}

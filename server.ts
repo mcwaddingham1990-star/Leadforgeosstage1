@@ -13,6 +13,7 @@ import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
+import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -198,6 +199,67 @@ app.post('/api/sign/:token', rateLimit('sign-post', 60_000, 10), async (req, res
     res.status(result.ok ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit this signature' });
+  }
+});
+
+// Customer Portal: a customer opening their portal link has no OwnersLocal
+// login of their own, so every one of these is gated only by the random
+// portalToken on their own Customer record (see server/customerPortal.ts) --
+// same model as the remote-signing endpoints just above. Rate-limited for
+// the same reason: the token is the only thing standing between a visitor
+// and one customer's own records.
+app.get('/api/portal/:token', rateLimit('portal-get', 60_000, 30), async (req, res) => {
+  try {
+    const result = await getPortalData(req.params.token);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your portal' });
+  }
+});
+app.get('/api/portal/:token/documents/:documentId', rateLimit('portal-doc', 60_000, 30), async (req, res) => {
+  try {
+    const result = await getPortalDocumentPdf(req.params.token, req.params.documentId);
+    res.status(result.ok ? 200 : 404).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load this document' });
+  }
+});
+app.post('/api/portal/:token/estimates/:estimateId/decision', rateLimit('portal-estimate-decision', 60_000, 15), async (req, res) => {
+  try {
+    const decision = req.body?.decision === 'Accepted' || req.body?.decision === 'Declined' ? req.body.decision : null;
+    if (!decision) {
+      res.status(400).json({ ok: false, error: 'decision must be Accepted or Declined' });
+      return;
+    }
+    const result = await submitEstimateDecision(req.params.token, req.params.estimateId, decision);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit your decision' });
+  }
+});
+app.post('/api/portal/:token/service-request', rateLimit('portal-service-request', 60_000, 15), async (req, res) => {
+  try {
+    const result = await submitServiceRequest(req.params.token, req.body as ServiceRequestSubmission);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not submit your request' });
+  }
+});
+app.post('/api/portal/:token/messages', rateLimit('portal-messages', 60_000, 30), async (req, res) => {
+  try {
+    const result = await submitPortalMessage(req.params.token, String(req.body?.body || ''));
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not send your message' });
+  }
+});
+app.post('/api/portal/:token/invoices/:invoiceId/checkout', rateLimit('portal-checkout', 60_000, 10), async (req, res) => {
+  try {
+    const origin = `${req.protocol}://${req.get('host')}/?portal=${encodeURIComponent(req.params.token)}`;
+    const result = await createInvoiceCheckout(req.params.token, req.params.invoiceId, origin);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not start checkout' });
   }
 });
 

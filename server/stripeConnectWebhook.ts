@@ -4,6 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
+import { applyPortalInvoicePayment } from "./customerPortal";
 
 // Separate path, separate signing secret, separate handler from the
 // platform webhook (server/stripeWebhook.ts) -- Stripe issues a distinct
@@ -82,7 +83,16 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
       console.error(`Stripe Connect event ${event.type} (${event.id}) for account ${stripeAccountId} matched no known business.`);
       return;
     }
-    // No payment/refund/dispute/payout business logic is wired up yet
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.ownerslocalInvoiceId) {
+        await applyPortalInvoicePayment(businessId, session);
+        return;
+      }
+    }
+
+    // No other payment/refund/dispute/payout business logic is wired up yet
     // (see PaymentsPage.tsx / stripeConnectRoutes.ts) -- this just proves
     // the event resolves to the right business and logs it, so nothing
     // here is invented ahead of that being built.

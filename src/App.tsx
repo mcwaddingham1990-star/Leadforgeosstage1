@@ -18,11 +18,13 @@ import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
 import { downloadCsv } from "./lib/csv";
 import { getRemoteSigningTokenFromUrl } from "./lib/remoteSigningClient";
+import { getCustomerPortalTokenFromUrl } from "./lib/customerPortalClient";
 import { updateLiveLocation } from "./lib/timeClockService";
 import { computePayrollHoursForRange } from "./lib/payrollHours";
 import { computeJobCosting } from "./lib/jobCostingEngine";
 import { PriceBookModal } from "./components/PriceBookModal";
 import RemoteSigningPage from "./components/RemoteSigningPage";
+import CustomerPortalPage from "./components/CustomerPortalPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -1521,6 +1523,12 @@ export default function App() {
   // between re-renders of the same instance.
   const remoteSignToken = getRemoteSigningTokenFromUrl();
   if (remoteSignToken) return <RemoteSigningPage token={remoteSignToken} />;
+
+  // Same reasoning, for a customer's own Customer Portal link -- no
+  // OwnersLocal login of theirs is involved, so this renders instead of
+  // the normal logged-in app shell entirely.
+  const customerPortalToken = getCustomerPortalTokenFromUrl();
+  if (customerPortalToken) return <CustomerPortalPage token={customerPortalToken} />;
 
   // Logged in user profile (null if guest/default owner, or set when authenticated)
   const [loggedInUser, setLoggedInUser] = useState<{

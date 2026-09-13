@@ -37,6 +37,8 @@ import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
+import { CustomerPortalControls } from "./CustomerPortalControls";
+import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -1945,6 +1947,12 @@ export const SchedulingPage: React.FC = () => {
                     {selectedEvent.assignedCrew || "No Crew Attached"}
                   </p>
                 </div>
+              </div>
+
+              {/* Customer Portal */}
+              <div className="space-y-1.5 border-b border-slate-50 pb-3">
+                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Customer Portal</span>
+                <CustomerPortalControls customer={resolveCustomerByIdOrName(customersList, selectedEvent.customerId, selectedEvent.customer)} />
               </div>
 
               {/* Notes */}

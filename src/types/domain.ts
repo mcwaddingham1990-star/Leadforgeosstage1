@@ -23,6 +23,15 @@ export interface Customer {
   requireFollowUp?: boolean;
   pendingConfirmation?: boolean;
   createdFrom?: "schedule_job" | "create_job";
+  /** Customer Portal access -- one secure link per customer, tied to this
+   * same real Customer record (no separate/duplicate customer data). The
+   * token alone (no login) gates portal access, same model as a document's
+   * remote-signing link (see signingOptions.remoteToken); portalEnabled
+   * lets the business turn access off without losing/regenerating the
+   * link, and "revoke" just replaces portalToken with a new one. */
+  portalEnabled?: boolean;
+  portalToken?: string;
+  portalTokenCreatedAt?: string;
 }
 
 export interface Lead {
@@ -40,6 +49,7 @@ export interface Lead {
     | "Phone Call"
     | "Walk-In"
     | "Manual Entry"
+    | "Customer Portal"
     | "Other";
   salesRep: string;
   status:
@@ -56,6 +66,14 @@ export interface Lead {
   addedDaysAgo: number;
   address?: string;
   notes?: string;
+  /** Set when a "Request Service" submission from the Customer Portal came
+   * from an existing Customer -- links back to that real record (display/
+   * navigation only) instead of the Lead being a separate, duplicate
+   * customer. Existing leads (not from the portal) leave this unset. */
+  sourceCustomerId?: string;
+  /** Photos the customer attached when requesting service, same inline-
+   * base64 convention as every other small attached image in this app. */
+  photos?: string[];
 }
 
 export interface Estimate {
@@ -63,6 +81,12 @@ export interface Estimate {
   number: string;
   customerName: string;
   company: string;
+  /** Links this estimate to a real Customer record when known -- optional
+   * since older estimates and some creation paths only ever captured the
+   * customer's name. The Customer Portal and anything else that needs to
+   * securely scope "this customer's own estimates" should prefer this over
+   * name-matching when it's present. */
+  customerId?: string;
   status: "Draft" | "Pending" | "Sent" | "Viewed" | "Accepted" | "Declined" | "Expired" | "Completed";
   salesRep: string;
   amount: number;
@@ -335,6 +359,8 @@ export interface Transaction {
   membershipId?: string;
   /** Links an expense to the Purchase Order it was recorded from ("Record Expense" at receiving time), same display/navigation-only convention as every other source*Id link. */
   purchaseOrderId?: string;
+  /** Set on a Customer Portal invoice payment -- the Stripe Checkout Session id that produced it, so the webhook that applies the payment can tell "already recorded" from "new" if Stripe ever redelivers the same event. */
+  stripeSessionId?: string;
 }
 
 export interface SchedulingEvent {

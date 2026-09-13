@@ -11,6 +11,8 @@ import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import { MembershipBuilder } from "./MembershipBuilder";
 import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
 import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
+import { CustomerPortalControls } from "./CustomerPortalControls";
+import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import type { WorkOrder } from "../types/domain";
 import type { Membership } from "../types/membership";
 import type { PurchaseOrder } from "../types/purchaseOrder";
@@ -1731,6 +1733,12 @@ export const DocumentsPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Customer Portal */}
+              <div className="space-y-1.5 pt-1.5">
+                <span className="text-[#5E7393] uppercase text-[9px] block">Customer Portal</span>
+                <CustomerPortalControls customer={resolveCustomerByIdOrName(customersList, undefined, activeDoc.customer !== "None" ? activeDoc.customer : undefined)} />
               </div>
 
               {/* ACTION BUTTONS (NO DEAD BUTTONS) */}

@@ -45,6 +45,8 @@ import type { DocumentItem, WorkOrder } from "../types/domain";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
 import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import type { Membership } from "../types/membership";
+import { CustomerPortalControls } from "./CustomerPortalControls";
+import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { PriceBookModal } from "./PriceBookModal";
 
 export type { Estimate } from "../types/domain";
@@ -1511,6 +1513,12 @@ export const EstimatesPage: React.FC = () => {
                   </button>
                 )}
               </div>
+              {!isEditMode && selectedEstimate && (
+                <div className="mt-3 border-t border-[#9EC8EF] pt-3">
+                  <p className="mb-2 text-[9px] font-bold uppercase tracking-wider text-[#5E7393]">Customer Portal</p>
+                  <CustomerPortalControls customer={resolveCustomerByIdOrName(customers, selectedEstimate.customerId, selectedEstimate.customerName)} />
+                </div>
+              )}
             </div>
           </div>
         </div>

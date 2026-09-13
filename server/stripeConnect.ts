@@ -66,6 +66,47 @@ export async function createAccountSession(accountId: string): Promise<{ clientS
   return { clientSecret: accountSession.client_secret };
 }
 
+/**
+ * A Stripe-hosted Checkout page for a customer paying one Invoice from
+ * their Customer Portal -- a direct charge on the business's own connected
+ * account (per this file's direct-charges architecture, the business stays
+ * merchant of record), not a platform-side charge. Hosted Checkout is used
+ * instead of embedding card fields directly in the portal so this app
+ * never touches raw card data.
+ */
+export async function createInvoiceCheckoutSession(params: {
+  accountId: string;
+  amountCents: number;
+  currency?: string;
+  description: string;
+  successUrl: string;
+  cancelUrl: string;
+  metadata: Record<string, string>;
+}): Promise<{ url: string | null }> {
+  const stripe = getStripeClient();
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: params.currency || "usd",
+            unit_amount: params.amountCents,
+            product_data: { name: params.description }
+          }
+        }
+      ],
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+      metadata: params.metadata,
+      payment_intent_data: { metadata: params.metadata }
+    },
+    { stripeAccount: params.accountId }
+  );
+  return { url: session.url };
+}
+
 export interface ConnectAccountStatus {
   accountId: string;
   detailsSubmitted: boolean;

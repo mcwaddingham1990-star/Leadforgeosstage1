@@ -8,6 +8,8 @@ import { PriceBookModal } from "./PriceBookModal";
 import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
 import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
 import type { PurchaseOrder } from "../types/purchaseOrder";
+import { CustomerPortalControls } from "./CustomerPortalControls";
+import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import {
   Account,
   JournalEntry,
@@ -949,6 +951,10 @@ function InvoicesTab({
                   <p className="bg-[#EAF5FF]/40 border border-[#9EC8EF]/30 p-3 rounded-xl">{viewingInvoice.notes}</p>
                 </div>
               )}
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase font-bold text-[#5E7393]">Customer Portal</p>
+                <CustomerPortalControls customer={resolveCustomerByIdOrName(customers, viewingInvoice.customerId, viewingInvoice.customer)} />
+              </div>
             </div>
             <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between gap-2 shrink-0">
               {(() => {
