@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
@@ -172,6 +172,18 @@ export const AccountingPage: React.FC = () => {
   const canDelete = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "accounting", "delete");
 
   const [activeTab, setActiveTab] = useState<AccountingTab>("dashboard");
+  // Revenue's "Create Invoice" quick action hands off here the same way its
+  // "Record Expense"/"Add Custom Payment" siblings already do (a sessionStorage
+  // flag) since AccountingPage is mounted fresh by App.tsx's screen switch
+  // with no props of its own to carry an "open the invoice form" intent.
+  const [autoOpenInvoiceCreate, setAutoOpenInvoiceCreate] = useState(false);
+  useEffect(() => {
+    if (sessionStorage.getItem("ownerslocal_pending_invoice_create") === "1") {
+      sessionStorage.removeItem("ownerslocal_pending_invoice_create");
+      setActiveTab("invoices");
+      setAutoOpenInvoiceCreate(true);
+    }
+  }, []);
 
   // Inventory is a live subledger: its current asset value is the same
   // quantity × unit-cost valuation shown by Inventory. Journal-only balance
@@ -316,6 +328,8 @@ export const AccountingPage: React.FC = () => {
           triggerNotification={triggerNotification}
           logOperationalEvent={logOperationalEvent}
           loggedInUser={loggedInUser}
+          autoOpenCreate={autoOpenInvoiceCreate}
+          onAutoOpenCreateHandled={() => setAutoOpenInvoiceCreate(false)}
         />
       )}
 
@@ -542,11 +556,20 @@ function InvoicesTab({
   canEdit,
   triggerNotification,
   logOperationalEvent,
-  loggedInUser
+  loggedInUser,
+  autoOpenCreate,
+  onAutoOpenCreateHandled
 }: any) {
   const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
+  useEffect(() => {
+    if (autoOpenCreate) {
+      setIsCreating(true);
+      onAutoOpenCreateHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenCreate]);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [customer, setCustomer] = useState("");
   const [dueInDays, setDueInDays] = useState(30);

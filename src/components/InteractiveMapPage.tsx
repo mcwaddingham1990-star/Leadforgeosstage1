@@ -2888,7 +2888,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                         type="text"
                         value={editCityState}
                         onChange={(e) => setEditCityState(e.target.value)}
-                        placeholder="e.g. Seattle, WA"
+                        placeholder="e.g. City, State"
                         className="w-full px-3 py-2 bg-slate-800/80 border border-white/10 rounded-xl text-xs text-white focus:border-blue-500 focus:outline-none transition-colors"
                       />
                     </div>

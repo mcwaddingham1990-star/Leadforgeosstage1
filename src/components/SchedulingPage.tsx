@@ -1730,7 +1730,7 @@ export const SchedulingPage: React.FC = () => {
                         <input
                           value={formCustomCityState}
                           onChange={(e) => setFormCustomCityState(e.target.value)}
-                          placeholder="Seattle, WA"
+                          placeholder="e.g. City, State"
                           type="text"
                           className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl p-2 font-medium"
                         />

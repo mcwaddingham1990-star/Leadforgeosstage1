@@ -20,11 +20,17 @@ export interface VerifiedFirebaseUser {
 
 export async function verifyFirebaseIdToken(idToken: string): Promise<VerifiedFirebaseUser | null> {
   if (!idToken) return null;
+  // Bounded so a stalled outbound call to Google here can't leave every
+  // requireAuth-gated request (Payments' status check included) hanging
+  // indefinitely with no way for the client to ever get a response back.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch(LOOKUP_URL, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ idToken }),
+      signal: controller.signal,
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -33,6 +39,8 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<VerifiedFi
     return { uid: user.localId, email: user.email || null };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

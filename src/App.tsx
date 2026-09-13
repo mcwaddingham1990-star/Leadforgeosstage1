@@ -12,6 +12,7 @@ import { ReviewRequest, ReviewAutomationSettings, DEFAULT_REVIEW_AUTOMATION_SETT
 import type { CustomerSession } from "./types/customerAccount";
 import { CustomerLoginPanel } from "./components/CustomerLoginPanel";
 import { CustomerAppShell } from "./components/CustomerAppShell";
+import { useStripeConnectStatus } from "./hooks/useStripeConnectStatus";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
@@ -833,6 +834,20 @@ const BRAND_ICON_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/
 const SIGNIN_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Signinbuttom.png";
 const GO_BUTTON_URL = "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Assets/Gobutton.png";
 
+// Real per-module URLs (/app/<screenId>) so refresh, bookmarking, and
+// browser Back/Forward all work -- additive only: this just keeps
+// window.location's path in sync with activeScreen (see the useState
+// initializer and the two useEffects near activeScreen's declaration
+// below). Existing role/permission gating is untouched -- an id restored
+// from a URL the current user can't actually see still renders the same
+// "Restricted Access" fallback it always would if activeScreen held that
+// id for any other reason, and an unrecognized id falls back to OS_SCREENS[0]
+// exactly like an unrecognized sessionStorage value already did.
+function screenIdFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/app\/([a-zA-Z0-9_]+)\/?$/);
+  return match ? match[1] : null;
+}
+
 // Operating System Screens mapping
 const OS_SCREENS = [
   { id: "dashboard", label: "Dashboard", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightdashboard.jpg", icon: "📊", top: "12%", bottom: "17%" },
@@ -874,6 +889,33 @@ const EXPENSE_CATEGORY_NAMES = [
 ] as const;
 
 /**
+ * A bill's real expense cost for the Revenue graph -- prefers the amount
+ * Accounting's own ledger actually posted as an expense (postBillCreatedEntry
+ * in accountingEngine.ts), which correctly excludes any inventory-linked
+ * portion (that slice debits Inventory instead -- see that function's own
+ * comment), over the bill's raw totalCost/estimatedCost which includes it.
+ * Without this, a bill for received inventory items counted as an expense
+ * here AND as inventory asset value in Accounting, so the two pages'
+ * expense/profit totals disagreed on exactly those bills. Falls back to the
+ * old raw-total calculation only when no matching "bill" journal entry
+ * exists at all (e.g. a very old bill from before this was posted), so no
+ * historical bill silently drops out of this total.
+ */
+function billExpenseAmounts(bills: Bill[], journalEntries: JournalEntry[]): Map<string, number> {
+  const fromLedger = new Map<string, number>();
+  journalEntries.forEach((je) => {
+    if (je.source !== "bill" || !je.sourceId) return;
+    const nonInventoryDebits = je.lines.filter((l) => l.debit > 0 && l.accountId !== "acct_inventory").reduce((s, l) => s + l.debit, 0);
+    fromLedger.set(je.sourceId, nonInventoryDebits);
+  });
+  const amounts = new Map<string, number>();
+  bills.forEach((bill) => {
+    amounts.set(bill.id, fromLedger.get(bill.id) ?? (bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)));
+  });
+  return amounts;
+}
+
+/**
  * Buckets the real revenueEvents log (written by the Event Engine's
  * job-completion cascade) and real transactions log (manual/scanned/payroll
  * entries — see LogTransactionModal + handleRunPayroll) into real calendar
@@ -886,7 +928,8 @@ function getRevenueChartData(
   filter: string,
   revenueEvents: RevenueEvent[],
   transactions: Transaction[] = [],
-  bills: Bill[] = []
+  bills: Bill[] = [],
+  journalEntries: JournalEntry[] = []
 ): {
   series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number }>;
   currentTotal: number;
@@ -901,8 +944,9 @@ function getRevenueChartData(
   const materialOperationalCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
   const materialTx = expenseTx.filter((t) => materialOperationalCategories.has(t.category || ""));
   const otherExpenseTx = expenseTx.filter((t) => t.category !== "Payroll" && !materialOperationalCategories.has(t.category || ""));
+  const billAmounts = billExpenseAmounts(bills, journalEntries);
   const billCosts = bills.filter((bill) => bill.status !== "void").map((bill) => ({
-    amount: bill.totalCost ?? bill.estimatedCost ?? bill.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    amount: billAmounts.get(bill.id) ?? 0,
     date: bill.issuedDate
   }));
   const allExpenseCosts = [...expenseTx, ...billCosts];
@@ -1098,7 +1142,8 @@ function getRevenueStepSeries(
   filter: string,
   revenueEvents: RevenueEvent[],
   transactions: Transaction[] = [],
-  bills: Bill[] = []
+  bills: Bill[] = [],
+  journalEntries: JournalEntry[] = []
 ): { points: RevenueStepPoint[]; periodStart: Date; periodEnd: Date } {
   const now = new Date();
   let periodStart: Date;
@@ -1139,12 +1184,12 @@ function getRevenueStepSeries(
     const time = new Date(t.date).getTime();
     if (inRange(time)) events.push({ time, kind: t.type === "income" ? "payment" : "expense", amount: t.amount });
   }
+  const billAmounts = billExpenseAmounts(bills, journalEntries);
   for (const b of bills) {
     if (b.status === "void") continue;
     const time = new Date(b.issuedDate).getTime();
     if (!inRange(time)) continue;
-    const amount = b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
-    events.push({ time, kind: "expense", amount });
+    events.push({ time, kind: "expense", amount: billAmounts.get(b.id) ?? 0 });
   }
   events.sort((a, b) => a.time - b.time);
   // Dates without a time-of-day (a bill's issued date, a logged transaction's
@@ -1629,11 +1674,22 @@ export default function App() {
     new URLSearchParams(window.location.search).has("joinCode") ? "customer" : "business"
   ));
   const [customerSession, setCustomerSession] = useState<CustomerSession | null>(null);
+  // One shared, live Stripe Connect status (same check PaymentsPage itself
+  // uses) so Dashboard/Revenue's "Integrate Stripe" prompt actually reflects
+  // reality instead of showing unconditionally even for an already-connected
+  // business -- see src/hooks/useStripeConnectStatus.ts.
+  const stripeConnectStatus = useStripeConnectStatus();
   const [currentView, setCurrentView] = useState<string>("login");
   const [activeScreen, setActiveScreen] = useState(() => {
-    const savedId = sessionStorage.getItem("ownerslocal_active_screen");
+    const savedId = screenIdFromPath() || sessionStorage.getItem("ownerslocal_active_screen");
     return OS_SCREENS.find(screen => screen.id === savedId) || OS_SCREENS[0];
   });
+  // True until the first activeScreen-sync effect below has run once --
+  // that first sync (which may just be re-confirming whatever the URL/
+  // sessionStorage already said on load) uses replaceState so a plain page
+  // load never pushes an extra, pointless history entry; every screen
+  // change after that pushes a real one so Back/Forward work.
+  const hasSyncedInitialScreenUrlRef = useRef(false);
   const [showNotification, setShowNotification] = useState<string | null>(null);
   const [employeeRedoOnboardingAllowed, setEmployeeRedoOnboardingAllowed] = useState(false);
 
@@ -1648,7 +1704,29 @@ export default function App() {
 
   useEffect(() => {
     sessionStorage.setItem("ownerslocal_active_screen", activeScreen.id);
+    const nextPath = `/app/${activeScreen.id}`;
+    if (window.location.pathname !== nextPath) {
+      const historyMethod = hasSyncedInitialScreenUrlRef.current ? "pushState" : "replaceState";
+      window.history[historyMethod]({ screenId: activeScreen.id }, "", nextPath + window.location.search);
+    }
+    hasSyncedInitialScreenUrlRef.current = true;
   }, [activeScreen]);
+
+  // Browser Back/Forward -- popstate fires with the URL already changed, so
+  // this only needs to read it and update activeScreen to match (never
+  // pushes/replaces a history entry itself, which would fight the browser's
+  // own navigation). An id the current user can't see still renders via the
+  // normal role-gated "Restricted Access" fallback, same as any other path
+  // to an activeScreen the permission check rejects.
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathScreenId = screenIdFromPath();
+      const matched = pathScreenId && OS_SCREENS.find(s => s.id === pathScreenId);
+      if (matched) setActiveScreen(matched);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // Dashboard & Operational Interactive states
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -3807,10 +3885,22 @@ Access to full financial telemetry is restricted.`;
 
   // Save a real income/expense transaction -- typed manually or scanned via
   // real Gemini vision, always confirmed/edited by the user before saving.
-  const handleSaveTransaction = async (t: Omit<Transaction, "id">) => {
+  const handleSaveTransaction = async (t: Omit<Transaction, "id"> & { id?: string }) => {
     try {
-      const newTxn: Transaction = { ...t, id: `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
-      const journalEntry = postTransactionEntry(newTxn);
+      // Reuses the caller-supplied id (LogTransactionModal generates one
+      // stable id per form-fill and resubmits it unchanged on retry) so a
+      // retry after a network blip -- where the first attempt's batch.commit
+      // actually succeeded server-side but the client never saw the ack --
+      // safely re-applies the SAME transaction/journal-entry docs instead of
+      // creating a second, duplicate income/expense record with a new id.
+      const { id: suppliedId, ...rest } = t;
+      const newTxn: Transaction = { ...rest, id: suppliedId || `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+      // postTransactionEntry's own id is a fresh random one on every call
+      // (shared by every other builder in accountingEngine.ts, so that isn't
+      // changed) -- overridden here to a deterministic derivative of the
+      // now-stable transaction id, so a retry of this same submission writes
+      // the identical journal-entry doc instead of a second one.
+      const journalEntry = { ...postTransactionEntry(newTxn), id: `je_for_${newTxn.id}` };
       if (!businessId) throw new Error("Missing business account");
       // Firestore rejects `undefined` values. Category and createdBy are
       // intentionally optional in the manual-entry form, so omit them from
@@ -4845,7 +4935,7 @@ Access to full financial telemetry is restricted.`;
                           onChange={(value) => setBusinessAddresses(prev => [value, ...prev.slice(1)])}
                         />
                         {renderDynamicField("business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
-                        {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Seattle HQ")}
+                        {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Main Office")}
                         <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-[10px] leading-relaxed text-blue-950">
                           <p className="flex items-center gap-1.5 font-black uppercase tracking-wide">
                             <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600" />
@@ -6885,15 +6975,17 @@ Access to full financial telemetry is restricted.`;
 
                     return (
                       <>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          onClick={() => navigateToScreen("payments")}
-                          className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                          Integrate Stripe for financial updates and customer payment options
-                        </button>
-                      </div>
+                      {!stripeConnectStatus.ready && (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            onClick={() => navigateToScreen("payments")}
+                            className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            Integrate Stripe for financial updates and customer payment options
+                          </button>
+                        </div>
+                      )}
                       <div className="flex-1 flex flex-col gap-5 animate-fade-in text-[#1F3557]">
                         
                         {/* TEAM MEMBER TERMINAL (Top side-to-side card) */}
@@ -7276,9 +7368,14 @@ Access to full financial telemetry is restricted.`;
                                   handleRunPayroll();
                                   return;
                                 }
+                                // "Create Invoice" was previously a dead label -- it just
+                                // navigated to Accounting with a toast telling the user to
+                                // go find the real invoice form themselves. This handoff
+                                // (same sessionStorage pattern as "expense"/"payment" above)
+                                // actually opens Accounting's own New Invoice form.
+                                sessionStorage.setItem("ownerslocal_pending_invoice_create", "1");
                                 const accounting = OS_SCREENS.find(screen => screen.id === "accounting");
                                 if (accounting) setActiveScreen(accounting);
-                                triggerNotification("Open Invoices to create a customer invoice.");
                               }}
                               className="shrink-0 bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] hover:from-[#1E6EE0] hover:to-[#0D5FCB] border border-white/40 rounded-xl px-3.5 py-2 flex items-center gap-1.5 cursor-pointer transition-all shadow-[0_0_10px_rgba(20,133,244,0.35)] disabled:opacity-60 disabled:cursor-not-allowed"
                             >
@@ -7303,14 +7400,14 @@ Access to full financial telemetry is restricted.`;
                         <span className="pointer-events-none absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-white" />
                         <span className="pointer-events-none absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-white" />
                         {(() => {
-                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills);
+                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
                           const { points, periodStart, periodEnd } = stepData;
                           const latest = points[points.length - 1];
                           const paymentsTotal = latest.Payments;
                           const expensesTotal = latest.Expenses;
                           const netTotal = latest.Net;
 
-                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills);
+                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
                           const priorNet = priorTotal - priorExpenseTotal;
                           const pctChange = (cur: number, prior: number) => (prior !== 0 ? ((cur - prior) / Math.abs(prior)) * 100 : null);
                           const paymentsPct = pctChange(paymentsTotal, priorTotal);
@@ -7348,7 +7445,7 @@ Access to full financial telemetry is restricted.`;
                           const revenueSlicesTotal = revenueSlices.reduce((s, r) => s + r.value, 0);
                           const expenseSlicesTotal = expenseSlices.reduce((s, r) => s + r.value, 0);
 
-                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills).series;
+                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries).series;
 
                           const todayStr = new Date().toISOString().slice(0, 10);
                           const upcomingJobs = schedulingEvents
@@ -7838,15 +7935,17 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               {/* Lives at the bottom of the card, out of the way of the graph and quick actions */}
-                              <div className="flex flex-wrap justify-end gap-2 pt-1">
-                                <button
-                                  onClick={() => navigateToScreen("payments")}
-                                  className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
-                                >
-                                  <CreditCard className="w-3.5 h-3.5" />
-                                  Integrate Stripe for financial updates and customer payment options
-                                </button>
-                              </div>
+                              {!stripeConnectStatus.ready && (
+                                <div className="flex flex-wrap justify-end gap-2 pt-1">
+                                  <button
+                                    onClick={() => navigateToScreen("payments")}
+                                    className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5" />
+                                    Integrate Stripe for financial updates and customer payment options
+                                  </button>
+                                </div>
+                              )}
                             </>
                           );
                         })()}
@@ -8862,6 +8961,7 @@ Access to full financial telemetry is restricted.`;
                   onClick={() => setIsFloatingAiOpen(false)}
                   className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-xs font-bold cursor-pointer"
                   title="Collapse Panel"
+                  aria-label="Collapse Owner's AI panel"
                 >
                   ✕
                 </button>
@@ -9056,6 +9156,7 @@ Access to full financial telemetry is restricted.`;
                   <div className="flex gap-1.5 pt-2 border-t border-slate-100 shrink-0">
                     <input
                       type="text"
+                      aria-label="Ask Owner's AI a question"
                       value={floatingAiInput}
                       disabled={!!pendingAiAction || !!pendingDataAction}
                       onChange={(e) => setFloatingAiInput(e.target.value)}

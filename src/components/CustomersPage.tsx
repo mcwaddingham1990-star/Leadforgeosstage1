@@ -1245,7 +1245,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       type="text" 
                       value={formCityState}
                       onChange={e => setFormCityState(e.target.value)}
-                      placeholder="e.g. Seattle, WA"
+                      placeholder="e.g. City, State"
                       className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                     />
                   </div>
@@ -1619,7 +1619,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                           type="text" 
                           value={formCityState}
                           onChange={e => setFormCityState(e.target.value)}
-                          placeholder="e.g. Seattle, WA"
+                          placeholder="e.g. City, State"
                           className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                         />
                       </div>

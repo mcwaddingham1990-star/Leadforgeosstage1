@@ -200,6 +200,38 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
+    // Work Orders, Price Book, Memberships, Purchase Orders, Review Requests:
+    // src/App.tsx's useFirestoreCollection calls for "work_orders",
+    // "price_book_folders", "price_book_models", "memberships",
+    // "purchase_orders", and "review_requests" had no matching rule here at
+    // all, so every read/write to these tenant-scoped collections was
+    // silently denied by Firestore's default-deny -- same isBusinessMember
+    // scoping as every other standard business collection above.
+    match /work_orders/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /price_book_folders/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /price_book_models/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /memberships/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /purchase_orders/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+    match /review_requests/{docId} {
+      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+
     // Financial / accounting collections
     match /transactions/{docId} {
       allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));

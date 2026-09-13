@@ -39,6 +39,24 @@ function getAdminApp(): App | null {
  * back to the OwnersLOCAL business it belongs to, since business_profiles
  * is keyed by businessId (the owner's email), not by Stripe account id.
  */
+/**
+ * Idempotency guard keyed by Stripe's own permanent event.id -- Stripe can
+ * (and does) redeliver the same webhook event more than once (retries,
+ * manual resends from the Dashboard). Recording the id BEFORE processing
+ * means a near-simultaneous duplicate delivery sees it too, not just one
+ * arriving after the first finished.
+ */
+async function wasAlreadyProcessed(eventId: string): Promise<boolean> {
+  const app = getAdminApp();
+  if (!app) return false; // Not configured -- nothing to dedup against; let it through.
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  const ref = db.collection("stripe_webhook_events").doc(eventId);
+  const snap = await ref.get();
+  if (snap.exists) return true;
+  await ref.set({ id: eventId, source: "connect", processedAt: new Date().toISOString() });
+  return false;
+}
+
 async function resolveBusinessIdForConnectedAccount(stripeAccountId: string): Promise<string | null> {
   const app = getAdminApp();
   if (!app) return null;
@@ -71,6 +89,11 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
   res.status(200).json({ received: true });
 
   try {
+    const alreadyProcessed = await wasAlreadyProcessed(event.id);
+    if (alreadyProcessed) {
+      console.log(`[stripe-connect] ${event.type} (${event.id}) already processed -- skipping duplicate delivery.`);
+      return;
+    }
     const stripeAccountId = event.account;
     if (!stripeAccountId) {
       // Shouldn't happen for a connect-scoped webhook, but fail loud in the

@@ -1687,7 +1687,7 @@ export const MessagesPage: React.FC = () => {
                 <label className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Group Channel Name</label>
                 <input
                   type="text"
-                  placeholder="e.g., Seattle Excavation Crew"
+                  placeholder="e.g., North Side Excavation Crew"
                   value={newConvTitle}
                   onChange={(e) => setNewConvTitle(e.target.value)}
                   className="w-full text-xs bg-slate-50 border border-[#A9CDEE] rounded-xl px-3 py-2.5 focus:outline-none"

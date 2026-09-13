@@ -45,6 +45,7 @@ import {
 import { SchedulingEvent } from "./SchedulingPage";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
+import { useStripeConnectStatus } from "../hooks/useStripeConnectStatus";
 
 // Let's define interfaces for custom integration items
 export interface Integration {
@@ -240,6 +241,16 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       comingSoon: true
     }
   ]);
+
+  // The "stripe" row above starts hardcoded connected:false regardless of
+  // reality -- patch it in from the one real, live status check (same one
+  // PaymentsPage itself uses) the moment it resolves, instead of this page
+  // showing "Not Set Up" for a business that already finished onboarding.
+  const stripeStatus = useStripeConnectStatus();
+  useEffect(() => {
+    if (stripeStatus.loading) return;
+    setIntegrations(prev => prev.map(item => item.id === "stripe" ? { ...item, connected: stripeStatus.ready } : item));
+  }, [stripeStatus.loading, stripeStatus.ready]);
 
   // Sync log entries -- starts empty; nothing here is a real connected
   // integration yet, so no sync activity has actually happened.

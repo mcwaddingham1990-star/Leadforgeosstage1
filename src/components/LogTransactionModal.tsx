@@ -9,7 +9,7 @@ import { useDomainData } from "../context/DomainDataContext";
 interface LogTransactionModalProps {
   type: "income" | "expense";
   createdBy?: string;
-  onSave: (t: Omit<Transaction, "id">) => Promise<void>;
+  onSave: (t: Omit<Transaction, "id"> & { id?: string }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -35,6 +35,12 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const { setDocuments, schedulingEvents } = useDomainData();
   const jobs = React.useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
   const [mode, setMode] = useState<Mode>("choose");
+  // One stable id per form-fill, reused unchanged across a retry (see
+  // handleSave's catch below) -- a retry after a save that actually
+  // succeeded server-side but errored on the client (network blip on the
+  // ack) then safely re-applies the same transaction instead of creating a
+  // duplicate income/expense record with a fresh random id.
+  const pendingIdRef = useRef<string | null>(null);
   const [source, setSource] = useState<"manual" | "ai_scan">("manual");
   const [scanError, setScanError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -57,6 +63,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const descLabel = type === "income" ? "Payer / Source" : "Vendor";
 
   const startManual = () => {
+    pendingIdRef.current = null;
     setSource("manual");
     setAmount("");
     setDescription("");
@@ -71,6 +78,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    pendingIdRef.current = null;
     setMode("processing");
     setScanError(null);
     try {
@@ -114,8 +122,10 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     if (!parsedAmount || parsedAmount <= 0 || !description.trim() || isSaving) return;
     setIsSaving(true);
     setSaveError(null);
+    if (!pendingIdRef.current) pendingIdRef.current = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     try {
       await onSave({
+        id: pendingIdRef.current,
         type,
         source,
         amount: parsedAmount,
@@ -126,6 +136,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
         createdBy,
         jobId: type === "expense" && jobId ? jobId : undefined
       });
+      pendingIdRef.current = null;
       if (scannedPhoto && scannedPhoto.base64.length <= SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) {
         setDocuments(prev => [buildScanSnapshotDocument({
           photoBase64: scannedPhoto.base64,

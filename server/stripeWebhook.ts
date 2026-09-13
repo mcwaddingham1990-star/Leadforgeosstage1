@@ -1,5 +1,43 @@
 import type { Request, Response } from "express";
 import Stripe from "stripe";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+// @ts-ignore
+import firebaseConfig from "../firebase-applet-config.json";
+
+let adminApp: App | null | undefined;
+function getAdminApp(): App | null {
+  if (adminApp !== undefined) return adminApp;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    adminApp = null;
+    return adminApp;
+  }
+  try {
+    adminApp = getApps().length ? getApps()[0]! : initializeApp({ credential: cert(JSON.parse(raw)) });
+  } catch (err) {
+    console.error("FIREBASE_SERVICE_ACCOUNT_JSON is set but could not be parsed/used for the Stripe webhook:", err);
+    adminApp = null;
+  }
+  return adminApp;
+}
+
+/**
+ * Idempotency guard keyed by Stripe's own permanent event.id -- Stripe can
+ * (and does) redeliver the same webhook event more than once (retries,
+ * manual resends from the Dashboard). Recording the id BEFORE processing
+ * means a near-simultaneous duplicate delivery sees it too.
+ */
+async function wasAlreadyProcessed(eventId: string): Promise<boolean> {
+  const app = getAdminApp();
+  if (!app) return false; // Not configured -- nothing to dedup against; let it through.
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  const ref = db.collection("stripe_webhook_events").doc(eventId);
+  const snap = await ref.get();
+  if (snap.exists) return true;
+  await ref.set({ id: eventId, source: "platform", processedAt: new Date().toISOString() });
+  return false;
+}
 
 // Verifies the request actually came from Stripe (not a forged POST from
 // anywhere on the internet) using the raw request body + the signing
@@ -33,6 +71,10 @@ export async function handleStripeWebhook(req: Request, res: Response) {
   res.status(200).json({ received: true });
 
   try {
+    if (await wasAlreadyProcessed(event.id)) {
+      console.log(`[stripe] ${event.type} (${event.id}) already processed -- skipping duplicate delivery.`);
+      return;
+    }
     await routeEvent(event);
   } catch (err) {
     // Nothing to do about a failure after the 200 has already gone out --

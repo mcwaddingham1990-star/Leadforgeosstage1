@@ -257,6 +257,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
         <div className="flex flex-col sm:flex-row gap-2.5">
           <input
             type="text"
+            aria-label="Ask about your business"
             value={askInput}
             onChange={e => setAskInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleAskQuestion()}
@@ -522,8 +523,9 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">How Should It Talk to You?</label>
+                    <label htmlFor="ai-tone-select" className="text-[10px] uppercase font-bold text-[#5E7393]">How Should It Talk to You?</label>
                     <select
+                      id="ai-tone-select"
                       value={aiTone}
                       onChange={(e) => setAiTone(e.target.value)}
                       className="w-full bg-[#EAF5FF] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl px-3 py-2 focus:outline-none cursor-pointer"
@@ -536,8 +538,9 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Your bidding/writing style notes</label>
+                    <label htmlFor="ai-style-notes" className="text-[10px] uppercase font-bold text-[#5E7393]">Your bidding/writing style notes</label>
                     <textarea
+                      id="ai-style-notes"
                       value={styleNotes}
                       onChange={(e) => setStyleNotes(e.target.value)}
                       rows={3}

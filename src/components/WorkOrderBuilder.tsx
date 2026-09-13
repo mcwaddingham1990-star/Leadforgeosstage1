@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { X, Plus, Trash2, FileText } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -57,9 +57,25 @@ const EMPTY_FORM = {
 
 export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onClose, prefill, editingWorkOrder, onSaved }) => {
   const { loggedInUser } = useAuth();
-  const { customers, recentRoster, workOrders, setWorkOrders, setSchedulingEvents, setGeneratedPdfDraft, purchaseOrders } = useDomainData();
+  const { customers, recentRoster, employees, workOrders, setWorkOrders, setSchedulingEvents, setGeneratedPdfDraft, purchaseOrders } = useDomainData();
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const actor = loggedInUser?.name || loggedInUser?.email || "Staff";
+
+  // Same "active roster" source as Estimates/Scheduling/Dispatch
+  // (EstimatesPage.tsx) -- recentRoster alone is just the invite-code
+  // ledger (often stale "Pending" entries), not the real employee roster,
+  // so real active employees never showed up here on their own.
+  const assignmentCandidates = useMemo(() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    recentRoster
+      .filter(person => person.status?.toLowerCase() !== "inactive")
+      .forEach(person => byName.set(person.name.trim().toLowerCase(), { id: person.id || person.code || person.name, name: person.name }));
+    employees.forEach(employee => {
+      const name = `${employee.firstName} ${employee.lastName}`.trim();
+      if (name) byName.set(name.toLowerCase(), { id: employee.id || employee.email, name });
+    });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [recentRoster, employees]);
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
@@ -291,8 +307,8 @@ export const WorkOrderBuilder: React.FC<WorkOrderBuilderProps> = ({ isOpen, onCl
 
           <Field label="Assigned employee(s)">
             <div className="flex flex-wrap gap-2 rounded-xl border border-[#9EC8EF] bg-white p-2">
-              {recentRoster.length === 0 && <p className="px-1 text-xs text-slate-400">No roster yet.</p>}
-              {recentRoster.map(r => (
+              {assignmentCandidates.length === 0 && <p className="px-1 text-xs text-slate-400">No roster yet.</p>}
+              {assignmentCandidates.map(r => (
                 <button
                   type="button"
                   key={r.id || r.name}

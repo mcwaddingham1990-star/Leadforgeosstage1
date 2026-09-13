@@ -68,9 +68,18 @@ export const PaymentsPage: React.FC = () => {
     return data.clientSecret as string;
   }, []);
 
+  // A hung request upstream (a stalled Firebase token refresh, or the
+  // server's own outbound call to Google's Identity Toolkit inside
+  // requireAuth never returning) previously left this page spinning on
+  // "Loading…" forever, with no timeout and no way for the user to recover
+  // short of a full page reload. Bounding the request means this always
+  // lands on real data, "not connected", or a retryable error within 15s.
   const refreshStatus = useCallback(async () => {
+    setStatus({ state: "loading" });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const res = await authedFetch("/api/stripe/connect/status");
+      const res = await authedFetch("/api/stripe/connect/status", { signal: controller.signal });
       const data = await res.json();
       if (!res.ok) {
         setStatus({ state: "error", message: data.error || "Could not check Stripe status." });
@@ -84,7 +93,10 @@ export const PaymentsPage: React.FC = () => {
         setStatus({ state: "ready" });
       }
     } catch (err) {
-      setStatus({ state: "error", message: err instanceof Error ? err.message : "Could not check Stripe status." });
+      const timedOut = err instanceof DOMException && err.name === "AbortError";
+      setStatus({ state: "error", message: timedOut ? "Checking Stripe status timed out. Try again." : (err instanceof Error ? err.message : "Could not check Stripe status.") });
+    } finally {
+      clearTimeout(timeout);
     }
   }, []);
 
@@ -155,8 +167,11 @@ export const PaymentsPage: React.FC = () => {
 
   if (status.state === "loading") {
     return (
-      <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm text-left animate-fade-in flex items-center gap-2 text-xs text-slate-500 font-sans font-semibold">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+      <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm text-left animate-fade-in flex items-center justify-between gap-2 text-xs text-slate-500 font-sans font-semibold">
+        <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Checking Stripe status…</span>
+        <button onClick={() => void refreshStatus()} className="text-[#315C9F] font-bold underline cursor-pointer shrink-0">
+          Taking a while? Retry
+        </button>
       </div>
     );
   }
@@ -176,8 +191,11 @@ export const PaymentsPage: React.FC = () => {
       </div>
 
       {status.state === "error" && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-sans font-semibold rounded-xl p-3">
-          {status.message}
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-sans font-semibold rounded-xl p-3 flex items-center justify-between gap-3">
+          <span>{status.message}</span>
+          <button onClick={() => void refreshStatus()} className="shrink-0 px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-bold uppercase tracking-wide cursor-pointer">
+            Retry
+          </button>
         </div>
       )}
 

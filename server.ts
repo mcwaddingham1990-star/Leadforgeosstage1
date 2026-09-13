@@ -34,11 +34,17 @@ const app = express();
 // its own express.raw()) before that global JSON parser runs, or the body
 // would already be consumed/transformed by the time this route sees it.
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+// Without this, a GET here (health checks, a browser visit, a misconfigured
+// monitor) fell through to the app's catch-all `app.get('*', ...)` below and
+// silently got back the SPA's index.html with a 200 -- this route is
+// POST-only, so anything else should say so.
+app.all('/api/stripe/webhook', (_req, res) => { res.status(405).json({ error: 'Method Not Allowed -- this endpoint only accepts POST.' }); });
 
 // Separate endpoint, separate signing secret (STRIPE_CONNECT_WEBHOOK_SECRET)
 // for events on businesses' own connected accounts (connect: true in the
 // Stripe Dashboard) -- see server/stripeConnectWebhook.ts.
 app.post('/api/stripe/connect-webhook', express.raw({ type: 'application/json' }), handleStripeConnectWebhook);
+app.all('/api/stripe/connect-webhook', (_req, res) => { res.status(405).json({ error: 'Method Not Allowed -- this endpoint only accepts POST.' }); });
 
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));
