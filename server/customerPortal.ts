@@ -3,7 +3,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import type Stripe from "stripe";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
-import { createInvoiceCheckoutSession, getConnectAccountStatus } from "./stripeConnect";
+import { createInvoiceCheckoutSession, getConnectAccountStatus, retrieveCharge } from "./stripeConnect";
 
 // A customer opening their Portal link has no OwnersLocal login -- same
 // reasoning as server/remoteSigning.ts and server/webLeadFormHandler.ts.
@@ -511,4 +511,202 @@ export async function applyPortalInvoicePayment(businessId: string, session: Str
       businessId, action: "invoice_paid", detail: `Invoice ${inv.invoiceNumber} paid online ($${amount.toFixed(2)}).`, createdAt: now
     })
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// Refunds, disputes, and payouts -- called from server/stripeConnectWebhook.ts.
+// Cash never gets double-recognized: it was already booked to acct_cash the
+// moment the original payment came in (applyPortalInvoicePayment above), so
+// a payout arriving later is purely informational (money already ours just
+// physically lands in the bank), while a refund/dispute genuinely reverses
+// that recognition -- acct_refunds (a contra-revenue account that already
+// existed in the default chart of accounts) is debited, acct_cash credited,
+// mirroring the original entry in reverse.
+// ---------------------------------------------------------------------------
+
+function invoiceTotal(inv: FirebaseFirestore.DocumentData): number {
+  const subtotal = (inv.lineItems || []).reduce((s: number, li: any) => s + li.quantity * li.unitPrice, 0);
+  return subtotal + subtotal * ((inv.taxRate || 0) / 100);
+}
+
+function statusForAmountPaid(inv: FirebaseFirestore.DocumentData, newAmountPaid: number): string {
+  if (inv.status === "void") return "void";
+  const total = invoiceTotal(inv);
+  if (newAmountPaid <= 0.01) return "sent";
+  return newAmountPaid >= total - 0.01 ? "paid" : "partial";
+}
+
+/** charge.refunded -- charge.amount_refunded is Stripe's own authoritative
+ * running total refunded on this charge so far, which makes this naturally
+ * idempotent against redelivery: only the DELTA past what's already
+ * recorded (invoice.amountRefunded) is ever applied again. */
+export async function applyChargeRefund(businessId: string, charge: Stripe.Charge): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const invoiceId = charge.metadata?.ownerslocalInvoiceId;
+  if (!invoiceId) return;
+
+  const ref = db.collection("invoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.businessId !== businessId) return;
+  const inv = snap.data()!;
+
+  const totalRefundedNow = (charge.amount_refunded || 0) / 100;
+  const delta = totalRefundedNow - (inv.amountRefunded || 0);
+  if (delta <= 0.001) return; // Redelivery, or nothing new since the last event.
+
+  const newAmountPaid = Math.max(0, (inv.amountPaid || 0) - delta);
+  const newStatus = statusForAmountPaid(inv, newAmountPaid);
+  const now = nowIso();
+  const txnId = uid("txn_stripe_refund");
+  const journalId = uid("je_stripe_refund");
+
+  await Promise.all([
+    ref.update({ amountPaid: newAmountPaid, amountRefunded: totalRefundedNow, status: newStatus, updatedAt: now }),
+    db.collection("transactions").doc(txnId).set({
+      id: txnId, type: "expense", source: "stripe_refund", amount: delta,
+      description: `Refund issued on Invoice ${inv.invoiceNumber}`,
+      date: now.slice(0, 10), createdAt: now, invoiceId, stripeChargeId: charge.id, businessId
+    }),
+    db.collection("journal_entries").doc(journalId).set({
+      id: journalId, date: now.slice(0, 10), memo: `Refund issued: Invoice ${inv.invoiceNumber}`,
+      source: "invoice_refund", sourceId: invoiceId,
+      lines: [
+        { accountId: "acct_refunds", debit: delta, credit: 0 },
+        { accountId: "acct_cash", debit: 0, credit: delta }
+      ],
+      createdAt: now, businessId
+    }),
+    notifyBusinessUsers(db, businessId, "invoices", "Invoice refunded", `$${delta.toFixed(2)} was refunded on Invoice ${inv.invoiceNumber}.`, "invoices"),
+    db.collection("audit_logs").doc(uid("audit")).set({
+      businessId, action: "invoice_refunded", detail: `$${delta.toFixed(2)} refunded on Invoice ${inv.invoiceNumber} (Stripe charge ${charge.id}).`, createdAt: now
+    })
+  ]);
+}
+
+/** charge.dispute.funds_withdrawn / charge.dispute.funds_reinstated -- the
+ * two dispute events that actually say money moved (unlike created/updated/
+ * closed, which are status changes only). Disputes don't carry the invoice
+ * link themselves, so the charge they're against is looked up first. Guarded
+ * per-direction on the invoice doc itself so a redelivered event can never
+ * move the same money twice. */
+export async function applyDisputeFundsMovement(businessId: string, dispute: Stripe.Dispute, direction: "withdrawn" | "reinstated", accountId: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+  if (!chargeId) return;
+
+  let invoiceId: string | undefined;
+  try {
+    const charge = await retrieveCharge(accountId, chargeId);
+    invoiceId = charge.metadata?.ownerslocalInvoiceId;
+  } catch (err) {
+    console.error(`Could not look up charge ${chargeId} for dispute ${dispute.id}:`, err);
+  }
+  if (!invoiceId) return;
+
+  const ref = db.collection("invoices").doc(invoiceId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.businessId !== businessId) return;
+  const inv = snap.data()!;
+
+  const isWithdrawal = direction === "withdrawn";
+  const dedupField = isWithdrawal ? "disputeFundsWithdrawnAt" : "disputeFundsReinstatedAt";
+  if (inv[dedupField]) return; // Already applied -- redelivery.
+
+  const amount = (dispute.amount || 0) / 100;
+  const newAmountPaid = isWithdrawal ? Math.max(0, (inv.amountPaid || 0) - amount) : (inv.amountPaid || 0) + amount;
+  const newStatus = statusForAmountPaid(inv, newAmountPaid);
+  const now = nowIso();
+  const txnId = uid(isWithdrawal ? "txn_stripe_dispute" : "txn_stripe_dispute_reversal");
+  const journalId = uid(isWithdrawal ? "je_stripe_dispute" : "je_stripe_dispute_reversal");
+  const lines = isWithdrawal
+    ? [{ accountId: "acct_refunds", debit: amount, credit: 0 }, { accountId: "acct_cash", debit: 0, credit: amount }]
+    : [{ accountId: "acct_cash", debit: amount, credit: 0 }, { accountId: "acct_refunds", debit: 0, credit: amount }];
+
+  await Promise.all([
+    ref.update({ amountPaid: newAmountPaid, status: newStatus, [dedupField]: now, disputeStatus: dispute.status, disputedAmount: amount, updatedAt: now }),
+    db.collection("transactions").doc(txnId).set({
+      id: txnId, type: isWithdrawal ? "expense" : "income", source: isWithdrawal ? "stripe_dispute" : "stripe_dispute_reversal", amount,
+      description: `${isWithdrawal ? "Disputed (chargeback) on" : "Dispute won, funds returned on"} Invoice ${inv.invoiceNumber}`,
+      date: now.slice(0, 10), createdAt: now, invoiceId, stripeDisputeId: dispute.id, businessId
+    }),
+    db.collection("journal_entries").doc(journalId).set({
+      id: journalId, date: now.slice(0, 10),
+      memo: `${isWithdrawal ? "Dispute opened" : "Dispute resolved in your favor"}: Invoice ${inv.invoiceNumber}`,
+      source: isWithdrawal ? "invoice_dispute" : "invoice_dispute_reversal", sourceId: invoiceId,
+      lines, createdAt: now, businessId
+    }),
+    notifyBusinessUsers(
+      db, businessId, "invoices",
+      isWithdrawal ? "Payment disputed" : "Dispute resolved in your favor",
+      isWithdrawal
+        ? `A customer disputed their $${amount.toFixed(2)} payment on Invoice ${inv.invoiceNumber}. Respond to it in your Stripe Dashboard.`
+        : `You won the dispute on Invoice ${inv.invoiceNumber} -- $${amount.toFixed(2)} has been returned to you.`,
+      "invoices"
+    ),
+    db.collection("audit_logs").doc(uid("audit")).set({
+      businessId, action: isWithdrawal ? "invoice_disputed" : "invoice_dispute_reversed",
+      detail: `$${amount.toFixed(2)} ${isWithdrawal ? "withdrawn for dispute" : "returned after winning dispute"} on Invoice ${inv.invoiceNumber} (Stripe dispute ${dispute.id}).`,
+      createdAt: now
+    })
+  ]);
+}
+
+/** charge.dispute.created / .updated / .closed -- status-only notifications
+ * (no money moved by these events themselves; see applyDisputeFundsMovement
+ * for the two that do). Stamps the current status on the invoice too, so
+ * the customer portal / accounting UI can show it without a new lookup. */
+export async function notifyDisputeStatus(businessId: string, dispute: Stripe.Dispute, accountId: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+  if (!chargeId) return;
+
+  let invoiceNumber = "";
+  try {
+    const charge = await retrieveCharge(accountId, chargeId);
+    const invoiceId = charge.metadata?.ownerslocalInvoiceId;
+    if (invoiceId) {
+      const snap = await db.collection("invoices").doc(invoiceId).get();
+      if (snap.exists && snap.data()?.businessId === businessId) {
+        invoiceNumber = snap.data()?.invoiceNumber || "";
+        await snap.ref.update({ disputeStatus: dispute.status, updatedAt: nowIso() });
+      }
+    }
+  } catch (err) {
+    console.error(`Could not look up charge ${chargeId} for dispute ${dispute.id}:`, err);
+  }
+
+  await notifyBusinessUsers(
+    db, businessId, "invoices", "Dispute status update",
+    `Dispute${invoiceNumber ? ` on Invoice ${invoiceNumber}` : ""} is now "${dispute.status}". Respond to it in your Stripe Dashboard before the deadline.`,
+    "invoices"
+  );
+}
+
+/** payout.created / .paid / .failed / .canceled -- informational only. The
+ * cash itself was already recognized in the ledger the moment each
+ * underlying charge succeeded (applyPortalInvoicePayment), so a payout is
+ * just Stripe physically moving money it already owed the business into
+ * their bank account -- recording it again as a NEW journal entry would
+ * double-count that cash. */
+export async function recordPayoutEvent(businessId: string, payout: Stripe.Payout, eventType: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  const now = nowIso();
+  const amount = (payout.amount || 0) / 100;
+
+  await db.collection("payouts").doc(payout.id).set({
+    id: payout.id, businessId, amount, currency: payout.currency, status: payout.status,
+    arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString().slice(0, 10) : undefined,
+    failureMessage: payout.failure_message || undefined,
+    lastEventType: eventType, updatedAt: now
+  }, { merge: true });
+
+  if (eventType === "payout.paid") {
+    await notifyBusinessUsers(db, businessId, "accounting", "Payout deposited", `Stripe deposited $${amount.toFixed(2)} to your bank account.`, "accounting");
+  } else if (eventType === "payout.failed") {
+    await notifyBusinessUsers(db, businessId, "accounting", "Payout failed", `A $${amount.toFixed(2)} payout from Stripe failed${payout.failure_message ? `: ${payout.failure_message}` : "."}`, "accounting");
+  }
 }

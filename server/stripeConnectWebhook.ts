@@ -4,7 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
-import { applyPortalInvoicePayment } from "./customerPortal";
+import { applyPortalInvoicePayment, applyChargeRefund, applyDisputeFundsMovement, notifyDisputeStatus, recordPayoutEvent } from "./customerPortal";
 
 // Separate path, separate signing secret, separate handler from the
 // platform webhook (server/stripeWebhook.ts) -- Stripe issues a distinct
@@ -107,18 +107,45 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
       return;
     }
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.metadata?.ownerslocalInvoiceId) {
-        await applyPortalInvoicePayment(businessId, session);
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.ownerslocalInvoiceId) await applyPortalInvoicePayment(businessId, session);
+        return;
+      }
+      case "charge.refunded": {
+        await applyChargeRefund(businessId, event.data.object as Stripe.Charge);
+        return;
+      }
+      case "charge.dispute.funds_withdrawn": {
+        await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "withdrawn", stripeAccountId);
+        return;
+      }
+      case "charge.dispute.funds_reinstated": {
+        await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "reinstated", stripeAccountId);
+        return;
+      }
+      case "charge.dispute.created":
+      case "charge.dispute.updated":
+      case "charge.dispute.closed": {
+        await notifyDisputeStatus(businessId, event.data.object as Stripe.Dispute, stripeAccountId);
+        return;
+      }
+      case "payout.created":
+      case "payout.paid":
+      case "payout.failed":
+      case "payout.canceled": {
+        await recordPayoutEvent(businessId, event.data.object as Stripe.Payout, event.type);
         return;
       }
     }
 
-    // No other payment/refund/dispute/payout business logic is wired up yet
-    // (see PaymentsPage.tsx / stripeConnectRoutes.ts) -- this just proves
-    // the event resolves to the right business and logs it, so nothing
-    // here is invented ahead of that being built.
+    // Every other subscribed event type (SaaS subscription billing --
+    // there's no paywall built yet to react to it; Financial Connections;
+    // KYC/account.updated; saved payment methods; 1099 reporting; etc.) is
+    // acknowledged and logged rather than invented ahead of the feature
+    // that would actually use it. See the handoff doc's spec mapping for
+    // what each of these is reserved for.
     console.log(`[stripe-connect] ${event.type} (${event.id}) for business ${businessId} (account ${stripeAccountId}) -- no handler wired yet.`);
   } catch (err) {
     console.error(`Error handling Stripe Connect event ${event.type} (${event.id}):`, err);

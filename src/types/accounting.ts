@@ -87,6 +87,18 @@ export interface Invoice {
   /** Marketing attribution, carried over from the Customer/Job/Estimate this invoice came from (see Customer.source in types/domain.ts). */
   source?: LeadSource;
   sourceLeadId?: string;
+  /** Running total ever refunded on this invoice's Stripe payment (dollars,
+   * server/stripeConnectWebhook.ts's charge.refunded handler) -- amountPaid
+   * above is kept net of this so every existing balance-due calculation
+   * keeps working unchanged; this field exists purely so a refund is never
+   * indistinguishable from the invoice simply never having been paid that
+   * much in the first place. */
+  amountRefunded?: number;
+  /** Set while a Stripe dispute/chargeback is open against this invoice's
+   * payment (server/stripeConnectWebhook.ts's charge.dispute.* handler).
+   * Cleared once Stripe reports the dispute closed. */
+  disputeStatus?: string;
+  disputedAmount?: number;
 }
 
 export interface Bill {

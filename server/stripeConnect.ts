@@ -131,3 +131,15 @@ export async function getConnectAccountStatus(accountId: string): Promise<Connec
     payoutsEnabled: !!account.payouts_enabled,
   };
 }
+
+/**
+ * A Dispute webhook event doesn't carry the ownerslocalInvoiceId metadata
+ * itself (only the Charge/PaymentIntent it came from does) -- this looks
+ * that charge up on the business's own connected account so
+ * server/stripeConnectWebhook.ts's dispute handler can find which invoice
+ * it's about.
+ */
+export async function retrieveCharge(accountId: string, chargeId: string): Promise<Stripe.Charge> {
+  const stripe = getStripeClient();
+  return stripe.charges.retrieve(chargeId, undefined, { stripeAccount: accountId });
+}
