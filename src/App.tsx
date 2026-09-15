@@ -6602,8 +6602,8 @@ Access to full financial telemetry is restricted.`;
 
                     // Keep the dashboard widget on the exact same selected period and
                     // financial series as the Revenue page graph.
-                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions).series;
-                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions);
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries).series;
+                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
                     const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
 
                     // Dashboard widgets show real company data -- each slot maps to the
@@ -7426,12 +7426,18 @@ Access to full financial telemetry is restricted.`;
                           const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
                           const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
 
-                          const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                          // Only sweeps categories that have no dedicated bucket of their
+                          // own in EXPENSE_CATEGORY_NAMES -- Fuel/Equipment/Tools/Office
+                          // Supplies each get their own named slice below, so folding them
+                          // in here too would count that same transaction twice in this
+                          // breakdown (once as "Material Expenses", once under its own name).
+                          const materialCategoriesForBreakdown = new Set(["Material Expenses", "Materials", "Supplies", "Inventory"]);
+                          const billAmountsThisPeriod = billExpenseAmounts(bills, journalEntries);
                           const categoryTotalsThisPeriod = EXPENSE_CATEGORY_NAMES.map(name => {
                             const values = name === "Bills"
-                              ? bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0))
+                              ? bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => billAmountsThisPeriod.get(b.id) ?? 0)
                               : name === "Material Expenses"
-                                ? transactions.filter(t => t.type === "expense" && materialCategories.has(t.category || "") && inPeriod(t.date)).map(t => t.amount)
+                                ? transactions.filter(t => t.type === "expense" && materialCategoriesForBreakdown.has(t.category || "") && inPeriod(t.date)).map(t => t.amount)
                                 : transactions.filter(t => t.type === "expense" && t.category === name && inPeriod(t.date)).map(t => t.amount);
                             return { name: name as string, total: values.reduce((s, v) => s + v, 0) };
                           }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
@@ -7958,7 +7964,12 @@ Access to full financial telemetry is restricted.`;
 
                       {/* TWO STATEMENT TABLES - PAYMENTS (TOP), THEN EXPENSES (BELOW) */}
                       {(() => {
-                        const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
+                        // Same non-overlapping set as the money-tracker breakdown above --
+                        // Fuel/Equipment/Tools/Office Supplies already get their own named
+                        // row below, so they're deliberately left out of this umbrella sweep
+                        // to avoid listing (and totaling) the same transaction twice.
+                        const materialCategories = new Set(["Material Expenses", "Materials", "Supplies", "Inventory"]);
+                        const billAmountsForStatement = billExpenseAmounts(bills, journalEntries);
                         const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                         const allPaymentItems = [
@@ -7974,7 +7985,7 @@ Access to full financial telemetry is restricted.`;
                               id: b.id,
                               date: b.issuedDate,
                               memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
-                              amount: b.totalCost ?? b.estimatedCost ?? b.lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0)
+                              amount: billAmountsForStatement.get(b.id) ?? 0
                             }));
                           }
                           if (name === "Material Expenses") {
