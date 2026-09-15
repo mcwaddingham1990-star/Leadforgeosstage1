@@ -57,7 +57,11 @@ class CallStateReceiver : BroadcastReceiver() {
             val date = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
             val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER))
 
-            if (type != CallLog.Calls.MISSED_TYPE) return
+            // A call the user declines (swipes away without answering) logs
+            // as REJECTED_TYPE on many devices/Android versions rather than
+            // MISSED_TYPE -- from a business's perspective that's still an
+            // unanswered call that should get the auto-reply, so both count.
+            if (type != CallLog.Calls.MISSED_TYPE && type != CallLog.Calls.REJECTED_TYPE) return
             if (id == app.sessionStore.lastProcessedCallLogId) return
             if (System.currentTimeMillis() - date > STALE_ENTRY_WINDOW_MS) return
 
