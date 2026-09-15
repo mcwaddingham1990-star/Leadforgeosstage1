@@ -136,15 +136,23 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
         createdBy,
         jobId: type === "expense" && jobId ? jobId : undefined
       });
+      const savedTxnId = pendingIdRef.current;
       pendingIdRef.current = null;
       if (scannedPhoto && scannedPhoto.base64.length <= SNAPSHOT_PHOTO_MAX_BASE64_LENGTH) {
+        // Stable id derived from the transaction's own stable id -- a second
+        // handleSave firing for the same submission (a fast double-click
+        // before the isSaving guard re-renders, or a retry) reuses the same
+        // transaction id (see pendingIdRef above) and so lands here with the
+        // same savedTxnId too, overwriting the identical snapshot document
+        // instead of filing a duplicate copy of the same photo.
         setDocuments(prev => [buildScanSnapshotDocument({
           photoBase64: scannedPhoto.base64,
           mimeType: scannedPhoto.mimeType,
           vendor: description.trim(),
           date,
           docType: type === "income" ? "Checks" : "Receipts",
-          uploadedBy: createdBy
+          uploadedBy: createdBy,
+          id: savedTxnId ? `doc_scan_${savedTxnId}` : undefined
         }), ...prev]);
       }
     } catch (err) {
@@ -215,11 +223,13 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
               </div>
             )}
             <div className="space-y-1">
-              <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Amount</label>
+              <label htmlFor="log-txn-amount" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Amount</label>
               <input
+                id="log-txn-amount"
                 type="number"
                 min="0"
                 step="0.01"
+                required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
@@ -227,9 +237,11 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">{descLabel}</label>
+              <label htmlFor="log-txn-description" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">{descLabel}</label>
               <input
+                id="log-txn-description"
                 type="text"
+                required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={type === "income" ? "e.g. Jane Smith" : "e.g. Home Depot"}
@@ -238,8 +250,9 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Category</label>
+                <label htmlFor="log-txn-category" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Category</label>
                 <select
+                  id="log-txn-category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 font-semibold focus:outline-none focus:border-blue-400"
@@ -249,9 +262,11 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Date</label>
+                <label htmlFor="log-txn-date" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Date</label>
                 <input
+                  id="log-txn-date"
                   type="date"
+                  required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 font-semibold focus:outline-none focus:border-blue-400"
@@ -260,8 +275,9 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
             </div>
             {type === "expense" && jobs.length > 0 && (
               <div className="space-y-1">
-                <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Job (optional)</label>
+                <label htmlFor="log-txn-job" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Job (optional)</label>
                 <select
+                  id="log-txn-job"
                   value={jobId}
                   onChange={(e) => setJobId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 font-semibold focus:outline-none focus:border-blue-400"

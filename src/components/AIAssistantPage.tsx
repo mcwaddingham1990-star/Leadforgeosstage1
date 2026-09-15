@@ -513,6 +513,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       type="range"
                       min="10"
                       max="100"
+                      aria-label="How creative should it be"
                       value={creativityLevel}
                       onChange={(e) => setCreativityLevel(Number(e.target.value))}
                       className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#315C9F]"
@@ -632,6 +633,7 @@ export const AIAssistantPage: React.FC<AIAssistantPageProps> = ({
                       <div key={mod.key} className="flex items-center justify-between p-2.5 hover:bg-slate-50/50 rounded-xl border border-slate-100 bg-white">
                         <span className="text-xs font-bold text-slate-700 font-sans">{mod.label}</span>
                         <select
+                          aria-label={`AI involvement for ${mod.label}`}
                           value={moduleAiSettings[mod.key] || "DEFAULT"}
                           onChange={(e) => {
                             const val = e.target.value;

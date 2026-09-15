@@ -11,6 +11,7 @@ import type { PurchaseOrder } from "../types/purchaseOrder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
+import { useStripeConnectStatus } from "../hooks/useStripeConnectStatus";
 import { MarketingAttributionView } from "./MarketingAttributionView";
 import {
   Account,
@@ -172,6 +173,10 @@ export const AccountingPage: React.FC = () => {
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const canEdit = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "accounting", "edit");
   const canDelete = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "accounting", "delete");
+  // Same live GET /api/stripe/connect/status check Dashboard/Revenue/
+  // Integrations/Payments all read, so Accounting's own "Integrate Stripe"
+  // prompt can't disagree with what those pages already show.
+  const stripeConnectStatus = useStripeConnectStatus();
 
   const [activeTab, setActiveTab] = useState<AccountingTab>("dashboard");
   // Revenue's "Create Invoice" quick action hands off here the same way its
@@ -332,7 +337,7 @@ export const AccountingPage: React.FC = () => {
       )}
 
       {activeTab === "banking" && (
-        <BankingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} accounts={accounts} canEdit={canEdit} triggerNotification={triggerNotification} businessId={businessId} />
+        <BankingTab bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} accounts={accounts} canEdit={canEdit} triggerNotification={triggerNotification} businessId={businessId} stripeReady={stripeConnectStatus.ready} />
       )}
 
       {activeTab === "chart_of_accounts" && (
@@ -1476,7 +1481,7 @@ function VendorsTab({ vendors, setVendors, bills, purchaseOrders, canEdit, canDe
 // ============================================================================
 // BANKING
 // ============================================================================
-function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerNotification, businessId }: any) {
+function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerNotification, businessId, stripeReady }: any) {
   const { navigateToScreen } = useNavTelemetry();
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState("");
@@ -1528,7 +1533,7 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
         </div>}
       </div>
 
-      {canEdit && (
+      {canEdit && !stripeReady && (
         <button
           onClick={() => navigateToScreen("payments")}
           className="w-full px-4 py-3 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-2xl uppercase flex items-center justify-center gap-2 cursor-pointer shadow-sm"
@@ -1536,6 +1541,12 @@ function BankingTab({ bankAccounts, setBankAccounts, accounts, canEdit, triggerN
           <CreditCard className="w-4 h-4" />
           Integrate Stripe for financial updates and customer payment options
         </button>
+      )}
+      {canEdit && stripeReady && (
+        <div className="w-full px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-2xl uppercase flex items-center justify-center gap-2">
+          <CreditCard className="w-4 h-4" />
+          Stripe Connected
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">

@@ -56,7 +56,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { APIProvider, Map, Marker, Polyline, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, AdvancedMarker, Map, Marker, Polyline, useMap } from "@vis.gl/react-google-maps";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { fetchRecentRoutes, ShiftRoute } from "../lib/timeClockService";
 import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
@@ -144,6 +144,13 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
+  // google.maps.Marker (the plain <Marker> below) is deprecated in favor of
+  // AdvancedMarkerElement, but AdvancedMarkerElement hard-requires a real
+  // Cloud Map ID to render at all -- it silently no-ops without one. Only
+  // switch to it when a business has actually configured GOOGLE_MAPS_MAP_ID
+  // (see .env.example); otherwise keep the legacy marker so pins that work
+  // today don't stop rendering for every business that hasn't set one.
+  const mapId = (process.env.GOOGLE_MAPS_MAP_ID || "").trim();
   const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
   const [mapsApiError, setMapsApiError] = useState(false);
   const [mapsApiDiagnostic, setMapsApiDiagnostic] = useState<string | null>(null);
@@ -1766,6 +1773,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 >
                 <Map
                   id="gmp_mcp_codeassist_v1_aistudio"
+                  mapId={mapId || undefined}
                   defaultCenter={resolvedDefaultCenter || DFW_FALLBACK}
                   defaultZoom={11}
                   onCameraChanged={(e) => handleMapCameraChanged(e?.detail?.center)}
@@ -1785,24 +1793,39 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       strokeWeight={4}
                     />
                   )}
-                  {/* Standard markers do not require a cloud Map ID and are
-                      substantially more reliable on mobile browsers. */}
-                  {filteredPins.map(pin => (
-                    <Marker
-                      key={`${pin.type}_${pin.id}`}
-                      position={{ lat: pin.lat, lng: pin.lng }}
-                      title={pin.title}
-                      onClick={() => {
-                        if (isMultiSelectMode) {
-                          setSelectedBasketIds(prev =>
-                            prev.includes(pin.id) ? prev.filter(x => x !== pin.id) : [...prev, pin.id]
-                          );
-                        } else {
-                          openLocationEditor(pin);
-                        }
-                      }}
-                    />
-                  ))}
+                  {/* AdvancedMarker when a real Cloud Map ID is configured
+                      (see mapId above) -- same position/title/click behavior
+                      either way, just a different underlying Google Maps API.
+                      Falls back to the legacy standard Marker (still
+                      substantially more reliable on mobile browsers) when no
+                      Map ID is set, since AdvancedMarker can't render at all
+                      without one. */}
+                  {filteredPins.map(pin => {
+                    const handlePinClick = () => {
+                      if (isMultiSelectMode) {
+                        setSelectedBasketIds(prev =>
+                          prev.includes(pin.id) ? prev.filter(x => x !== pin.id) : [...prev, pin.id]
+                        );
+                      } else {
+                        openLocationEditor(pin);
+                      }
+                    };
+                    return mapId ? (
+                      <AdvancedMarker
+                        key={`${pin.type}_${pin.id}`}
+                        position={{ lat: pin.lat, lng: pin.lng }}
+                        title={pin.title}
+                        onClick={handlePinClick}
+                      />
+                    ) : (
+                      <Marker
+                        key={`${pin.type}_${pin.id}`}
+                        position={{ lat: pin.lat, lng: pin.lng }}
+                        title={pin.title}
+                        onClick={handlePinClick}
+                      />
+                    );
+                  })}
                 </Map>
               </APIProvider>
             ) : (
