@@ -24,7 +24,6 @@ import {
   Budget,
   InvoiceLineItem,
   BankAccountType,
-  computeAccountBalance,
   isBalancedEntry
 } from "../types/accounting";
 import {
@@ -33,7 +32,10 @@ import {
   postBillCreatedEntry,
   postBillPaymentEntry,
   postRefundEntry,
-  invoiceTotal
+  invoiceTotal,
+  computeAccountBalances,
+  computeLedgerTotals,
+  expenseBreakdownByAccount
 } from "../lib/accountingEngine";
 import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
@@ -198,54 +200,27 @@ export const AccountingPage: React.FC = () => {
   );
 
   // ---- Derived, real numbers from journals plus connected subledgers. ----
-  const accountBalances = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const acct of accounts) map[acct.id] = computeAccountBalance(acct, journalEntries);
-    map["acct_inventory"] = inventoryAssetValue;
-    // Backfill the accounting view for job-completion revenue written by
-    // older app versions before those events also posted journal entries.
-    // New events carry a matching journal sourceId and are not added twice.
-    const postedSourceIds = new Set(journalEntries.map(entry => entry.sourceId).filter(Boolean));
-    const legacyUnpostedRevenue = revenueEvents
-      .filter(event => !postedSourceIds.has(event.id))
-      .reduce((sum, event) => sum + event.amount, 0);
-    map["acct_ar"] = (map["acct_ar"] || 0) + legacyUnpostedRevenue;
-    map["acct_service_revenue"] = (map["acct_service_revenue"] || 0) + legacyUnpostedRevenue;
-    return map;
-  }, [accounts, journalEntries, inventoryAssetValue, revenueEvents]);
+  // Canonical ledger read -- computeAccountBalances/computeLedgerTotals are
+  // the same functions Dashboard and Revenue call with these same inputs,
+  // so this page's balances/P&L can never drift from what those pages show.
+  const accountBalances = useMemo(
+    () => computeAccountBalances({ accounts, journalEntries, revenueEvents, inventoryAssetValue }),
+    [accounts, journalEntries, inventoryAssetValue, revenueEvents]
+  );
 
   const cashBalance = accountBalances["acct_cash"] || 0;
   const arBalance = accountBalances["acct_ar"] || 0;
   const apBalance = accountBalances["acct_ap"] || 0;
 
-  const totalRevenue = useMemo(
-    () => accounts.filter(a => a.type === "revenue").reduce((s, a) => s + (accountBalances[a.id] || 0), 0),
-    [accounts, accountBalances]
-  );
-  const totalExpenses = useMemo(
-    () => accounts.filter(a => a.type === "expense").reduce((s, a) => s + (accountBalances[a.id] || 0), 0),
-    [accounts, accountBalances]
-  );
-  const netIncome = totalRevenue - totalExpenses;
+  const ledgerTotals = useMemo(() => computeLedgerTotals(accounts, accountBalances), [accounts, accountBalances]);
+  const { totalRevenue, totalExpenses, netIncome } = ledgerTotals;
 
-  const totalAssets = useMemo(
-    () => accounts.filter(a => a.type === "asset").reduce((s, a) => s + (accountBalances[a.id] || 0), 0),
-    [accounts, accountBalances]
-  );
-  const totalLiabilities = useMemo(
-    () => accounts.filter(a => a.type === "liability").reduce((s, a) => s + (accountBalances[a.id] || 0), 0),
-    [accounts, accountBalances]
-  );
-  const totalEquityAccounts = useMemo(
-    () => accounts.filter(a => a.type === "equity").reduce((s, a) => s + (accountBalances[a.id] || 0), 0),
-    [accounts, accountBalances]
-  );
   // Books aren't formally "closed" each period (no separate closing-entry
   // step), so current-year net income is shown as its own equity line
   // rather than folded into Retained Earnings -- the accounting equation
   // (Assets = Liabilities + Equity) holds exactly because every entry that
   // touches Revenue/Expense also touches a real Asset/Liability account.
-  const totalEquity = totalEquityAccounts + netIncome;
+  const { totalAssets, totalLiabilities, totalEquity } = ledgerTotals;
 
   const pendingRevenue = useMemo(() => {
     const invoicedEstimateIds = new Set(invoices.map(i => i.estimateId).filter(Boolean));
@@ -1800,7 +1775,7 @@ function JournalTab({ journalEntries, setJournalEntries, accounts, canEdit, trig
 // ============================================================================
 // REPORTS
 // ============================================================================
-function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, estimates, inventoryList, accountBalances, totalRevenue, totalExpenses, netIncome, leads, jobs, customers, employees, timeClockLogs, payrollWorkweekStart }: any) {
+function ReportsTab({ accounts, journalEntries, invoices, bills, transactions, revenueEvents, estimates, inventoryList, accountBalances, totalRevenue, totalExpenses, netIncome, leads, jobs, customers, employees, timeClockLogs, payrollWorkweekStart }: any) {
   const [report, setReport] = useState("pnl");
 
   const revenueByCustomer = useMemo(() => {
@@ -1834,23 +1809,22 @@ function ReportsTab({ accounts, invoices, bills, transactions, revenueEvents, es
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [invoices]);
 
+  // Ledger-derived, same function Dashboard/Revenue use for their own
+  // "Expenses by Category" breakdown -- one row per real expense account, so
+  // this report can never disagree with what those pages show for the same
+  // all-time range, and a bill/transaction can never land in two rows.
   const expensesByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    const materialCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-    for (const t of transactions) {
-      if (t.type !== "expense") continue;
-      const category = materialCategories.has(t.category || "") ? "Material Expenses" : (t.category || "Uncategorized");
-      map[category] = (map[category] || 0) + t.amount;
-    }
-    for (const b of bills as Bill[]) map.Bills = (map.Bills || 0) + billTotal(b);
-    const priority = ["Bills", "Material Expenses", "Payroll"];
-    return Object.entries(map).sort((a, b) => {
-      const aPriority = priority.indexOf(a[0]);
-      const bPriority = priority.indexOf(b[0]);
-      if (aPriority >= 0 || bPriority >= 0) return (aPriority < 0 ? priority.length : aPriority) - (bPriority < 0 ? priority.length : bPriority);
-      return b[1] - a[1];
-    });
-  }, [transactions, bills]);
+    const breakdown = expenseBreakdownByAccount(accounts, journalEntries);
+    const priority = ["Bills", "Payroll & Labor Expense"];
+    return breakdown
+      .map(c => [c.name, c.total] as [string, number])
+      .sort((a, b) => {
+        const aPriority = priority.indexOf(a[0]);
+        const bPriority = priority.indexOf(b[0]);
+        if (aPriority >= 0 || bPriority >= 0) return (aPriority < 0 ? priority.length : aPriority) - (bPriority < 0 ? priority.length : bPriority);
+        return b[1] - a[1];
+      });
+  }, [accounts, journalEntries]);
 
   const expensesByVendor = useMemo(() => {
     const map: Record<string, number> = {};

@@ -243,9 +243,13 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Array<Omit<Account, "createdAt">> = [
   { id: "acct_other_income", code: "4900", name: "Other Income", type: "revenue", subtype: "Other Revenue", isSystemAccount: true },
   { id: "acct_refunds", code: "4800", name: "Sales Refunds & Allowances", type: "revenue", subtype: "Contra-Revenue", isSystemAccount: true },
   { id: "acct_cogs_materials", code: "5000", name: "Cost of Goods Sold - Materials", type: "expense", subtype: "Cost of Goods Sold", isSystemAccount: true },
+  { id: "acct_bills_expense", code: "5900", name: "Bills", type: "expense", subtype: "Operating Expense", isSystemAccount: true, description: "Vendor bills from the Bills tab, kept separate from other expense categories so a bill's dollars are never mixed into (or double-counted against) a manually-logged transaction's category total." },
   { id: "acct_payroll_expense", code: "6000", name: "Payroll & Labor Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
   { id: "acct_fuel_expense", code: "6100", name: "Fuel Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
+  { id: "acct_equipment_expense", code: "6110", name: "Equipment Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
+  { id: "acct_tools_expense", code: "6120", name: "Tools Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
   { id: "acct_vehicle_expense", code: "6200", name: "Vehicle Maintenance Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
+  { id: "acct_rent_expense", code: "6250", name: "Rent Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
   { id: "acct_office_expense", code: "6300", name: "Office Supplies Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
   { id: "acct_marketing_expense", code: "6400", name: "Advertising & Marketing Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
   { id: "acct_utilities_expense", code: "6500", name: "Utilities Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true },
@@ -253,12 +257,22 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Array<Omit<Account, "createdAt">> = [
   { id: "acct_other_expense", code: "6900", name: "Other Operating Expense", type: "expense", subtype: "Operating Expense", isSystemAccount: true }
 ];
 
-/** Maps the existing Transaction expense `category` strings (LogTransactionModal) onto a real Chart of Accounts account. */
+/**
+ * Maps the existing Transaction expense `category` strings (LogTransactionModal's
+ * EXPENSE_CATEGORIES) onto a real Chart of Accounts account -- one account per
+ * category, matching that dropdown 1:1, so every category a user can actually
+ * pick has its own ledger bucket instead of several sharing "Other" and
+ * becoming indistinguishable (or a later screen having to re-derive the split
+ * from the free-text category string instead of the ledger itself).
+ */
 export function accountIdForExpenseCategory(category: string | undefined): string {
   switch (category) {
     case "Materials": return "acct_cogs_materials";
+    case "Equipment": return "acct_equipment_expense";
+    case "Tools": return "acct_tools_expense";
     case "Fuel": return "acct_fuel_expense";
     case "Vehicle Maintenance": return "acct_vehicle_expense";
+    case "Rent": return "acct_rent_expense";
     case "Office Supplies": return "acct_office_expense";
     case "Marketing": return "acct_marketing_expense";
     case "Utilities": return "acct_utilities_expense";

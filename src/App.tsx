@@ -13,11 +13,11 @@ import type { CustomerSession } from "./types/customerAccount";
 import { CustomerLoginPanel } from "./components/CustomerLoginPanel";
 import { CustomerAppShell } from "./components/CustomerAppShell";
 import { useStripeConnectStatus } from "./hooks/useStripeConnectStatus";
-import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS, computeAccountBalance } from "./types/accounting";
+import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
 import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
 import { authedFetch } from "./lib/apiClient";
-import { postTransactionEntry, invoiceTotal } from "./lib/accountingEngine";
+import { postTransactionEntry, invoiceTotal, accountMovementInRange, computeAccountBalances, computeLedgerTotals, expenseBreakdownByAccount, ledgerItemsForAccount } from "./lib/accountingEngine";
 import { registerForPushNotifications } from "./lib/pushNotifications";
 import { buildTextDocumentPdf, bytesToBase64 } from "./lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "./lib/firestoreDocumentLimits";
@@ -879,14 +879,6 @@ const OS_SCREENS = [
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
-// The real expense categories shown in the Revenue page's statement table
-// ("Expenses by Category" view). "Bills" comes from the bills collection;
-// "Material Expenses" is a bucket of several transaction categories; every
-// other entry matches a transaction's `category` field exactly.
-const EXPENSE_CATEGORY_NAMES = [
-  "Bills", "Material Expenses", "Fuel", "Vehicle Maintenance", "Equipment", "Tools",
-  "Insurance", "Taxes", "Marketing", "Software & Subs", "Utilities", "Office Supplies", "Custom Expense"
-] as const;
 
 /**
  * A bill's real expense cost for the Revenue graph -- prefers the amount
@@ -916,19 +908,20 @@ function billExpenseAmounts(bills: Bill[], journalEntries: JournalEntry[]): Map<
 }
 
 /**
- * Buckets the real revenueEvents log (written by the Event Engine's
- * job-completion cascade) and real transactions log (manual/scanned/payroll
- * entries — see LogTransactionModal + handleRunPayroll) into real calendar
- * periods for the revenue chart, plus real prior-period/current-period
- * totals for the comparison badge and summary cards. Accrued Taxes is
+ * Buckets the canonical ledger (journalEntries, grouped by real Chart of
+ * Accounts accounts) into real calendar periods for the revenue chart, plus
+ * real prior-period/current-period totals for the comparison badge and
+ * summary cards. Deriving every number here from account movements --
+ * instead of separately re-filtering raw revenueEvents/transactions/bills
+ * arrays the way this function used to -- is what makes this chart's totals
+ * agree with Accounting & Bookkeeping's P&L for the exact same range: both
+ * read the same journal entries through the same accounts. Accrued Taxes is
  * deliberately not derived here — there's no real tax engine anywhere in
  * the app to compute a real liability from.
  */
 function getRevenueChartData(
   filter: string,
-  revenueEvents: RevenueEvent[],
-  transactions: Transaction[] = [],
-  bills: Bill[] = [],
+  accounts: Account[],
   journalEntries: JournalEntry[] = []
 ): {
   series: Array<{ time: string; Revenue: number; Expenses: number; TotalExpenses: number; Bills: number; MaterialExpenses: number; Payroll: number; OtherExpenses: number; Profit: number }>;
@@ -939,38 +932,25 @@ function getRevenueChartData(
   priorExpenseTotal: number;
 } {
   const now = new Date();
-  const expenseTx = transactions.filter((t) => t.type === "expense");
-  const payrollTx = expenseTx.filter((t) => t.category === "Payroll");
-  const materialOperationalCategories = new Set(["Material Expenses", "Materials", "Equipment", "Fuel", "Office Supplies", "Tools", "Supplies", "Inventory"]);
-  const materialTx = expenseTx.filter((t) => materialOperationalCategories.has(t.category || ""));
-  const otherExpenseTx = expenseTx.filter((t) => t.category !== "Payroll" && !materialOperationalCategories.has(t.category || ""));
-  const billAmounts = billExpenseAmounts(bills, journalEntries);
-  const billCosts = bills.filter((bill) => bill.status !== "void").map((bill) => ({
-    amount: billAmounts.get(bill.id) ?? 0,
-    date: bill.issuedDate
-  }));
-  const allExpenseCosts = [...expenseTx, ...billCosts];
+  const revenueAccountIds = accounts.filter((a) => a.type === "revenue").map((a) => a.id);
+  const expenseAccountIds = accounts.filter((a) => a.type === "expense").map((a) => a.id);
+  // Same "Material Expenses" umbrella the Dashboard/Revenue breakdowns use --
+  // everything else expense-type (other than Bills/Payroll, each broken out
+  // as their own named series) rolls into OtherExpenses.
+  const materialAccountIds = ["acct_cogs_materials", "acct_equipment_expense", "acct_tools_expense"].filter((id) => expenseAccountIds.includes(id));
+  const otherExpenseAccountIds = expenseAccountIds.filter((id) => id !== "acct_bills_expense" && id !== "acct_payroll_expense" && !materialAccountIds.includes(id));
 
-  // Real revenue = job-completion events (revenueEvents) + manually-logged
-  // or scanned income transactions (e.g. a photographed check) — both are
-  // real money in, and logging one should actually move these totals.
-  const incomeTx = transactions.filter((t) => t.type === "income");
-  const revenueSource: Array<{ amount: number; date: string }> = [...revenueEvents, ...incomeTx];
-
-  const sumInRange = (items: Array<{ amount: number; date: string }>, start: Date, end: Date) =>
-    items
-      .filter((e) => {
-        const d = new Date(e.date);
-        return d >= start && d < end;
-      })
-      .reduce((sum, e) => sum + e.amount, 0);
+  const ledgerRevenueInRange = (start: Date, end: Date) =>
+    revenueAccountIds.reduce((s, id) => s + accountMovementInRange(id, "revenue", journalEntries, start, end), 0);
+  const ledgerExpenseInRange = (start: Date, end: Date) =>
+    expenseAccountIds.reduce((s, id) => s + accountMovementInRange(id, "expense", journalEntries, start, end), 0);
 
   const buildRow = (time: string, start: Date, end: Date) => {
-    const Revenue = sumInRange(revenueSource, start, end);
-    const Bills = sumInRange(billCosts, start, end);
-    const MaterialExpenses = sumInRange(materialTx, start, end);
-    const Payroll = sumInRange(payrollTx, start, end);
-    const OtherExpenses = sumInRange(otherExpenseTx, start, end);
+    const Revenue = ledgerRevenueInRange(start, end);
+    const Bills = accountMovementInRange("acct_bills_expense", "expense", journalEntries, start, end);
+    const Payroll = accountMovementInRange("acct_payroll_expense", "expense", journalEntries, start, end);
+    const MaterialExpenses = materialAccountIds.reduce((s, id) => s + accountMovementInRange(id, "expense", journalEntries, start, end), 0);
+    const OtherExpenses = otherExpenseAccountIds.reduce((s, id) => s + accountMovementInRange(id, "expense", journalEntries, start, end), 0);
     const TotalExpenses = Bills + MaterialExpenses + Payroll + OtherExpenses;
     return { time, Revenue, Expenses: TotalExpenses, TotalExpenses, Bills, MaterialExpenses, Payroll, OtherExpenses, Profit: Revenue - TotalExpenses };
   };
@@ -1001,8 +981,8 @@ function getRevenueChartData(
       currentExpenseTotal: filter === "Day"
         ? series.reduce((s, d) => s + d.Expenses, 0)
         : (series[series.length - 1]?.Expenses || 0),
-      currentPayrollTotal: sumInRange(payrollTx, periodStart, periodEnd),
-      priorExpenseTotal: sumInRange(allExpenseCosts, new Date(periodStart.getTime() - periodDuration), periodStart)
+      currentPayrollTotal: accountMovementInRange("acct_payroll_expense", "expense", journalEntries, periodStart, periodEnd),
+      priorExpenseTotal: ledgerExpenseInRange(new Date(periodStart.getTime() - periodDuration), periodStart)
     };
   };
 
@@ -1023,8 +1003,7 @@ function getRevenueChartData(
     const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const series = buildDays(30, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
-    const priorTotal = sumInRange(
-      revenueSource,
+    const priorTotal = ledgerRevenueInRange(
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 59),
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
     );
@@ -1035,8 +1014,7 @@ function getRevenueChartData(
     const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const dailyRows = buildDays(7, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
-    const priorTotal = sumInRange(
-      revenueSource,
+    const priorTotal = ledgerRevenueInRange(
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13),
       periodStart
     );
@@ -1047,8 +1025,7 @@ function getRevenueChartData(
     const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13);
     const periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const dailyRows = buildDays(14, (d) => d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }));
-    const priorTotal = sumInRange(
-      revenueSource,
+    const priorTotal = ledgerRevenueInRange(
       new Date(now.getFullYear(), now.getMonth(), now.getDate() - 27),
       periodStart
     );
@@ -1066,7 +1043,7 @@ function getRevenueChartData(
       dailyRows.push(buildRow(dayStart.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }), dayStart, dayEnd));
     }
     const priorMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const priorTotal = sumInRange(revenueSource, priorMonthStart, periodStart);
+    const priorTotal = ledgerRevenueInRange(priorMonthStart, periodStart);
     return withTotals(cumulative(dailyRows), periodStart, periodEnd, priorTotal);
   }
 
@@ -1080,8 +1057,7 @@ function getRevenueChartData(
     }
     const periodStart = new Date(now.getFullYear(), quarterStartMonth, 1);
     const periodEnd = new Date(now.getFullYear(), quarterStartMonth + 3, 1);
-    const priorTotal = sumInRange(
-      revenueSource,
+    const priorTotal = ledgerRevenueInRange(
       new Date(now.getFullYear(), quarterStartMonth - 3, 1),
       periodStart
     );
@@ -1097,8 +1073,7 @@ function getRevenueChartData(
     }
     const periodStart = new Date(now.getFullYear(), 0, 1);
     const periodEnd = new Date(now.getFullYear() + 1, 0, 1);
-    const priorTotal = sumInRange(
-      revenueSource,
+    const priorTotal = ledgerRevenueInRange(
       new Date(now.getFullYear() - 1, 0, 1),
       periodStart
     );
@@ -1106,8 +1081,8 @@ function getRevenueChartData(
   }
 
   // Total: group the complete ledger by year, then show lifetime running totals.
-  const allDates = [...revenueSource, ...expenseTx, ...billCosts]
-    .map((item) => new Date(item.date))
+  const allDates = journalEntries
+    .map((entry) => new Date(entry.date))
     .filter((date) => !Number.isNaN(date.getTime()));
   const firstYear = allDates.length ? Math.min(...allDates.map((date) => date.getFullYear())) : now.getFullYear();
   const years: ReturnType<typeof buildRow>[] = [];
@@ -1884,6 +1859,22 @@ export default function App() {
     setAccounts(seeded);
   }, [businessId, accounts.length, setAccounts]);
 
+  // Additive backfill for businesses whose Chart of Accounts was already
+  // seeded before a new system account (e.g. a dedicated Bills expense
+  // account) was added to DEFAULT_CHART_OF_ACCOUNTS above -- otherwise an
+  // older business would keep posting that category's dollars into
+  // whichever account used to catch it (typically Other Operating Expense)
+  // forever, disagreeing with a newer business's books for the exact same
+  // kind of transaction. Only ever adds accounts that don't already exist;
+  // never edits or removes one, so no existing balance is touched.
+  useEffect(() => {
+    if (!businessId || accounts.length === 0) return;
+    const existingIds = new Set(accounts.map(a => a.id));
+    const missing = DEFAULT_CHART_OF_ACCOUNTS.filter(a => !existingIds.has(a.id));
+    if (missing.length === 0) return;
+    setAccounts(prev => [...prev, ...missing.map(a => ({ ...a, createdAt: new Date().toISOString() }))]);
+  }, [businessId, accounts, setAccounts]);
+
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
   // instead of reflecting what's actually been recognized. Includes both
@@ -2229,9 +2220,12 @@ export default function App() {
   // here so "View Financial Reports" doesn't have to navigate away --
   // each category's items come straight from the journal entries and open
   // invoices/bills those real actions already posted, nothing fabricated.
+  // computeAccountBalances is the exact function Accounting & Bookkeeping
+  // itself calls with these same inputs, inventory valuation and legacy-
+  // revenue backfill included, so this snapshot can't drift from that page.
   const financialSnapshotData = useMemo(() => {
-    const cashBalances: Record<string, number> = {};
-    for (const acct of accounts) cashBalances[acct.id] = computeAccountBalance(acct, journalEntries);
+    const inventoryAssetValue = inventoryList.reduce((s, i) => s + (i.quantity || 0) * (i.unitCost || 0), 0);
+    const cashBalances = computeAccountBalances({ accounts, journalEntries, revenueEvents, inventoryAssetValue });
 
     const cashLine = (entry: JournalEntry) => entry.lines.find(l => l.accountId === "acct_cash");
     const byDateDesc = <T extends { date: string }>(rows: T[]) => [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -2288,7 +2282,7 @@ export default function App() {
       payments_collected: { label: "Payments Collected", total: paymentsCollectedItems.reduce((s, i) => s + i.amount, 0), items: paymentsCollectedItems },
       expenses_paid: { label: "Expenses Paid", total: expensesPaidItems.reduce((s, i) => s + i.amount, 0), items: expensesPaidItems }
     };
-  }, [accounts, journalEntries, invoices, bills]);
+  }, [accounts, journalEntries, invoices, bills, revenueEvents, inventoryList]);
   const [isGeneratingFinancialStatement, setIsGeneratingFinancialStatement] = useState(false);
 
   // Builds a real PDF statement from whichever category is currently open
@@ -6602,8 +6596,8 @@ Access to full financial telemetry is restricted.`;
 
                     // Keep the dashboard widget on the exact same selected period and
                     // financial series as the Revenue page graph.
-                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries).series;
-                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
+                    const getDashboardGraphData = () => getRevenueChartData(revenuePageFilter, accounts, journalEntries).series;
+                    const dashboardFinancials = getRevenueChartData(revenuePageFilter, accounts, journalEntries);
                     const dashboardNetRevenue = dashboardFinancials.currentTotal - dashboardFinancials.currentExpenseTotal;
 
                     // Dashboard widgets show real company data -- each slot maps to the
@@ -7412,7 +7406,7 @@ Access to full financial telemetry is restricted.`;
                           const expensesTotal = latest.Expenses;
                           const netTotal = latest.Net;
 
-                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
+                          const { priorTotal, priorExpenseTotal } = getRevenueChartData(revenuePageFilter, accounts, journalEntries);
                           const priorNet = priorTotal - priorExpenseTotal;
                           const pctChange = (cur: number, prior: number) => (prior !== 0 ? ((cur - prior) / Math.abs(prior)) * 100 : null);
                           const paymentsPct = pctChange(paymentsTotal, priorTotal);
@@ -7426,21 +7420,11 @@ Access to full financial telemetry is restricted.`;
                           const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
                           const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
 
-                          // Only sweeps categories that have no dedicated bucket of their
-                          // own in EXPENSE_CATEGORY_NAMES -- Fuel/Equipment/Tools/Office
-                          // Supplies each get their own named slice below, so folding them
-                          // in here too would count that same transaction twice in this
-                          // breakdown (once as "Material Expenses", once under its own name).
-                          const materialCategoriesForBreakdown = new Set(["Material Expenses", "Materials", "Supplies", "Inventory"]);
-                          const billAmountsThisPeriod = billExpenseAmounts(bills, journalEntries);
-                          const categoryTotalsThisPeriod = EXPENSE_CATEGORY_NAMES.map(name => {
-                            const values = name === "Bills"
-                              ? bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => billAmountsThisPeriod.get(b.id) ?? 0)
-                              : name === "Material Expenses"
-                                ? transactions.filter(t => t.type === "expense" && materialCategoriesForBreakdown.has(t.category || "") && inPeriod(t.date)).map(t => t.amount)
-                                : transactions.filter(t => t.type === "expense" && t.category === name && inPeriod(t.date)).map(t => t.amount);
-                            return { name: name as string, total: values.reduce((s, v) => s + v, 0) };
-                          }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+                          // Ledger-derived -- one row per real expense account for this
+                          // period, the same function the Revenue page's statement table
+                          // and Accounting & Bookkeeping's Reports tab use, so this pie can
+                          // never disagree with either about what a category adds up to.
+                          const categoryTotalsThisPeriod = expenseBreakdownByAccount(accounts, journalEntries, periodStart, periodEnd);
 
                           const topCategories = categoryTotalsThisPeriod.slice(0, 4);
                           const otherCategoriesTotal = categoryTotalsThisPeriod.slice(4).reduce((s, c) => s + c.total, 0);
@@ -7456,7 +7440,7 @@ Access to full financial telemetry is restricted.`;
                           const revenueSlicesTotal = revenueSlices.reduce((s, r) => s + r.value, 0);
                           const expenseSlicesTotal = expenseSlices.reduce((s, r) => s + r.value, 0);
 
-                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, revenueEvents, transactions, bills, journalEntries).series;
+                          const cashFlowSeries = getRevenueChartData(revenuePageFilter, accounts, journalEntries).series;
 
                           const todayStr = new Date().toISOString().slice(0, 10);
                           const upcomingJobs = schedulingEvents
@@ -7964,12 +7948,6 @@ Access to full financial telemetry is restricted.`;
 
                       {/* TWO STATEMENT TABLES - PAYMENTS (TOP), THEN EXPENSES (BELOW) */}
                       {(() => {
-                        // Same non-overlapping set as the money-tracker breakdown above --
-                        // Fuel/Equipment/Tools/Office Supplies already get their own named
-                        // row below, so they're deliberately left out of this umbrella sweep
-                        // to avoid listing (and totaling) the same transaction twice.
-                        const materialCategories = new Set(["Material Expenses", "Materials", "Supplies", "Inventory"]);
-                        const billAmountsForStatement = billExpenseAmounts(bills, journalEntries);
                         const fmt = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
                         const allPaymentItems = [
@@ -7979,26 +7957,13 @@ Access to full financial telemetry is restricted.`;
                         const paymentItems = paymentsTableFilter === "all" ? allPaymentItems : allPaymentItems.filter(i => i.source === paymentsTableFilter);
                         const paymentsTotal = paymentItems.reduce((s, i) => s + i.amount, 0);
 
-                        const getCategoryItems = (name: string) => {
-                          if (name === "Bills") {
-                            return bills.filter(b => b.status !== "void").map(b => ({
-                              id: b.id,
-                              date: b.issuedDate,
-                              memo: b.billNumber ? `Bill ${b.billNumber} — ${b.vendor}` : b.vendor,
-                              amount: billAmountsForStatement.get(b.id) ?? 0
-                            }));
-                          }
-                          if (name === "Material Expenses") {
-                            return transactions
-                              .filter(t => t.type === "expense" && materialCategories.has(t.category || ""))
-                              .map(t => ({ id: t.id, date: t.date, memo: t.description || "Material expense", amount: t.amount }));
-                          }
-                          return transactions
-                            .filter(t => t.type === "expense" && t.category === name)
-                            .map(t => ({ id: t.id, date: t.date, memo: t.description || name, amount: t.amount }));
-                        };
-                        const allExpenseItems = EXPENSE_CATEGORY_NAMES.flatMap(name =>
-                          getCategoryItems(name).map(item => ({ ...item, category: name as string }))
+                        // Ledger-derived -- one row per posted journal line, grouped by its
+                        // real Chart of Accounts account. A balanced entry never posts two
+                        // lines to the same account, so no bill or transaction can ever be
+                        // listed (or totaled) under two different category rows here.
+                        const expenseCategoryAccounts = accounts.filter(a => a.type === "expense");
+                        const allExpenseItems = expenseCategoryAccounts.flatMap(acct =>
+                          ledgerItemsForAccount(acct.id, "expense", journalEntries).map(item => ({ ...item, category: acct.name }))
                         ).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
                         const expenseItems = expensesTableFilter === "all" ? allExpenseItems : allExpenseItems.filter(i => i.category === expensesTableFilter);
                         const expensesTotal = expenseItems.reduce((s, i) => s + i.amount, 0);
@@ -8081,7 +8046,7 @@ Access to full financial telemetry is restricted.`;
                                     className="bg-white border border-[#9EC8EF] rounded-xl px-3 py-2 text-[11px] font-bold text-[#1F3557] focus:outline-none cursor-pointer"
                                   >
                                     <option value="all">All Expenses</option>
-                                    {EXPENSE_CATEGORY_NAMES.map(name => <option key={name} value={name}>{name}</option>)}
+                                    {expenseCategoryAccounts.map(acct => <option key={acct.id} value={acct.name}>{acct.name}</option>)}
                                   </select>
                                   <button
                                     type="button"
