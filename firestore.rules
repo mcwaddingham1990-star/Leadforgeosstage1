@@ -137,25 +137,43 @@ service cloud.firestore {
     // Standard business collections — all scoped to businessId
     // (owner's email is the tenant key; employees have businessEmail in their
     // user_profile pointing back to the owner, handled by isBusinessMember)
+    //
+    // SECURITY: every "allow create, update" / "allow delete" pair below
+    // used to be one combined "allow write" line reading
+    // `request.resource == null || isBusinessMember(request.resource.data.businessId)`.
+    // request.resource is null on a DELETE (there's no resulting document),
+    // so that first half authorized EVERY delete unconditionally for any
+    // authenticated user, regardless of which business the document
+    // actually belonged to -- it never reached the isBusinessMember check at
+    // all. Split so delete checks the EXISTING document's own businessId
+    // (`resource.data`, not `request.resource.data`) instead of skipping it.
 
     match /customers/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /leads/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /estimates/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /scheduling_events/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /inventory/{docId} {
-      allow create, delete: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      // SECURITY: same request.resource-is-null-on-delete fix as the
+      // standard business collections above -- delete now checks the
+      // EXISTING item's own businessId instead of skipping the check.
+      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       // Stock reductions are approval actions. All other inventory edits retain
       // the existing tenant permission behavior.
       allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
@@ -190,23 +208,28 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /document_folders/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /roster/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /courses/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /training_profiles/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /bulletins/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /notifications/{docId} {
@@ -219,11 +242,13 @@ service cloud.firestore {
         && resource.data.recipientEmail == request.auth.token.email;
     }
     match /recent_ai_actions/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /snapshots/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
@@ -235,81 +260,100 @@ service cloud.firestore {
     // silently denied by Firestore's default-deny -- same isBusinessMember
     // scoping as every other standard business collection above.
     match /work_orders/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /price_book_folders/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /price_book_models/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /memberships/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /purchase_orders/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /review_requests/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
     // Financial / accounting collections
     match /transactions/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /journal_entries/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /revenue_events/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /chart_of_accounts/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /invoices/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /bills/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /vendors/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /bank_accounts/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /recurring_transactions/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /mileage_logs/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /budgets/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /sales_tax_rates/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /conversations/{docId} {
-      allow write: if isAuthenticated() && (request.resource == null || isBusinessMember(request.resource.data.businessId));
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
