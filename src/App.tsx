@@ -4202,6 +4202,11 @@ Access to full financial telemetry is restricted.`;
         granularPermissions: inviteGranularPermissions,
         isEmployee: true,
         businessEmail,
+        // Lets firestore.rules' user_profiles create rule verify this
+        // businessEmail/role actually came from a real, still-open invite
+        // this business issued, instead of trusting whatever this new
+        // account itself claims.
+        inviteCode: empInviteCode,
         requireTimeClockVerification: inviteRequiresClockVerification,
         isOnboarded: true,
         name: `${empFirstName} ${empLastName}`,

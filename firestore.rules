@@ -67,7 +67,34 @@ service cloud.firestore {
     // (e.g. RosterPage's role editor), unchanged from before.
     match /user_profiles/{uid} {
       allow read: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
-      allow create: if isAuthenticated() && request.auth.uid == uid;
+      // SECURITY: the update rule below already pins businessEmail/role once
+      // a profile exists, but that comparison needs a `resource` to compare
+      // against -- on CREATE there isn't one yet, so without a check here a
+      // brand-new authenticated user could set their own first profile's
+      // businessEmail to any OTHER business's email (and role to "Owner")
+      // and instantly inherit full read/write over that business's data via
+      // isBusinessMember() everywhere else in this ruleset. Only two ways to
+      // legitimately land a first businessEmail/role are now allowed:
+      // (a) a real Owner self-signup, where businessEmail can only be the
+      //     signer-upper's own verified auth email and role only "Owner"
+      //     (matches App.tsx's owner-signup flows, which always set both
+      //     this way); or (b) redeeming a real, still-open
+      //     employee_invites/{code} doc -- which itself can only ever be
+      //     created by an existing real member of that business
+      //     (isBusinessMember() in that collection's own create rule) -- and
+      //     the new profile's businessEmail/role must match that invite
+      //     exactly, not whatever the new account claims. App.tsx's
+      //     invite-signup flow now stamps the redeemed code onto the new
+      //     profile as `inviteCode` specifically so this can verify it.
+      allow create: if isAuthenticated() && request.auth.uid == uid && (
+        (request.resource.data.businessEmail == request.auth.token.email && request.resource.data.role == "Owner")
+        || (
+          request.resource.data.inviteCode is string &&
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.status == "pending" &&
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.businessEmail == request.resource.data.businessEmail &&
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.role == request.resource.data.role
+        )
+      );
       allow update: if isAuthenticated() && (
         (request.auth.uid == uid
           && request.resource.data.businessEmail == resource.data.businessEmail
