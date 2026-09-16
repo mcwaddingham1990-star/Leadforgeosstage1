@@ -4,6 +4,12 @@ import { authedFetch } from "../lib/apiClient";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useSubscriptionStatus } from "../hooks/useSubscriptionStatus";
 
+// Mirrors the discount server/subscriptionRoutes.ts actually applies
+// (FIRST_MONTH_PRICE_CENTS via the "once" coupon) -- shown as copy here so
+// this can't say something the checkout session doesn't back up.
+const FIRST_MONTH_PRICE = "$49.50";
+const REGULAR_PRICE = "$99";
+
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   trialing: "Trial",
@@ -102,6 +108,13 @@ export const BillingPage: React.FC = () => {
               ? STATUS_LABELS[subscription.status] || `Subscription status: ${subscription.status}`
               : "No active subscription."}
           </div>
+        </div>
+      )}
+
+      {subscription.configured && !subscription.subscriptionActive && !subscription.loading && (
+        <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 flex items-baseline gap-2">
+          <span className="text-2xl font-black text-[#1F3557]">{FIRST_MONTH_PRICE}</span>
+          <span className="text-xs text-slate-500">first month, then {REGULAR_PRICE}/month. Cancel anytime.</span>
         </div>
       )}
 
