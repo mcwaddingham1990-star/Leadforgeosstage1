@@ -121,7 +121,7 @@ import {
   Legend
 } from "recharts";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } from "recharts";
-import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star, Receipt } from "lucide-react";
 
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
 import { LeadsPage, INITIAL_LEADS, Lead } from "./components/LeadsPage";
@@ -138,6 +138,7 @@ import { EmployeeLocationsPage } from "./components/EmployeeLocationsPage";
 import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
 import { PaymentsPage } from "./components/PaymentsPage";
+import { BillingPage } from "./components/BillingPage";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
@@ -854,6 +855,7 @@ const OS_SCREENS = [
   { id: "revenue", label: "Revenue", url: "", icon: "📈", top: "12%", bottom: "17%" },
   { id: "accounting", label: "Accounting", url: "", icon: "🧮", top: "12%", bottom: "17%" },
   { id: "payments", label: "Payments", url: "", icon: "💳", top: "12%", bottom: "17%" },
+  { id: "billing", label: "Billing", url: "", icon: "🧾", top: "12%", bottom: "17%" },
   { id: "customers", label: "Customers", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightcustomers.jpg", icon: "👥", top: "27%", bottom: "32%" },
   { id: "leads", label: "Leads", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightleads.jpg", icon: "🎯", top: "17%", bottom: "22%" },
   { id: "estimates", label: "Estimates & Bids", url: "https://raw.githubusercontent.com/mcwaddingham1990-star/Leadforgeos/main/Src/Screens/Lightmodescreens/Lightestimatesbids.jpg", icon: "📝", top: "57%", bottom: "62%" },
@@ -1267,6 +1269,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Landmark className={className} />;
     case "payments":
       return <CreditCard className={className} />;
+    case "billing":
+      return <Receipt className={className} />;
     case "customers":
       return <Users className={className} />;
     case "leads":
@@ -7240,6 +7244,9 @@ Access to full financial telemetry is restricted.`;
 
                   ) : activeScreen.id === "payments" ? (
                     <PaymentsPage />
+
+                  ) : activeScreen.id === "billing" ? (
+                    <BillingPage />
 
                   ) : activeScreen.id === "messages" ? (
                     <MessagesPage />
