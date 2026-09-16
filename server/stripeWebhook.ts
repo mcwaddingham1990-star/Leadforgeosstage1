@@ -85,6 +85,42 @@ export async function handleStripeWebhook(req: Request, res: Response) {
   }
 }
 
+// Statuses that mean "this business currently has working access" --
+// trialing counts (Stripe hasn't attempted the first real charge yet, but
+// the plan grants access during the trial by definition); everything else
+// (past_due, unpaid, canceled, incomplete, incomplete_expired, paused)
+// does not.
+const ACTIVE_SUBSCRIPTION_STATUSES: Stripe.Subscription.Status[] = ["active", "trialing"];
+
+/**
+ * Applies a Stripe Subscription's current state to the business it belongs
+ * to. The subscription's own metadata (set at creation time in
+ * server/subscriptionRoutes.ts's checkout session) carries the businessId
+ * directly, so this never has to look it up by Stripe customer id.
+ */
+async function syncSubscriptionState(subscription: Stripe.Subscription): Promise<void> {
+  const businessId = subscription.metadata?.ownerslocalBusinessId;
+  if (!businessId) {
+    console.warn(`[stripe] Subscription ${subscription.id} has no ownerslocalBusinessId metadata -- cannot apply its state to a business.`);
+    return;
+  }
+  const app = getAdminApp();
+  if (!app) return;
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  const item = subscription.items.data[0];
+  await db.collection("business_profiles").doc(businessId).set(
+    {
+      stripeSubscriptionId: subscription.id,
+      subscriptionStatus: subscription.status,
+      subscriptionActive: ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status),
+      subscriptionPriceId: item?.price.id || null,
+      subscriptionCurrentPeriodEnd: item?.current_period_end ?? null,
+      subscriptionCancelAtPeriodEnd: !!subscription.cancel_at_period_end,
+    },
+    { merge: true }
+  );
+}
+
 async function routeEvent(event: Stripe.Event): Promise<void> {
   switch (true) {
     // Bank-account linking (Financial Connections) -- the bank
@@ -96,14 +132,20 @@ async function routeEvent(event: Stripe.Event): Promise<void> {
       console.log(`[stripe] ${event.type} (${event.id}) -- Financial Connections event received, no handler wired yet.`);
       break;
 
-    // Subscription billing (the owner paywall) -- same story: the paywall
-    // itself isn't built, so these just get acknowledged and logged for
-    // now rather than silently dropped.
+    // Subscription billing (the owner paywall): OwnersLOCAL charging the
+    // business owners who use the app. The subscription object itself
+    // (created/updated/deleted) is the single source of truth for whether
+    // a business currently has access -- checkout.session.completed always
+    // fires alongside customer.subscription.created for a subscription-mode
+    // session, so there's nothing additional to apply from it.
+    case event.type.startsWith("customer.subscription."):
+      await syncSubscriptionState(event.data.object as Stripe.Subscription);
+      break;
+
     case event.type === "checkout.session.completed":
     case event.type === "invoice.paid":
     case event.type === "invoice.payment_failed":
-    case event.type.startsWith("customer.subscription."):
-      console.log(`[stripe] ${event.type} (${event.id}) -- subscription event received, no handler wired yet.`);
+      console.log(`[stripe] ${event.type} (${event.id}) acknowledged -- subscription state is applied from customer.subscription.* events instead.`);
       break;
 
     default:

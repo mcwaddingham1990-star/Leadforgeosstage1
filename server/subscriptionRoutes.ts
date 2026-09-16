@@ -1,0 +1,178 @@
+import type { Request, Response } from "express";
+import Stripe from "stripe";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+// @ts-ignore
+import firebaseConfig from "../firebase-applet-config.json";
+
+// OwnersLOCAL's own SaaS subscription -- the platform charging the business
+// owners who use it (distinct from Stripe Connect in stripeConnect.ts /
+// stripeConnectRoutes.ts, which lets a business charge ITS OWN customers).
+// Same per-file getAdminApp()/resolveCallerBusinessId() duplication as the
+// rest of server/*.ts (see payrollApi.ts's comment for why).
+let adminApp: App | null | undefined;
+function getAdminApp(): App | null {
+  if (adminApp !== undefined) return adminApp;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    adminApp = null;
+    return adminApp;
+  }
+  try {
+    adminApp = getApps().length ? getApps()[0]! : initializeApp({ credential: cert(JSON.parse(raw)) });
+  } catch (err) {
+    console.error("FIREBASE_SERVICE_ACCOUNT_JSON is set but could not be parsed/used for subscription billing:", err);
+    adminApp = null;
+  }
+  return adminApp;
+}
+
+function getDb() {
+  const app = getAdminApp();
+  if (!app) return null;
+  return getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+}
+
+/**
+ * Resolves the caller's own businessId (the business owner's email, used as
+ * the tenant key throughout this app) from their verified uid -- never
+ * trusts a client-supplied businessId, for the same reason
+ * stripeConnectRoutes.ts and payrollApi.ts don't: it would let one
+ * business's member start/manage billing for a DIFFERENT business just by
+ * naming it in the request.
+ */
+async function resolveCallerBusinessId(uid: string): Promise<string | null> {
+  const db = getDb();
+  if (!db) return null;
+  const snap = await db.collection("user_profiles").doc(uid).get();
+  const businessEmail = snap.data()?.businessEmail;
+  return typeof businessEmail === "string" && businessEmail ? businessEmail : null;
+}
+
+const API_VERSION = "2026-08-26.dahlia";
+let stripeClient: Stripe | null = null;
+function getStripeClient(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) throw new Error("STRIPE_SECRET_KEY is not configured on the server.");
+  if (!stripeClient) stripeClient = new Stripe(secretKey, { apiVersion: API_VERSION });
+  return stripeClient;
+}
+
+function isSubscriptionBillingConfigured(): boolean {
+  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SUBSCRIPTION_PRICE_ID);
+}
+
+/** Prefer the configured APP_URL (same var used for OAuth/self-referential links elsewhere); fall back to the request itself so this still works before APP_URL is set. */
+function resolveAppUrl(req: Request): string {
+  const configured = process.env.APP_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const proto = typeof forwardedProto === "string" ? forwardedProto.split(",")[0] : req.protocol;
+  return `${proto}://${req.get("host")}`;
+}
+
+export async function handleGetSubscriptionStatus(req: Request, res: Response) {
+  try {
+    const businessId = await resolveCallerBusinessId(req.firebaseUser!.uid);
+    if (!businessId) {
+      res.status(503).json({ error: "Your account has no business linked yet." });
+      return;
+    }
+    const db = getDb();
+    if (!db) {
+      res.status(503).json({ error: "Subscription billing is not configured on this server yet." });
+      return;
+    }
+    const snap = await db.collection("business_profiles").doc(businessId).get();
+    const data = snap.data() || {};
+    res.json({
+      configured: isSubscriptionBillingConfigured(),
+      hasBillingAccount: typeof data.stripeSubscriptionCustomerId === "string" && !!data.stripeSubscriptionCustomerId,
+      subscriptionActive: !!data.subscriptionActive,
+      status: typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null,
+      currentPeriodEnd: typeof data.subscriptionCurrentPeriodEnd === "number" ? data.subscriptionCurrentPeriodEnd : null,
+      cancelAtPeriodEnd: !!data.subscriptionCancelAtPeriodEnd,
+    });
+  } catch (err) {
+    console.error("Error checking subscription status:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not check subscription status." });
+  }
+}
+
+export async function handleCreateSubscriptionCheckout(req: Request, res: Response) {
+  try {
+    const priceId = process.env.STRIPE_SUBSCRIPTION_PRICE_ID;
+    if (!isSubscriptionBillingConfigured() || !priceId) {
+      res.status(503).json({ error: "Subscription billing is not configured on this server yet." });
+      return;
+    }
+    const businessId = await resolveCallerBusinessId(req.firebaseUser!.uid);
+    const db = getDb();
+    if (!businessId || !db) {
+      res.status(503).json({ error: "Your account has no business linked yet." });
+      return;
+    }
+
+    const stripe = getStripeClient();
+    const profileRef = db.collection("business_profiles").doc(businessId);
+    const profileSnap = await profileRef.get();
+    let customerId = profileSnap.data()?.stripeSubscriptionCustomerId;
+    if (typeof customerId !== "string" || !customerId) {
+      const customer = await stripe.customers.create({
+        email: businessId,
+        metadata: { ownerslocalBusinessId: businessId },
+      });
+      customerId = customer.id;
+      await profileRef.set({ stripeSubscriptionCustomerId: customerId }, { merge: true });
+    }
+
+    const appUrl = resolveAppUrl(req);
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      client_reference_id: businessId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      subscription_data: { metadata: { ownerslocalBusinessId: businessId } },
+      success_url: `${appUrl}/app/billing?checkout=success`,
+      cancel_url: `${appUrl}/app/billing?checkout=cancel`,
+    });
+
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("Error creating subscription checkout session:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not start checkout." });
+  }
+}
+
+export async function handleCreateBillingPortalSession(req: Request, res: Response) {
+  try {
+    if (!isSubscriptionBillingConfigured()) {
+      res.status(503).json({ error: "Subscription billing is not configured on this server yet." });
+      return;
+    }
+    const businessId = await resolveCallerBusinessId(req.firebaseUser!.uid);
+    const db = getDb();
+    if (!businessId || !db) {
+      res.status(503).json({ error: "Your account has no business linked yet." });
+      return;
+    }
+    const profileSnap = await db.collection("business_profiles").doc(businessId).get();
+    const customerId = profileSnap.data()?.stripeSubscriptionCustomerId;
+    if (typeof customerId !== "string" || !customerId) {
+      res.status(404).json({ error: "No billing account yet -- subscribe first." });
+      return;
+    }
+
+    const stripe = getStripeClient();
+    const appUrl = resolveAppUrl(req);
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${appUrl}/app/billing`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("Error creating billing portal session:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not open the billing portal." });
+  }
+}

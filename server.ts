@@ -13,6 +13,7 @@ import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
+import { handleGetSubscriptionStatus, handleCreateSubscriptionCheckout, handleCreateBillingPortalSession } from './server/subscriptionRoutes';
 import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
 import {
   getServiceProfessionals, redeemInviteCode, acceptRelationship, declineRelationship, removeRelationship,
@@ -108,6 +109,15 @@ app.get('/api/client-info', (req, res) => {
 app.post('/api/stripe/connect/account', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleGetOrCreateAccount);
 app.post('/api/stripe/connect/account-session', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleCreateAccountSession);
 app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 60_000, 30), handleGetAccountStatus);
+
+// OwnersLOCAL's own SaaS subscription (the owner paywall) -- billing the
+// business owners who use this app, as opposed to Stripe Connect above
+// (which lets THEM bill their own customers). Same resolve-from-caller's-
+// own-uid pattern, so one business can never start or manage billing for a
+// different one. See server/subscriptionRoutes.ts.
+app.get('/api/subscription/status', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionStatus);
+app.post('/api/subscription/checkout', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateSubscriptionCheckout);
+app.post('/api/subscription/portal', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateBillingPortalSession);
 
 app.post('/api/notifications/send-push', requireAuth, async (req, res) => {
   try {
