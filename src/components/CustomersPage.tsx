@@ -907,14 +907,18 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               </button>
               <button
                 onClick={() => {
-                  if (!selectedCustomer) return;
-                  setMembershipPrefillBase({
+                  // A Quick Action, not a per-customer action -- MembershipBuilder's
+                  // own form already has editable Customer Name/Phone/Email/Address
+                  // fields, so this can open blank (letting the user type or pick a
+                  // customer inside the form) instead of silently doing nothing when
+                  // nothing is selected yet (e.g. an empty customer list).
+                  setMembershipPrefillBase(selectedCustomer ? {
                     customerId: selectedCustomer.id,
                     customerName: selectedCustomer.contact || selectedCustomer.company,
                     customerPhone: selectedCustomer.phone,
                     customerEmail: selectedCustomer.email,
                     address: selectedCustomer.address
-                  });
+                  } : undefined);
                   setIsMembershipPickerOpen(true);
                 }}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
