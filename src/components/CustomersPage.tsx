@@ -875,30 +875,37 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 Schedule Job
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && onNavigateToScreen("jobs", { customerId: selectedCustomer.id })}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <Briefcase className="w-3.5 h-3.5 text-[#1F3557]" />
                 View Jobs
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && onNavigateToScreen("accounting", { customerId: selectedCustomer.id })}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <CreditCard className="w-3.5 h-3.5 text-[#1F3557]" />
                 Create Invoice
               </button>
               <button
                 onClick={() => {
-                  if (!selectedCustomer) return;
-                  setWorkOrderPrefill({
+                  // A Quick Action, not a per-customer action -- WorkOrderBuilder
+                  // itself supports "a fully blank/custom Work Order" (its own
+                  // docstring), so this can open blank instead of silently doing
+                  // nothing when no customer is selected yet.
+                  setWorkOrderPrefill(selectedCustomer ? {
                     customerId: selectedCustomer.id,
                     customerName: selectedCustomer.contact || selectedCustomer.company,
                     customerPhone: selectedCustomer.phone,
                     customerEmail: selectedCustomer.email,
                     address: selectedCustomer.address,
                     date: new Date().toISOString().slice(0, 10)
-                  });
+                  } : { date: new Date().toISOString().slice(0, 10) });
                   setIsWorkOrderBuilderOpen(true);
                 }}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
@@ -926,28 +933,36 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 📜 Add Membership
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && onNavigateToScreen("messages", { customerId: selectedCustomer.id })}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <MessageSquare className="w-3.5 h-3.5 text-[#1F3557]" />
                 Message Customer
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && void compileCustomerDocuments(selectedCustomer)}
-                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
               >
                 <FileText className="w-3.5 h-3.5" /> Compile Documents
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && onNavigateToScreen("documents", { customerId: selectedCustomer.id })}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <FolderOpen className="w-3.5 h-3.5 text-[#1F3557]" />
                 View Documents
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => selectedCustomer && openCollectSignatures(selectedCustomer)}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <Edit3 className="w-3.5 h-3.5 text-[#1F3557]" />
                 Collect Signatures
