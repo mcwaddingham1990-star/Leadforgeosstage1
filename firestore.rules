@@ -18,8 +18,18 @@ service cloud.firestore {
     // Fast path uses the auth token's own email directly (no cross-document
     // lookup) to cover the common owner case; falls back to the profile
     // lookup for employees whose businessId is their owner's email.
+    //
+    // SECURITY: the `businessId is string && businessId.size() > 0` guard
+    // matters -- without it, a document missing its businessId field (a
+    // malformed write, or a caller explicitly omitting it) makes this
+    // compare against `null`. getBusinessEmail() also returns null for a
+    // caller whose own profile happens to be missing businessEmail, so
+    // `null == null` would otherwise evaluate true and grant that caller
+    // access to a businessId-less document regardless of which business it
+    // belongs to. Requiring a real non-empty string closes that off.
     function isBusinessMember(businessId) {
-      return request.auth.token.email == businessId || getBusinessEmail() == businessId;
+      return businessId is string && businessId.size() > 0 &&
+        (request.auth.token.email == businessId || getBusinessEmail() == businessId);
     }
 
     // Only owners and managers may create or modify eSign / PDF documents.
@@ -38,14 +48,22 @@ service cloud.firestore {
       ];
     }
 
-    function isAssignedToJob(jobId) {
+    // SECURITY: businessId is required and checked against the job's own
+    // record -- without it, a jobId belonging to a DIFFERENT business whose
+    // assignedEmployee/assignedCrew text happens to match this caller's own
+    // name/email would satisfy the assignment check below, letting a
+    // project_completion_plans write for the caller's own business ride in
+    // on a coincidental cross-business name match instead of a real
+    // assignment on a job that business actually owns.
+    function isAssignedToJob(jobId, businessId) {
       let job = get(/databases/$(database)/documents/scheduling_events/$(jobId)).data;
       let profile = getUserProfile();
-      return job.assignedEmployee == request.auth.token.email
-        || job.assignedEmployee == profile.name
-        || job.assignedEmployee == profile.firstName + " " + profile.lastName
-        || job.assignedEmployee == profile.email
-        || job.assignedCrew == profile.name;
+      return job.businessId == businessId
+        && (job.assignedEmployee == request.auth.token.email
+          || job.assignedEmployee == profile.name
+          || job.assignedEmployee == profile.firstName + " " + profile.lastName
+          || job.assignedEmployee == profile.email
+          || job.assignedCrew == profile.name);
     }
 
     // Profiles collection: users can read/write their own profiles.
@@ -184,7 +202,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
         && request.resource.data.jobId == jobId
-        && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId));
+        && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId, request.resource.data.businessId));
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
         && canManageProjectCompletion(resource.data.businessId);
       allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
@@ -192,7 +210,7 @@ service cloud.firestore {
         && request.resource.data.jobId == resource.data.jobId
         && (
           canManageProjectCompletion(request.resource.data.businessId)
-          || (isAssignedToJob(resource.data.jobId)
+          || (isAssignedToJob(resource.data.jobId, resource.data.businessId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'activity', 'updatedAt']))
         );
     }

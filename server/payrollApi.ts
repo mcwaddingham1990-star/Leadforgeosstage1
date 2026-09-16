@@ -1,5 +1,44 @@
 import { createHash, randomUUID } from "crypto";
 import type { Request, Response } from "express";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+// @ts-ignore
+import firebaseConfig from "../firebase-applet-config.json";
+
+// SECURITY: this handler is not currently wired to any route in server.ts
+// (grep server.ts for "payroll" -- there's nothing), so it isn't reachable
+// today. It's hardened anyway because it moves real money (ACH payroll
+// disbursement) and the request body carries a client-supplied businessId
+// with nothing else tying it to the caller -- if this were ever wired up
+// with just `requireAuth` and no additional check, any signed-in user could
+// submit a real payroll batch for ANY business by naming it in the body.
+// The same resolveCallerBusinessId pattern server/stripeConnectRoutes.ts and
+// server/customerAccounts.ts already use for the same reason.
+let adminApp: App | null | undefined;
+function getAdminApp(): App | null {
+  if (adminApp !== undefined) return adminApp;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    adminApp = null;
+    return adminApp;
+  }
+  try {
+    adminApp = getApps().length ? getApps()[0]! : initializeApp({ credential: cert(JSON.parse(raw)) });
+  } catch (err) {
+    console.error("FIREBASE_SERVICE_ACCOUNT_JSON is set but could not be parsed/used for payroll submission:", err);
+    adminApp = null;
+  }
+  return adminApp;
+}
+
+async function resolveCallerBusinessId(uid: string): Promise<string | null> {
+  const app = getAdminApp();
+  if (!app) return null;
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  const snap = await db.collection("user_profiles").doc(uid).get();
+  const businessEmail = snap.data()?.businessEmail;
+  return typeof businessEmail === "string" && businessEmail ? businessEmail : null;
+}
 
 type PaymentInstruction = {
   employeeId: string;
@@ -52,10 +91,25 @@ export function getPayrollCapabilities(_req: Request, res: Response) {
 }
 
 export async function submitPayrollBatch(req: Request, res: Response) {
+  // Requires requireAuth to have already run (sets req.firebaseUser) --
+  // checked explicitly rather than assumed, since this handler isn't wired
+  // to a route yet and can't rely on whoever wires it up remembering the
+  // middleware. The submitted businessId must match the CALLER's own,
+  // server-resolved businessId -- never trust the body's claim alone.
+  const caller = req.firebaseUser;
+  if (!caller) {
+    res.status(401).json({ status: "rejected", errors: ["Sign in required."] });
+    return;
+  }
   const body = req.body as PayrollSubmission;
   const errors = validateSubmission(body);
   if (errors.length) {
     res.status(400).json({ status: "rejected", errors });
+    return;
+  }
+  const callerBusinessId = await resolveCallerBusinessId(caller.uid);
+  if (!callerBusinessId || callerBusinessId !== body.businessId) {
+    res.status(403).json({ status: "rejected", errors: ["You are not authorized to submit payroll for this business."] });
     return;
   }
 

@@ -1,0 +1,50 @@
+name: CI
+
+# Runs on every push and pull request against PUSH-TO-HERE-ALWAYS -- required
+# so a broken build or a cross-tenant security regression can't land without
+# someone noticing. Pair this with a GitHub branch protection rule requiring
+# this workflow's checks to pass before merging (see the security audit
+# report for the exact settings -- that part can't be configured from here).
+on:
+  push:
+    branches: [PUSH-TO-HERE-ALWAYS]
+  pull_request:
+    branches: [PUSH-TO-HERE-ALWAYS]
+
+jobs:
+  typecheck-and-build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: TypeScript check
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+
+  security-regression-tests:
+    name: Cross-Tenant Security Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+      - name: Run Firestore rules security/regression suite
+        run: npm run test:rules
