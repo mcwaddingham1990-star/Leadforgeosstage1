@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { CreditCard, CheckCircle2, AlertTriangle, Loader2, Receipt } from "lucide-react";
 import { authedFetch } from "../lib/apiClient";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -31,6 +31,42 @@ export const BillingPage: React.FC = () => {
   const { triggerNotification } = useNavTelemetry();
   const subscription = useSubscriptionStatus();
   const [isRedirecting, setIsRedirecting] = useState<"checkout" | "portal" | null>(null);
+
+  // Stripe redirects back to success_url as soon as Checkout completes,
+  // which can be BEFORE the customer.subscription.created webhook has
+  // actually landed and updated business_profiles -- without this, a user
+  // returning from a successful checkout can briefly (or, if the webhook is
+  // slow/misconfigured, indefinitely) see "No active subscription" even
+  // though they just paid. Poll a few times to catch up; give up after 10
+  // tries (~20s) rather than looping forever.
+  const [justCheckedOut, setJustCheckedOut] = useState(false);
+  const pollAttemptsRef = useRef(0);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+    if (checkout === "success" || checkout === "cancel") {
+      setJustCheckedOut(checkout === "success");
+      params.delete("checkout");
+      const rest = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!justCheckedOut || subscription.loading) return;
+    if (subscription.subscriptionActive) {
+      setJustCheckedOut(false);
+      return;
+    }
+    if (pollAttemptsRef.current >= 10) {
+      setJustCheckedOut(false);
+      return;
+    }
+    pollAttemptsRef.current += 1;
+    const timeout = setTimeout(() => subscription.refresh(), 2000);
+    return () => clearTimeout(timeout);
+  }, [justCheckedOut, subscription.loading, subscription.subscriptionActive, subscription.refresh]);
 
   const startCheckout = async () => {
     setIsRedirecting("checkout");
@@ -67,6 +103,13 @@ export const BillingPage: React.FC = () => {
       <p className="text-xs text-slate-500 -mt-3">
         Your business's own OwnersLOCAL subscription. This is separate from Payments, which is where you connect Stripe to charge your customers.
       </p>
+
+      {justCheckedOut && !subscription.subscriptionActive && (
+        <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex items-start gap-3">
+          <Loader2 className="w-4 h-4 text-[#315C9F] shrink-0 mt-0.5 animate-spin" />
+          <div className="text-xs text-[#1F3557]">Finalizing your subscription -- this can take a few seconds.</div>
+        </div>
+      )}
 
       {subscription.loading ? (
         <div className="flex items-center gap-2 text-sm text-slate-500">

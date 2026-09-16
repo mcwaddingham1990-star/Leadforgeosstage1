@@ -171,6 +171,21 @@ export async function handleCreateSubscriptionCheckout(req: Request, res: Respon
       await profileRef.set({ stripeSubscriptionCustomerId: customerId }, { merge: true });
     }
 
+    // Refuse to start a second subscription for a business that already has
+    // a live one on this customer -- checked against Stripe itself (not
+    // just business_profiles.subscriptionActive) so a webhook that hasn't
+    // landed yet doesn't leave a window where a reload + re-click doubles
+    // the charge. past_due/unpaid still count as "has a subscription" (it
+    // needs fixing via the billing portal, not a second one).
+    const existingSubscriptions = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
+    const stillLive = existingSubscriptions.data.find((sub) =>
+      ["active", "trialing", "past_due", "unpaid"].includes(sub.status)
+    );
+    if (stillLive) {
+      res.status(409).json({ error: "This business already has a subscription. Use Manage Billing to update or cancel it instead of subscribing again." });
+      return;
+    }
+
     await ensureFirstMonthCoupon(stripe);
 
     const appUrl = resolveAppUrl(req);
