@@ -62,6 +62,51 @@ function isSubscriptionBillingConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SUBSCRIPTION_PRICE_ID);
 }
 
+// The offer: $49.50 for the first month, then the full configured price
+// (STRIPE_SUBSCRIPTION_PRICE_ID -- an administrator sets that price to
+// $99.00/month in the Stripe Dashboard) every month after. Modeled as a
+// `duration: "once"` coupon applied automatically at checkout, NOT a
+// customer-entered promotion code -- there is no "add promo code" box, the
+// discount is just always there for a first-time subscription.
+const FIRST_MONTH_PRICE_CENTS = 4950;
+const FIRST_MONTH_COUPON_ID = "ownerslocal-first-month-49-50-off";
+let firstMonthCouponEnsured = false;
+
+/**
+ * Idempotent get-or-create for the first-month coupon -- a fixed coupon id
+ * so repeat calls (across requests, across server restarts) always resolve
+ * to the same coupon instead of creating a new one every checkout. Cached
+ * in-process after the first successful check so steady-state checkouts
+ * don't pay for an extra Stripe API round trip.
+ */
+async function ensureFirstMonthCoupon(stripe: Stripe): Promise<void> {
+  if (firstMonthCouponEnsured) return;
+  try {
+    await stripe.coupons.retrieve(FIRST_MONTH_COUPON_ID);
+    firstMonthCouponEnsured = true;
+    return;
+  } catch (err) {
+    const isMissing = err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing";
+    if (!isMissing) throw err;
+  }
+  try {
+    await stripe.coupons.create({
+      id: FIRST_MONTH_COUPON_ID,
+      name: "First month: $49.50",
+      amount_off: FIRST_MONTH_PRICE_CENTS,
+      currency: "usd",
+      duration: "once",
+    });
+    firstMonthCouponEnsured = true;
+  } catch (err) {
+    // A concurrent request created it between our retrieve and this create --
+    // that's fine, it exists now either way. Anything else is a real failure.
+    const alreadyExists = err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_already_exists";
+    if (!alreadyExists) throw err;
+    firstMonthCouponEnsured = true;
+  }
+}
+
 /** Prefer the configured APP_URL (same var used for OAuth/self-referential links elsewhere); fall back to the request itself so this still works before APP_URL is set. */
 function resolveAppUrl(req: Request): string {
   const configured = process.env.APP_URL;
@@ -126,13 +171,18 @@ export async function handleCreateSubscriptionCheckout(req: Request, res: Respon
       await profileRef.set({ stripeSubscriptionCustomerId: customerId }, { merge: true });
     }
 
+    await ensureFirstMonthCoupon(stripe);
+
     const appUrl = resolveAppUrl(req);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: businessId,
       line_items: [{ price: priceId, quantity: 1 }],
-      allow_promotion_codes: true,
+      // First month at $49.50 via an automatically-applied coupon -- NOT
+      // allow_promotion_codes (that shows a customer-facing "add promo
+      // code" box, which this offer must not have).
+      discounts: [{ coupon: FIRST_MONTH_COUPON_ID }],
       subscription_data: { metadata: { ownerslocalBusinessId: businessId } },
       success_url: `${appUrl}/app/billing?checkout=success`,
       cancel_url: `${appUrl}/app/billing?checkout=cancel`,
