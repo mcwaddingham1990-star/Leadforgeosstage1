@@ -11,14 +11,18 @@ import android.provider.CallLog
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.ownerslocal.missedcalltextback.MissedCallApp
+import com.ownerslocal.missedcalltextback.data.CrmLinker
+import com.ownerslocal.missedcalltextback.data.FirestoreRestClient
 import com.ownerslocal.missedcalltextback.sms.AutoReplySender
 
 /**
  * Fires on every call-state change. Rather than tracking RINGING -> IDLE
  * transitions by hand (fragile if the receiver's process was briefly
  * killed between the two broadcasts), this treats the device's own call
- * log as ground truth: whenever the phone goes IDLE, check whether the
- * most recent call log entry is a fresh, not-yet-handled missed call.
+ * log as ground truth: whenever the phone goes IDLE, check what the most
+ * recent call log entry is -- a fresh, not-yet-handled missed/rejected call
+ * (auto-reply + CRM log) or an ordinary answered incoming/outgoing call
+ * (CRM log only, no text, no new Lead -- see CrmLinker.linkAndLog).
  */
 class CallStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -57,16 +61,37 @@ class CallStateReceiver : BroadcastReceiver() {
             val date = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
             val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER))
 
-            // A call the user declines (swipes away without answering) logs
-            // as REJECTED_TYPE on many devices/Android versions rather than
-            // MISSED_TYPE -- from a business's perspective that's still an
-            // unanswered call that should get the auto-reply, so both count.
-            if (type != CallLog.Calls.MISSED_TYPE && type != CallLog.Calls.REJECTED_TYPE) return
             if (id == app.sessionStore.lastProcessedCallLogId) return
             if (System.currentTimeMillis() - date > STALE_ENTRY_WINDOW_MS) return
 
+            // A call the user declines (swipes away without answering) logs
+            // as REJECTED_TYPE on many devices/Android versions rather than
+            // MISSED_TYPE -- from a business's perspective that's still an
+            // unanswered call that should get the auto-reply, so both count
+            // as "missed" here. Answered INCOMING_TYPE/OUTGOING_TYPE calls
+            // never get an auto-text, but are still worth a Call & Text
+            // History entry.
+            val direction = when (type) {
+                CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE -> "missed"
+                CallLog.Calls.INCOMING_TYPE -> "incoming"
+                CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                else -> return
+            }
             app.sessionStore.lastProcessedCallLogId = id
-            AutoReplySender(context, app.sessionStore).maybeSendAutoReply(number)
+            val firestore = FirestoreRestClient(app.httpClient)
+            if (direction == "missed") {
+                AutoReplySender(context, app.sessionStore, firestore).maybeSendAutoReply(number)
+                return
+            }
+            val businessId = app.sessionStore.businessId
+            val idToken = app.sessionStore.idToken
+            if (!businessId.isNullOrBlank() && !idToken.isNullOrBlank()) {
+                try {
+                    CrmLinker.linkAndLog(firestore, businessId, idToken, number, direction)
+                } catch (e: Exception) {
+                    // Best-effort logging only -- nothing else depends on this succeeding.
+                }
+            }
         }
     }
 

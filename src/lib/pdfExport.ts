@@ -3,7 +3,7 @@
 // sample document). Used by every "Generate PDF" / "Compile Documents"
 // button across Estimates, Accounting (Invoices), Customers, and Documents.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib";
-import type { Estimate, Customer, DocumentItem, Lead } from "../types/domain";
+import type { Estimate, Customer, DocumentItem, Lead, MissedCallEvent } from "../types/domain";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
 
 export interface BusinessProfile {
@@ -314,6 +314,45 @@ export async function buildCustomerProfilePdf(customer: Customer, related: { est
   writer.heading(`Invoices (${related.invoices.length})`);
   if (!related.invoices.length) writer.text("None on file.", { color: SLATE, gap: 4 });
   related.invoices.forEach(i => writer.text(`${i.invoiceNumber} · ${i.status} · ${money(i.lineItems.reduce((s, l) => s + l.quantity * l.unitPrice, 0))} · due ${i.dueDate}`, { gap: 2 }));
+
+  return doc.save();
+}
+
+const directionLabel: Record<MissedCallEvent["direction"], string> = {
+  missed: "Missed Call",
+  incoming: "Incoming Call",
+  outgoing: "Outgoing Call"
+};
+
+/** Real record of a customer's call/text history from the Missed Call Text-Back app (see CrmLinker.kt), oldest first, for the Customer Card's "Convert to PDF" button. */
+export async function buildCallTextHistoryPdf(customer: Customer, events: MissedCallEvent[], business: BusinessProfile): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const writer = new PdfWriter(doc, font, bold, doc.addPage([PAGE_W, PAGE_H]));
+  await drawLetterhead(writer, business, "CALL & TEXT HISTORY", customer.id);
+
+  writer.heading(customer.company || customer.contact);
+  writer.text(customer.contact, { gap: 1 });
+  writer.text(customer.phone || "—", { gap: 8 });
+
+  const sorted = [...events].sort((a, b) => a.callTimestamp.localeCompare(b.callTimestamp));
+  if (!sorted.length) {
+    writer.text("No calls or texts on file yet.", { color: SLATE, gap: 4 });
+    return doc.save();
+  }
+
+  for (const event of sorted) {
+    writer.rule();
+    writer.text(`${directionLabel[event.direction] || "Call"} — ${event.callTimestamp}`, { font: bold, gap: 2 });
+    writer.text(`Number: ${event.phoneNumber}`, { gap: 2 });
+    if (event.autoReplySent && event.autoReplyMessage) {
+      writer.text(`Auto-reply text sent: "${event.autoReplyMessage}"`, { color: SLATE, gap: 2 });
+    }
+    if (event.createdNewLead) {
+      writer.text("A new lead was created from this call.", { color: SLATE, gap: 2 });
+    }
+  }
 
   return doc.save();
 }
