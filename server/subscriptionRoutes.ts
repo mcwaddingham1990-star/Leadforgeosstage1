@@ -4,6 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
+import { isAdminBusinessId } from "./paywallBypass";
 
 // OwnersLOCAL's own SaaS subscription -- the platform charging the business
 // owners who use it (distinct from Stripe Connect in stripeConnect.ts /
@@ -154,6 +155,8 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
     const data = snap.data() || {};
     const employeeCount = await countEmployees(db, businessId);
     const extraSeatBlocks = extraSeatBlocksFor(employeeCount);
+    const bypassExpiresAt = typeof data.bypassExpiresAt === "number" ? data.bypassExpiresAt : null;
+    const bypassActive = !!data.bypassActive && !!bypassExpiresAt && bypassExpiresAt > Date.now();
     res.json({
       configured: isSubscriptionBillingConfigured(),
       hasBillingAccount: typeof data.stripeSubscriptionCustomerId === "string" && !!data.stripeSubscriptionCustomerId,
@@ -161,6 +164,12 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
       status: typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null,
       currentPeriodEnd: typeof data.subscriptionCurrentPeriodEnd === "number" ? data.subscriptionCurrentPeriodEnd : null,
       cancelAtPeriodEnd: !!data.subscriptionCancelAtPeriodEnd,
+      // The manually-issued bypass code (see paywallBypass.ts) and the
+      // hardcoded platform-admin business, which is never gated at all
+      // regardless of subscriptionActive/bypassActive.
+      bypassActive,
+      bypassExpiresAt: bypassActive ? bypassExpiresAt : null,
+      isAdminBusiness: isAdminBusinessId(businessId),
       seatPricing: {
         includedEmployees: INCLUDED_EMPLOYEES,
         employeesPerAdditionalBlock: EMPLOYEES_PER_ADDITIONAL_BLOCK,

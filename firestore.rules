@@ -122,9 +122,37 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.businessEmail == request.auth.token.email;
     }
 
-    // Business profiles: owners can read/write their business profile
+    // Business profiles: owners can read/write their business profile.
+    //
+    // SECURITY: subscriptionActive/subscriptionStatus/subscriptionCurrentPeriodEnd/
+    // subscriptionCancelAtPeriodEnd/stripeSubscriptionCustomerId (server/
+    // subscriptionRoutes.ts + server/stripeWebhook.ts) and bypassActive/
+    // bypassExpiresAt (server/paywallBypass.ts) are the OwnersLOCAL paywall's
+    // entire source of truth, and both are written exclusively through the
+    // Firebase Admin SDK -- which bypasses these rules entirely, so this
+    // costs those legitimate writes nothing. Without this restriction, any
+    // business's own signed-in client could open devtools and
+    // `setDoc(business_profiles/<their email>, {subscriptionActive: true})`
+    // themselves, permanently defeating the entire paywall -- every existing
+    // client write to this collection already uses `{merge: true}` (see
+    // SettingsPage.tsx, RosterPage.tsx, UniversalAIIntake.tsx, App.tsx),
+    // so blocking these specific keys from ever appearing in a client write
+    // doesn't touch any real field those callers actually set.
     match /business_profiles/{email} {
-      allow read, write: if isAuthenticated() && isBusinessMember(email);
+      allow read: if isAuthenticated() && isBusinessMember(email);
+      allow create: if isAuthenticated() && isBusinessMember(email) &&
+        !request.resource.data.keys().hasAny([
+          'subscriptionActive', 'subscriptionStatus', 'subscriptionCurrentPeriodEnd',
+          'subscriptionCancelAtPeriodEnd', 'stripeSubscriptionCustomerId',
+          'bypassActive', 'bypassExpiresAt'
+        ]);
+      allow update: if isAuthenticated() && isBusinessMember(email) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'subscriptionActive', 'subscriptionStatus', 'subscriptionCurrentPeriodEnd',
+          'subscriptionCancelAtPeriodEnd', 'stripeSubscriptionCustomerId',
+          'bypassActive', 'bypassExpiresAt'
+        ]);
+      allow delete: if isAuthenticated() && isBusinessMember(email);
     }
 
     // Employee invites: the code must stay readable pre-signup (an
@@ -455,5 +483,14 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
+
+    // app_config/paywall_bypass holds the hashed (never plaintext) platform
+    // admin access code for the OwnersLOCAL paywall -- see
+    // server/paywallBypass.ts. Deliberately left unmatched here (default-deny
+    // for every client, same reasoning as business_relationships/
+    // business_invite_codes above): even the platform admin's own browser
+    // never reads or writes this collection directly, only that file's
+    // Admin SDK calls do, reached through the authenticated
+    // /api/paywall/redeem and /api/paywall/set-code server routes.
   }
 }

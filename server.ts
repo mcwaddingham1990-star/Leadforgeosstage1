@@ -14,6 +14,7 @@ import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
 import { handleGetSubscriptionStatus, handleCreateSubscriptionCheckout, handleCreateBillingPortalSession } from './server/subscriptionRoutes';
+import { handleRedeemBypassCode, handleSetBypassCode } from './server/paywallBypass';
 import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
 import {
   getServiceProfessionals, redeemInviteCode, acceptRelationship, declineRelationship, removeRelationship,
@@ -118,6 +119,8 @@ app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 6
 app.get('/api/subscription/status', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionStatus);
 app.post('/api/subscription/checkout', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateSubscriptionCheckout);
 app.post('/api/subscription/portal', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateBillingPortalSession);
+app.post('/api/paywall/redeem', requireAuth, rateLimit('paywall-redeem', 60_000, 10), handleRedeemBypassCode);
+app.post('/api/paywall/set-code', requireAuth, rateLimit('paywall-set-code', 60_000, 10), handleSetBypassCode);
 
 app.post('/api/notifications/send-push', requireAuth, async (req, res) => {
   try {

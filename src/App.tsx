@@ -139,6 +139,8 @@ import { DocumentsPage, DocumentItem } from "./components/DocumentsPage";
 import { AccountingPage } from "./components/AccountingPage";
 import { PaymentsPage } from "./components/PaymentsPage";
 import { BillingPage } from "./components/BillingPage";
+import { PaywallGate } from "./components/PaywallGate";
+import { useSubscriptionStatus } from "./hooks/useSubscriptionStatus";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
@@ -1735,6 +1737,15 @@ export default function App() {
   // collection to empty. (TrainingPage.tsx already used this exact
   // ternary, anticipating businessEmail would be populated here.)
   const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
+
+  // OwnersLOCAL's own SaaS paywall (see server/subscriptionRoutes.ts and
+  // server/paywallBypass.ts). Called unconditionally here, alongside every
+  // other top-level hook in this component, so its value is available for
+  // the gate check right before the final return below (same reasoning as
+  // the customerSession early-return: this can't be checked any earlier
+  // than the point where auth state has actually resolved, but every hook
+  // above it still has to run on every render regardless).
+  const subscription = useSubscriptionStatus();
 
   // Applies a theme choice immediately -- local state, localStorage, AND a
   // direct partial Firestore write (merge: true only touches
@@ -4443,6 +4454,24 @@ Access to full financial telemetry is restricted.`;
   // state instead of a static URL param, so it can't be checked until now.
   if (customerSession) {
     return <CustomerAppShell session={customerSession} onSignOut={() => { setCustomerSession(null); auth.signOut(); }} />;
+  }
+
+  // The real paywall enforcement point -- everything above just computes
+  // subscription state; this is the only place that actually blocks usage.
+  // Gated only once a real signed-in, onboarded business exists (loggedInUser
+  // is never set otherwise -- see the isEmployee || isOnboarded check around
+  // the profile-load effect above), only when billing is actually configured
+  // on this deployment (nothing to gate against otherwise), and never for
+  // the.owner@ownerslocal.com's own business (isAdminBusiness, checked
+  // server-side in subscriptionRoutes.ts) or while the status check itself
+  // is still loading/erroring (never lock someone out over a transient
+  // network failure).
+  if (
+    isLoggedIn && loggedInUser && !subscription.loading &&
+    subscription.configured && !subscription.isAdminBusiness &&
+    !subscription.subscriptionActive && !subscription.bypassActive
+  ) {
+    return <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />;
   }
 
   return (
