@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CreditCard, CheckCircle2, AlertTriangle, Loader2, Receipt } from "lucide-react";
+import { CreditCard, CheckCircle2, AlertTriangle, Loader2, Receipt, KeyRound } from "lucide-react";
 import { authedFetch } from "../lib/apiClient";
+import { redeemBypassCode } from "../lib/paywallClient";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useSubscriptionStatus } from "../hooks/useSubscriptionStatus";
 
@@ -31,6 +32,24 @@ export const BillingPage: React.FC = () => {
   const { triggerNotification } = useNavTelemetry();
   const subscription = useSubscriptionStatus();
   const [isRedirecting, setIsRedirecting] = useState<"checkout" | "portal" | null>(null);
+  const [accessCode, setAccessCode] = useState("");
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+
+  const submitAccessCode = async () => {
+    if (!accessCode.trim()) return;
+    setIsRedeeming(true);
+    setRedeemError(null);
+    const result = await redeemBypassCode(accessCode.trim());
+    setIsRedeeming(false);
+    if (!result.success) {
+      setRedeemError(result.error || "Could not redeem that code.");
+      return;
+    }
+    setAccessCode("");
+    subscription.refresh();
+    triggerNotification("✅ Access code accepted.");
+  };
 
   // Stripe redirects back to success_url as soon as Checkout completes,
   // which can be BEFORE the customer.subscription.created webhook has
@@ -143,6 +162,16 @@ export const BillingPage: React.FC = () => {
             )}
           </div>
         </div>
+      ) : subscription.bypassActive ? (
+        <div className="bg-[#E7F7EE] border border-[#A9E0C0] rounded-2xl p-4 flex items-start gap-3">
+          <KeyRound className="w-4 h-4 text-[#1F7A46] shrink-0 mt-0.5" />
+          <div className="text-xs text-[#1F5C36] space-y-1">
+            <div className="font-bold">Free access active (access code)</div>
+            {subscription.bypassExpiresAt && (
+              <div>Re-enter the code on {new Date(subscription.bypassExpiresAt).toLocaleDateString()} to keep access.</div>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex items-start gap-3">
           <CreditCard className="w-4 h-4 text-[#315C9F] shrink-0 mt-0.5" />
@@ -154,7 +183,34 @@ export const BillingPage: React.FC = () => {
         </div>
       )}
 
-      {subscription.configured && !subscription.subscriptionActive && !subscription.loading && (
+      {!subscription.loading && !subscription.subscriptionActive && !subscription.bypassActive && (
+        <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F3557]">
+            <KeyRound className="w-3.5 h-3.5 text-[#315C9F]" />
+            Have an access code?
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={accessCode}
+              onChange={e => setAccessCode(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submitAccessCode()}
+              placeholder="Enter code"
+              className="flex-1 px-3 py-2 text-xs border border-[#DDE8F5] rounded-xl focus:outline-none focus:border-[#315C9F]"
+            />
+            <button
+              onClick={submitAccessCode}
+              disabled={isRedeeming || !accessCode.trim()}
+              className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer flex items-center gap-1.5"
+            >
+              {isRedeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+            </button>
+          </div>
+          {redeemError && <p className="text-[11px] text-rose-600 font-semibold">{redeemError}</p>}
+        </div>
+      )}
+
+      {subscription.configured && !subscription.subscriptionActive && !subscription.bypassActive && !subscription.loading && (
         <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 flex items-baseline gap-2">
           <span className="text-2xl font-black text-[#1F3557]">{FIRST_MONTH_PRICE}</span>
           <span className="text-xs text-slate-500">first month, then {REGULAR_PRICE}/month. Cancel anytime.</span>

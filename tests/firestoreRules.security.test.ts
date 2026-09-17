@@ -123,6 +123,14 @@ beforeEach(async () => {
       role: "Technician",
       status: "pending",
     });
+
+    // Business A's profile, as if the real signup flow created it plus a
+    // real Stripe webhook already set subscriptionActive -- used by the
+    // paywall-field-protection regression tests below.
+    await setDoc(doc(db, "business_profiles", BIZ_A), {
+      businessNames: ["A Co"],
+      subscriptionActive: false,
+    });
   });
 });
 
@@ -387,5 +395,47 @@ describe("Notifications are per-recipient, not business-wide broadcast", () => {
     });
     const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
     await assertSucceeds(getDoc(doc(db, "notifications", "notif_2")));
+  });
+});
+
+describe("Paywall self-grant via business_profiles (regression for the open-devtools bypass)", () => {
+  test("an owner cannot self-grant subscriptionActive on their own business_profiles doc", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), { subscriptionActive: true }));
+  });
+
+  test("an owner cannot self-grant a bypass via bypassActive/bypassExpiresAt", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(
+      updateDoc(doc(db, "business_profiles", BIZ_A), {
+        bypassActive: true,
+        bypassExpiresAt: Date.now() + 999_999_999,
+      })
+    );
+  });
+
+  test("an owner cannot forge stripeSubscriptionCustomerId onto their own profile", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), { stripeSubscriptionCustomerId: "cus_forged" }));
+  });
+
+  test("a brand new business cannot create its business_profiles doc pre-loaded with subscriptionActive: true", async () => {
+    const db = ctxFor("new-owner-uid", "newowner2@example.com").firestore();
+    await assertFails(
+      setDoc(doc(db, "business_profiles", "newowner2@example.com"), {
+        businessNames: ["New Co"],
+        subscriptionActive: true,
+      })
+    );
+  });
+
+  test("an owner CAN still update ordinary business_profiles fields (legitimate settings save)", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(setDoc(doc(db, "business_profiles", BIZ_A), { businessNames: ["A Co Renamed"] }, { merge: true }));
+  });
+
+  test("an owner of Business B cannot touch Business A's subscription fields at all", async () => {
+    const db = ctxFor(OWNER_B_UID, BIZ_B).firestore();
+    await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), { subscriptionActive: true }));
   });
 });

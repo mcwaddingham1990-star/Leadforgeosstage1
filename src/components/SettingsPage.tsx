@@ -52,6 +52,7 @@ import { ONBOARDING_ROLE_TEMPLATES } from "./RosterPage";
 import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { defaultGranularFromModuleList } from "../types/permissions";
 import { STATE_SALES_TAX_DEFAULTS, SALES_TAX_DATASET_VERSION } from "../data/stateSalesTaxDefaults";
+import { setBypassCode } from "../lib/paywallClient";
 import type { SelectedRole, WorkspaceTheme } from "../App";
 import { workspaceThemeFromSetting, workspaceThemeSettingValue } from "../App";
 
@@ -271,6 +272,33 @@ export default function SettingsPage({
   const { recentRoster, setRecentRoster, recentAiActions, setRecentAiActions, employees, setEmployees, reviewAutomationSettings, setReviewAutomationSettings, reviewRequests, customers } = useDomainData();
   const { triggerNotification, navigateToScreen: onNavigateToScreen } = useNavTelemetry();
 
+  // Platform Admin: only the real, signed-in owner of the.owner@ownerslocal.com's
+  // own business -- not an employee they've invited, and not just anyone
+  // whose businessId happens to match some other way. The enforcement that
+  // actually matters lives server-side (handleSetBypassCode re-checks this
+  // exact condition); this only controls whether the tab is shown at all.
+  const isPlatformAdmin = !loggedInUser?.isEmployee && businessId?.trim().toLowerCase() === "the.owner@ownerslocal.com";
+  const [newAccessCode, setNewAccessCode] = useState("");
+  const [isSavingAccessCode, setIsSavingAccessCode] = useState(false);
+  const [accessCodeError, setAccessCodeError] = useState<string | null>(null);
+
+  const handleSaveAccessCode = async () => {
+    if (newAccessCode.trim().length < 6) {
+      setAccessCodeError("Access code must be at least 6 characters.");
+      return;
+    }
+    setIsSavingAccessCode(true);
+    setAccessCodeError(null);
+    const result = await setBypassCode(newAccessCode.trim());
+    setIsSavingAccessCode(false);
+    if (!result.success) {
+      setAccessCodeError(result.error || "Could not set the access code.");
+      return;
+    }
+    setNewAccessCode("");
+    triggerNotification("✅ Paywall access code updated.");
+  };
+
   // Completed employee records are the primary roster source. Include active
   // invite/legacy roster entries as a compatibility fallback, but deduplicate
   // by person name so the monitor matches Users & Roles instead of reporting
@@ -421,7 +449,8 @@ export default function SettingsPage({
     { id: "backup", label: "Backup & Restore", icon: <Database className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
     { id: "audit_logs", label: "Audit Logs", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
     { id: "api_keys", label: "API Keys", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "advanced", label: "Advanced Settings", icon: <ShieldAlert className="w-4 h-4 text-[#315C9F]" />, group: "System Control" }
+    { id: "advanced", label: "Advanced Settings", icon: <ShieldAlert className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
+    ...(isPlatformAdmin ? [{ id: "platform_admin", label: "Platform Admin", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "System Control" }] : [])
   ].filter(cat => activeRole === "Owner" || cat.id === "appearance");
 
   // Grouped Categories for sidebar
@@ -2492,6 +2521,39 @@ export default function SettingsPage({
                         </button>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* PLATFORM ADMIN -- only rendered when isPlatformAdmin (see above); shown or not
+                  is a UI convenience only, the real check happens server-side on every request. */}
+              {activeCategory === "platform_admin" && isPlatformAdmin && (
+                <div className="space-y-4 text-xs font-medium">
+                  <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Platform Admin</h3>
+                  <div className="bg-white p-4 rounded-xl border border-[#A9CDEE] space-y-3">
+                    <div>
+                      <p className="font-extrabold text-slate-800">Paywall Access Code</p>
+                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                        Any account can enter this code on the Billing page to unlock full access for 30 days without paying -- for comped accounts, testers, or anyone you want to let in manually. Setting a new code replaces the old one immediately; it doesn't affect anyone whose 30-day window is already running.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newAccessCode}
+                        onChange={e => setNewAccessCode(e.target.value)}
+                        placeholder="New access code (min. 6 characters)"
+                        className="flex-1 px-3 py-2 text-xs border border-[#A9CDEE] rounded-xl focus:outline-none focus:border-[#315C9F] font-mono"
+                      />
+                      <button
+                        onClick={() => void handleSaveAccessCode()}
+                        disabled={isSavingAccessCode || newAccessCode.trim().length < 6}
+                        className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer"
+                      >
+                        {isSavingAccessCode ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    {accessCodeError && <p className="text-[11px] text-rose-600 font-semibold">{accessCodeError}</p>}
                   </div>
                 </div>
               )}

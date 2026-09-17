@@ -34,6 +34,9 @@ export type SubscriptionState =
       hasBillingAccount: false;
       currentPeriodEnd: null;
       cancelAtPeriodEnd: false;
+      bypassActive: false;
+      bypassExpiresAt: null;
+      isAdminBusiness: false;
       seatPricing: SeatPricing;
     }
   | {
@@ -44,6 +47,11 @@ export type SubscriptionState =
       hasBillingAccount: boolean;
       currentPeriodEnd: number | null;
       cancelAtPeriodEnd: boolean;
+      /** A redeemed platform-admin access code, valid for 30 days from redemption -- see server/paywallBypass.ts. */
+      bypassActive: boolean;
+      bypassExpiresAt: number | null;
+      /** The hardcoded platform-admin business (the.owner@ownerslocal.com) -- never gated regardless of the fields above. */
+      isAdminBusiness: boolean;
       seatPricing: SeatPricing;
       error?: string;
     };
@@ -56,6 +64,9 @@ const initialState: SubscriptionState = {
   hasBillingAccount: false,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
+  bypassActive: false,
+  bypassExpiresAt: null,
+  isAdminBusiness: false,
   seatPricing: DEFAULT_SEAT_PRICING,
 };
 
@@ -79,6 +90,9 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
             hasBillingAccount: false,
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
+            bypassActive: false,
+            bypassExpiresAt: null,
+            isAdminBusiness: false,
             seatPricing: DEFAULT_SEAT_PRICING,
             error: data.error || "Could not check subscription status.",
           });
@@ -92,6 +106,9 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
           hasBillingAccount: !!data.hasBillingAccount,
           currentPeriodEnd: typeof data.currentPeriodEnd === "number" ? data.currentPeriodEnd : null,
           cancelAtPeriodEnd: !!data.cancelAtPeriodEnd,
+          bypassActive: !!data.bypassActive,
+          bypassExpiresAt: typeof data.bypassExpiresAt === "number" ? data.bypassExpiresAt : null,
+          isAdminBusiness: !!data.isAdminBusiness,
           seatPricing: data.seatPricing || DEFAULT_SEAT_PRICING,
         });
       } catch (err) {
@@ -104,6 +121,9 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
           hasBillingAccount: false,
           currentPeriodEnd: null,
           cancelAtPeriodEnd: false,
+          bypassActive: false,
+          bypassExpiresAt: null,
+          isAdminBusiness: false,
           seatPricing: DEFAULT_SEAT_PRICING,
           error: timedOut ? "Checking subscription status timed out." : (err instanceof Error ? err.message : "Could not check subscription status."),
         });
