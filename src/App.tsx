@@ -575,7 +575,7 @@ const validPersonName = (value: unknown): string => {
 
 export type WorkspaceTheme = "light-basic" | "light-extreme" | "dark-basic" | "dark-dynamic";
 
-const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
+export const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
   // "Light Mode Dynamic" was previously labeled "Light Mode Extreme" --
   // accept the old saved string so existing businesses don't get bumped
   // back to Light Mode Basic after the rename.
@@ -585,7 +585,7 @@ const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
   return "light-basic";
 };
 
-const workspaceThemeSettingValue = (theme: WorkspaceTheme): string => {
+export const workspaceThemeSettingValue = (theme: WorkspaceTheme): string => {
   if (theme === "light-extreme") return "Light Mode Dynamic";
   if (theme === "dark-dynamic") return "Dark Mode Dynamic";
   if (theme === "dark-basic") return "Dark Mode Basic";
