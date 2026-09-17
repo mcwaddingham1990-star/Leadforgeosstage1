@@ -54,7 +54,7 @@ import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDo
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { BulkImportModal } from "./BulkImportModal";
-import type { ImportFieldSpec } from "../lib/spreadsheetImport";
+import { normalizePhoneForMatch, normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
 
 type CustomerImportKey = "company" | "contact" | "phone" | "email" | "address" | "type" | "status" | "vip";
 const CUSTOMER_IMPORT_FIELDS: ImportFieldSpec<CustomerImportKey>[] = [
@@ -239,6 +239,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [lastImportedCustomerIds, setLastImportedCustomerIds] = useState<string[]>([]);
 
   // Cross-navigation: opening Customers from an estimate/invoice/job's
   // "Open Customer" link (or any other page) lands here with that
@@ -311,6 +312,23 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   // BulkImportModal + src/lib/spreadsheetImport.ts for the shared parsing
   // engine. Any column order works; the modal auto-maps headers and lets
   // the user fix any column before this ever runs.
+  //
+  // A row is flagged as a likely duplicate -- and skipped by default -- if
+  // its phone or email matches an existing customer already on file. Phone
+  // numbers are compared by normalized last-10-digits (same normalization
+  // CrmLinker.kt uses) since real spreadsheets store numbers however the
+  // business originally typed them.
+  const checkCustomerDuplicate = (row: Partial<Record<CustomerImportKey, string>>): DuplicateCheckResult => {
+    const phone = normalizePhoneForMatch(row.phone);
+    const email = normalizeEmailForMatch(row.email);
+    const match = customers.find(c =>
+      (phone && normalizePhoneForMatch(c.phone) === phone) ||
+      (email && normalizeEmailForMatch(c.email) === email)
+    );
+    if (match) return { isDuplicate: true, reason: `Matches existing customer "${match.contact || match.company}"` };
+    return { isDuplicate: false };
+  };
+
   const handleBulkImportCustomers = (rows: Array<Partial<Record<CustomerImportKey, string>>>) => {
     const imported: Customer[] = rows
       .map(row => {
@@ -344,8 +362,17 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       return;
     }
     setCustomers(prev => [...imported, ...prev]);
-    triggerNotification(`✅ Imported ${imported.length} customer(s).`);
+    setLastImportedCustomerIds(imported.map(c => c.id));
+    triggerNotification(`✅ Imported ${imported.length} customer(s). Downloaded an import report.`);
     if (logOperationalEvent) logOperationalEvent("Spreadsheet Imported", `Imported ${imported.length} customer records`, "📥");
+  };
+
+  const undoLastCustomerImport = () => {
+    const count = lastImportedCustomerIds.length;
+    setCustomers(prev => prev.filter(c => !lastImportedCustomerIds.includes(c.id)));
+    setLastImportedCustomerIds([]);
+    triggerNotification(`Undone -- removed ${count} imported customer(s).`);
+    if (logOperationalEvent) logOperationalEvent("Import Undone", `Removed ${count} customer records from the last import`, "↩️");
   };
 
   // Form states
@@ -1384,9 +1411,19 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           title="Import Customers"
           description="Upload a spreadsheet (CSV/TSV/Excel export, or a tabular PDF) of your existing customers."
           fields={CUSTOMER_IMPORT_FIELDS}
+          checkDuplicate={checkCustomerDuplicate}
+          rowLabel={row => row.contact || row.company || ""}
           onConfirm={handleBulkImportCustomers}
           onClose={() => setIsImportModalOpen(false)}
         />
+      )}
+
+      {lastImportedCustomerIds.length > 0 && (
+        <div className="fixed bottom-6 left-6 bg-white border-2 border-[#9EC8EF] shadow-lg rounded-2xl px-4 py-3 flex items-center gap-3 z-50 text-xs animate-fade-in">
+          <span className="font-bold text-[#1F3557]">Imported {lastImportedCustomerIds.length} customer(s).</span>
+          <button onClick={undoLastCustomerImport} className="font-bold text-rose-600 hover:underline cursor-pointer">Undo</button>
+          <button onClick={() => setLastImportedCustomerIds([])} className="text-[#5E7393] hover:text-[#1F3557] cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+        </div>
       )}
 
       {/* Customer Details & Edit Modal */}
