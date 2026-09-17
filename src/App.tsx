@@ -1736,6 +1736,25 @@ export default function App() {
   // ternary, anticipating businessEmail would be populated here.)
   const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
 
+  // Applies a theme choice immediately -- local state, localStorage, AND a
+  // direct partial Firestore write (merge: true only touches
+  // companySettings.appearance.theme, leaving every other saved setting
+  // alone) -- rather than only updating local state and waiting for
+  // Settings' own separate "Save Changes" button. A theme pick that only
+  // lives in local state until some unrelated form is explicitly saved is
+  // exactly what made switching themes look like it "doesn't stick": pick
+  // a theme, refresh before hitting Save anywhere else, and the reload
+  // reads whatever was last actually saved, not the pick.
+  const applyWorkspaceTheme = (nextTheme: WorkspaceTheme) => {
+    setWorkspaceTheme(nextTheme);
+    const settingValue = workspaceThemeSettingValue(nextTheme);
+    localStorage.setItem("ownerslocal_workspace_theme", settingValue);
+    if (businessId) {
+      setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: settingValue } } }, { merge: true })
+        .catch(err => console.error("Couldn't save workspace theme:", err));
+    }
+  };
+
   useEffect(() => {
     if (!businessId) return;
     let cancelled = false;
@@ -8664,6 +8683,33 @@ Access to full financial telemetry is restricted.`;
               setWorkspaceTheme(nextTheme);
               localStorage.setItem("ownerslocal_workspace_theme", workspaceThemeSettingValue(nextTheme));
             }}
+            className={`max-w-[150px] rounded-lg border px-2 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur-md outline-none cursor-pointer ${isDarkTheme
+              ? "border-blue-400/30 bg-[#06152b]/70 text-blue-50"
+              : "border-blue-200/60 bg-white/60 text-[#315C9F]"
+            }`}
+          >
+            <option value="light-basic">Light Mode Basic</option>
+            <option value="light-extreme">Light Mode Dynamic</option>
+            <option value="dark-basic">Dark Mode Basic</option>
+            <option value="dark-dynamic">Dark Mode Dynamic</option>
+          </select>
+        </div>
+      )}
+
+      {/* Same theme switcher as the login page, but for once you're signed
+          in -- previously the only way to change themes post-login was
+          Settings > Appearance, several clicks deep. Uses
+          applyWorkspaceTheme so a pick here (like a pick in Settings) saves
+          immediately instead of waiting on some unrelated form's Save
+          button. */}
+      {isLoggedIn && (
+        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-30">
+          <label className="sr-only" htmlFor="workspace-theme-selector">Color scheme</label>
+          <select
+            id="workspace-theme-selector"
+            aria-label="Color scheme"
+            value={workspaceTheme}
+            onChange={(event) => applyWorkspaceTheme(event.target.value as WorkspaceTheme)}
             className={`max-w-[150px] rounded-lg border px-2 py-1.5 text-[10px] font-bold shadow-sm backdrop-blur-md outline-none cursor-pointer ${isDarkTheme
               ? "border-blue-400/30 bg-[#06152b]/70 text-blue-50"
               : "border-blue-200/60 bg-white/60 text-[#315C9F]"
