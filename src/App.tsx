@@ -6310,11 +6310,11 @@ Access to full financial telemetry is restricted.`;
                         setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
                         triggerNotification(`Navigated to: ${screen.label}`);
                       }}
-                      className={`w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
+                      className={`sidebar-nav-btn w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
                         isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
                       } ${
                         isCurrent
-                          ? "bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
+                          ? "sidebar-nav-btn-active bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
                           : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
                       }`}
                       title={screen.label}
