@@ -7,6 +7,24 @@ import { authedFetch } from "../lib/apiClient";
  * Connect account for charging THEIR customers. See
  * server/subscriptionRoutes.ts for the server side of this.
  */
+export interface SeatPricing {
+  includedEmployees: number;
+  employeesPerAdditionalBlock: number;
+  additionalBlockPriceDollars: number;
+  employeeCount: number;
+  extraSeatBlocks: number;
+  additionalMonthlyCostDollars: number;
+}
+
+const DEFAULT_SEAT_PRICING: SeatPricing = {
+  includedEmployees: 5,
+  employeesPerAdditionalBlock: 5,
+  additionalBlockPriceDollars: 20,
+  employeeCount: 0,
+  extraSeatBlocks: 0,
+  additionalMonthlyCostDollars: 0,
+};
+
 export type SubscriptionState =
   | {
       loading: true;
@@ -16,6 +34,7 @@ export type SubscriptionState =
       hasBillingAccount: false;
       currentPeriodEnd: null;
       cancelAtPeriodEnd: false;
+      seatPricing: SeatPricing;
     }
   | {
       loading: false;
@@ -25,6 +44,7 @@ export type SubscriptionState =
       hasBillingAccount: boolean;
       currentPeriodEnd: number | null;
       cancelAtPeriodEnd: boolean;
+      seatPricing: SeatPricing;
       error?: string;
     };
 
@@ -36,6 +56,7 @@ const initialState: SubscriptionState = {
   hasBillingAccount: false,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
+  seatPricing: DEFAULT_SEAT_PRICING,
 };
 
 export function useSubscriptionStatus(): SubscriptionState & { refresh: () => void } {
@@ -58,6 +79,7 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
             hasBillingAccount: false,
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
+            seatPricing: DEFAULT_SEAT_PRICING,
             error: data.error || "Could not check subscription status.",
           });
           return;
@@ -70,6 +92,7 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
           hasBillingAccount: !!data.hasBillingAccount,
           currentPeriodEnd: typeof data.currentPeriodEnd === "number" ? data.currentPeriodEnd : null,
           cancelAtPeriodEnd: !!data.cancelAtPeriodEnd,
+          seatPricing: data.seatPricing || DEFAULT_SEAT_PRICING,
         });
       } catch (err) {
         const timedOut = err instanceof DOMException && err.name === "AbortError";
@@ -81,6 +104,7 @@ export function useSubscriptionStatus(): SubscriptionState & { refresh: () => vo
           hasBillingAccount: false,
           currentPeriodEnd: null,
           cancelAtPeriodEnd: false,
+          seatPricing: DEFAULT_SEAT_PRICING,
           error: timedOut ? "Checking subscription status timed out." : (err instanceof Error ? err.message : "Could not check subscription status."),
         });
       } finally {

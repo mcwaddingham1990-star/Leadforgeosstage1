@@ -161,6 +161,23 @@ export const BillingPage: React.FC = () => {
         </div>
       )}
 
+      {!subscription.loading && (
+        <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 text-xs text-slate-600 space-y-1">
+          <div className="font-bold text-[#1F3557]">
+            Includes you (the owner) plus {subscription.seatPricing.includedEmployees} employees.
+          </div>
+          <div>
+            Every additional {subscription.seatPricing.employeesPerAdditionalBlock} employees adds ${subscription.seatPricing.additionalBlockPriceDollars}/month.
+          </div>
+          <div className="pt-1">
+            You have {subscription.seatPricing.employeeCount} employee{subscription.seatPricing.employeeCount === 1 ? "" : "s"}
+            {subscription.seatPricing.extraSeatBlocks > 0
+              ? ` — ${subscription.seatPricing.extraSeatBlocks} extra block${subscription.seatPricing.extraSeatBlocks === 1 ? "" : "s"} of 5 = +$${subscription.seatPricing.additionalMonthlyCostDollars}/month.`
+              : " — within the included amount, no extra charge."}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {subscription.configured && !subscription.subscriptionActive && (
           <button

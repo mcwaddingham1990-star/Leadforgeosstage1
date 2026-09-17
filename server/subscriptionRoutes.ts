@@ -107,6 +107,28 @@ async function ensureFirstMonthCoupon(stripe: Stripe): Promise<void> {
   }
 }
 
+// Seat pricing: the base price includes the owner plus 5 employees: every
+// additional block of 5 employees beyond that costs $20/month
+// (STRIPE_ADDITIONAL_SEATS_PRICE, a flat-rate Stripe price where quantity =
+// number of extra 5-employee blocks). The owner isn't in the `employees`
+// collection (only invited staff get a record there -- see
+// webLeadFormHandler.ts/customerPortal.ts/customerAccounts.ts, which query
+// it the same way), so this counts that collection directly rather than
+// adding 1 for the owner and subtracting it back out.
+const INCLUDED_EMPLOYEES = 5;
+const EMPLOYEES_PER_ADDITIONAL_BLOCK = 5;
+const ADDITIONAL_SEAT_PRICE_DOLLARS = 20;
+
+async function countEmployees(db: FirebaseFirestore.Firestore, businessId: string): Promise<number> {
+  const snap = await db.collection("employees").where("businessEmail", "==", businessId).get();
+  return snap.size;
+}
+
+function extraSeatBlocksFor(employeeCount: number): number {
+  const extraEmployees = Math.max(0, employeeCount - INCLUDED_EMPLOYEES);
+  return Math.ceil(extraEmployees / EMPLOYEES_PER_ADDITIONAL_BLOCK);
+}
+
 /** Prefer the configured APP_URL (same var used for OAuth/self-referential links elsewhere); fall back to the request itself so this still works before APP_URL is set. */
 function resolveAppUrl(req: Request): string {
   const configured = process.env.APP_URL;
@@ -130,6 +152,8 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
     }
     const snap = await db.collection("business_profiles").doc(businessId).get();
     const data = snap.data() || {};
+    const employeeCount = await countEmployees(db, businessId);
+    const extraSeatBlocks = extraSeatBlocksFor(employeeCount);
     res.json({
       configured: isSubscriptionBillingConfigured(),
       hasBillingAccount: typeof data.stripeSubscriptionCustomerId === "string" && !!data.stripeSubscriptionCustomerId,
@@ -137,6 +161,14 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
       status: typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null,
       currentPeriodEnd: typeof data.subscriptionCurrentPeriodEnd === "number" ? data.subscriptionCurrentPeriodEnd : null,
       cancelAtPeriodEnd: !!data.subscriptionCancelAtPeriodEnd,
+      seatPricing: {
+        includedEmployees: INCLUDED_EMPLOYEES,
+        employeesPerAdditionalBlock: EMPLOYEES_PER_ADDITIONAL_BLOCK,
+        additionalBlockPriceDollars: ADDITIONAL_SEAT_PRICE_DOLLARS,
+        employeeCount,
+        extraSeatBlocks,
+        additionalMonthlyCostDollars: extraSeatBlocks * ADDITIONAL_SEAT_PRICE_DOLLARS,
+      },
     });
   } catch (err) {
     console.error("Error checking subscription status:", err);
@@ -186,6 +218,22 @@ export async function handleCreateSubscriptionCheckout(req: Request, res: Respon
       return;
     }
 
+    // Add the additional-seats price if this business has more than the 5
+    // included employees. Refuse to under-charge silently: if extra seats
+    // are owed but the price isn't configured, this must fail loudly
+    // rather than let a large business subscribe at the small-business rate.
+    const employeeCount = await countEmployees(db, businessId);
+    const extraSeatBlocks = extraSeatBlocksFor(employeeCount);
+    const additionalSeatsPriceId = process.env.STRIPE_ADDITIONAL_SEATS_PRICE;
+    if (extraSeatBlocks > 0 && !additionalSeatsPriceId) {
+      res.status(503).json({ error: "This business has more than the 5 included employees, but additional-seat pricing isn't configured yet. An administrator needs to set STRIPE_ADDITIONAL_SEATS_PRICE on the server." });
+      return;
+    }
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [{ price: priceId, quantity: 1 }];
+    if (extraSeatBlocks > 0 && additionalSeatsPriceId) {
+      lineItems.push({ price: additionalSeatsPriceId, quantity: extraSeatBlocks });
+    }
+
     await ensureFirstMonthCoupon(stripe);
 
     const appUrl = resolveAppUrl(req);
@@ -193,10 +241,13 @@ export async function handleCreateSubscriptionCheckout(req: Request, res: Respon
       mode: "subscription",
       customer: customerId,
       client_reference_id: businessId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      // First month at $49.50 via an automatically-applied coupon -- NOT
+      line_items: lineItems,
+      // $49.50 off the first invoice's total (base + any extra-seat line
+      // item together) via an automatically-applied coupon -- NOT
       // allow_promotion_codes (that shows a customer-facing "add promo
-      // code" box, which this offer must not have).
+      // code" box, which this offer must not have). A fixed-dollar coupon
+      // applied to the invoice as a whole is equivalent to applying it to
+      // just the base price, since it's the same total either way.
       discounts: [{ coupon: FIRST_MONTH_COUPON_ID }],
       subscription_data: { metadata: { ownerslocalBusinessId: businessId } },
       success_url: `${appUrl}/app/billing?checkout=success`,
