@@ -59,11 +59,11 @@ function getStripeClient(): Stripe {
 }
 
 function isSubscriptionBillingConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SUBSCRIPTION_PRICE_ID);
+  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_BASE_PRICE);
 }
 
 // The offer: $49.50 for the first month, then the full configured price
-// (STRIPE_SUBSCRIPTION_PRICE_ID -- an administrator sets that price to
+// (STRIPE_BASE_PRICE -- an administrator sets that price to
 // $99.00/month in the Stripe Dashboard) every month after. Modeled as a
 // `duration: "once"` coupon applied automatically at checkout, NOT a
 // customer-entered promotion code -- there is no "add promo code" box, the
@@ -146,7 +146,7 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
 
 export async function handleCreateSubscriptionCheckout(req: Request, res: Response) {
   try {
-    const priceId = process.env.STRIPE_SUBSCRIPTION_PRICE_ID;
+    const priceId = process.env.STRIPE_BASE_PRICE;
     if (!isSubscriptionBillingConfigured() || !priceId) {
       res.status(503).json({ error: "Subscription billing is not configured on this server yet." });
       return;
