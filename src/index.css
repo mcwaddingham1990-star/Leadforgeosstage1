@@ -533,12 +533,25 @@ select option {
   background-image: none !important;
 }
 
-/* Borders remain quiet and structural instead of glowing. */
+/* Borders remain quiet and structural instead of glowing. A default text
+   color goes here too: the enumerated text-color overrides below only
+   catch specific known Tailwind/hex classes, so any element using a color
+   class this list doesn't happen to name (there are many, scattered across
+   a very large file) was silently keeping its original light-theme navy
+   text -- illegible against these dark surfaces. This low-specificity
+   default (workspace-theme.theme-dark-basic + a bare descendant selector)
+   is always beaten by the more specific muted/accent/white overrides
+   below, so those distinctions are untouched. */
 .workspace-theme.theme-dark-basic,
-.workspace-theme.theme-dark-basic *,
+.workspace-theme.theme-dark-basic * {
+  border-color: var(--dark-border) !important;
+}
 .workspace-theme.theme-dark-basic ::before,
 .workspace-theme.theme-dark-basic ::after {
   border-color: var(--dark-border) !important;
+}
+.workspace-theme.theme-dark-basic *:not([class*="text-red"]):not([class*="text-rose"]):not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-orange"]) {
+  color: var(--dark-text) !important;
 }
 
 /* Primary and secondary typography. */
@@ -790,9 +803,21 @@ select option {
   --dynamic-border-soft: rgba(56, 145, 255, .55);
   --dynamic-cyan: #18c8ff;
   --dynamic-blue: #145dff;
+  --dynamic-text: #eaf6ff;
   background-color: #010713 !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
+}
+
+/* Same reasoning as theme-dark-basic's equivalent rule: only two specific
+   navy classes were ever remapped below, so any other color class (there
+   are many, scattered across a very large file) kept its original
+   light-theme text color -- illegible against these forced-dark glass
+   surfaces. Low specificity, so the more specific accent/muted/white
+   overrides below still win. */
+.workspace-theme.theme-dark-dynamic:not([class*="text-red"]):not([class*="text-rose"]):not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-orange"]),
+.workspace-theme.theme-dark-dynamic *:not([class*="text-red"]):not([class*="text-rose"]):not([class*="text-green"]):not([class*="text-emerald"]):not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-orange"]) {
+  color: var(--dynamic-text) !important;
 }
 
 /* Main shell and navigation -- the menu is a glass tile over the starscape

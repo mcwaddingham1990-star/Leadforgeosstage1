@@ -53,6 +53,7 @@ import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { defaultGranularFromModuleList } from "../types/permissions";
 import { STATE_SALES_TAX_DEFAULTS, SALES_TAX_DATASET_VERSION } from "../data/stateSalesTaxDefaults";
 import type { SelectedRole, WorkspaceTheme } from "../App";
+import { workspaceThemeFromSetting, workspaceThemeSettingValue } from "../App";
 
 // Types for SettingsPage
 import { StructuredAddressFields } from "./StructuredAddressFields";
@@ -313,13 +314,12 @@ export default function SettingsPage({
               { ...defaults, ...(stored[category] || {}) }
             ])
           ) as typeof INITIAL_DEFAULTS;
-          // Migrate the abandoned first-pass preset names without ever
-          // altering the original Light Mode Basic appearance.
-          merged.appearance.theme = stored?.appearance?.theme === "Dark Mode Dynamic"
-            ? "Dark Mode Dynamic"
-            : stored?.appearance?.theme === "Dark Mode Basic" || stored?.appearance?.theme === "Basic Dark"
-              ? "Dark Mode Basic"
-              : "Light Mode Basic";
+          // Normalize through the same canonical helpers App.tsx uses (handles
+          // the abandoned "Light Mode Extreme"/"Basic Dark" preset names too)
+          // instead of a second, incomplete copy of this logic -- the old
+          // inline version here never recognized "Light Mode Dynamic" and
+          // silently fell back to "Light Mode Basic" on every reload.
+          merged.appearance.theme = workspaceThemeSettingValue(workspaceThemeFromSetting(stored?.appearance?.theme));
           setLocalConfig(merged);
           setSavedConfig(merged);
           const matchedTheme = THEME_OPTIONS.find(option => option.value === merged.appearance.theme);
