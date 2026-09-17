@@ -53,6 +53,20 @@ import { ReviewRequestControls } from "./ReviewRequestControls";
 import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, buildCallTextHistoryPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
+import { BulkImportModal } from "./BulkImportModal";
+import type { ImportFieldSpec } from "../lib/spreadsheetImport";
+
+type CustomerImportKey = "company" | "contact" | "phone" | "email" | "address" | "type" | "status" | "vip";
+const CUSTOMER_IMPORT_FIELDS: ImportFieldSpec<CustomerImportKey>[] = [
+  { key: "company", label: "Company", aliases: ["company", "company name", "business", "business name", "customer"], required: false },
+  { key: "contact", label: "Contact Name", aliases: ["contact", "contact person", "contact name", "name", "customer name", "full name"] },
+  { key: "phone", label: "Phone", aliases: ["phone", "phone number", "cell", "mobile", "telephone"] },
+  { key: "email", label: "Email", aliases: ["email", "email address", "e-mail"] },
+  { key: "address", label: "Address", aliases: ["address", "service address", "billing address", "street address", "location"] },
+  { key: "type", label: "Type (Residential/Commercial)", aliases: ["type", "customer type"] },
+  { key: "status", label: "Status", aliases: ["status", "customer status", "account status"] },
+  { key: "vip", label: "VIP", aliases: ["vip", "vip status", "is vip"] }
+];
 
 export interface CustomersPageProps {
   // NOTE: this page calls onOpenPlaceholder("estimates")/("scheduling", "icon")
@@ -225,8 +239,6 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importFileError, setImportFileError] = useState<string | null>(null);
-  const [importPreviewList, setImportPreviewList] = useState<Customer[]>([]);
 
   // Cross-navigation: opening Customers from an estimate/invoice/job's
   // "Open Customer" link (or any other page) lands here with that
@@ -295,92 +307,45 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     }
   };
 
-  const handleImportCSVData = (text: string) => {
-    try {
-      const lines = text.split(/\r?\n/);
-      if (lines.length <= 1) {
-        setImportFileError("The file seems to be empty or contains no headers.");
-        return;
-      }
-
-      const parsedList: Customer[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        const fields: string[] = [];
-        let cur = "";
-        let inQuotes = false;
-        for (let charIdx = 0; charIdx < line.length; charIdx++) {
-          const char = line[charIdx];
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            fields.push(cur.trim().replace(/^["']|["']$/g, ""));
-            cur = "";
-          } else {
-            cur += char;
-          }
-        }
-        fields.push(cur.trim().replace(/^["']|["']$/g, ""));
-
-        let company = fields[0] || "";
-        let contact = fields[1] || "";
-        let phone = fields[2] || "";
-        let email = fields[3] || "";
-        let address = fields[4] || "";
-        let typeStr = fields[5] || "Residential";
-        let statusStr = fields[6] || "Active";
-        let vipStr = fields[7] || "No";
-
-        if (!contact && company) {
-          contact = company;
-        }
-        if (!contact && !company) continue;
-
-        const importedCustomer: Customer = {
-          id: "cust_csv_" + Math.random().toString(36).substring(2, 9),
+  // Bulk import (spreadsheet/PDF -> real Customer records) -- see
+  // BulkImportModal + src/lib/spreadsheetImport.ts for the shared parsing
+  // engine. Any column order works; the modal auto-maps headers and lets
+  // the user fix any column before this ever runs.
+  const handleBulkImportCustomers = (rows: Array<Partial<Record<CustomerImportKey, string>>>) => {
+    const imported: Customer[] = rows
+      .map(row => {
+        const company = row.company?.trim() || "";
+        const contact = row.contact?.trim() || "";
+        if (!company && !contact) return null;
+        const typeStr = (row.type || "").toLowerCase();
+        const statusStr = (row.status || "").toLowerCase();
+        const vipStr = (row.vip || "").toLowerCase();
+        const customer: Customer = {
+          id: "cust_import_" + Math.random().toString(36).substring(2, 9),
           company: company || contact,
           contact: contact || company,
-          phone: phone || "",
-          email: email || "",
-          address: address || "No address supplied",
+          phone: row.phone?.trim() || "",
+          email: row.email?.trim() || "",
+          address: row.address?.trim() || "No address supplied",
           openJobs: 0,
           outstandingBalance: 0,
           lifetimeValue: 0,
-          status: (statusStr.toLowerCase().includes("past") || statusStr.toLowerCase().includes("due"))
-            ? "Past Due"
-            : statusStr.toLowerCase().includes("inactive")
-            ? "Inactive"
-            : "Active",
-          type: (typeStr.toLowerCase().includes("commercial") || typeStr.toLowerCase().includes("comm"))
-            ? "Commercial"
-            : "Residential",
-          isVIP: vipStr.toLowerCase() === "yes" || vipStr.toLowerCase() === "true" || vipStr.toLowerCase() === "y" || vipStr.toLowerCase() === "vip",
+          status: (statusStr.includes("past") || statusStr.includes("due")) ? "Past Due" : statusStr.includes("inactive") ? "Inactive" : "Active",
+          type: (typeStr.includes("commercial") || typeStr.includes("comm")) ? "Commercial" : "Residential",
+          isVIP: ["yes", "true", "y", "vip"].includes(vipStr),
           recentlyAdded: true
         };
-        parsedList.push(importedCustomer);
-      }
+        return customer;
+      })
+      .filter((c): c is Customer => c !== null);
 
-      if (parsedList.length === 0) {
-        setImportFileError("Could not extract any valid customer records. Please verify headers.");
-      } else {
-        setImportPreviewList(parsedList);
-        setImportFileError(null);
-      }
-    } catch (err) {
-      setImportFileError("Failed to parse the CSV file. Please check the file formatting.");
+    if (!imported.length) {
+      triggerNotification("No valid rows found -- make sure at least a Company or Contact Name column is mapped.");
+      return;
     }
-  };
-
-  const loadPresetImport = (presetName: string) => {
-    let presetText = "";
-    if (presetName === "hvac") {
-      presetText = `Company Name,Contact Person,Phone,Email,Address,Customer Type,Status,VIP Status\n"Titan Air Conditioning","Ray Nelson","(555) 304-9811","ray@titanair.com","452 Industrial Parkway, Ste E","Commercial","Active","Yes"\n"Linda Geller Residential","Linda Geller","(555) 881-2356","linda.geller@gmail.com","128 Maple Lane","Residential","Active","No"\n"Metro Cold Storage Inc","Victor Stone","(555) 441-9022","vstone@metrocold.org","99 Waterfront Rd","Commercial","Past Due","No"`;
-    } else {
-      presetText = `Company Name,Contact Person,Phone,Email,Address,Customer Type,Status,VIP Status\n"Stark Remodeling","Howard Stark","(555) 902-1144","howard@starkremodel.com","10880 Malibu Point","Commercial","Active","Yes"\n"Green Acres Farms","Bruce Banner","(555) 234-9900","bruce@hulkscience.org","14 Outer Ridge Road","Residential","Active","No"`;
-    }
-    handleImportCSVData(presetText);
+    setCustomers(prev => [...imported, ...prev]);
+    triggerNotification(`✅ Imported ${imported.length} customer(s).`);
+    if (logOperationalEvent) logOperationalEvent("Spreadsheet Imported", `Imported ${imported.length} customer records`, "📥");
   };
 
   // Form states
@@ -748,11 +713,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               </button>
             )}
             <button
-              onClick={() => {
-                setImportFileError(null);
-                setImportPreviewList([]);
-                setIsImportModalOpen(true);
-              }}
+              onClick={() => setIsImportModalOpen(true)}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Upload className="w-3.5 h-3.5" />
@@ -1419,160 +1380,13 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
       {/* Import Customers Modal */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Upload className="w-5 h-5 text-white" />
-                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">CSV Customer Importer</h3>
-              </div>
-              <button 
-                onClick={() => {
-                  setIsImportModalOpen(false);
-                  setImportFileError(null);
-                  setImportPreviewList([]);
-                }}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-5 text-[#1F3557]">
-              <div className="space-y-1">
-                <h4 className="text-xs font-bold">Import Instructions:</h4>
-                <p className="text-[11px] text-[#5E7393] leading-relaxed">
-                  Upload a standard comma-separated values (CSV) file. The file should contain headers like 
-                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Company Name</code>, 
-                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Contact Person</code>, 
-                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Phone</code>, 
-                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Email</code>, and 
-                  <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[10px] mx-1 text-slate-800">Address</code>.
-                </p>
-              </div>
-
-              {/* Drag & Drop Zone */}
-              <div className="relative border-2 border-dashed border-[#9EC8EF] hover:border-[#315C9F] bg-[#EAF5FF]/30 hover:bg-[#EAF5FF]/50 rounded-2xl p-6 transition-colors text-center cursor-pointer">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (evt) => {
-                        const text = evt.target?.result as string;
-                        handleImportCSVData(text);
-                      };
-                      reader.readAsText(file);
-                    }
-                  }}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="w-8 h-8 text-[#315C9F]" />
-                  <p className="text-xs font-extrabold">Click to select or drag & drop a CSV file</p>
-                  <p className="text-[10px] text-[#5E7393]">Supported files: .csv (Max 5MB)</p>
-                </div>
-              </div>
-
-              {/* Preset Simulators */}
-              <div className="bg-[#EAF5FF]/50 p-3 rounded-2xl border border-[#9EC8EF]/40 space-y-2 text-left">
-                <span className="text-[10px] uppercase font-bold text-[#5E7393] block">No CSV on hand? Load instant test dataset:</span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadPresetImport("construction")}
-                    className="px-3 py-1.5 bg-[#C7E3FA] hover:bg-[#BDDDF8] text-[#1F3557] text-[10.5px] font-bold rounded-xl transition-all border border-[#9EC8EF]/40 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3 text-[#1F3557]" /> Stark Remodeling Preset (2 Leads)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => loadPresetImport("hvac")}
-                    className="px-3 py-1.5 bg-[#C7E3FA] hover:bg-[#BDDDF8] text-[#1F3557] text-[10.5px] font-bold rounded-xl transition-all border border-[#9EC8EF]/40 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3 text-[#1F3557]" /> Ray Nelson HVAC Preset (3 Leads)
-                  </button>
-                </div>
-              </div>
-
-              {/* Error box */}
-              {importFileError && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl flex items-center gap-2 text-xs">
-                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-                  <span className="font-semibold">{importFileError}</span>
-                </div>
-              )}
-
-              {/* Previews */}
-              {importPreviewList.length > 0 && (
-                <div className="space-y-2.5 text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold">
-                      Previewing parsed customers ({importPreviewList.length}):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setImportPreviewList([])}
-                      className="text-[10.5px] font-bold text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Clear Preview
-                    </button>
-                  </div>
-                  
-                  <div className="border border-[#9EC8EF]/40 rounded-xl overflow-hidden max-h-40 overflow-y-auto divide-y divide-[#9EC8EF]/20 bg-slate-50">
-                    {importPreviewList.map((parsed, idx) => (
-                      <div key={idx} className="p-2.5 text-[11px] flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="font-bold truncate">{parsed.company}</p>
-                          <p className="text-[10px] text-[#5E7393] font-medium mt-0.5 truncate">Contact: {parsed.contact} | {parsed.email}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-[#1F3557] rounded font-bold uppercase">{parsed.type}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold uppercase">{parsed.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-end gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsImportModalOpen(false);
-                  setImportFileError(null);
-                  setImportPreviewList([]);
-                }}
-                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={importPreviewList.length === 0}
-                onClick={() => {
-                  setCustomers(prev => [...importPreviewList, ...prev]);
-                  if (logOperationalEvent) {
-                    logOperationalEvent("CSV Imported", `Imported ${importPreviewList.length} customer records into CRM database`, "📥");
-                  }
-                  setIsImportModalOpen(false);
-                  setImportPreviewList([]);
-                }}
-                className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1 ${
-                  importPreviewList.length > 0 ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
-                }`}
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                Confirm Import ({importPreviewList.length})
-              </button>
-            </div>
-          </div>
-        </div>
+        <BulkImportModal<CustomerImportKey>
+          title="Import Customers"
+          description="Upload a spreadsheet (CSV/TSV/Excel export, or a tabular PDF) of your existing customers."
+          fields={CUSTOMER_IMPORT_FIELDS}
+          onConfirm={handleBulkImportCustomers}
+          onClose={() => setIsImportModalOpen(false)}
+        />
       )}
 
       {/* Customer Details & Edit Modal */}
