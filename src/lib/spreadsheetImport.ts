@@ -5,7 +5,7 @@
 // name instead of requiring an exact template -- the same job LeadsPage's
 // existing CSV importer already did by hand; this generalizes that pattern
 // so every page gets it instead of re-deriving it.
-import { parseCsv } from "./csv";
+import { parseCsv, downloadCsv } from "./csv";
 
 export interface ImportFieldSpec<K extends string = string> {
   key: K;
@@ -19,33 +19,82 @@ function normalizeHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-/** Best-effort column -> field mapping by header name. Returns, per column index, the matched field key (or null if nothing matched) so the caller can still offer a manual override UI for anything guessed wrong. */
+/**
+ * Best-effort column -> field mapping by header name. Returns, per column
+ * index, the matched field key (or null if nothing matched, or if the
+ * match was ambiguous) so the caller can still offer a manual override UI
+ * for anything not auto-mapped.
+ *
+ * SAFETY: an ambiguous header (its substring match ties between two or more
+ * still-unclaimed fields -- e.g. a header like "Contact" could plausibly be
+ * a Customer's `contact` name or a generic `notes` field depending on the
+ * schema) is deliberately left unmapped rather than guessing the first
+ * candidate in field-declaration order. A wrong silent guess here means
+ * real data lands in the wrong column with no indication anything went
+ * wrong; leaving it null forces the user to look at it and choose.
+ */
 export function autoMapHeaders<K extends string>(headers: string[], fields: ImportFieldSpec<K>[]): Array<K | null> {
   const used = new Set<K>();
   return headers.map(header => {
     const norm = normalizeHeader(header);
     if (!norm) return null;
-    // Exact alias match first (highest confidence).
-    for (const field of fields) {
-      if (used.has(field.key)) continue;
-      if (field.aliases.some(alias => normalizeHeader(alias) === norm)) {
-        used.add(field.key);
-        return field.key;
-      }
+    // Exact alias match first (highest confidence) -- but still only when
+    // exactly one still-unclaimed field's alias list matches. Two fields
+    // sharing a generic alias (e.g. both "Notes" and "Contact" listing
+    // "info") is a real possibility a schema author can introduce by
+    // accident, and this must stay ambiguous rather than silently
+    // rewarding whichever field happens to be declared first.
+    const exactCandidates = fields.filter(field => !used.has(field.key) && field.aliases.some(alias => normalizeHeader(alias) === norm));
+    if (exactCandidates.length === 1) {
+      used.add(exactCandidates[0].key);
+      return exactCandidates[0].key;
     }
-    // Fall back to a substring match (e.g. header "Customer Phone Number" vs alias "phone").
-    for (const field of fields) {
-      if (used.has(field.key)) continue;
-      if (field.aliases.some(alias => {
-        const a = normalizeHeader(alias);
-        return a.length >= 3 && (norm.includes(a) || a.includes(norm));
-      })) {
-        used.add(field.key);
-        return field.key;
-      }
+    if (exactCandidates.length > 1) return null;
+    // Fall back to a substring match (e.g. header "Customer Phone Number" vs
+    // alias "phone") -- but only when exactly one still-unclaimed field
+    // qualifies. More than one candidate is ambiguous; leave it for the user.
+    const candidates = fields.filter(field => !used.has(field.key) && field.aliases.some(alias => {
+      const a = normalizeHeader(alias);
+      return a.length >= 3 && (norm.includes(a) || a.includes(norm));
+    }));
+    if (candidates.length === 1) {
+      used.add(candidates[0].key);
+      return candidates[0].key;
     }
     return null;
   });
+}
+
+/** Last-10-digits phone comparison, same normalization CrmLinker.kt uses for the Missed Call Text-Back matching -- phone numbers are stored however each business originally typed them, so an exact string match would miss real duplicates constantly. */
+export function normalizePhoneForMatch(raw: string | undefined | null): string {
+  const digits = (raw || "").replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+export function normalizeEmailForMatch(raw: string | undefined | null): string {
+  return (raw || "").trim().toLowerCase();
+}
+
+export interface DuplicateCheckResult {
+  isDuplicate: boolean;
+  reason?: string;
+}
+
+/** Import-report row status, used for the downloadable audit log every bulk import produces. */
+export type ImportRowStatus = "imported" | "skipped_duplicate" | "skipped_invalid";
+export interface ImportReportRow {
+  rowNumber: number; // 1-based, matching the source file's data rows (header excluded)
+  status: ImportRowStatus;
+  summary: string; // a human-readable identifier for the row, e.g. a name
+  reason?: string;
+}
+
+/** Real, downloadable audit trail for one bulk import: which rows were created, which were skipped as duplicates, which were skipped as invalid, and why -- so a business can see exactly what a 2,000-row import actually did instead of trusting a single toast notification. */
+export function downloadImportReport(sourceFileName: string, report: ImportReportRow[]) {
+  const headers = ["Row", "Status", "Record", "Reason"];
+  const rows = report.map(r => [r.rowNumber, r.status.replace("_", " "), r.summary, r.reason || ""]);
+  const safeName = (sourceFileName || "import").replace(/\.[^.]+$/, "").replace(/[\\/:*?"<>|]+/g, "-");
+  downloadCsv(`${safeName}-import-report-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }
 
 export interface ParsedSheet<K extends string = string> {

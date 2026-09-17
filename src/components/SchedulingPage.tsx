@@ -40,7 +40,7 @@ import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { BulkImportModal } from "./BulkImportModal";
-import type { ImportFieldSpec } from "../lib/spreadsheetImport";
+import type { ImportFieldSpec, DuplicateCheckResult } from "../lib/spreadsheetImport";
 
 type JobImportKey = "customer" | "eventType" | "date" | "startTime" | "endTime" | "assignedEmployee" | "address" | "notes" | "status";
 const JOB_IMPORT_FIELDS: ImportFieldSpec<JobImportKey>[] = [
@@ -197,6 +197,7 @@ export const SchedulingPage: React.FC = () => {
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [lastImportedEventIds, setLastImportedEventIds] = useState<string[]>([]);
 
   // Best-effort date/time normalization -- a real spreadsheet export rarely
   // already uses this app's exact YYYY-MM-DD / 24-hour HH:MM format, so this
@@ -230,6 +231,19 @@ export const SchedulingPage: React.FC = () => {
       return `${String(hour).padStart(2, "0")}:${minute}`;
     }
     return fallback;
+  };
+
+  // A row is a likely duplicate if an existing event already has the same
+  // customer, date, and start time -- a reasonable proxy for "this exact
+  // appointment is already on the calendar."
+  const checkJobDuplicate = (row: Partial<Record<JobImportKey, string>>): DuplicateCheckResult => {
+    const customerName = (row.customer || "").trim().toLowerCase();
+    if (!customerName) return { isDuplicate: false };
+    const date = parseImportedDate(row.date);
+    const startTime = parseImportedTime(row.startTime, "09:00");
+    const match = events.find(e => e.customer.trim().toLowerCase() === customerName && e.date === date && e.startTime === startTime);
+    if (match) return { isDuplicate: true, reason: `Matches an existing ${match.eventType.toLowerCase()} on ${date}` };
+    return { isDuplicate: false };
   };
 
   // Bulk import (spreadsheet/PDF -> real SchedulingEvent records). Matches
@@ -270,8 +284,17 @@ export const SchedulingPage: React.FC = () => {
       return;
     }
     setEvents(prev => [...imported, ...prev]);
-    triggerNotification(`✅ Imported ${imported.length} job(s)/event(s).`);
+    setLastImportedEventIds(imported.map(e => e.id));
+    triggerNotification(`✅ Imported ${imported.length} job(s)/event(s). Downloaded an import report.`);
     if (logOperationalEvent) logOperationalEvent("Spreadsheet Imported", `Imported ${imported.length} scheduling records`, "📥");
+  };
+
+  const undoLastJobImport = () => {
+    const count = lastImportedEventIds.length;
+    setEvents(prev => prev.filter(e => !lastImportedEventIds.includes(e.id)));
+    setLastImportedEventIds([]);
+    triggerNotification(`Undone -- removed ${count} imported job(s)/event(s).`);
+    if (logOperationalEvent) logOperationalEvent("Import Undone", `Removed ${count} scheduling records from the last import`, "↩️");
   };
   // Navigation states
   const [currentDate, setCurrentDate] = useState<Date>(() => {
@@ -2162,9 +2185,19 @@ export const SchedulingPage: React.FC = () => {
           title="Import Schedule"
           description="Upload a spreadsheet (CSV/TSV/Excel export, or a tabular PDF) of existing jobs/appointments. A customer name that matches an existing customer record links up automatically."
           fields={JOB_IMPORT_FIELDS}
+          checkDuplicate={checkJobDuplicate}
+          rowLabel={row => row.customer ? `${row.customer}${row.date ? ` — ${row.date}` : ""}` : ""}
           onConfirm={handleBulkImportJobs}
           onClose={() => setIsBulkImportOpen(false)}
         />
+      )}
+
+      {lastImportedEventIds.length > 0 && (
+        <div className="fixed bottom-6 left-6 bg-white border-2 border-[#9EC8EF] shadow-lg rounded-2xl px-4 py-3 flex items-center gap-3 z-50 text-xs animate-fade-in">
+          <span className="font-bold text-[#1F3557]">Imported {lastImportedEventIds.length} job(s)/event(s).</span>
+          <button onClick={undoLastJobImport} className="font-bold text-rose-600 hover:underline cursor-pointer">Undo</button>
+          <button onClick={() => setLastImportedEventIds([])} className="text-[#5E7393] hover:text-[#1F3557] cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+        </div>
       )}
     </div>
   );

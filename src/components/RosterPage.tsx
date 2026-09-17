@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -14,7 +14,7 @@ import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { RecentRoutesSection } from "./RecentRoutesSection";
 import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 import { BulkImportModal } from "./BulkImportModal";
-import type { ImportFieldSpec } from "../lib/spreadsheetImport";
+import { normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
 
 type EmployeeImportKey = "name" | "email" | "phone" | "role";
 const EMPLOYEE_IMPORT_FIELDS: ImportFieldSpec<EmployeeImportKey>[] = [
@@ -86,6 +86,20 @@ export const RosterPage: React.FC = () => {
   const [generatedInviteCode, setGeneratedInviteCode] = useState<string | null>(null);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [bulkInviteResults, setBulkInviteResults] = useState<Array<{ name: string; role: string; code: string }>>([]);
+
+  // A row is a likely duplicate if its email (or, lacking one, its exact
+  // name) already matches a real employee already on the roster -- no
+  // point re-inviting someone who already has an account.
+  const checkEmployeeDuplicate = (row: Partial<Record<EmployeeImportKey, string>>): DuplicateCheckResult => {
+    const email = normalizeEmailForMatch(row.email);
+    const name = (row.name || "").trim().toLowerCase();
+    const match = employees.find(e =>
+      (email && normalizeEmailForMatch(e.email) === email) ||
+      (!email && name && `${e.firstName} ${e.lastName}`.trim().toLowerCase() === name)
+    );
+    if (match) return { isDuplicate: true, reason: `Matches existing employee "${match.firstName} ${match.lastName}"` };
+    return { isDuplicate: false };
+  };
   const managerRole = (loggedInUser?.role || "").toLowerCase();
   const canManageRoles = !loggedInUser?.isEmployee || managerRole.includes("owner") || managerRole.includes("manager") || managerRole.includes("admin");
 
@@ -299,6 +313,19 @@ export const RosterPage: React.FC = () => {
     setBulkInviteResults(results);
     triggerNotification(`✅ Generated ${results.length} invite code(s). Copy them below to send out.`);
     if (logOperationalEvent) logOperationalEvent("Bulk Invites Generated", `Generated ${results.length} employee invite codes from spreadsheet`, "📥");
+  };
+
+  const undoLastBulkInvite = async () => {
+    const codes = bulkInviteResults.map(r => r.code);
+    try {
+      await Promise.all(codes.map(code => deleteDoc(doc(db, "employee_invites", code))));
+      triggerNotification(`Undone -- removed ${codes.length} invite code(s). Anyone who already used one keeps their account.`);
+      if (logOperationalEvent) logOperationalEvent("Import Undone", `Removed ${codes.length} unused invite codes from the last import`, "↩️");
+    } catch (err) {
+      console.error("Error undoing bulk invites:", err);
+      triggerNotification("Couldn't remove all the invite codes -- check your connection and try again.");
+    }
+    setBulkInviteResults([]);
   };
 
   const statusColor = (status: string) =>
@@ -590,6 +617,8 @@ export const RosterPage: React.FC = () => {
           title="Import Team"
           description="Upload a spreadsheet (CSV/TSV/Excel export, or a tabular PDF) of your team. This generates one real, role-assigned invite code per person -- each one still has to actually sign up with their code before they become a real employee record, same as inviting someone by hand."
           fields={EMPLOYEE_IMPORT_FIELDS}
+          checkDuplicate={checkEmployeeDuplicate}
+          rowLabel={row => row.name || ""}
           onConfirm={rows => void handleBulkImportEmployees(rows)}
           onClose={() => setIsBulkImportOpen(false)}
           confirmLabel="Generate Invite Codes"
@@ -632,8 +661,9 @@ export const RosterPage: React.FC = () => {
                 Copy All
               </button>
             </div>
-            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 shrink-0">
-              <button onClick={() => setBulkInviteResults([])} className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-bold">Done</button>
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 shrink-0 flex gap-2">
+              <button onClick={() => void undoLastBulkInvite()} className="flex-1 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl font-bold cursor-pointer">Undo</button>
+              <button onClick={() => setBulkInviteResults([])} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold cursor-pointer">Done</button>
             </div>
           </div>
         </div>
