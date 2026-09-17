@@ -31,8 +31,8 @@ export function downloadCsv(filename: string, headers: string[], rows: Array<Arr
   URL.revokeObjectURL(url);
 }
 
-/** Minimal RFC4180-ish CSV parser -- handles quoted fields with embedded commas/newlines/escaped quotes. */
-export function parseCsv(text: string): string[][] {
+/** Minimal RFC4180-ish delimited-text parser -- handles quoted fields with embedded delimiters/newlines/escaped quotes. Defaults to comma; pass "\t" for a tab-separated (Excel "Save as .tsv" / paste) file. */
+export function parseCsv(text: string, delimiter: string = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -47,7 +47,7 @@ export function parseCsv(text: string): string[][] {
       }
     } else if (char === '"') {
       inQuotes = true;
-    } else if (char === ",") {
+    } else if (char === delimiter) {
       row.push(field); field = "";
     } else if (char === "\n" || char === "\r") {
       if (char === "\r" && text[i + 1] === "\n") i++;

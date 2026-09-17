@@ -39,6 +39,21 @@ import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
+import { BulkImportModal } from "./BulkImportModal";
+import type { ImportFieldSpec } from "../lib/spreadsheetImport";
+
+type JobImportKey = "customer" | "eventType" | "date" | "startTime" | "endTime" | "assignedEmployee" | "address" | "notes" | "status";
+const JOB_IMPORT_FIELDS: ImportFieldSpec<JobImportKey>[] = [
+  { key: "customer", label: "Customer", aliases: ["customer", "customer name", "client", "client name"], required: true },
+  { key: "eventType", label: "Type (Job/Estimate/etc)", aliases: ["type", "event type", "job type"] },
+  { key: "date", label: "Date", aliases: ["date", "job date", "scheduled date"], required: true },
+  { key: "startTime", label: "Start Time", aliases: ["start time", "start", "time"] },
+  { key: "endTime", label: "End Time", aliases: ["end time", "end"] },
+  { key: "assignedEmployee", label: "Assigned To", aliases: ["assigned employee", "assigned to", "technician", "tech", "employee"] },
+  { key: "address", label: "Address", aliases: ["address", "job address", "location", "service address"] },
+  { key: "notes", label: "Notes", aliases: ["notes", "description", "job notes"] },
+  { key: "status", label: "Status", aliases: ["status", "job status"] }
+];
 
 const DEFAULT_EVENT_TYPES = [
   "Estimate",
@@ -181,6 +196,83 @@ export const SchedulingPage: React.FC = () => {
   // reads as the whole page freezing. Route confirmations through in-app UI.
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+
+  // Best-effort date/time normalization -- a real spreadsheet export rarely
+  // already uses this app's exact YYYY-MM-DD / 24-hour HH:MM format, so this
+  // accepts the common real-world shapes (M/D/YYYY, M/D/YY, already-ISO, and
+  // 12-hour "9:00 AM") instead of silently dropping every imported row that
+  // isn't pre-formatted exactly right.
+  const parseImportedDate = (raw: string | undefined): string => {
+    const value = (raw || "").trim();
+    if (!value) return new Date().toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (slash) {
+      let [, m, d, y] = slash;
+      if (y.length === 2) y = `20${y}`;
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
+  };
+  const parseImportedTime = (raw: string | undefined, fallback: string): string => {
+    const value = (raw || "").trim();
+    if (!value) return fallback;
+    if (/^\d{1,2}:\d{2}$/.test(value)) return value.padStart(5, "0");
+    const ampm = value.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (ampm) {
+      let hour = parseInt(ampm[1], 10);
+      const minute = ampm[2];
+      const isPm = ampm[3].toLowerCase() === "pm";
+      if (isPm && hour !== 12) hour += 12;
+      if (!isPm && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, "0")}:${minute}`;
+    }
+    return fallback;
+  };
+
+  // Bulk import (spreadsheet/PDF -> real SchedulingEvent records). Matches
+  // each row's customer name against real Customer records by the same
+  // helper the rest of the app uses (resolveCustomerByIdOrName), so an
+  // imported job for an existing customer links up instead of creating a
+  // disconnected duplicate -- unmatched names still import fine as
+  // free-text (same as manually typing a new customer name into this page
+  // already allows).
+  const handleBulkImportJobs = (rows: Array<Partial<Record<JobImportKey, string>>>) => {
+    const imported: SchedulingEvent[] = rows
+      .filter(row => row.customer?.trim())
+      .map(row => {
+        const matchedCustomer = resolveCustomerByIdOrName(customersList, undefined, row.customer);
+        const eventType = row.eventType?.trim();
+        const statusRaw = (row.status || "").trim().toLowerCase();
+        return {
+          id: "sched_import_" + Math.random().toString(36).substring(2, 9),
+          eventType: eventType && DEFAULT_EVENT_TYPES.includes(eventType) ? eventType : "Job",
+          date: parseImportedDate(row.date),
+          startTime: parseImportedTime(row.startTime, "09:00"),
+          endTime: parseImportedTime(row.endTime, "10:00"),
+          customer: matchedCustomer?.contact || matchedCustomer?.company || row.customer!.trim(),
+          customerId: matchedCustomer?.id,
+          customerPhone: matchedCustomer?.phone,
+          customerEmail: matchedCustomer?.email,
+          customerAddress: row.address?.trim() || matchedCustomer?.address,
+          assignedEmployee: row.assignedEmployee?.trim() || "",
+          location: row.address?.trim() || matchedCustomer?.address || "",
+          priority: "Medium",
+          notes: row.notes?.trim() || "",
+          status: statusRaw.includes("complete") ? "Completed" : statusRaw.includes("cancel") ? "Cancelled" : row.assignedEmployee?.trim() ? "Assigned" : "Unassigned",
+          createdAt: new Date().toISOString()
+        };
+      });
+    if (!imported.length) {
+      triggerNotification("No valid rows found -- make sure Customer and Date columns are mapped.");
+      return;
+    }
+    setEvents(prev => [...imported, ...prev]);
+    triggerNotification(`✅ Imported ${imported.length} job(s)/event(s).`);
+    if (logOperationalEvent) logOperationalEvent("Spreadsheet Imported", `Imported ${imported.length} scheduling records`, "📥");
+  };
   // Navigation states
   const [currentDate, setCurrentDate] = useState<Date>(() => {
     if (preSelectedDate) {
@@ -958,6 +1050,12 @@ export const SchedulingPage: React.FC = () => {
                 >
                   <Plus className="w-4 h-4" />
                   New Event
+                </button>
+                <button
+                  onClick={() => setIsBulkImportOpen(true)}
+                  className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  📥 Import Schedule
                 </button>
                 <button
                   onClick={() => setIsWorkOrderPickerOpen(true)}
@@ -2058,6 +2156,16 @@ export const SchedulingPage: React.FC = () => {
 
       <CreateWorkOrderPicker isOpen={isWorkOrderPickerOpen} onClose={() => setIsWorkOrderPickerOpen(false)} />
       <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} />
+
+      {isBulkImportOpen && (
+        <BulkImportModal<JobImportKey>
+          title="Import Schedule"
+          description="Upload a spreadsheet (CSV/TSV/Excel export, or a tabular PDF) of existing jobs/appointments. A customer name that matches an existing customer record links up automatically."
+          fields={JOB_IMPORT_FIELDS}
+          onConfirm={handleBulkImportJobs}
+          onClose={() => setIsBulkImportOpen(false)}
+        />
+      )}
     </div>
   );
 };
