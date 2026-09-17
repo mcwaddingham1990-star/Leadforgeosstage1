@@ -5,6 +5,8 @@ import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import com.ownerslocal.missedcalltextback.Config
 import com.ownerslocal.missedcalltextback.auth.SessionStore
+import com.ownerslocal.missedcalltextback.data.CrmLinker
+import com.ownerslocal.missedcalltextback.data.FirestoreRestClient
 
 /**
  * Sends the configured auto-reply text and enforces a per-number cooldown
@@ -13,8 +15,19 @@ import com.ownerslocal.missedcalltextback.auth.SessionStore
  * service's process is meant to stay alive continuously, and losing the
  * cooldown list on a rare process death just risks one extra duplicate
  * text rather than anything unsafe.
+ *
+ * [firestore] is optional so existing callers/tests that only care about
+ * the SMS itself don't need one -- when present (the real app always
+ * passes it, see MissedCallApp.httpClient), a successful send is also
+ * matched against the business's CRM and logged (see CrmLinker). That part
+ * runs on this same caller's thread and is called from a background
+ * Thread already (CallStateReceiver), so it's fine for it to block.
  */
-class AutoReplySender(private val context: Context, private val sessionStore: SessionStore) {
+class AutoReplySender(
+    private val context: Context,
+    private val sessionStore: SessionStore,
+    private val firestore: FirestoreRestClient? = null
+) {
     private val lastTextedAt = HashMap<String, Long>()
 
     fun maybeSendAutoReply(phoneNumber: String?): Boolean {
@@ -37,8 +50,20 @@ class AutoReplySender(private val context: Context, private val sessionStore: Se
             } else {
                 SmsManager.getDefault()
             }
-            smsManager.sendTextMessage(number, null, sessionStore.messageTemplate, null, null)
+            val messageSent = sessionStore.messageTemplate
+            smsManager.sendTextMessage(number, null, messageSent, null, null)
             lastTextedAt[number] = now
+
+            val businessId = sessionStore.businessId
+            val idToken = sessionStore.idToken
+            if (firestore != null && !businessId.isNullOrBlank() && !idToken.isNullOrBlank()) {
+                try {
+                    CrmLinker.linkAndLog(firestore, businessId, idToken, number, "missed", messageSent)
+                } catch (e: Exception) {
+                    // The text already sent successfully -- a CRM/log failure
+                    // shouldn't be reported as the auto-reply itself failing.
+                }
+            }
             true
         } catch (e: Exception) {
             false

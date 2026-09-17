@@ -33,11 +33,15 @@ import {
   Edit3,
   X,
   Save,
-  Minus
+  Minus,
+  PhoneMissed,
+  PhoneIncoming,
+  PhoneOutgoing,
+  MessageCircle
 } from "lucide-react";
 
 export type { Customer } from "../types/domain";
-import type { Customer, DocumentItem, WorkOrder } from "../types/domain";
+import type { Customer, DocumentItem, WorkOrder, MissedCallEvent } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
@@ -46,7 +50,7 @@ import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
-import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
+import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, buildCallTextHistoryPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 
@@ -499,6 +503,66 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     });
     onNavigateToScreen("documents");
     if (logOperationalEvent) logOperationalEvent("Customer PDF Generated", filename, "📄");
+  };
+
+  // Read-only: every call/text the Missed Call Text-Back Android app has
+  // logged for this business (it writes directly to Firestore -- see
+  // CrmLinker.kt -- the web app never writes to this collection). Matched
+  // to this customer by customerId when the app found them at call time,
+  // falling back to a normalized-last-10-digits phone match so a call that
+  // predates this customer being added (or that matched nothing at the
+  // time) still shows up once the number is on file.
+  const [allCallEvents] = useFirestoreCollection<MissedCallEvent>("missed_call_events", businessId);
+  const normalizePhoneDigits = (raw: string) => {
+    const digits = (raw || "").replace(/\D/g, "");
+    return digits.length > 10 ? digits.slice(-10) : digits;
+  };
+  const customerCallEvents = useMemo(() => {
+    if (!selectedCustomer) return [];
+    const targetDigits = normalizePhoneDigits(selectedCustomer.phone || "");
+    return allCallEvents
+      .filter(event => event.customerId === selectedCustomer.id || (targetDigits && normalizePhoneDigits(event.phoneNumber) === targetDigits))
+      .sort((a, b) => b.callTimestamp.localeCompare(a.callTimestamp));
+  }, [allCallEvents, selectedCustomer]);
+
+  // "Convert to PDF" on the Call & Text History panel -- saves into
+  // Documents tagged with this customer's name, same convention every other
+  // customer PDF here uses, so it's automatically swept up by "Compile
+  // Documents" above with no extra wiring needed there.
+  const generateCallTextHistoryPdf = async (cust: Customer, events: MissedCallEvent[]) => {
+    const bytes = await buildCallTextHistoryPdf(cust, events, businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const filename = `${(cust.company || cust.contact || "Customer").replace(/[\\/:*?"<>|]+/g, "-")}-call-text-history.pdf`;
+    const docId = `doc_calltext_${cust.id}_${Date.now()}`;
+    const newDoc: DocumentItem = {
+      id: docId,
+      name: filename,
+      customer: cust.contact || cust.company,
+      employee: loggedInUser?.name || "Staff Administrator",
+      vendor: "None",
+      job: "None",
+      type: "Customer Notes",
+      folder: "Customer Notes",
+      uploadedBy: loggedInUser?.name || "Staff Administrator",
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: `Call & Text History compiled from ${events.length} logged call(s).`,
+      tags: ["Customer", "Call History"],
+      estimateId: "None",
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
+    setDocuments(prev => [...prev, newDoc]);
+    triggerNotification(`📄 Saved Call & Text History to Documents: ${filename}`);
+    if (logOperationalEvent) logOperationalEvent("Call & Text History PDF Generated", filename, "📄");
   };
 
   const handleAddCustomer = (openPdf = false) => {
@@ -1832,6 +1896,50 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                         </div>
                       );
                     })()}
+                  </div>
+
+                  {/* Call & Text History -- populated by the Missed Call
+                      Text-Back Android app (see missed-call-text-back-app),
+                      which runs in the background on the owner's phone even
+                      when the browser is closed. This is the same record
+                      regardless of where the customer card is opened from. */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase font-bold text-[#5E7393] flex items-center gap-1.5">
+                        <MessageCircle className="w-3 h-3 text-[#315C9F]" />Call &amp; Text History
+                      </span>
+                      {customerCallEvents.length > 0 && (
+                        <button
+                          onClick={() => void generateCallTextHistoryPdf(selectedCustomer, customerCallEvents)}
+                          className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer flex items-center gap-1"
+                        >
+                          <FileText className="w-3 h-3" />Convert to PDF
+                        </button>
+                      )}
+                    </div>
+                    <div className="bg-[#EAF5FF]/40 rounded-2xl border border-[#9EC8EF]/30 divide-y divide-[#9EC8EF]/30 max-h-64 overflow-y-auto">
+                      {customerCallEvents.length === 0 ? (
+                        <p className="text-[10px] text-[#5E7393] font-semibold p-3">No calls or texts on file yet. Missed calls this customer makes get auto-texted back and logged here automatically once Missed Call Text-Back is set up on the owner's phone.</p>
+                      ) : (
+                        customerCallEvents.map(event => (
+                          <div key={event.id} className="p-2.5 space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#1F3557]">
+                              {event.direction === "missed" && <PhoneMissed className="w-3 h-3 text-rose-600 shrink-0" />}
+                              {event.direction === "incoming" && <PhoneIncoming className="w-3 h-3 text-emerald-600 shrink-0" />}
+                              {event.direction === "outgoing" && <PhoneOutgoing className="w-3 h-3 text-[#315C9F] shrink-0" />}
+                              <span className="capitalize">{event.direction} Call</span>
+                              <span className="text-[9px] font-semibold text-[#5E7393] ml-auto">{event.callTimestamp}</span>
+                            </div>
+                            {event.autoReplySent && event.autoReplyMessage && (
+                              <div className="flex items-start gap-1.5 pl-4.5 text-[10px] text-[#5E7393]">
+                                <MessageCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                                <span className="italic">"{event.autoReplyMessage}"</span>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
 
                   {/* Metrics */}

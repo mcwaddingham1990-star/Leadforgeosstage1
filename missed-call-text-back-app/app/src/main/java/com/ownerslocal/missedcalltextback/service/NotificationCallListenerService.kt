@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.ownerslocal.missedcalltextback.MissedCallApp
+import com.ownerslocal.missedcalltextback.data.FirestoreRestClient
 import com.ownerslocal.missedcalltextback.sms.AutoReplySender
 
 /**
@@ -31,7 +32,8 @@ class NotificationCallListenerService : NotificationListenerService() {
 
         val phoneNumber = PHONE_NUMBER_REGEX.find(combined)?.value ?: return
         val context = applicationContext
-        Thread { AutoReplySender(context, app.sessionStore).maybeSendAutoReply(phoneNumber) }.start()
+        val firestore = FirestoreRestClient(app.httpClient)
+        Thread { AutoReplySender(context, app.sessionStore, firestore).maybeSendAutoReply(phoneNumber) }.start()
     }
 
     companion object {

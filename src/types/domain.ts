@@ -90,6 +90,32 @@ export interface Lead {
   photos?: string[];
 }
 
+/**
+ * One call or its follow-up text, written by the Missed Call Text-Back
+ * Android app (see missed-call-text-back-app/.../data/CrmLinker.kt) straight
+ * to Firestore over the REST API -- the web app only ever reads this
+ * collection, never writes to it. `direction` covers every call the phone's
+ * call log records, not just missed ones: "missed" is the one that actually
+ * triggers `autoReplyMessage`/`autoReplySent`; "incoming"/"outgoing" are
+ * answered calls logged for the record with no auto-text. Two-way inbound
+ * texting (a customer replying) isn't wired up yet -- that needs a real SMS
+ * provider (e.g. Twilio) with its own phone number, which nothing here has
+ * been given credentials for.
+ */
+export interface MissedCallEvent {
+  id: string;
+  businessId: string;
+  phoneNumber: string;
+  direction: "missed" | "incoming" | "outgoing";
+  customerId: string | null;
+  leadId: string | null;
+  createdNewLead: boolean;
+  autoReplyMessage: string;
+  autoReplySent: boolean;
+  callTimestamp: string;
+  createdAt: string;
+}
+
 export interface Estimate {
   id: string;
   number: string;

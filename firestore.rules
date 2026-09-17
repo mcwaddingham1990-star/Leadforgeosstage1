@@ -443,5 +443,17 @@ service cloud.firestore {
     match /missed_call_settings/{businessId} {
       allow read, write: if isAuthenticated() && isBusinessMember(businessId);
     }
+
+    // One doc per missed call the companion Android app detected and
+    // auto-replied to -- written by that app (signed in as the same owner
+    // account as the web app, so the standard isBusinessMember check
+    // applies exactly like every other collection), read by the web app's
+    // Missed Call Text-Back log and the per-customer Call & Text History
+    // panel.
+    match /missed_call_events/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
   }
 }
