@@ -470,6 +470,15 @@ export default function SettingsPage({
       const nextTheme = matchedTheme?.id || "light-basic";
       setWorkspaceTheme(nextTheme);
       localStorage.setItem("ownerslocal_workspace_theme", value);
+      // Saved immediately, not gated behind the page's general "Save
+      // Changes" button (merge: true only touches this one field) -- a
+      // theme pick that only lived in local state until some unrelated
+      // field was also saved is exactly what made picking a theme here
+      // look like it "didn't stick" on refresh.
+      if (businessId) {
+        setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: value } } }, { merge: true })
+          .catch(err => console.error("Couldn't save workspace theme:", err));
+      }
     }
   };
 
