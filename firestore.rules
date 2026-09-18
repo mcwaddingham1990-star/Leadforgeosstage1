@@ -484,6 +484,19 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
 
+    // One doc per real SMS (either direction) the companion Android app
+    // has seen -- an incoming customer reply (SmsReceiver.kt) or an
+    // outgoing text actually sent from the owner's phone, whether that's
+    // the automated missed-call reply or a manual reply typed into the
+    // native Messages app (OutgoingSmsObserver.kt). Same write/read shape
+    // as missed_call_events; read by the web app's business-wide Inbox and
+    // the per-customer Call & Text History panel.
+    match /text_messages/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+    }
+
     // app_config/paywall_bypass holds the hashed (never plaintext) platform
     // admin access code for the OwnersLOCAL paywall -- see
     // server/paywallBypass.ts. Deliberately left unmatched here (default-deny

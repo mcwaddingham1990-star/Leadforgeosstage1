@@ -6,13 +6,15 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Runs after a missed-call auto-reply is sent: matches the caller against
- * this business's existing customers, then leads (by normalized phone
- * digits -- phone numbers are stored however the owner originally typed
- * them, so an exact string match would miss real matches constantly);
- * creates a new Lead if neither matches; and logs the event to
- * missed_call_events, so the web app's Missed Call Text-Back log and the
- * matched customer's Call & Text History panel both reflect it.
+ * Matches a phone number against this business's existing customers, then
+ * leads (by normalized phone digits -- phone numbers are stored however the
+ * owner originally typed them, so an exact string match would miss real
+ * matches constantly), creates a new Lead when nobody matches and the event
+ * is the kind that warrants one, and logs the real event --
+ * linkAndLog for calls (missed_call_events), logTextMessage for real SMS
+ * (text_messages, see SmsReceiver.kt/OutgoingSmsObserver.kt) -- so the web
+ * app's Missed Call Text-Back log, business-wide Inbox, and the matched
+ * customer's Call & Text History panel all reflect it.
  *
  * Deliberately does NOT write into the web app's `notifications` collection
  * -- that collection is populated through a local-array-sync hook
@@ -67,6 +69,47 @@ object CrmLinker {
      * no new-Lead creation -- an answered call to/from an unknown number is
      * just as likely personal as it is business).
      */
+    /** Shared by linkAndLog and logTextMessage: matches an existing customer, then lead, creating a new lead only when [createLeadIfUnmatched] and nobody matched -- a "someone reached out to us" event (a missed call, or an incoming text), never an answered/outgoing one (just as likely personal as business). */
+    private class MatchResult(val customerId: String?, val leadId: String?, val createdNewLead: Boolean)
+
+    private fun matchOrCreateLead(
+        firestore: FirestoreRestClient,
+        businessId: String,
+        idToken: String,
+        phoneNumber: String,
+        createLeadIfUnmatched: Boolean,
+        autoCreateNote: String
+    ): MatchResult {
+        val targetDigits = normalizePhone(phoneNumber)
+        val customerId = findMatch(firestore, "customers", businessId, idToken, targetDigits)
+        if (customerId != null) return MatchResult(customerId, null, false)
+
+        var leadId = findMatch(firestore, "leads", businessId, idToken, targetDigits)
+        var createdNewLead = false
+        if (leadId == null && createLeadIfUnmatched) {
+            leadId = firestore.createDocument(
+                "leads",
+                mapOf(
+                    "businessId" to businessId,
+                    "name" to "$autoCreateNote ($phoneNumber)",
+                    "company" to "",
+                    "phone" to phoneNumber,
+                    "email" to "",
+                    "source" to "Phone Call",
+                    "salesRep" to "",
+                    "status" to "New",
+                    "estimatedValue" to 0,
+                    "dateAdded" to isoNow(),
+                    "addedDaysAgo" to 0,
+                    "notes" to "Auto-created by Missed Call Text-Back -- this number didn't match an existing customer or lead."
+                ),
+                idToken
+            )
+            createdNewLead = leadId != null
+        }
+        return MatchResult(customerId, leadId, createdNewLead)
+    }
+
     fun linkAndLog(
         firestore: FirestoreRestClient,
         businessId: String,
@@ -75,35 +118,7 @@ object CrmLinker {
         direction: String,
         autoReplyMessage: String? = null
     ) {
-        val targetDigits = normalizePhone(phoneNumber)
-        val customerId = findMatch(firestore, "customers", businessId, idToken, targetDigits)
-        var leadId: String? = null
-        var createdNewLead = false
-
-        if (customerId == null) {
-            leadId = findMatch(firestore, "leads", businessId, idToken, targetDigits)
-            if (leadId == null && direction == "missed") {
-                leadId = firestore.createDocument(
-                    "leads",
-                    mapOf(
-                        "businessId" to businessId,
-                        "name" to "Missed Call ($phoneNumber)",
-                        "company" to "",
-                        "phone" to phoneNumber,
-                        "email" to "",
-                        "source" to "Phone Call",
-                        "salesRep" to "",
-                        "status" to "New",
-                        "estimatedValue" to 0,
-                        "dateAdded" to isoNow(),
-                        "addedDaysAgo" to 0,
-                        "notes" to "Auto-created by Missed Call Text-Back -- this number didn't match an existing customer or lead."
-                    ),
-                    idToken
-                )
-                createdNewLead = leadId != null
-            }
-        }
+        val match = matchOrCreateLead(firestore, businessId, idToken, phoneNumber, direction == "missed", "Missed Call")
 
         firestore.createDocument(
             "missed_call_events",
@@ -111,12 +126,48 @@ object CrmLinker {
                 "businessId" to businessId,
                 "phoneNumber" to phoneNumber,
                 "direction" to direction,
-                "customerId" to customerId,
-                "leadId" to leadId,
-                "createdNewLead" to createdNewLead,
+                "customerId" to match.customerId,
+                "leadId" to match.leadId,
+                "createdNewLead" to match.createdNewLead,
                 "autoReplyMessage" to (autoReplyMessage ?: ""),
                 "autoReplySent" to (autoReplyMessage != null),
                 "callTimestamp" to isoNow(),
+                "createdAt" to isoNow()
+            ),
+            idToken
+        )
+    }
+
+    /**
+     * Logs one real SMS (either direction) to text_messages, matched against
+     * the same customers/leads this business already has on file. An
+     * unmatched INCOMING text creates a new Lead, same reasoning as an
+     * unmatched missed call -- an unprompted inbound text is a real
+     * inbound inquiry. An unmatched OUTGOING text never creates one: that's
+     * the owner texting someone first from their own phone's native
+     * Messages app, which is just as likely personal as it is business.
+     */
+    fun logTextMessage(
+        firestore: FirestoreRestClient,
+        businessId: String,
+        idToken: String,
+        phoneNumber: String,
+        direction: String,
+        body: String
+    ) {
+        val match = matchOrCreateLead(firestore, businessId, idToken, phoneNumber, direction == "incoming", "Text Message")
+
+        firestore.createDocument(
+            "text_messages",
+            mapOf(
+                "businessId" to businessId,
+                "phoneNumber" to phoneNumber,
+                "direction" to direction,
+                "body" to body,
+                "customerId" to match.customerId,
+                "leadId" to match.leadId,
+                "createdNewLead" to match.createdNewLead,
+                "timestamp" to isoNow(),
                 "createdAt" to isoNow()
             ),
             idToken

@@ -141,6 +141,8 @@ class MainActivity : AppCompatActivity() {
     private fun requestRuntimePermissions() {
         val permissions = mutableListOf(
             Manifest.permission.SEND_SMS,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_SMS,
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG
         )
@@ -163,13 +165,17 @@ class MainActivity : AppCompatActivity() {
     private fun refreshPermissionsStatus() {
         if (!app.sessionStore.isSignedIn) return
         val smsGranted = isGranted(Manifest.permission.SEND_SMS)
+        val receiveSmsGranted = isGranted(Manifest.permission.RECEIVE_SMS)
+        val readSmsGranted = isGranted(Manifest.permission.READ_SMS)
         val phoneStateGranted = isGranted(Manifest.permission.READ_PHONE_STATE)
         val callLogGranted = isGranted(Manifest.permission.READ_CALL_LOG)
         val notificationAccessGranted = NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
         val batteryExempt = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
 
         binding.permissionsStatusText.text = buildString {
-            append(if (smsGranted) "✓ " else "✗ ").append("SMS\n")
+            append(if (smsGranted) "✓ " else "✗ ").append("Send SMS\n")
+            append(if (receiveSmsGranted) "✓ " else "✗ ").append("Receive SMS (customer replies)\n")
+            append(if (readSmsGranted) "✓ " else "✗ ").append("Read SMS (your replies, for the full conversation)\n")
             append(if (phoneStateGranted) "✓ " else "✗ ").append("Phone state\n")
             append(if (callLogGranted) "✓ " else "✗ ").append("Call log\n")
             append(if (notificationAccessGranted) "✓ " else "✗ ").append("Notification access\n")

@@ -103,6 +103,7 @@ beforeEach(async () => {
       ["estimates", "est_"],
       ["leads", "lead_"],
       ["missed_call_events", "mce_"],
+      ["text_messages", "txt_"],
     ] as const) {
       await setDoc(doc(db, collectionName, `${id}a`), { businessId: BIZ_A });
       await setDoc(doc(db, collectionName, `${id}b`), { businessId: BIZ_B });
@@ -183,7 +184,7 @@ describe("Tenant isolation: create/update cannot claim another business", () => 
 });
 
 describe("Cross-business DELETE (regression for the request.resource==null bug)", () => {
-  const collections = ["customers", "invoices", "bills", "journal_entries", "transactions", "scheduling_events", "work_orders", "estimates", "leads", "missed_call_events"] as const;
+  const collections = ["customers", "invoices", "bills", "journal_entries", "transactions", "scheduling_events", "work_orders", "estimates", "leads", "missed_call_events", "text_messages"] as const;
   const idFor = (c: (typeof collections)[number]) =>
     ({
       customers: "cust_b1",
@@ -196,6 +197,7 @@ describe("Cross-business DELETE (regression for the request.resource==null bug)"
       estimates: "est_b",
       leads: "lead_b",
       missed_call_events: "mce_b",
+      text_messages: "txt_b",
     })[c];
 
   for (const collectionName of collections) {

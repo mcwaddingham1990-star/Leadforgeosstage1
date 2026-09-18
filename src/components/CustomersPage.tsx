@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 
 export type { Customer } from "../types/domain";
-import type { Customer, DocumentItem, WorkOrder, MissedCallEvent } from "../types/domain";
+import type { Customer, DocumentItem, WorkOrder, MissedCallEvent, TextMessage } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
@@ -505,6 +505,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   // predates this customer being added (or that matched nothing at the
   // time) still shows up once the number is on file.
   const [allCallEvents] = useFirestoreCollection<MissedCallEvent>("missed_call_events", businessId);
+  // Real two-way SMS -- SmsReceiver.kt (incoming) / OutgoingSmsObserver.kt
+  // (outgoing, including a manual reply typed into the phone's native
+  // Messages app after "Reply" opens it) in the Android companion app.
+  const [allTextMessages] = useFirestoreCollection<TextMessage>("text_messages", businessId);
   const normalizePhoneDigits = (raw: string) => {
     const digits = (raw || "").replace(/\D/g, "");
     return digits.length > 10 ? digits.slice(-10) : digits;
@@ -516,13 +520,28 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       .filter(event => event.customerId === selectedCustomer.id || (targetDigits && normalizePhoneDigits(event.phoneNumber) === targetDigits))
       .sort((a, b) => b.callTimestamp.localeCompare(a.callTimestamp));
   }, [allCallEvents, selectedCustomer]);
+  const customerTextMessages = useMemo(() => {
+    if (!selectedCustomer) return [];
+    const targetDigits = normalizePhoneDigits(selectedCustomer.phone || "");
+    return allTextMessages
+      .filter(msg => msg.customerId === selectedCustomer.id || (targetDigits && normalizePhoneDigits(msg.phoneNumber) === targetDigits))
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [allTextMessages, selectedCustomer]);
+  // A single chronological feed mixing calls and real texts -- the actual
+  // "conversation" this customer's card is meant to show, newest first.
+  type TimelineEntry = { sortKey: string; kind: "call"; event: MissedCallEvent } | { sortKey: string; kind: "text"; event: TextMessage };
+  const customerTimeline = useMemo<TimelineEntry[]>(() => {
+    const calls: TimelineEntry[] = customerCallEvents.map(event => ({ sortKey: event.callTimestamp, kind: "call", event }));
+    const texts: TimelineEntry[] = customerTextMessages.map(event => ({ sortKey: event.timestamp, kind: "text", event }));
+    return [...calls, ...texts].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  }, [customerCallEvents, customerTextMessages]);
 
   // "Convert to PDF" on the Call & Text History panel -- saves into
   // Documents tagged with this customer's name, same convention every other
   // customer PDF here uses, so it's automatically swept up by "Compile
   // Documents" above with no extra wiring needed there.
-  const generateCallTextHistoryPdf = async (cust: Customer, events: MissedCallEvent[]) => {
-    const bytes = await buildCallTextHistoryPdf(cust, events, businessProfile);
+  const generateCallTextHistoryPdf = async (cust: Customer, events: MissedCallEvent[], texts: TextMessage[]) => {
+    const bytes = await buildCallTextHistoryPdf(cust, events, texts, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
     const filename = `${(cust.company || cust.contact || "Customer").replace(/[\\/:*?"<>|]+/g, "-")}-call-text-history.pdf`;
     const docId = `doc_calltext_${cust.id}_${Date.now()}`;
@@ -541,7 +560,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       status: "Draft",
       isFavorite: false,
       isArchived: false,
-      notes: `Call & Text History compiled from ${events.length} logged call(s).`,
+      notes: `Call & Text History compiled from ${events.length} call(s) and ${texts.length} text(s).`,
       tags: ["Customer", "Call History"],
       estimateId: "None",
       invoiceId: "None",
@@ -1755,38 +1774,65 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       when the browser is closed. This is the same record
                       regardless of where the customer card is opened from. */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-1.5">
                       <span className="text-[9px] uppercase font-bold text-[#5E7393] flex items-center gap-1.5">
                         <MessageCircle className="w-3 h-3 text-[#315C9F]" />Call &amp; Text History
                       </span>
-                      {customerCallEvents.length > 0 && (
-                        <button
-                          onClick={() => void generateCallTextHistoryPdf(selectedCustomer, customerCallEvents)}
-                          className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" />Convert to PDF
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {selectedCustomer.phone && (
+                          <>
+                            <button
+                              onClick={() => callNumber(selectedCustomer.phone)}
+                              className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer flex items-center gap-1"
+                              title="Opens your phone's native calling app, number pre-dialed"
+                            >
+                              <Phone className="w-3 h-3" />Call
+                            </button>
+                            <button
+                              onClick={() => composeSms({ to: selectedCustomer.phone })}
+                              className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer flex items-center gap-1"
+                              title="Opens your phone's native texting app, number pre-filled"
+                            >
+                              <MessageCircle className="w-3 h-3" />Reply
+                            </button>
+                          </>
+                        )}
+                        {customerTimeline.length > 0 && (
+                          <button
+                            onClick={() => void generateCallTextHistoryPdf(selectedCustomer, customerCallEvents, customerTextMessages)}
+                            className="px-2 py-1 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-lg text-[9px] font-bold text-[#315C9F] uppercase cursor-pointer flex items-center gap-1"
+                          >
+                            <FileText className="w-3 h-3" />Convert to PDF
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="bg-[#EAF5FF]/40 rounded-2xl border border-[#9EC8EF]/30 divide-y divide-[#9EC8EF]/30 max-h-64 overflow-y-auto">
-                      {customerCallEvents.length === 0 ? (
-                        <p className="text-[10px] text-[#5E7393] font-semibold p-3">No calls or texts on file yet. Missed calls this customer makes get auto-texted back and logged here automatically once Missed Call Text-Back is set up on the owner's phone.</p>
+                      {customerTimeline.length === 0 ? (
+                        <p className="text-[10px] text-[#5E7393] font-semibold p-3">No calls or texts on file yet. Missed calls get auto-texted back, and every real text either side sends gets logged here automatically once Missed Call Text-Back is set up on the owner's phone.</p>
                       ) : (
-                        customerCallEvents.map(event => (
-                          <div key={event.id} className="p-2.5 space-y-1">
+                        customerTimeline.map(entry => entry.kind === "call" ? (
+                          <div key={`call_${entry.event.id}`} className="p-2.5 space-y-1">
                             <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#1F3557]">
-                              {event.direction === "missed" && <PhoneMissed className="w-3 h-3 text-rose-600 shrink-0" />}
-                              {event.direction === "incoming" && <PhoneIncoming className="w-3 h-3 text-emerald-600 shrink-0" />}
-                              {event.direction === "outgoing" && <PhoneOutgoing className="w-3 h-3 text-[#315C9F] shrink-0" />}
-                              <span className="capitalize">{event.direction} Call</span>
-                              <span className="text-[9px] font-semibold text-[#5E7393] ml-auto">{event.callTimestamp}</span>
+                              {entry.event.direction === "missed" && <PhoneMissed className="w-3 h-3 text-rose-600 shrink-0" />}
+                              {entry.event.direction === "incoming" && <PhoneIncoming className="w-3 h-3 text-emerald-600 shrink-0" />}
+                              {entry.event.direction === "outgoing" && <PhoneOutgoing className="w-3 h-3 text-[#315C9F] shrink-0" />}
+                              <span className="capitalize">{entry.event.direction} Call</span>
+                              <span className="text-[9px] font-semibold text-[#5E7393] ml-auto">{entry.event.callTimestamp}</span>
                             </div>
-                            {event.autoReplySent && event.autoReplyMessage && (
+                            {entry.event.autoReplySent && entry.event.autoReplyMessage && (
                               <div className="flex items-start gap-1.5 pl-4.5 text-[10px] text-[#5E7393]">
                                 <MessageCircle className="w-3 h-3 mt-0.5 shrink-0" />
-                                <span className="italic">"{event.autoReplyMessage}"</span>
+                                <span className="italic">"{entry.event.autoReplyMessage}"</span>
                               </div>
                             )}
+                          </div>
+                        ) : (
+                          <div key={`text_${entry.event.id}`} className={`p-2.5 flex ${entry.event.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
+                            <div className={`max-w-[85%] rounded-xl px-2.5 py-1.5 space-y-0.5 ${entry.event.direction === "outgoing" ? "bg-[#315C9F] text-white" : "bg-white border border-[#9EC8EF]/50 text-[#1F3557]"}`}>
+                              <p className="text-[10px] leading-snug">{entry.event.body}</p>
+                              <p className={`text-[8.5px] font-semibold ${entry.event.direction === "outgoing" ? "text-white/70" : "text-[#5E7393]"}`}>{entry.event.timestamp}</p>
+                            </div>
                           </div>
                         ))
                       )}
