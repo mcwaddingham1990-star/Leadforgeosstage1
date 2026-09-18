@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshPermissionsStatus()
+        if (app.sessionStore.isSignedIn) renderSettingsSummary()
     }
 
     private fun renderSignedInState() {
@@ -73,7 +74,8 @@ class MainActivity : AppCompatActivity() {
             append(if (store.enabled) "Auto text-back is ON.\n" else "Auto text-back is OFF (enable it on the web app's settings page).\n")
             append("Message: \"${store.messageTemplate}\"\n")
             append("Watching ${store.watchedPackages.size} extra app(s) for missed calls.\n")
-            append("Last synced: $lastSyncText")
+            append("Last synced: $lastSyncText\n\n")
+            append("Last call check: ${store.lastCallCheckDebug ?: "none yet -- place a test call, then reopen this app"}")
         }
     }
 
