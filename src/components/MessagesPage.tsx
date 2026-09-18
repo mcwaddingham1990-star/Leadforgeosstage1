@@ -55,9 +55,10 @@ import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "fi
 import { db } from "../firebase";
 import { hasPermission } from "../types/permissions";
 import { composeSms, callNumber } from "../lib/deviceHandoff";
-import { TextMessage } from "../types/domain";
+import { TextMessage, Lead } from "../types/domain";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
-import { normalizePhoneForMatch } from "../lib/spreadsheetImport";
+import { normalizePhoneForMatch, normalizeEmailForMatch } from "../lib/spreadsheetImport";
+import { composeEmail } from "../lib/deviceHandoff";
 
 // Let's define the Types
 export interface MessageAttachment {
@@ -120,7 +121,12 @@ export const MessagesPage: React.FC = () => {
   // conversation is owner-only by default, unless a role has explicitly
   // been granted Delete on the Messages module.
   const canDeleteMessages = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "messages", "delete");
-  const { documents, setDocuments, customers: customersList, recentRoster, employees, schedulingEvents, estimates, invoices } = useDomainData();
+  const { documents, setDocuments, customers: customersList, leads, recentRoster, employees, schedulingEvents, estimates, invoices } = useDomainData();
+  // "View Lead Messages in Inbox" is its own module permission (separate from
+  // "messages" itself, which just gates the page) -- an employee can have
+  // full Team Chat + Text Inbox access without seeing website lead-form
+  // submissions, or vice versa. The Owner always sees everything.
+  const canViewLeadMessages = activeRole === "Owner" || hasPermission(loggedInUser?.granularPermissions, "view_lead_messages", "view");
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -237,49 +243,105 @@ export const MessagesPage: React.FC = () => {
   // Reply/Call deep-links below that hand off to the phone's native apps.
   const [textMessages] = useFirestoreCollection<TextMessage>("text_messages", businessId);
 
-  interface TextThread {
-    phoneKey: string;
+  // Every real text captured by the companion Android app, merged in the
+  // same Inbox with every Lead that came in through the embedded website
+  // form (source === "Website") -- both are "someone reached out" events,
+  // and a website lead that later texts the same number lands in the same
+  // thread as the original inquiry.
+  interface InboxEntry {
+    kind: "text" | "lead";
+    id: string;
+    sortKey: string;
+    text?: TextMessage;
+    lead?: Lead;
+  }
+
+  interface InboxThread {
+    key: string;
     phoneNumber: string;
+    email: string;
     customerId: string | null;
     leadId: string | null;
     displayName: string;
-    messages: TextMessage[];
-    lastMessage: TextMessage;
+    hasWebsiteLead: boolean;
+    entries: InboxEntry[];
+    lastEntry: InboxEntry;
   }
 
-  const textThreads = useMemo<TextThread[]>(() => {
-    const byPhone = new Map<string, TextMessage[]>();
+  const websiteLeads = useMemo(() => {
+    if (!canViewLeadMessages) return [];
+    return leads.filter(l => l.source === "Website");
+  }, [leads, canViewLeadMessages]);
+
+  const leadSortKey = (lead: Lead) => {
+    const parsed = new Date(lead.dateAdded);
+    return isNaN(parsed.getTime()) ? lead.dateAdded : parsed.toISOString();
+  };
+
+  const inboxThreads = useMemo<InboxThread[]>(() => {
+    const byKey = new Map<string, InboxEntry[]>();
+    const keyMeta = new Map<string, { phoneNumber: string; email: string }>();
+
+    const keyFor = (phone: string | undefined, email: string | undefined) => {
+      const normalizedPhone = phone ? normalizePhoneForMatch(phone) || phone : "";
+      if (normalizedPhone) return `phone:${normalizedPhone}`;
+      const normalizedEmail = email ? normalizeEmailForMatch(email) : "";
+      return normalizedEmail ? `email:${normalizedEmail}` : "";
+    };
+
     textMessages.forEach(msg => {
-      const key = normalizePhoneForMatch(msg.phoneNumber) || msg.phoneNumber;
-      if (!byPhone.has(key)) byPhone.set(key, []);
-      byPhone.get(key)!.push(msg);
+      const key = keyFor(msg.phoneNumber, undefined);
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push({ kind: "text", id: msg.id, sortKey: msg.timestamp, text: msg });
+      if (!keyMeta.has(key)) keyMeta.set(key, { phoneNumber: msg.phoneNumber, email: "" });
     });
 
-    const threads: TextThread[] = [];
-    byPhone.forEach((msgs, key) => {
-      const sorted = [...msgs].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    websiteLeads.forEach(lead => {
+      const key = keyFor(lead.phone, lead.email);
+      if (!key) return;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push({ kind: "lead", id: lead.id, sortKey: leadSortKey(lead), lead });
+      const existing = keyMeta.get(key);
+      keyMeta.set(key, { phoneNumber: existing?.phoneNumber || lead.phone || "", email: existing?.email || lead.email || "" });
+    });
+
+    const threads: InboxThread[] = [];
+    byKey.forEach((entries, key) => {
+      const sorted = [...entries].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
       const last = sorted[sorted.length - 1];
+      const meta = keyMeta.get(key)!;
+      const lastText = last.kind === "text" ? last.text! : undefined;
+      const lastLead = sorted.filter(e => e.kind === "lead").map(e => e.lead!).pop();
+      const customerId = lastText?.customerId || null;
+      const leadId = lastText?.leadId || lastLead?.id || null;
+
       const matchedCustomer =
-        customersList.find(c => c.id === last.customerId) ||
-        customersList.find(c => normalizePhoneForMatch(c.phone) === key);
+        customersList.find(c => c.id === customerId) ||
+        (meta.phoneNumber && customersList.find(c => normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(meta.phoneNumber)));
+
       threads.push({
-        phoneKey: key,
-        phoneNumber: last.phoneNumber,
-        customerId: last.customerId,
-        leadId: last.leadId,
-        displayName: matchedCustomer ? (matchedCustomer.company || matchedCustomer.contact) : last.phoneNumber,
-        messages: sorted,
-        lastMessage: last
+        key,
+        phoneNumber: meta.phoneNumber,
+        email: meta.email,
+        customerId,
+        leadId,
+        displayName: matchedCustomer
+          ? (matchedCustomer.company || matchedCustomer.contact)
+          : (lastLead ? (lastLead.company || lastLead.name) : (meta.phoneNumber || meta.email)),
+        hasWebsiteLead: sorted.some(e => e.kind === "lead"),
+        entries: sorted,
+        lastEntry: last
       });
     });
 
-    return threads.sort((a, b) => b.lastMessage.timestamp.localeCompare(a.lastMessage.timestamp));
-  }, [textMessages, customersList]);
+    return threads.sort((a, b) => b.lastEntry.sortKey.localeCompare(a.lastEntry.sortKey));
+  }, [textMessages, websiteLeads, customersList]);
 
-  const [selectedInboxPhoneKey, setSelectedInboxPhoneKey] = useState<string>("");
+  const [selectedInboxKey, setSelectedInboxKey] = useState<string>("");
   const activeInboxThread = useMemo(() => {
-    return textThreads.find(t => t.phoneKey === selectedInboxPhoneKey) || textThreads[0];
-  }, [textThreads, selectedInboxPhoneKey]);
+    return inboxThreads.find(t => t.key === selectedInboxKey) || inboxThreads[0];
+  }, [inboxThreads, selectedInboxKey]);
 
   const formatThreadTimestamp = (iso: string) => {
     const parsed = new Date(iso);
@@ -797,10 +859,10 @@ export const MessagesPage: React.FC = () => {
           activeMainTab === "inbox" ? "bg-[#4A9BFF] text-white shadow-sm" : "text-[#315C9F] hover:bg-[#C7E3FB]"
         }`}
       >
-        <Inbox className="w-3.5 h-3.5" /> Text Inbox
-        {textThreads.length > 0 && (
+        <Inbox className="w-3.5 h-3.5" /> Inbox
+        {inboxThreads.length > 0 && (
           <span className={`ml-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md font-bold ${activeMainTab === "inbox" ? "bg-white/25 text-white" : "bg-[#C7E3FB] text-[#315C9F]"}`}>
-            {textThreads.length}
+            {inboxThreads.length}
           </span>
         )}
       </button>
@@ -822,11 +884,11 @@ export const MessagesPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <Inbox className="w-5 h-5 text-[#315C9F]" />
               <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
-                Customer Text Inbox
+                Customer Inbox
               </h2>
             </div>
             <p className="text-xs text-slate-500 font-sans mt-1">
-              Every real text your customers send to and receive from your business phone, captured automatically by the companion app — no separate SMS service required.
+              Every real text captured by the companion app, plus every lead submitted through your embedded website form — all in one place, no separate SMS service required.
             </p>
           </div>
           {mainTabSwitcher}
@@ -840,37 +902,47 @@ export const MessagesPage: React.FC = () => {
                 <MessageCircle className="w-4 h-4 text-[#315C9F]" /> Conversations
               </h3>
               <span className="text-[9px] bg-[#C7E3FB] text-[#315C9F] font-mono px-2 py-0.5 rounded-md font-bold">
-                {textThreads.length} Number{textThreads.length === 1 ? "" : "s"}
+                {inboxThreads.length} Conversation{inboxThreads.length === 1 ? "" : "s"}
               </span>
             </div>
 
             <div className="space-y-2 flex-1">
-              {textThreads.length === 0 ? (
+              {inboxThreads.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-xs font-semibold px-2">
-                  No texts captured yet. Incoming and outgoing texts on your companion phone will appear here automatically.
+                  Nothing captured yet. Incoming/outgoing texts and website lead-form submissions will appear here automatically.
                 </div>
               ) : (
-                textThreads.map(thread => {
-                  const isSelected = !!activeInboxThread && thread.phoneKey === activeInboxThread.phoneKey;
+                inboxThreads.map(thread => {
+                  const isSelected = !!activeInboxThread && thread.key === activeInboxThread.key;
+                  const last = thread.lastEntry;
                   return (
                     <div
-                      key={thread.phoneKey}
-                      onClick={() => setSelectedInboxPhoneKey(thread.phoneKey)}
+                      key={thread.key}
+                      onClick={() => setSelectedInboxKey(thread.key)}
                       className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
                         isSelected ? "bg-[#C7E3FB] border-[#4A9BFF] shadow-sm" : "bg-[#F5FAFF] border-[#A9CDEE] hover:bg-[#EAF5FF]"
                       }`}
                     >
                       <div className="flex justify-between items-start gap-1">
                         <h4 className="text-xs font-extrabold text-slate-800 line-clamp-1 leading-tight">{thread.displayName}</h4>
-                        <span className="text-[9px] text-slate-400 font-mono shrink-0">{formatThreadTimestamp(thread.lastMessage.timestamp)}</span>
+                        <span className="text-[9px] text-slate-400 font-mono shrink-0">{formatThreadTimestamp(last.sortKey)}</span>
                       </div>
-                      <p className="text-[9px] font-mono text-slate-400">{thread.phoneNumber}</p>
+                      <p className="text-[9px] font-mono text-slate-400">{thread.phoneNumber || thread.email}</p>
                       <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
-                        <strong className="text-slate-700">{thread.lastMessage.direction === "incoming" ? "Them" : "You"}:</strong> {thread.lastMessage.body}
+                        {last.kind === "text" ? (
+                          <><strong className="text-slate-700">{last.text!.direction === "incoming" ? "Them" : "You"}:</strong> {last.text!.body}</>
+                        ) : (
+                          <><strong className="text-slate-700">🌐 Website Lead:</strong> {last.lead!.notes || "New inquiry submitted."}</>
+                        )}
                       </p>
-                      {!thread.customerId && !thread.leadId && (
-                        <span className="text-[8.5px] uppercase font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded w-fit">Unmatched Number</span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {thread.hasWebsiteLead && (
+                          <span className="text-[8.5px] uppercase font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded w-fit">🌐 Website Lead</span>
+                        )}
+                        {!thread.customerId && !thread.leadId && (
+                          <span className="text-[8.5px] uppercase font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded w-fit">Unmatched</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -882,28 +954,40 @@ export const MessagesPage: React.FC = () => {
           <div className="lg:col-span-8 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex flex-col justify-between max-h-[640px]">
             {!activeInboxThread ? (
               <div className="flex-1 flex items-center justify-center text-center text-slate-400 text-xs font-semibold px-4">
-                Select a conversation to view the full text thread.
+                Select a conversation to view the full thread.
               </div>
             ) : (
               <>
                 <div className="border-b border-[#A9CDEE] pb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider leading-none">{activeInboxThread.displayName}</h3>
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{activeInboxThread.phoneNumber}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{activeInboxThread.phoneNumber || activeInboxThread.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => callNumber(activeInboxThread.phoneNumber)}
-                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Phone className="w-3.5 h-3.5" /> Call
-                    </button>
-                    <button
-                      onClick={() => composeSms({ to: activeInboxThread.phoneNumber })}
-                      className="px-3 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" /> Reply
-                    </button>
+                    {activeInboxThread.phoneNumber && (
+                      <button
+                        onClick={() => callNumber(activeInboxThread.phoneNumber)}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Call
+                      </button>
+                    )}
+                    {activeInboxThread.phoneNumber && (
+                      <button
+                        onClick={() => composeSms({ to: activeInboxThread.phoneNumber })}
+                        className="px-3 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" /> Reply
+                      </button>
+                    )}
+                    {!activeInboxThread.phoneNumber && activeInboxThread.email && (
+                      <button
+                        onClick={() => composeEmail({ to: activeInboxThread.email })}
+                        className="px-3 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" /> Email
+                      </button>
+                    )}
                     {activeInboxThread.customerId && (
                       <button
                         onClick={() => onNavigateToScreen && onNavigateToScreen("customers", { customerId: activeInboxThread.customerId })}
@@ -912,14 +996,35 @@ export const MessagesPage: React.FC = () => {
                         <User className="w-3.5 h-3.5" /> Customer Card
                       </button>
                     )}
+                    {!activeInboxThread.customerId && activeInboxThread.leadId && (
+                      <button
+                        onClick={() => onNavigateToScreen && onNavigateToScreen("leads", {})}
+                        className="px-3 py-2 bg-[#F5FAFF] hover:bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <User className="w-3.5 h-3.5" /> View Lead
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 rounded-xl my-3 max-h-[380px] flex flex-col">
-                  {activeInboxThread.messages.map(msg => {
+                  {activeInboxThread.entries.map(entry => {
+                    if (entry.kind === "lead") {
+                      const lead = entry.lead!;
+                      return (
+                        <div key={entry.id} className="mr-auto max-w-[90%] w-full p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-left">
+                          <span className="text-[9px] font-sans font-bold uppercase text-emerald-600 mb-1 flex items-center gap-1">
+                            🌐 Website Lead Submission · {formatThreadTimestamp(entry.sortKey)}
+                          </span>
+                          <p className="text-xs font-bold text-slate-800 mt-1">{lead.name}{lead.company ? ` — ${lead.company}` : ""}</p>
+                          {lead.notes && <p className="text-xs text-slate-700 mt-1 whitespace-pre-line">{lead.notes}</p>}
+                        </div>
+                      );
+                    }
+                    const msg = entry.text!;
                     const isOutgoing = msg.direction === "outgoing";
                     return (
-                      <div key={msg.id} className={`flex flex-col max-w-[85%] text-left ${isOutgoing ? "ml-auto items-end" : "mr-auto items-start"}`}>
+                      <div key={entry.id} className={`flex flex-col max-w-[85%] text-left ${isOutgoing ? "ml-auto items-end" : "mr-auto items-start"}`}>
                         <span className="text-[9px] font-sans font-bold uppercase text-slate-400 mb-0.5">
                           {isOutgoing ? "You" : activeInboxThread.displayName} · {formatThreadTimestamp(msg.timestamp)}
                         </span>
@@ -939,7 +1044,7 @@ export const MessagesPage: React.FC = () => {
                 </div>
 
                 <p className="text-[9px] text-slate-400 text-center">
-                  Captured automatically from your companion phone's text messages. Reply and Call open your phone's own apps — nothing is sent from here. The full thread also appears on this customer's card, printable as PDF.
+                  Texts are captured automatically from your companion phone; website leads from your embedded lead form. Reply/Call/Email open your own apps — nothing is sent from here. The full thread also appears on this customer's card, printable as PDF.
                 </p>
               </>
             )}
