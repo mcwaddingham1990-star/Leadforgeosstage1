@@ -191,7 +191,8 @@ export const BillingPage: React.FC = () => {
           </div>
           <div className="flex gap-2">
             <input
-              type="text"
+              type="password"
+              autoComplete="off"
               value={accessCode}
               onChange={e => setAccessCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submitAccessCode()}

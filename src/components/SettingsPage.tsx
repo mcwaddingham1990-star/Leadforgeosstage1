@@ -2539,7 +2539,8 @@ export default function SettingsPage({
                     </div>
                     <div className="flex gap-2">
                       <input
-                        type="text"
+                        type="password"
+                        autoComplete="off"
                         value={newAccessCode}
                         onChange={e => setNewAccessCode(e.target.value)}
                         placeholder="New access code (min. 6 characters)"
