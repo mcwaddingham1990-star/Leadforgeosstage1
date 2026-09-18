@@ -11,6 +11,7 @@ import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { buildNewCustomerRecord } from "../lib/customerDefaults";
+import { AssignEmployeeField } from "./AssignEmployeeField";
 import type { SchedulingEvent, DocumentItem, Customer } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import type { BuildJobPrefill } from "../types/generatedPdf";
@@ -54,7 +55,7 @@ export function BuildJobModal({
 }) {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const {
-    schedulingEvents, customers, setCustomers, setNotifications, recentRoster,
+    schedulingEvents, customers, setCustomers, setNotifications,
     inventoryList, setDocuments, businessProfile
   } = useDomainData();
   const { createJob, updateJob } = useDomainActions();
@@ -300,7 +301,7 @@ export function BuildJobModal({
           <Field label="Job type"><select value={form.jobType} onChange={(e: any) => setForm({ ...form, jobType: e.target.value })} className="input">{["Service", "Installation", "Repair", "Maintenance", "Inspection", "Project", "Warranty", "Emergency", "Custom"].map(x => <option key={x}>{x}</option>)}</select></Field>
           <Field label="Department"><input value={form.department} onChange={(e: any) => setForm({ ...form, department: e.target.value })} className="input" /></Field>
           <div className="grid grid-cols-2 gap-2"><Field label="Start"><input type="time" value={form.startTime} onChange={(e: any) => setForm({ ...form, startTime: e.target.value })} className="input" /></Field><Field label="End"><input type="time" value={form.endTime} onChange={(e: any) => setForm({ ...form, endTime: e.target.value })} className="input" /></Field></div>
-          <Field label="Assigned technician"><select value={form.assignedEmployee} onChange={(e: any) => setForm({ ...form, assignedEmployee: e.target.value })} className="input"><option value="">Unassigned</option>{recentRoster.map((r: any) => <option key={r.id || r.name} value={r.name}>{r.name}</option>)}</select></Field>
+          <Field label="Assigned technician"><AssignEmployeeField value={form.assignedEmployee} onChange={v => setForm({ ...form, assignedEmployee: v })} className="input" /></Field>
           <Field label="Crew"><input value={form.assignedCrew} onChange={(e: any) => setForm({ ...form, assignedCrew: e.target.value })} className="input" /></Field>
           <Field label="Vehicle"><input value={form.assignedVehicle} onChange={(e: any) => setForm({ ...form, assignedVehicle: e.target.value })} className="input" /></Field>
           <Field label="Status"><select value={form.status} onChange={(e: any) => setForm({ ...form, status: e.target.value })} className="input">{STATUSES.map(x => <option key={x}>{x}</option>)}</select></Field>

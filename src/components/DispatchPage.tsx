@@ -3,6 +3,8 @@ import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
+import { AssignEmployeeField } from "./AssignEmployeeField";
+import { useAssignableEmployeeNames } from "../hooks/useAssignableEmployees";
 import {
   Search,
   Filter,
@@ -76,12 +78,9 @@ const STATUSES: Array<DispatchEvent["status"]> = [
 export const DispatchPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList, employees } = useDomainData();
+  const { schedulingEvents: events, setSchedulingEvents: setEvents, customers: customersList } = useDomainData();
   const [isWorkOrderPickerOpen, setIsWorkOrderPickerOpen] = useState(false);
-  const AVAILABLE_TECHNICIANS = useMemo(() => employees
-    .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
-    .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
-    .sort((a, b) => a.localeCompare(b)), [employees]);
+  const AVAILABLE_TECHNICIANS = useAssignableEmployeeNames();
   const AVAILABLE_CREWS = useMemo(() => ["None", ...Array.from(new Set(events.map(event => event.assignedCrew).filter((crew): crew is string => !!crew && crew !== "None"))).sort()], [events]);
   const AVAILABLE_VEHICLES = useMemo(() => ["None", ...Array.from(new Set(events.map(event => event.assignedVehicle).filter((vehicle): vehicle is string => !!vehicle && vehicle !== "None"))).sort()], [events]);
   const {
@@ -1107,14 +1106,11 @@ export const DispatchPage: React.FC = () => {
               {(assignType === "technician" || assignType === "all") && (
                 <div>
                   <label className="block text-[10px] font-black text-[#5E7393] uppercase mb-1">Technician Assignee</label>
-                  <select
+                  <AssignEmployeeField
                     value={tempEmployee}
-                    onChange={(e) => setTempEmployee(e.target.value)}
+                    onChange={setTempEmployee}
                     className="w-full bg-white border border-[#A9CDEE] rounded-lg p-2 font-bold text-[#1F3557] outline-none"
-                  >
-                    <option value="">Unassigned</option>
-                    {AVAILABLE_TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  />
                 </div>
               )}
 
