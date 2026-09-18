@@ -138,9 +138,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setDocuments,
     completedJobsRevenue,
     employees,
-    timeClockLogs
+    timeClockLogs,
+    setBuildJobPrefill
   } = useDomainData();
-  const { convertLeadToCustomer, createJob } = useDomainActions();
+  const { convertLeadToCustomer } = useDomainActions();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const apiKey = (process.env.GOOGLE_MAPS_PLATFORM_KEY || "").trim();
   const hasValidKey = apiKey !== "";
@@ -867,12 +868,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // (see the activeShifts/activeTechnicians/vehicles derivations above),
   // which already re-render this component whenever a new real fix lands.
 
-  // Handle estimate approvals & conversion directly from the map -- routed
-  // through the same shared createJob every other entry point uses (Jobs
-  // page, BuildJobModal, Leads, Estimates) instead of hand-rolling a
-  // SchedulingEvent here. That previously skipped sourceEstimateId
-  // entirely, which broke createJob's idempotency check and let the same
-  // accepted estimate be converted into duplicate jobs.
+  // Handle estimate approvals from the map -- same universal Build Job
+  // popup every other "turn this into a job" entry point opens (Jobs page,
+  // Leads, Customers, Estimates), reached via the shared buildJobPrefill
+  // handoff instead of the map hand-rolling its own SchedulingEvent. That
+  // old inline version never set sourceEstimateId, which broke createJob's
+  // idempotency check and let the same accepted estimate be converted into
+  // duplicate jobs -- routing through the real popup removes that path
+  // entirely instead of just patching around it.
   const handleApproveEstimate = (estId: string) => {
     const est = estimates.find(e => e.id === estId);
     if (!est) return;
@@ -884,44 +887,20 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     const matchedCustomer = customers.find(
       c => c.contact === est.customerName || c.company === est.company
     );
-    const address = matchedCustomer?.address || est.address || est.company || "";
 
-    const newJob = createJob({
+    setBuildJobPrefill({
       customerId: matchedCustomer?.id,
-      customer: est.customerName,
-      customerPhone: matchedCustomer?.phone || "",
-      customerEmail: matchedCustomer?.email || "",
-      customerAddress: address,
-      location: address,
-      date: new Date().toISOString().split("T")[0],
-      startTime: "10:30",
-      endTime: "13:00",
-      priority: "Medium",
-      notes: `Generated automatically via approved estimate ${est.number}. Amount: $${est.amount}`,
+      customerName: est.customerName,
+      customerPhone: matchedCustomer?.phone || est.phone,
+      customerEmail: matchedCustomer?.email,
+      customerAddress: matchedCustomer?.address || est.address || est.company,
+      description: est.projectSpecifics || undefined,
+      notes: `Approved from the Map. Amount: $${est.amount}`,
       budget: est.amount,
       sourceEstimateId: est.id,
       source: matchedCustomer?.source || est.source
     });
-
-    // Update selection
-    setSelectedPin({
-      id: newJob.id,
-      type: "Job",
-      title: `Job: ${newJob.customer}`,
-      subtitle: `Assigned: Unassigned | Priority: Medium | Status: ${newJob.status}`,
-      address: newJob.location || address,
-      lat: geocodeAddress(newJob.location || address, newJob.id).lat,
-      lng: geocodeAddress(newJob.location || address, newJob.id).lng,
-      raw: newJob
-    });
-
-    if (logOperationalEvent) {
-      logOperationalEvent(
-        "Estimate Accepted",
-        `Estimate ${est.number} converted into live Scheduled Job ${newJob.id}.`,
-        "📈"
-      );
-    }
+    onNavigateToScreen("jobs");
   };
 
   // Convert Lead -> Active Customer profile instantly. Uses the same

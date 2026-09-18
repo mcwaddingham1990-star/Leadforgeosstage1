@@ -55,7 +55,7 @@ export function BuildJobModal({
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const {
     schedulingEvents, customers, setCustomers, setNotifications, recentRoster,
-    inventoryList, documents, setDocuments, businessProfile
+    inventoryList, setDocuments, businessProfile
   } = useDomainData();
   const { createJob, updateJob } = useDomainActions();
   const { navigateToScreen, triggerNotification } = useNavTelemetry();
@@ -91,6 +91,14 @@ export function BuildJobModal({
   // modal was opened from a prefill (a Lead/Estimate) that has no job yet.
   const [savedJob, setSavedJob] = useState<SchedulingEvent | null>(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  // What to do once Job Tracking is dismissed (closed, skipped, or
+  // remind-me-later'd) -- set right before auto-opening tracking after a
+  // save, so the save action's own follow-through (closing Build Job,
+  // navigating to Scheduling) still happens once tracking is done with,
+  // instead of stacking on top of it. Left null when Job Tracking is
+  // opened manually via its own button, so dismissing it just returns to
+  // the still-open Build Job popup underneath, per the original design.
+  const [afterTracking, setAfterTracking] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -169,8 +177,8 @@ export function BuildJobModal({
       }, ...prev]);
       setNotifications(prev => [{
         id: `customer_review_${customerId}`, screenId: "customers", title: "Edit and confirm new customer",
-        message: `${customerName} was added while creating a job. Review and confirm the customer record.`,
-        isRead: false, timestamp: new Date().toISOString()
+        description: `${customerName} was added while creating a job. Review and confirm the customer record.`,
+        isRead: false, time: new Date().toISOString()
       }, ...prev]);
     }
 
@@ -199,22 +207,63 @@ export function BuildJobModal({
     return created;
   };
 
-  const handleSaveJob = () => { if (doSave()) onClose(); };
+  // Every save funnels into Job Tracking next -- the user asked for this to
+  // be part of the flow every time a job is saved, not just something you
+  // have to remember to click into. `runAfter` is what actually finishes
+  // the save action (closing Build Job, navigating to Scheduling) once the
+  // user is done with -- or skips/remind-later's past -- Job Tracking.
+  const openTrackingThen = (job: SchedulingEvent, runAfter: () => void) => {
+    setAfterTracking(() => runAfter);
+    setIsTrackingOpen(true);
+  };
+  const handleSaveJob = () => {
+    const job = doSave();
+    if (!job) return;
+    openTrackingThen(job, onClose);
+  };
   const handleSaveAndPdf = () => {
     const job = doSave();
     if (!job) return;
-    void storeJobPdf(job).then(() => onClose());
+    void storeJobPdf(job).then(() => openTrackingThen(job, onClose));
   };
   const handleScheduleJob = () => {
     const job = doSave();
     if (!job) return;
-    onClose();
-    navigateToScreen("scheduling", { customerId: job.customerId });
+    openTrackingThen(job, () => { onClose(); navigateToScreen("scheduling", { customerId: job.customerId }); });
   };
   const handleOpenTracking = () => {
     const job = savedJob || doSave();
     if (!job) return;
     setIsTrackingOpen(true);
+  };
+  // Closing Job Tracking (the X, Skip, or Remind Me Later) always runs
+  // through here. When it was opened manually via the header button,
+  // afterTracking is still null, so this just returns to Build Job --
+  // matching the original design ("save job tracking, go back to build
+  // job"). When it was opened automatically right after a save, this
+  // finishes that save's own follow-through instead.
+  const closeTracking = () => {
+    setIsTrackingOpen(false);
+    if (afterTracking) {
+      const runAfter = afterTracking;
+      setAfterTracking(null);
+      runAfter();
+    }
+  };
+  const handleSkipTracking = () => {
+    triggerNotification("Job saved -- you can set up Job Tracking anytime from the job.");
+    closeTracking();
+  };
+  const handleRemindLaterTracking = () => {
+    if (savedJob) {
+      setNotifications(prev => [{
+        id: `job_tracking_reminder_${savedJob.id}_${Date.now()}`, screenId: "jobs", title: "Set up Job Tracking",
+        description: `${displayNumber(savedJob)} — ${savedJob.customer} is waiting on a completion plan. Set one up when you have the specifics.`,
+        isRead: false, time: new Date().toISOString()
+      }, ...prev]);
+    }
+    triggerNotification("We'll remind you to set up Job Tracking later.");
+    closeTracking();
   };
 
   return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e: any) => e.target === e.currentTarget && onClose()}>
@@ -268,7 +317,8 @@ export function BuildJobModal({
       job={savedJob} plan={completionPlans.find(plan => plan.jobId === savedJob.id)}
       businessId={businessId} actor={actor} canManage={canManageCompletion}
       canCreate={canManageCompletion || isAssignedWorker(savedJob)} inventory={inventoryList}
-      setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={() => setIsTrackingOpen(false)} notify={triggerNotification}
+      setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={closeTracking} notify={triggerNotification}
+      onSkip={handleSkipTracking} onRemindLater={handleRemindLaterTracking}
     />}
   </div>;
 }

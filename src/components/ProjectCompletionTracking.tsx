@@ -16,8 +16,16 @@ export function ProjectCompletionTracking(props: {
   job: SchedulingEvent; plan?: ProjectCompletionPlan; businessId: string; actor: string; canManage: boolean; canCreate?: boolean;
   inventory: InventoryItem[]; setPlans: React.Dispatch<React.SetStateAction<ProjectCompletionPlan[]>>;
   setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>; onClose: () => void; notify: (message: string) => void;
+  /** Only set when this popup was opened automatically right after a job
+   * was just saved (see BuildJobModal) -- lets someone who doesn't have the
+   * completion-plan specifics on hand yet bail out without losing the job
+   * they just created. Not shown when Job Tracking is opened manually
+   * (e.g. from the Jobs page's own detail view), where there's nothing to
+   * skip past. */
+  onSkip?: () => void;
+  onRemindLater?: () => void;
 }) {
-  const { job, plan, businessId, actor, canManage, canCreate = canManage, inventory, setPlans, setDocuments, onClose, notify } = props;
+  const { job, plan, businessId, actor, canManage, canCreate = canManage, inventory, setPlans, setDocuments, onClose, notify, onSkip, onRemindLater } = props;
   const { customers, setSchedulingEvents } = useDomainData();
   const [draft, setDraft] = useState<ProjectCompletionPlan | null>(plan || null);
   const [busy, setBusy] = useState(false);
@@ -68,7 +76,7 @@ export function ProjectCompletionTracking(props: {
     reader.readAsDataURL(file);
   };
 
-  if (!draft) return <Modal onClose={onClose}><div className="p-8 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-[#4A86F7]"/><h3 className="mt-3 text-lg font-black text-[#1F3557]">Project Completion Tracking</h3><p className="mt-2 text-xs text-slate-500">No completion plan has been created for this job.</p>{canCreate && <button onClick={createPlan} className="mt-5 rounded-xl bg-[#315C9F] px-5 py-3 text-xs font-black text-white">Create Completion Plan</button>}</div></Modal>;
+  if (!draft) return <Modal onClose={onClose}><div className="p-8 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-[#4A86F7]"/><h3 className="mt-3 text-lg font-black text-[#1F3557]">Project Completion Tracking</h3><p className="mt-2 text-xs text-slate-500">No completion plan has been created for this job.</p>{canCreate && <button onClick={createPlan} className="mt-5 rounded-xl bg-[#315C9F] px-5 py-3 text-xs font-black text-white">Create Completion Plan</button>}{(onSkip || onRemindLater) && <div className="mt-3 flex justify-center gap-2">{onRemindLater && <button onClick={onRemindLater} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold text-[#315C9F]">Remind Me Later</button>}{onSkip && <button onClick={onSkip} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Skip for now</button>}</div>}</div></Modal>;
 
   return <>
   <Modal onClose={onClose}>
