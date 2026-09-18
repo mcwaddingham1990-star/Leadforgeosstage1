@@ -7,6 +7,7 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { buildLeadPdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import type { DocumentItem } from "../types/domain";
+import { ScheduleHomeVisitModal } from "./ScheduleHomeVisitModal";
 import {
   Search,
   Plus,
@@ -361,6 +362,16 @@ export const LeadsPage: React.FC = () => {
     if (!selectedLead) return;
     openBuildJobFromLead(selectedLead);
     setSelectedLead(null);
+  };
+
+  // Unlike the other CRM actions, this one stays layered on top of the
+  // Lead Details modal instead of closing it -- scheduling (or skipping)
+  // a home visit is one step among several you might take on the same
+  // lead, not a terminal action like converting or building an estimate.
+  const [isHomeVisitOpen, setIsHomeVisitOpen] = useState(false);
+  const handleScheduleHomeVisit = () => {
+    if (!selectedLead) return;
+    setIsHomeVisitOpen(true);
   };
 
   const leads = propsLeads || localLeads;
@@ -1435,6 +1446,13 @@ export const LeadsPage: React.FC = () => {
                     <p className="text-[10px] uppercase font-bold text-[#5E7393] mb-2.5">CRM System Operations</p>
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
+                        onClick={handleScheduleHomeVisit}
+                        className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <Calendar className="w-4 h-4 text-amber-600" />
+                        Schedule Home Visit
+                      </button>
+                      <button
                         onClick={handleConvertLead}
                         className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                       >
@@ -1450,7 +1468,7 @@ export const LeadsPage: React.FC = () => {
                       </button>
                       <button
                         onClick={handleBuildJob}
-                        className="col-span-2 px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                        className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                       >
                         <Briefcase className="w-4 h-4 text-[#315C9F]" />
                         Build Job
@@ -1535,6 +1553,7 @@ export const LeadsPage: React.FC = () => {
           </div>
         </div>
       )}
+      <ScheduleHomeVisitModal isOpen={isHomeVisitOpen} onClose={() => setIsHomeVisitOpen(false)} lead={selectedLead} />
     </div>
   );
 };
