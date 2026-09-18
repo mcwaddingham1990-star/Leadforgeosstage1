@@ -44,6 +44,8 @@ import type { ImportFieldSpec, DuplicateCheckResult } from "../lib/spreadsheetIm
 import { BuildJobModal } from "./BuildJobModal";
 import type { BuildJobPrefill } from "../types/generatedPdf";
 import { buildNewCustomerRecord } from "../lib/customerDefaults";
+import { AssignEmployeeField } from "./AssignEmployeeField";
+import { useAssignableEmployeeNames } from "../hooks/useAssignableEmployees";
 
 type JobImportKey = "customer" | "eventType" | "date" | "startTime" | "endTime" | "assignedEmployee" | "address" | "notes" | "status";
 const JOB_IMPORT_FIELDS: ImportFieldSpec<JobImportKey>[] = [
@@ -164,13 +166,9 @@ export const SchedulingPage: React.FC = () => {
     setCustomers,
     setNotifications,
     preSelectedDate,
-    preSelectedCustomerId,
-    employees
+    preSelectedCustomerId
   } = useDomainData();
-  const EMPLOYEES = useMemo(() => employees
-    .map(employee => `${employee.firstName} ${employee.lastName}`.trim())
-    .filter((name, index, names) => name.length > 0 && names.indexOf(name) === index)
-    .sort((a, b) => a.localeCompare(b)), [employees]);
+  const EMPLOYEES = useAssignableEmployeeNames();
   const selectableCustomers = useMemo(() => {
     const byKey = new Map<string, { id: string; contact: string; company: string; phone: string; email: string; address: string }>();
     customersList.forEach(customer => byKey.set(customer.id, customer));
@@ -1930,17 +1928,13 @@ export const SchedulingPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Assign Employee</label>
-                  <select
+                  <AssignEmployeeField
                     value={formEmployee}
-                    onChange={(e) => setFormEmployee(e.target.value)}
+                    onChange={setFormEmployee}
                     className="w-full bg-[#F5FAFF] border border-[#A9CDEE] rounded-xl px-3 py-2 font-semibold"
-                  >
-                    {EMPLOYEES.length === 0 && <option value="">No team members yet</option>}
-                    {formEmployee === "" && EMPLOYEES.length > 0 && <option value="" disabled>Select employee...</option>}
-                    {EMPLOYEES.map(emp => (
-                      <option key={emp} value={emp}>{emp}</option>
-                    ))}
-                  </select>
+                    noOptionsLabel="No team members yet"
+                    placeholderLabel="Select employee..."
+                  />
                 </div>
 
                 <div className="space-y-1">
