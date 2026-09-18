@@ -41,6 +41,9 @@ import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { BulkImportModal } from "./BulkImportModal";
 import type { ImportFieldSpec, DuplicateCheckResult } from "../lib/spreadsheetImport";
+import { BuildJobModal } from "./BuildJobModal";
+import type { BuildJobPrefill } from "../types/generatedPdf";
+import { buildNewCustomerRecord } from "../lib/customerDefaults";
 
 type JobImportKey = "customer" | "eventType" | "date" | "startTime" | "endTime" | "assignedEmployee" | "address" | "notes" | "status";
 const JOB_IMPORT_FIELDS: ImportFieldSpec<JobImportKey>[] = [
@@ -327,6 +330,15 @@ export const SchedulingPage: React.FC = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<SchedulingEvent | null>(null);
   const [isEditingEvent, setIsEditingEvent] = useState(false);
+  // "Job" is one of the many event types this page's own New Event form can
+  // create -- but a Job specifically needs to go through the same shared
+  // BuildJobModal every other job entry point (Jobs page, Leads, Customers,
+  // Estimates, Map) uses, not a second independently-coded write path with
+  // its own copy of the "quick add a customer" logic and no idempotency
+  // guard. See handleSaveEvent/handleOpenEditForm below.
+  const [isBuildJobOpen, setIsBuildJobOpen] = useState(false);
+  const [buildJobEditingEvent, setBuildJobEditingEvent] = useState<SchedulingEvent | null>(null);
+  const [buildJobLocalPrefill, setBuildJobLocalPrefill] = useState<BuildJobPrefill | null>(null);
 
   // New/Edit Event Form Fields
   const [formType, setFormType] = useState("Job");
@@ -673,24 +685,49 @@ export const SchedulingPage: React.FC = () => {
     // everywhere this event's .customer field is read.
     if (!customerName) customerName = descriptor;
 
+    // A "Job" isn't just another calendar event type -- hand off to the
+    // same shared Build Job popup every other job entry point uses instead
+    // of writing a second, independently-coded SchedulingEvent here (which
+    // previously had no sourceEstimateId idempotency guard and re-typed its
+    // own copy of the "quick add a customer" block below). Whatever's
+    // already been filled in here carries over; BuildJobModal owns
+    // resolving/creating the customer record from that point on, same as
+    // when this popup is reached from an Estimate, a Lead, or the Map.
+    if (formType === "Job") {
+      setIsNewEventOpen(false);
+      setIsDetailsOpen(false);
+      if (isEditingEvent && selectedEvent) {
+        setBuildJobEditingEvent(selectedEvent);
+        setBuildJobLocalPrefill(null);
+      } else {
+        setBuildJobEditingEvent(null);
+        setBuildJobLocalPrefill({
+          customerId: formCustomerMode === "search" ? selectedCustomerId || undefined : undefined,
+          customerName, customerPhone, customerEmail, customerAddress,
+          title: descriptor, notes: formNotes.trim(),
+          budget: formBudget.trim() ? Number(formBudget) : undefined
+        });
+      }
+      setIsBuildJobOpen(true);
+      return;
+    }
+
     // Only create a customer record if a real contact name was actually
     // typed -- not just because "Add Customer" mode was left selected while
     // the field itself stayed empty (customerName would otherwise silently
     // fall back to the descriptor text above).
     if (formCustomerMode === "custom" && formCustomName.trim()) {
-      resolvedCustomerId = `cust_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      setCustomers(prev => [{
-        id: resolvedCustomerId, company: customerName, contact: customerName,
-        phone: customerPhone, email: customerEmail, address: customerAddress,
-        openJobs: 0, outstandingBalance: 0, lifetimeValue: 0,
-        status: "Active", type: "Residential", isVIP: false, recentlyAdded: true,
-        requireFollowUp: false, pendingConfirmation: true, createdFrom: "schedule_job"
-      }, ...prev]);
+      const newCustomer = buildNewCustomerRecord({
+        name: customerName, company: customerName, phone: customerPhone, email: customerEmail,
+        address: customerAddress, createdFrom: "schedule_job", pendingConfirmation: true
+      });
+      resolvedCustomerId = newCustomer.id;
+      setCustomers(prev => [newCustomer, ...prev]);
       setNotifications(prev => [{
         id: `customer_review_${resolvedCustomerId}`, screenId: "customers",
         title: "Edit and confirm new customer",
-        message: `${customerName} was added while scheduling a job. Review and confirm the customer record.`,
-        isRead: false, timestamp: new Date().toISOString()
+        description: `${customerName} was added while scheduling this event. Review and confirm the customer record.`,
+        isRead: false, time: new Date().toISOString()
       }, ...prev]);
     }
 
@@ -764,6 +801,17 @@ export const SchedulingPage: React.FC = () => {
     // Check permission
     if (!isHighPrivilege) {
       triggerNotification(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can edit event times/dates.`);
+      return;
+    }
+
+    // An existing Job goes straight to the same shared Build Job popup
+    // every other job entry point edits through, instead of this page's
+    // own generic event-edit form.
+    if (evt.eventType === "Job") {
+      setIsDetailsOpen(false);
+      setBuildJobEditingEvent(evt);
+      setBuildJobLocalPrefill(null);
+      setIsBuildJobOpen(true);
       return;
     }
 
@@ -864,7 +912,14 @@ export const SchedulingPage: React.FC = () => {
     const dup: SchedulingEvent = {
       ...evt,
       id: "evt_" + Math.random().toString(36).substring(2, 9),
-      status: "Scheduled"
+      status: "Scheduled",
+      // A duplicate is a genuinely new, separate appointment -- carrying
+      // over the original's sourceEstimateId/sourceLeadId would let two
+      // jobs both claim to be "the job for that estimate/lead," which
+      // breaks createJob's idempotency lookup (it would find whichever one
+      // happens to match first and treat the estimate as already handled).
+      sourceEstimateId: undefined,
+      sourceLeadId: undefined
     };
     setEvents(prev => [...prev, dup]);
     if (logOperationalEvent) {
@@ -2179,6 +2234,12 @@ export const SchedulingPage: React.FC = () => {
 
       <CreateWorkOrderPicker isOpen={isWorkOrderPickerOpen} onClose={() => setIsWorkOrderPickerOpen(false)} />
       <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} />
+      <BuildJobModal
+        isOpen={isBuildJobOpen}
+        onClose={() => { setIsBuildJobOpen(false); setBuildJobEditingEvent(null); setBuildJobLocalPrefill(null); setSelectedEvent(null); }}
+        editingJob={buildJobEditingEvent}
+        prefill={buildJobLocalPrefill}
+      />
 
       {isBulkImportOpen && (
         <BulkImportModal<JobImportKey>

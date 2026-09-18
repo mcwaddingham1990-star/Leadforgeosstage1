@@ -10,6 +10,7 @@ import { StructuredAddressFields } from "./StructuredAddressFields";
 import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
+import { buildNewCustomerRecord } from "../lib/customerDefaults";
 import type { SchedulingEvent, DocumentItem, Customer } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import type { BuildJobPrefill } from "../types/generatedPdf";
@@ -26,7 +27,6 @@ const EMPTY_FORM = {
   sourceEstimateId: undefined as string | undefined, sourceLeadId: undefined as string | undefined, source: undefined as Customer["source"] | undefined
 };
 
-const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const displayNumber = (job: SchedulingEvent) => job.jobNumber || `JOB-${job.id.replace(/\D/g, "").slice(-6) || job.id.slice(-6).toUpperCase()}`;
 const normalizedStatus = (job: SchedulingEvent): JobStatusType => {
   const raw = String(job.status || "Unassigned").trim();
@@ -168,13 +168,12 @@ export function BuildJobModal({
     const jobTitle = form.title.trim() || "Service Job";
     let customerId = customer?.id || form.customerId || undefined;
     if (form.addAsNewCustomer) {
-      customerId = uid("cust");
-      setCustomers(prev => [{
-        id: customerId!, company: customerName, contact: customerName, phone: customerPhone,
-        email: form.customerEmail.trim(), address: location, openJobs: 0, outstandingBalance: 0, lifetimeValue: 0,
-        status: "Active", type: "Residential", isVIP: false, recentlyAdded: true,
-        requireFollowUp: false, pendingConfirmation: true, createdFrom: "create_job"
-      }, ...prev]);
+      const newCustomer = buildNewCustomerRecord({
+        name: customerName, company: customerName, phone: customerPhone, email: form.customerEmail.trim(),
+        address: location, createdFrom: "create_job", pendingConfirmation: true
+      });
+      customerId = newCustomer.id;
+      setCustomers(prev => [newCustomer, ...prev]);
       setNotifications(prev => [{
         id: `customer_review_${customerId}`, screenId: "customers", title: "Edit and confirm new customer",
         description: `${customerName} was added while creating a job. Review and confirm the customer record.`,
@@ -184,6 +183,13 @@ export function BuildJobModal({
 
     if (savedJob) {
       const updated = updateJob(savedJob.id, {
+        // Editing a record through Build Job means it either already was a
+        // Job, or (e.g. someone switched a Scheduling event's type to
+        // "Job" mid-edit and got routed here) is meant to become one --
+        // either way, Build Job is the one place that owns "is this a
+        // Job", so it stamps eventType itself rather than leaving whatever
+        // the record started as.
+        eventType: "Job",
         title: jobTitle, customType: jobTitle, jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
         customerId, customer: customerName, customerPhone, customerEmail: form.customerEmail.trim() || customer?.email || savedJob.customerEmail || "",
         customerAddress: location, location, assignedEmployee: form.assignedEmployee, assignedCrew: form.assignedCrew, assignedVehicle: form.assignedVehicle,
