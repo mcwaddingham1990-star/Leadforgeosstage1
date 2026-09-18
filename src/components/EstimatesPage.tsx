@@ -202,11 +202,10 @@ export const EstimatesPage: React.FC = () => {
   };
 
   // Builds a real PDF from the actual estimate data right now (no signing
-  // required), saves it to the Documents Hub immediately, then opens the
-  // PDF Editor so the owner can review it and optionally capture
-  // signatures. This is the estimate's "Generate PDF" action everywhere it
-  // appears (create form, review screen).
-  const generateEstimatePdf = async (est: Estimate, autoCaptureSignatures = false) => {
+  // required) and saves it to the Documents Hub immediately. Shared by
+  // "Save (and Store as PDF)" (stops here) and "Save & Generate PDF" (goes
+  // on to open the PDF Editor) -- see generateEstimatePdf below.
+  const buildAndStoreEstimatePdf = async (est: Estimate) => {
     const matchedCustomer = customers.find(c => c.contact === est.customerName || c.company === est.company);
     const bytes = await buildEstimatePdf(est, matchedCustomer, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
@@ -242,6 +241,15 @@ export const EstimatesPage: React.FC = () => {
       triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
     }
     setDocuments(prev => [...prev, newDoc]);
+    return { pdfBase64, matchedCustomer };
+  };
+
+  // Builds + stores the PDF, then opens the PDF Editor so the owner can
+  // review it and optionally capture signatures. This is the estimate's
+  // "Save & Generate PDF" action everywhere it appears (create form, review
+  // screen).
+  const generateEstimatePdf = async (est: Estimate, autoCaptureSignatures = false) => {
+    const { pdfBase64, matchedCustomer } = await buildAndStoreEstimatePdf(est);
     setGeneratedPdfDraft({
       filename: `${est.number}.pdf`,
       title: `Estimate ${est.number}`,
@@ -259,7 +267,14 @@ export const EstimatesPage: React.FC = () => {
     if (logOperationalEvent) logOperationalEvent("Estimate PDF Generated", `${est.number} for ${est.customerName}`, "📄");
   };
 
-  const handleAddEstimate = (action: "save" | "pdf" | "signatures" | "convert" = "save") => {
+  // "Save (and Store as PDF)" -- builds + stores the PDF into Documents same
+  // as above, but stays on this page instead of opening the PDF Editor.
+  const storeEstimatePdf = async (est: Estimate) => {
+    await buildAndStoreEstimatePdf(est);
+    if (logOperationalEvent) logOperationalEvent("Estimate PDF Stored", `${est.number} for ${est.customerName} saved to Documents`, "📄");
+  };
+
+  const handleAddEstimate = (action: "save" | "pdf" | "pdf-store" | "signatures" | "convert" = "save") => {
     if (!formCustomerName.trim()) return;
     // Inherit the real source from an existing customer record when one
     // already matches (so a repeat customer's estimates keep rolling up
@@ -305,6 +320,7 @@ export const EstimatesPage: React.FC = () => {
     }
     setIsAddModalOpen(false);
     if (action === "pdf") void generateEstimatePdf(newEst);
+    if (action === "pdf-store") void storeEstimatePdf(newEst);
     if (action === "signatures") void generateEstimatePdf(newEst, true);
     if (action === "convert") {
       setSelectedEstimate(newEst);
@@ -327,7 +343,7 @@ export const EstimatesPage: React.FC = () => {
     setIsEditMode(false);
   };
 
-  const handleSaveEdit = (action: "save" | "pdf" | "signatures" | "convert" = "save") => {
+  const handleSaveEdit = (action: "save" | "pdf" | "pdf-store" | "signatures" | "convert" = "save") => {
     if (!selectedEstimate) return;
     const updated = {
       ...selectedEstimate,
@@ -353,6 +369,7 @@ export const EstimatesPage: React.FC = () => {
     setSelectedEstimate(updated);
     setIsEditMode(false);
     if (action === "pdf") void generateEstimatePdf(updated);
+    if (action === "pdf-store") void storeEstimatePdf(updated);
     if (action === "signatures") void generateEstimatePdf(updated, true);
     if (action === "convert" || (selectedEstimate.status !== "Accepted" && updated.status === "Accepted")) {
       setConversionComplete(false);
@@ -1166,6 +1183,14 @@ export const EstimatesPage: React.FC = () => {
               <button
                 type="button"
                 disabled={!formCustomerName.trim()}
+                onClick={() => handleAddEstimate("pdf-store")}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300 transition-colors cursor-pointer"
+              >
+                Save (and Store as PDF)
+              </button>
+              <button
+                type="button"
+                disabled={!formCustomerName.trim()}
                 onClick={() => handleAddEstimate("pdf")}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
               >
@@ -1475,7 +1500,9 @@ export const EstimatesPage: React.FC = () => {
                     Save Changes
                   </button>
                 )}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf-store")} className="px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300">Save (and Store as PDF)</button>}
                 {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf")} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Save &amp; Generate PDF</button>}
+                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void storeEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider">Store as PDF</button>}
                 {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
                 {isEditMode && canCollectSignatures && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("signatures")} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Collect Signatures</button>}
                 {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true)} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}

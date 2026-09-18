@@ -140,10 +140,10 @@ export const LeadsPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  // Builds a real PDF from the lead's own data, saves it to the Documents
-  // Hub, then opens the PDF Editor so it can be reviewed/finished and
-  // mailed -- same pattern as EstimatesPage's generateEstimatePdf.
-  const generateLeadPdf = async (lead: Lead) => {
+  // Builds a real PDF from the lead's own data and saves it to the
+  // Documents Hub. Shared by "Save (and Store as PDF)" (stops here) and
+  // "Save & Generate PDF" (goes on to open the PDF Editor) below.
+  const buildAndStoreLeadPdf = async (lead: Lead) => {
     const bytes = await buildLeadPdf(lead, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
     const docId = `doc_lead_${lead.id}_${Date.now()}`;
@@ -174,8 +174,16 @@ export const LeadsPage: React.FC = () => {
       triggerNotification?.("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
     }
     setDocuments(prev => [...prev, newDoc]);
+    return { pdfBase64, docName: newDoc.name };
+  };
+
+  // Builds + stores the PDF, then opens the PDF Editor so it can be
+  // reviewed/finished and mailed -- same pattern as EstimatesPage's
+  // generateEstimatePdf.
+  const generateLeadPdf = async (lead: Lead) => {
+    const { pdfBase64, docName } = await buildAndStoreLeadPdf(lead);
     setGeneratedPdfDraft({
-      filename: newDoc.name,
+      filename: docName,
       title: `Lead Summary — ${lead.name}`,
       sourceType: "Lead",
       sourceId: lead.id,
@@ -188,6 +196,13 @@ export const LeadsPage: React.FC = () => {
     });
     onNavigateToScreen("documents");
     if (logOperationalEvent) logOperationalEvent("Lead PDF Generated", `Lead summary for ${lead.name}`, "📄");
+  };
+
+  // "Save (and Store as PDF)" -- builds + stores the PDF into Documents same
+  // as above, but stays on this page instead of opening the PDF Editor.
+  const storeLeadPdf = async (lead: Lead) => {
+    await buildAndStoreLeadPdf(lead);
+    if (logOperationalEvent) logOperationalEvent("Lead PDF Stored", `Lead summary for ${lead.name} saved to Documents`, "📄");
   };
 
   // Queues the Estimate form to open pre-filled with this lead's info
@@ -228,7 +243,7 @@ export const LeadsPage: React.FC = () => {
     };
   };
 
-  const handleAddLead = (action: "save" | "pdf" | "estimate" = "save") => {
+  const handleAddLead = (action: "save" | "pdf" | "pdf-store" | "estimate" = "save") => {
     const newLead = buildNewLeadFromForm();
     if (!newLead) return;
 
@@ -240,6 +255,7 @@ export const LeadsPage: React.FC = () => {
     setIsAddModalOpen(false);
     if (logOperationalEvent) logOperationalEvent("Lead Added", `New lead '${newLead.name}' added`, "🎯", { screen: "leads" });
     if (action === "pdf") void generateLeadPdf(newLead);
+    if (action === "pdf-store") void storeLeadPdf(newLead);
     if (action === "estimate") openEstimateFromLead(newLead);
   };
 
@@ -283,11 +299,11 @@ export const LeadsPage: React.FC = () => {
     setIsEditMode(false);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!selectedLead) return;
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
-    
+
     const updated = {
       ...selectedLead,
       name: formName.trim(),
@@ -308,6 +324,8 @@ export const LeadsPage: React.FC = () => {
     }
     setSelectedLead(updated);
     setIsEditMode(false);
+    if (action === "pdf") void generateLeadPdf(updated);
+    if (action === "pdf-store") void storeLeadPdf(updated);
   };
 
   const handleConvertLead = () => {
@@ -1110,6 +1128,14 @@ export const LeadsPage: React.FC = () => {
               <button
                 type="button"
                 disabled={!formName.trim()}
+                onClick={() => handleAddLead("pdf-store")}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300 transition-colors cursor-pointer"
+              >
+                Save (and Store as PDF)
+              </button>
+              <button
+                type="button"
+                disabled={!formName.trim()}
                 onClick={() => handleAddLead("pdf")}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
               >
@@ -1424,16 +1450,54 @@ export const LeadsPage: React.FC = () => {
                 >
                   Close
                 </button>
+                {!isEditMode && selectedLead && (
+                  <button
+                    type="button"
+                    onClick={() => void storeLeadPdf(selectedLead)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Store as PDF
+                  </button>
+                )}
+                {!isEditMode && selectedLead && (
+                  <button
+                    type="button"
+                    onClick={() => void generateLeadPdf(selectedLead)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Generate PDF
+                  </button>
+                )}
                 {isEditMode && (
                   <button
                     type="button"
                     disabled={!formName.trim()}
-                    onClick={handleSaveEdit}
+                    onClick={() => handleSaveEdit("save")}
                     className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                       formName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                     }`}
                   >
                     Save Changes
+                  </button>
+                )}
+                {isEditMode && (
+                  <button
+                    type="button"
+                    disabled={!formName.trim()}
+                    onClick={() => handleSaveEdit("pdf-store")}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    Save (and Store as PDF)
+                  </button>
+                )}
+                {isEditMode && (
+                  <button
+                    type="button"
+                    disabled={!formName.trim()}
+                    onClick={() => handleSaveEdit("pdf")}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
+                  >
+                    Save &amp; Generate PDF
                   </button>
                 )}
               </div>

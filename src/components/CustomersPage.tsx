@@ -441,9 +441,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   };
 
   // Builds a real PDF of the customer profile (contact info, account
-  // summary, estimates/invoices on file) right now, saves it to the
-  // Documents Hub, then opens the PDF Editor for review/signing.
-  const generateCustomerPdf = async (cust: Customer) => {
+  // summary, estimates/invoices on file) right now and saves it to the
+  // Documents Hub. Shared by "Save (and Store as PDF)" (stops here) and
+  // "Save & Generate PDF" (goes on to open the PDF Editor) below.
+  const buildAndStoreCustomerPdf = async (cust: Customer) => {
     const customerEstimates = estimates.filter(item => [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.customerName) || [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.company));
     const customerInvoices = invoices.filter(item => [cust.id, cust.contact, cust.company].filter(Boolean).includes(item.customer));
     const bytes = await buildCustomerProfilePdf(cust, { estimates: customerEstimates, invoices: customerInvoices }, businessProfile);
@@ -481,6 +482,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
     }
     setDocuments(prev => [...prev, newDoc]);
+    return { pdfBase64, filename };
+  };
+
+  const generateCustomerPdf = async (cust: Customer) => {
+    const { pdfBase64, filename } = await buildAndStoreCustomerPdf(cust);
     setGeneratedPdfDraft({
       filename,
       title: "Customer Record",
@@ -495,6 +501,13 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     });
     onNavigateToScreen("documents");
     if (logOperationalEvent) logOperationalEvent("Customer PDF Generated", filename, "📄");
+  };
+
+  // "Save (and Store as PDF)" -- builds + stores the PDF into Documents same
+  // as above, but stays on this page instead of opening the PDF Editor.
+  const storeCustomerPdf = async (cust: Customer) => {
+    const { filename } = await buildAndStoreCustomerPdf(cust);
+    if (logOperationalEvent) logOperationalEvent("Customer PDF Stored", `${filename} saved to Documents`, "📄");
   };
 
   // Read-only: every call/text the Missed Call Text-Back Android app has
@@ -576,7 +589,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     if (logOperationalEvent) logOperationalEvent("Call & Text History PDF Generated", filename, "📄");
   };
 
-  const handleAddCustomer = (openPdf = false) => {
+  const handleAddCustomer = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!formContact.trim()) return;
     if (!canCreateCustomer) {
       triggerNotification("You don't have permission to add customers.");
@@ -609,10 +622,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     if (logOperationalEvent) {
       logOperationalEvent("Customer Added", `New Customer '${newCust.contact}' registered`, "👤", { screen: "customers", customerId: newCust.id });
     }
-    if (openPdf) void generateCustomerPdf(newCust);
+    if (action === "pdf") void generateCustomerPdf(newCust);
+    if (action === "pdf-store") void storeCustomerPdf(newCust);
   };
 
-  const handleEditCustomer = (openPdf = false) => {
+  const handleEditCustomer = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!selectedCustomer) return;
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
@@ -636,7 +650,8 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     if (logOperationalEvent) {
       logOperationalEvent("Customer Updated", `Customer Profile for '${formContact}' updated`, "📝", { screen: "customers", customerId: updated.id });
     }
-    if (openPdf) void generateCustomerPdf(updated);
+    if (action === "pdf") void generateCustomerPdf(updated);
+    if (action === "pdf-store") void storeCustomerPdf(updated);
   };
 
   const handleDeleteCustomer = () => {
@@ -1404,7 +1419,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               <button
                 type="button"
                 disabled={!formContact.trim()}
-                onClick={() => handleAddCustomer(false)}
+                onClick={() => handleAddCustomer("save")}
                 className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                   formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                 }`}
@@ -1414,7 +1429,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               <button
                 type="button"
                 disabled={!formContact.trim()}
-                onClick={() => handleAddCustomer(true)}
+                onClick={() => handleAddCustomer("pdf-store")}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300 transition-colors cursor-pointer"
+              >
+                Save (and Store as PDF)
+              </button>
+              <button
+                type="button"
+                disabled={!formContact.trim()}
+                onClick={() => handleAddCustomer("pdf")}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
               >
                 Generate PDF
@@ -1641,7 +1664,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                   <button
                     type="button"
                     disabled={!formContact.trim()}
-                    onClick={() => handleEditCustomer(false)}
+                    onClick={() => handleEditCustomer("save")}
                     className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                       formContact.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
                     }`}
@@ -1651,7 +1674,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                   <button
                     type="button"
                     disabled={!formContact.trim()}
-                    onClick={() => handleEditCustomer(true)}
+                    onClick={() => handleEditCustomer("pdf-store")}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    Save (and Store as PDF)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!formContact.trim()}
+                    onClick={() => handleEditCustomer("pdf")}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 transition-colors cursor-pointer"
                   >
                     Generate PDF
