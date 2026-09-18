@@ -34,3 +34,25 @@ export interface EstimatePrefill {
   notes?: string;
   sourceLeadId?: string;
 }
+
+/** Handoff for opening the single shared "Build Job" modal (BuildJobModal)
+ * pre-filled from wherever it was triggered -- a Lead, a Customer card, or
+ * an accepted Estimate -- same one-page-sets-it/one-page-consumes-it
+ * pattern as EstimatePrefill. Every entry point in the app queues this and
+ * navigates to Jobs, which is the only page that renders BuildJobModal, so
+ * the popup itself is always the exact same component no matter where the
+ * request came from. */
+export interface BuildJobPrefill {
+  customerId?: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  title?: string;
+  description?: string;
+  notes?: string;
+  budget?: number;
+  sourceEstimateId?: string;
+  sourceLeadId?: string;
+  source?: import("./domain").LeadSource;
+}

@@ -14,7 +14,7 @@ import { CustomerLoginPanel } from "./components/CustomerLoginPanel";
 import { CustomerAppShell } from "./components/CustomerAppShell";
 import { useStripeConnectStatus } from "./hooks/useStripeConnectStatus";
 import { Account, JournalEntry, Invoice, Bill, Vendor, BankAccount, RecurringTransaction, MileageLog, Budget, SalesTaxRate, DEFAULT_CHART_OF_ACCOUNTS } from "./types/accounting";
-import type { GeneratedPdfDraft, EstimatePrefill } from "./types/generatedPdf";
+import type { GeneratedPdfDraft, EstimatePrefill, BuildJobPrefill } from "./types/generatedPdf";
 import { buildStyleGuidance } from "./lib/aiStyle";
 import { authedFetch } from "./lib/apiClient";
 import { postTransactionEntry, invoiceTotal, accountMovementInRange, computeAccountBalances, computeLedgerTotals, expenseBreakdownByAccount, ledgerItemsForAccount } from "./lib/accountingEngine";
@@ -1832,6 +1832,7 @@ export default function App() {
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
   const [estimatePrefill, setEstimatePrefill] = useState<EstimatePrefill | null>(null);
+  const [buildJobPrefill, setBuildJobPrefill] = useState<BuildJobPrefill | null>(null);
   const [pendingSignatureCapture, setPendingSignatureCapture] = useState<{ customerName?: string; customerPhone?: string; customerEmail?: string } | null>(null);
   const [bills, setBills] = useFirestoreCollection<Bill>("bills", businessId);
   const [vendors, setVendors] = useFirestoreCollection<Vendor>("vendors", businessId);
@@ -4418,6 +4419,8 @@ Access to full financial telemetry is restricted.`;
     setGeneratedPdfDraft,
     estimatePrefill,
     setEstimatePrefill,
+    buildJobPrefill,
+    setBuildJobPrefill,
     pendingSignatureCapture,
     setPendingSignatureCapture,
     globalAiSetting,

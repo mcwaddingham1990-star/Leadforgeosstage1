@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, Briefcase, Calendar, Check, CheckCircle2, ChevronRight,
-  ChevronDown, ClipboardCheck, Clock, DollarSign, Edit3, FileText, Filter, MapPin,
+  AlertTriangle, Briefcase, Calendar, CheckCircle2, ChevronRight,
+  ClipboardCheck, Clock, DollarSign, Edit3, FileText, Filter, MapPin,
   MessageSquare, Package, Plus, Search, Send, Trash2, Truck, User, Users, X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
-import { StructuredAddressFields } from "./StructuredAddressFields";
 import SendChoiceModal from "./SendChoiceModal";
 import type { SchedulingEvent, WorkOrder, DocumentItem } from "../types/domain";
 import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
@@ -28,18 +27,14 @@ import type { PurchaseOrder } from "../types/purchaseOrder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
+import { BuildJobModal } from "./BuildJobModal";
+import type { BuildJobPrefill } from "../types/generatedPdf";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
 
 const STATUSES: JobStatus[] = ["Unassigned", "Assigned", "En Route", "Arrived", "Working", "On Hold", "Completed", "Cancelled"];
 const PRIORITIES: SchedulingEvent["priority"][] = ["Low", "Medium", "High", "Urgent"];
-const EMPTY_FORM = {
-  customerId: "", addAsNewCustomer: false, customerName: "", customerPhone: "", title: "", jobType: "Service", date: new Date().toISOString().slice(0, 10),
-  startTime: "09:00", endTime: "11:00", assignedEmployee: "", assignedCrew: "None",
-  assignedVehicle: "None", priority: "Medium" as SchedulingEvent["priority"], status: "Unassigned" as JobStatus,
-  location: "", department: "General", description: "", notes: "", purchaseOrder: "", budget: "", laborRate: ""
-};
 
 const statusStyle: Record<string, string> = {
   Unassigned: "bg-rose-50 text-rose-700 border-rose-200", Assigned: "bg-blue-50 text-blue-700 border-blue-200",
@@ -60,7 +55,7 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, memberships, purchaseOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, memberships, purchaseOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, buildJobPrefill, setBuildJobPrefill } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
@@ -83,18 +78,6 @@ export const JobsPage: React.FC = () => {
   const canManageCompletion = managementRole && (/^owner$/i.test(activeRole) || hasPermission(loggedInUser?.granularPermissions, "jobs", "edit") || !loggedInUser?.granularPermissions);
   const [completionPlans, setCompletionPlans] = useFirestoreCollection<ProjectCompletionPlan>("project_completion_plans", businessId);
   const jobs = useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
-  const customerOptions = useMemo(() => {
-    const options = new Map<string, any>();
-    customers.forEach(customer => options.set(customer.id, customer));
-    schedulingEvents.forEach(event => {
-      const name = event.customer?.trim();
-      if (!name) return;
-      const existing = customers.find(customer => customer.id === event.customerId || customer.contact === name || customer.company === name);
-      const id = existing?.id || event.customerId || `event_customer_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-      if (!options.has(id)) options.set(id, { id, contact: name, company: "", phone: event.customerPhone || "", address: event.customerAddress || event.location || "" });
-    });
-    return [...options.values()].sort((a, b) => (a.contact || a.company).localeCompare(b.contact || b.company));
-  }, [customers, schedulingEvents]);
   const [search, setSearch] = useState("");
   // Cross-navigation: "View Jobs" from a customer card lands here already
   // filtered to that customer's jobs.
@@ -112,7 +95,17 @@ export const JobsPage: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [createPrefill, setCreatePrefill] = useState<BuildJobPrefill | null>(null);
+  // Cross-navigation: a Lead, a Customer, an accepted Estimate, or the Map
+  // queues buildJobPrefill and lands here -- this opens the exact same
+  // Build Job popup as the "New Job" button, just pre-filled.
+  useEffect(() => {
+    if (!buildJobPrefill) return;
+    setCreatePrefill(buildJobPrefill);
+    setSelectedId(null);
+    setModal("create");
+    setBuildJobPrefill(null);
+  }, [buildJobPrefill, setBuildJobPrefill]);
   const [newTask, setNewTask] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [materialQty, setMaterialQty] = useState(1);
@@ -165,79 +158,8 @@ export const JobsPage: React.FC = () => {
     triggerNotification(action);
   };
 
-  const openCreate = () => { setForm(EMPTY_FORM); setModal("create"); };
-  const openEdit = (job: SchedulingEvent) => {
-    const customer = customers.find(c => c.id === job.customerId || c.contact === job.customer || c.company === job.customer);
-    const sourceEstimate = estimates.find(e => e.id === job.sourceEstimateId);
-    setForm({
-      ...EMPTY_FORM, customerId: customer?.id || "", customerName: job.customer || customer?.contact || customer?.company || "",
-      customerPhone: job.customerPhone || customer?.phone || "", title: job.title || job.customType || "", jobType: job.jobType || "Service",
-      date: job.date, startTime: job.startTime?.replace(/\s?(AM|PM)$/i, "") || "09:00", endTime: job.endTime?.replace(/\s?(AM|PM)$/i, "") || "11:00",
-      assignedEmployee: job.assignedEmployee || "", assignedCrew: job.assignedCrew || "None", assignedVehicle: job.assignedVehicle || "None",
-      priority: job.priority, status: normalizedStatus(job), location: job.location || job.customerAddress || "", department: job.department || "General",
-      description: job.description || "", notes: job.notes || "", purchaseOrder: job.purchaseOrder || "", budget: (job.budget ?? sourceEstimate?.amount)?.toString() || "", laborRate: job.laborRate?.toString() || ""
-    });
-    setSelectedId(job.id); setModal("edit");
-  };
-
-  const saveForm = (action: "save" | "pdf" | "pdf-store" = "save") => {
-    if (!canEdit) return triggerNotification("Your role cannot create or edit jobs.");
-    const customer = customerOptions.find(c => c.id === form.customerId);
-    const customerName = form.customerName.trim();
-    const customerPhone = form.customerPhone.trim();
-    const location = form.location.trim();
-    const budget = Number(form.budget);
-    if (!customerName || !location || !customerPhone || !form.date || !form.budget.trim() || !Number.isFinite(budget) || budget < 0) {
-      return triggerNotification("Name, address, phone number, estimated value, and date are required.");
-    }
-    const jobTitle = form.title.trim() || "Service Job";
-    let customerId = customer?.id;
-    if (form.addAsNewCustomer) {
-      customerId = uid("cust");
-      setCustomers(prev => [{
-        id: customerId!, company: customerName, contact: customerName, phone: customerPhone,
-        email: "", address: location, openJobs: 0, outstandingBalance: 0, lifetimeValue: 0,
-        status: "Active", type: "Residential", isVIP: false, recentlyAdded: true,
-        requireFollowUp: false, pendingConfirmation: true, createdFrom: "create_job"
-      }, ...prev]);
-      setNotifications(prev => [{
-        id: `customer_review_${customerId}`, screenId: "customers", title: "Edit and confirm new customer",
-        message: `${customerName} was added while creating a job. Review and confirm the customer record.`,
-        isRead: false, timestamp: new Date().toISOString()
-      }, ...prev]);
-    }
-    const base: Partial<SchedulingEvent> = {
-      title: jobTitle, customType: jobTitle, jobType: form.jobType, date: form.date, startTime: form.startTime, endTime: form.endTime,
-      customerId, customer: customerName, customerPhone,
-      customerEmail: customer?.email || (modal === "edit" ? jobs.find(job => job.id === selectedId)?.customerEmail || "" : ""),
-      customerAddress: location, location, assignedEmployee: form.assignedEmployee,
-      assignedCrew: form.assignedCrew, assignedVehicle: form.assignedVehicle, priority: form.priority,
-      status: form.assignedEmployee && form.status === "Unassigned" ? "Assigned" : form.status, department: form.department,
-      description: form.description, notes: form.notes, purchaseOrder: form.purchaseOrder,
-      budget, laborRate: Number(form.laborRate) || 0, updatedAt: new Date().toISOString()
-    };
-    if (modal === "edit" && selectedId) {
-      writeJob(selectedId, base, "Job details edited");
-      const updatedJob = jobs.find(job => job.id === selectedId);
-      const mergedJob = updatedJob ? ({...updatedJob,...base} as SchedulingEvent) : null;
-      if (action === "pdf" && mergedJob) generateJobPdf(mergedJob);
-      if (action === "pdf-store" && mergedJob) void storeJobPdf(mergedJob);
-    } else {
-      const now = new Date().toISOString();
-      const job: SchedulingEvent = {
-        id: uid("job"), eventType: "Job", jobNumber: `JOB-${new Date().getFullYear()}-${String(jobs.length + 1).padStart(4, "0")}`,
-        progress: 0, checklist: [], materials: [], activity: [{ id: uid("act"), timestamp: now, action: "Job created", by: actor }], createdAt: now,
-        ...base
-      } as SchedulingEvent;
-      setSchedulingEvents(prev => [job, ...prev]);
-      setSelectedId(job.id);
-      logOperationalEvent("Job Created", `${job.jobNumber} created for ${job.customer}`, "💼");
-      triggerNotification(`${job.jobNumber} created and published to Scheduling, Dispatch, Map, Time Clock, Messages, and the Event Engine.`);
-      if (action === "pdf") generateJobPdf(job);
-      if (action === "pdf-store") void storeJobPdf(job);
-    }
-    setModal(null);
-  };
+  const openCreate = () => { setCreatePrefill(null); setModal("create"); };
+  const openEdit = (job: SchedulingEvent) => { setSelectedId(job.id); setModal("edit"); };
 
   // Native window.confirm() blocks the JS main thread until dismissed -- in
   // some embedded/automated contexts it never gets dismissed, which reads as
@@ -439,10 +361,7 @@ export const JobsPage: React.FC = () => {
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity Timeline</h4><div className="mt-3 space-y-3">{[...(selected.activity||[])].reverse().map(a=><div key={a.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold text-slate-700">{a.action}</p><p className="text-[9px] text-slate-400">{new Date(a.timestamp).toLocaleString()} · {a.by}</p></div>)}{!(selected.activity||[]).length&&<p className="text-xs text-slate-400">Future changes will appear here automatically.</p>}</div></section>
       </div></div></div>}
 
-    {modal && <JobForm
-      form={form} setForm={setForm} customers={customerOptions} roster={recentRoster}
-      onClose={()=>setModal(null)} onSave={()=>saveForm("save")} onStorePdf={()=>saveForm("pdf-store")} onGenerate={()=>saveForm("pdf")} title={modal==="create"?"Create Job":"Edit Job"}
-    />}
+    <BuildJobModal isOpen={modal !== null} onClose={()=>setModal(null)} editingJob={modal==="edit" ? selected : null} prefill={modal==="create" ? createPrefill : null} />
     {completionJob && businessId && <ProjectCompletionTracking
       job={completionJob} plan={completionPlans.find(plan=>plan.jobId===completionJob.id)}
       businessId={businessId} actor={actor} canManage={canManageCompletion}
@@ -472,34 +391,3 @@ const JobCard = ({job,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:Sc
   return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Project Completion Tracking</button></div></div>;
 };
 
-const JobForm = ({form,setForm,customers,roster,onClose,onSave,onStorePdf,onGenerate,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
-  <div className="grid gap-3 p-4 sm:grid-cols-2">
-    <div className="sm:col-span-2"><Field label="Select customer"><select value={form.addAsNewCustomer?"__add__":form.customerId} onChange={(e:any)=>{if(e.target.value==="__add__"){setForm({...form,customerId:"",addAsNewCustomer:true,customerName:"",customerPhone:"",location:""});return;}const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,addAsNewCustomer:false,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer...</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}<option value="__add__">＋ Add customer</option></select>{form.addAsNewCustomer&&<p className="mt-1 text-[10px] font-bold text-amber-700">Enter the new customer's details below. Customers will ask you to edit and confirm the record.</p>}</Field></div>
-    <Field label="Name *"><input value={form.customerName} onChange={(e:any)=>setForm({...form,customerName:e.target.value})} className="input" placeholder="Customer name"/></Field>
-    <Field label="Phone number *"><input type="tel" value={form.customerPhone} onChange={(e:any)=>setForm({...form,customerPhone:e.target.value})} className="input" placeholder="(555) 555-0123"/></Field>
-    <div className="sm:col-span-2"><StructuredAddressFields value={form.location} onChange={(val:string)=>setForm({...form,location:val})} required label="Job Site Address *" inputClassName="w-full rounded-xl border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#315C9F]"/></div>
-    <Field label="Estimated value *"><input type="number" min="0" step="0.01" value={form.budget} onChange={(e:any)=>setForm({...form,budget:e.target.value})} className="input" placeholder="0.00"/></Field>
-    <Field label="Date *"><input type="date" value={form.date} onChange={(e:any)=>setForm({...form,date:e.target.value})} className="input"/></Field>
-  </div>
-  <details className="group mx-4 mb-4 rounded-xl border border-[#9EC8EF] bg-white">
-    <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-xs font-black text-[#315C9F]">Other job info <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180"/></summary>
-    <div className="grid gap-3 border-t border-[#D7EAFB] p-3 sm:grid-cols-2">
-      <Field label="Job title"><input value={form.title} onChange={(e:any)=>setForm({...form,title:e.target.value})} className="input" placeholder="Repair, installation, inspection..."/></Field>
-      <Field label="Job type"><select value={form.jobType} onChange={(e:any)=>setForm({...form,jobType:e.target.value})} className="input">{["Service","Installation","Repair","Maintenance","Inspection","Project","Warranty","Emergency","Custom"].map(x=><option key={x}>{x}</option>)}</select></Field>
-      <Field label="Department"><input value={form.department} onChange={(e:any)=>setForm({...form,department:e.target.value})} className="input"/></Field>
-      <div className="grid grid-cols-2 gap-2"><Field label="Start"><input type="time" value={form.startTime} onChange={(e:any)=>setForm({...form,startTime:e.target.value})} className="input"/></Field><Field label="End"><input type="time" value={form.endTime} onChange={(e:any)=>setForm({...form,endTime:e.target.value})} className="input"/></Field></div>
-      <Field label="Assigned technician"><select value={form.assignedEmployee} onChange={(e:any)=>setForm({...form,assignedEmployee:e.target.value})} className="input"><option value="">Unassigned</option>{roster.map((r:any)=><option key={r.id||r.name} value={r.name}>{r.name}</option>)}</select></Field>
-      <Field label="Crew"><input value={form.assignedCrew} onChange={(e:any)=>setForm({...form,assignedCrew:e.target.value})} className="input"/></Field>
-      <Field label="Vehicle"><input value={form.assignedVehicle} onChange={(e:any)=>setForm({...form,assignedVehicle:e.target.value})} className="input"/></Field>
-      <Field label="Status"><select value={form.status} onChange={(e:any)=>setForm({...form,status:e.target.value})} className="input">{STATUSES.map(x=><option key={x}>{x}</option>)}</select></Field>
-      <Field label="Priority"><select value={form.priority} onChange={(e:any)=>setForm({...form,priority:e.target.value})} className="input">{PRIORITIES.map(x=><option key={x}>{x}</option>)}</select></Field>
-      <Field label="PO / Work order"><input value={form.purchaseOrder} onChange={(e:any)=>setForm({...form,purchaseOrder:e.target.value})} className="input"/></Field>
-      <Field label="Labor rate"><input type="number" min="0" value={form.laborRate} onChange={(e:any)=>setForm({...form,laborRate:e.target.value})} className="input"/></Field>
-      <div className="sm:col-span-2"><Field label="Scope / Description"><textarea rows={2} value={form.description} onChange={(e:any)=>setForm({...form,description:e.target.value})} className="input"/></Field></div>
-      <div className="sm:col-span-2"><Field label="Internal notes"><textarea rows={2} value={form.notes} onChange={(e:any)=>setForm({...form,notes:e.target.value})} className="input"/></Field></div>
-    </div>
-  </details>
-  <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-3"><button type="button" onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button><button type="button" onClick={onStorePdf} className="rounded-xl border border-emerald-600 bg-white px-4 py-2 text-xs font-black text-emerald-700"><FileText className="mr-1 inline h-4 w-4"/>Save (and Store as PDF)</button><button type="button" onClick={onGenerate} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white"><FileText className="mr-1 inline h-4 w-4"/>Save &amp; Generate PDF</button><button type="button" onClick={onSave} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white"><Check className="mr-1 inline h-4 w-4"/>Save Job</button></div>
-</div></div>;
-
-const Field=({label,children}:{label:string;children:React.ReactNode})=><label className="block"><span className="mb-1 block text-[9px] font-black uppercase tracking-wide text-[#5E7393]">{label}</span>{children}</label>;

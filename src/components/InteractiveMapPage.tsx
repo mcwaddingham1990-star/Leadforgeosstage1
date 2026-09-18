@@ -138,7 +138,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
     setDocuments,
     completedJobsRevenue,
     employees,
-    timeClockLogs
+    timeClockLogs,
+    setBuildJobPrefill
   } = useDomainData();
   const { convertLeadToCustomer } = useDomainActions();
   const { navigateToScreen: onNavigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
@@ -867,13 +868,17 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   // (see the activeShifts/activeTechnicians/vehicles derivations above),
   // which already re-render this component whenever a new real fix lands.
 
-  // Handle estimate approvals & conversion directly from the map
+  // Handle estimate approvals from the map -- same universal Build Job
+  // popup every other "turn this into a job" entry point opens (Jobs page,
+  // Leads, Customers, Estimates), reached via the shared buildJobPrefill
+  // handoff instead of the map hand-rolling its own SchedulingEvent. That
+  // old inline version never set sourceEstimateId, which broke createJob's
+  // idempotency check and let the same accepted estimate be converted into
+  // duplicate jobs -- routing through the real popup removes that path
+  // entirely instead of just patching around it.
   const handleApproveEstimate = (estId: string) => {
     const est = estimates.find(e => e.id === estId);
     if (!est) return;
-
-    // 1. Update Estimate Status
-    setEstimates(prev => prev.map(e => e.id === estId ? { ...e, status: "Accepted" } : e));
 
     // Cross-reference the real customer record for real contact info --
     // an estimate itself only stores a customer name/company, not phone/
@@ -883,54 +888,19 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
       c => c.contact === est.customerName || c.company === est.company
     );
 
-    // 2. Automatically dispatch schedule event
-    const newJobId = `job_gen_${Date.now()}`;
-    const newJob = {
-      id: newJobId,
-      eventType: "Job" as const,
-      date: new Date().toISOString().split("T")[0],
-      startTime: "10:30",
-      endTime: "13:00",
-      customer: est.customerName,
-      customerPhone: matchedCustomer?.phone || "",
-      customerEmail: matchedCustomer?.email || "",
-      customerAddress: matchedCustomer?.address || est.address || est.company || "",
-      // No real rule exists for which employee should get an
-      // auto-created job -- unassigned for a real dispatcher to pick is
-      // honest; a hardcoded name never matching a real employee is not.
-      assignedEmployee: "",
-      location: matchedCustomer?.address || est.address || est.company || "",
-      priority: "Medium" as const,
-      notes: `Generated automatically via approved estimate ${est.number}. Amount: $${est.amount}`,
-      status: "Scheduled" as const,
-      // Same real expected-payout field every other job-creation path
-      // populates (manual scheduling, Jobs page, accepted-estimate
-      // conversion) -- the amount was already known here, just never
-      // carried into the structured field anything reading job value reads.
-      budget: est.amount
-    };
-
-    setSchedulingEvents(prev => [...prev, newJob]);
-
-    // Update selection
-    setSelectedPin({
-      id: newJobId,
-      type: "Job",
-      title: `Job: ${newJob.customer}`,
-      subtitle: `Assigned: Unassigned | Priority: Medium | Status: Scheduled`,
-      address: newJob.location,
-      lat: geocodeAddress(newJob.location, newJobId).lat,
-      lng: geocodeAddress(newJob.location, newJobId).lng,
-      raw: newJob
+    setBuildJobPrefill({
+      customerId: matchedCustomer?.id,
+      customerName: est.customerName,
+      customerPhone: matchedCustomer?.phone || est.phone,
+      customerEmail: matchedCustomer?.email,
+      customerAddress: matchedCustomer?.address || est.address || est.company,
+      description: est.projectSpecifics || undefined,
+      notes: `Approved from the Map. Amount: $${est.amount}`,
+      budget: est.amount,
+      sourceEstimateId: est.id,
+      source: matchedCustomer?.source || est.source
     });
-
-    if (logOperationalEvent) {
-      logOperationalEvent(
-        "Estimate Accepted",
-        `Estimate ${est.number} converted into live Scheduled Job ${newJobId}.`,
-        "📈"
-      );
-    }
+    onNavigateToScreen("jobs");
   };
 
   // Convert Lead -> Active Customer profile instantly. Uses the same
