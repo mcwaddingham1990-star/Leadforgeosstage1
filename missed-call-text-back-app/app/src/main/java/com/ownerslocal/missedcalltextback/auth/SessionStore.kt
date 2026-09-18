@@ -74,6 +74,15 @@ class SessionStore(context: Context) {
         get() = prefs.getLong(KEY_LAST_SENT_SMS_ID, -1L)
         set(value) = prefs.edit().putLong(KEY_LAST_SENT_SMS_ID, value).apply()
 
+    /** One-line, human-readable outcome of the most recent call-state check
+     *  (CallStateReceiver/AutoReplySender) -- every gate in that pipeline
+     *  fails silently by design (no toast, no crash), so this is the only
+     *  way to see, from the phone itself, exactly why a real missed call
+     *  did or didn't trigger an auto-reply. Shown on MainActivity. */
+    var lastCallCheckDebug: String?
+        get() = prefs.getString(KEY_LAST_CALL_CHECK_DEBUG, null)
+        set(value) = prefs.edit().putString(KEY_LAST_CALL_CHECK_DEBUG, value).apply()
+
     val isSignedIn: Boolean
         get() = !refreshToken.isNullOrBlank() && !uid.isNullOrBlank()
 
@@ -93,5 +102,6 @@ class SessionStore(context: Context) {
         private const val KEY_LAST_SYNC = "last_sync_at"
         private const val KEY_LAST_CALL_LOG_ID = "last_call_log_id"
         private const val KEY_LAST_SENT_SMS_ID = "last_sent_sms_id"
+        private const val KEY_LAST_CALL_CHECK_DEBUG = "last_call_check_debug"
     }
 }

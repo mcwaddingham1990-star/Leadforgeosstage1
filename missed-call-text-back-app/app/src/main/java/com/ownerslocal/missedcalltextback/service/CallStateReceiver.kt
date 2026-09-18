@@ -14,6 +14,14 @@ import com.ownerslocal.missedcalltextback.MissedCallApp
 import com.ownerslocal.missedcalltextback.data.CrmLinker
 import com.ownerslocal.missedcalltextback.data.FirestoreRestClient
 import com.ownerslocal.missedcalltextback.sms.AutoReplySender
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun debugStamp(app: MissedCallApp, message: String) {
+    val time = SimpleDateFormat("MM/dd HH:mm:ss", Locale.US).format(Date())
+    app.sessionStore.lastCallCheckDebug = "[$time] $message"
+}
 
 /**
  * Fires on every call-state change. Rather than tracking RINGING -> IDLE
@@ -30,11 +38,17 @@ class CallStateReceiver : BroadcastReceiver() {
         if (intent.getStringExtra(TelephonyManager.EXTRA_STATE) != TelephonyManager.EXTRA_STATE_IDLE) return
 
         val app = context.applicationContext as MissedCallApp
-        if (!app.sessionStore.isSignedIn || !app.sessionStore.enabled) return
+        if (!app.sessionStore.isSignedIn || !app.sessionStore.enabled) {
+            debugStamp(app, "Skipped: not signed in or auto text-back is turned off")
+            return
+        }
 
         val hasCallLogPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) ==
             PackageManager.PERMISSION_GRANTED
-        if (!hasCallLogPermission) return
+        if (!hasCallLogPermission) {
+            debugStamp(app, "Skipped: Call Log permission not granted")
+            return
+        }
 
         // The call log row for the call that just ended isn't always written
         // the instant IDLE fires -- give it a moment before reading it back.
@@ -51,18 +65,32 @@ class CallStateReceiver : BroadcastReceiver() {
                 CallLog.Calls.CONTENT_URI, projection, null, null, "${CallLog.Calls.DATE} DESC LIMIT 1"
             )
         } catch (e: SecurityException) {
+            debugStamp(app, "Skipped: reading the call log threw a permission error")
             null
-        } ?: return
+        } ?: run {
+            debugStamp(app, "Skipped: call log query returned nothing (null cursor)")
+            return
+        }
 
         cursor.use {
-            if (!it.moveToFirst()) return
+            if (!it.moveToFirst()) {
+                debugStamp(app, "Skipped: call log is empty")
+                return
+            }
             val id = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls._ID))
             val type = it.getInt(it.getColumnIndexOrThrow(CallLog.Calls.TYPE))
             val date = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
             val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER))
 
-            if (id == app.sessionStore.lastProcessedCallLogId) return
-            if (System.currentTimeMillis() - date > STALE_ENTRY_WINDOW_MS) return
+            if (id == app.sessionStore.lastProcessedCallLogId) {
+                debugStamp(app, "Skipped: most recent call log entry (id=$id) was already processed")
+                return
+            }
+            val ageMs = System.currentTimeMillis() - date
+            if (ageMs > STALE_ENTRY_WINDOW_MS) {
+                debugStamp(app, "Skipped: most recent call log entry is ${ageMs / 1000}s old (over the ${STALE_ENTRY_WINDOW_MS / 1000}s window) -- the phone-state broadcast may have fired late, or this wasn't the call being tested")
+                return
+            }
 
             // A call the user declines (swipes away without answering) logs
             // as REJECTED_TYPE on many devices/Android versions rather than
@@ -75,21 +103,28 @@ class CallStateReceiver : BroadcastReceiver() {
                 CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE -> "missed"
                 CallLog.Calls.INCOMING_TYPE -> "incoming"
                 CallLog.Calls.OUTGOING_TYPE -> "outgoing"
-                else -> return
+                else -> {
+                    debugStamp(app, "Skipped: most recent call log entry has an unrecognized type ($type) -- not missed/rejected/incoming/outgoing")
+                    return
+                }
             }
             app.sessionStore.lastProcessedCallLogId = id
             val firestore = FirestoreRestClient(app.httpClient)
             if (direction == "missed") {
+                // maybeSendAutoReply writes the specific outcome (sent, or
+                // exactly why not -- permission, cooldown, bad number, send
+                // threw) into sessionStore.lastCallCheckDebug itself.
                 AutoReplySender(context, app.sessionStore, firestore).maybeSendAutoReply(number)
                 return
             }
+            debugStamp(app, "Detected answered $direction call -- logging to CRM (no auto-text)")
             val businessId = app.sessionStore.businessId
             val idToken = app.sessionStore.idToken
             if (!businessId.isNullOrBlank() && !idToken.isNullOrBlank()) {
                 try {
                     CrmLinker.linkAndLog(firestore, businessId, idToken, number, direction)
                 } catch (e: Exception) {
-                    // Best-effort logging only -- nothing else depends on this succeeding.
+                    debugStamp(app, "CRM log failed for answered $direction call: ${e.message}")
                 }
             }
         }

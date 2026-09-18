@@ -7,6 +7,9 @@ import com.ownerslocal.missedcalltextback.Config
 import com.ownerslocal.missedcalltextback.auth.SessionStore
 import com.ownerslocal.missedcalltextback.data.CrmLinker
 import com.ownerslocal.missedcalltextback.data.FirestoreRestClient
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Sends the configured auto-reply text and enforces a per-number cooldown
@@ -30,18 +33,39 @@ class AutoReplySender(
 ) {
     private val lastTextedAt = HashMap<String, Long>()
 
+    // Same debug trail as CallStateReceiver -- every early-return below used
+    // to be silent, which made a real "why didn't my test call get a text"
+    // report impossible to diagnose without device logs.
+    private fun debugStamp(message: String) {
+        val time = SimpleDateFormat("MM/dd HH:mm:ss", Locale.US).format(Date())
+        sessionStore.lastCallCheckDebug = "[$time] $message"
+    }
+
     fun maybeSendAutoReply(phoneNumber: String?): Boolean {
         val number = phoneNumber?.trim()
-        if (number.isNullOrEmpty() || number.equals("unknown", ignoreCase = true)) return false
-        if (!sessionStore.enabled) return false
+        if (number.isNullOrEmpty() || number.equals("unknown", ignoreCase = true)) {
+            debugStamp("Skipped: missed call had no usable caller number")
+            return false
+        }
+        if (!sessionStore.enabled) {
+            debugStamp("Skipped: auto text-back is turned off")
+            return false
+        }
 
         val now = System.currentTimeMillis()
         val lastSent = lastTextedAt[number]
-        if (lastSent != null && now - lastSent < Config.PER_NUMBER_COOLDOWN_MS) return false
+        if (lastSent != null && now - lastSent < Config.PER_NUMBER_COOLDOWN_MS) {
+            val remainingMin = (Config.PER_NUMBER_COOLDOWN_MS - (now - lastSent)) / 60000
+            debugStamp("Skipped: already texted this number within the cooldown window (~${remainingMin + 1} min left) -- this only tracks calls since the app process last started")
+            return false
+        }
 
         val hasSmsPermission = ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!hasSmsPermission) return false
+        if (!hasSmsPermission) {
+            debugStamp("Skipped: Send SMS permission not granted")
+            return false
+        }
 
         return try {
             @Suppress("DEPRECATION")
@@ -53,6 +77,7 @@ class AutoReplySender(
             val messageSent = sessionStore.messageTemplate
             smsManager.sendTextMessage(number, null, messageSent, null, null)
             lastTextedAt[number] = now
+            debugStamp("Sent auto-reply to missed call from $number")
 
             val businessId = sessionStore.businessId
             val idToken = sessionStore.idToken
@@ -62,10 +87,12 @@ class AutoReplySender(
                 } catch (e: Exception) {
                     // The text already sent successfully -- a CRM/log failure
                     // shouldn't be reported as the auto-reply itself failing.
+                    debugStamp("Sent auto-reply to $number, but CRM log failed: ${e.message}")
                 }
             }
             true
         } catch (e: Exception) {
+            debugStamp("Failed: sendTextMessage threw ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }
