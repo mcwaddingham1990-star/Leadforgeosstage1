@@ -9,7 +9,9 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { StructuredAddressFields } from "./StructuredAddressFields";
 import SendChoiceModal from "./SendChoiceModal";
-import type { SchedulingEvent, WorkOrder } from "../types/domain";
+import type { SchedulingEvent, WorkOrder, DocumentItem } from "../types/domain";
+import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
+import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
 import { hasPermission } from "../types/permissions";
@@ -58,7 +60,7 @@ const normalizedStatus = (job: SchedulingEvent): JobStatus => {
 
 export const JobsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
-  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, memberships, purchaseOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId } = useDomainData();
+  const { schedulingEvents, setSchedulingEvents, customers, setCustomers, setNotifications, recentRoster, inventoryList, setInventoryList, documents, setDocuments, timeClockLogs, estimates, employees, transactions, payrollWorkweekStart, workOrders, memberships, purchaseOrders, setGeneratedPdfDraft, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
@@ -178,7 +180,7 @@ export const JobsPage: React.FC = () => {
     setSelectedId(job.id); setModal("edit");
   };
 
-  const saveForm = (openPdf = false) => {
+  const saveForm = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!canEdit) return triggerNotification("Your role cannot create or edit jobs.");
     const customer = customerOptions.find(c => c.id === form.customerId);
     const customerName = form.customerName.trim();
@@ -217,7 +219,9 @@ export const JobsPage: React.FC = () => {
     if (modal === "edit" && selectedId) {
       writeJob(selectedId, base, "Job details edited");
       const updatedJob = jobs.find(job => job.id === selectedId);
-      if (openPdf && updatedJob) generateJobPdf({...updatedJob,...base} as SchedulingEvent);
+      const mergedJob = updatedJob ? ({...updatedJob,...base} as SchedulingEvent) : null;
+      if (action === "pdf" && mergedJob) generateJobPdf(mergedJob);
+      if (action === "pdf-store" && mergedJob) void storeJobPdf(mergedJob);
     } else {
       const now = new Date().toISOString();
       const job: SchedulingEvent = {
@@ -229,7 +233,8 @@ export const JobsPage: React.FC = () => {
       setSelectedId(job.id);
       logOperationalEvent("Job Created", `${job.jobNumber} created for ${job.customer}`, "💼");
       triggerNotification(`${job.jobNumber} created and published to Scheduling, Dispatch, Map, Time Clock, Messages, and the Event Engine.`);
-      if (openPdf) generateJobPdf(job);
+      if (action === "pdf") generateJobPdf(job);
+      if (action === "pdf-store") void storeJobPdf(job);
     }
     setModal(null);
   };
@@ -274,9 +279,49 @@ export const JobsPage: React.FC = () => {
   };
 
   const estimatedAmount = (job: SchedulingEvent) => estimates.find(e => e.id === job.sourceEstimateId)?.amount || job.budget || 0;
+  const jobPdfLines = (job: SchedulingEvent) => [`Customer: ${job.customer}`,`Phone: ${job.customerPhone||"—"}`,`Address: ${job.location||job.customerAddress||"—"}`,`Date: ${job.date} ${job.startTime||""}`,`Status: ${normalizedStatus(job)}`,`Priority: ${job.priority}`,`Estimated value: $${Number(estimatedAmount(job)).toLocaleString()}`,"",`Description: ${job.description||job.notes||"—"}`];
   const generateJobPdf = (job: SchedulingEvent) => {
-    setGeneratedPdfDraft({filename:`${displayNumber(job)}.pdf`,title:`Job ${displayNumber(job)}`,sourceType:"Job",sourceId:job.id,customerName:job.customer,customerPhone:job.customerPhone,customerEmail:job.customerEmail,representativeName:job.assignedEmployee||actor,lines:[`Customer: ${job.customer}`,`Phone: ${job.customerPhone||"—"}`,`Address: ${job.location||job.customerAddress||"—"}`,`Date: ${job.date} ${job.startTime||""}`,`Status: ${normalizedStatus(job)}`,`Priority: ${job.priority}`,`Estimated value: $${Number(estimatedAmount(job)).toLocaleString()}`,"",`Description: ${job.description||job.notes||"—"}`]});
+    setGeneratedPdfDraft({filename:`${displayNumber(job)}.pdf`,title:`Job ${displayNumber(job)}`,sourceType:"Job",sourceId:job.id,customerName:job.customer,customerPhone:job.customerPhone,customerEmail:job.customerEmail,representativeName:job.assignedEmployee||actor,lines:jobPdfLines(job)});
     navigateToScreen("documents");
+  };
+
+  // "Save (and Store as PDF)" -- unlike the other pages' Generate PDF
+  // (which only queues a freeform draft for the PDF Editor to render),
+  // this builds real PDF bytes right now via the generic section-based
+  // builder and stores it straight into Documents, without opening the
+  // editor.
+  const storeJobPdf = async (job: SchedulingEvent) => {
+    const bytes = await buildTextDocumentPdf(`Job ${displayNumber(job)}`, [{ body: jobPdfLines(job).join("\n") }], businessProfile);
+    const pdfBase64 = bytesToBase64(bytes);
+    const filename = `${displayNumber(job)}.pdf`;
+    const newDoc: DocumentItem = {
+      id: `doc_job_${job.id}_${Date.now()}`,
+      name: filename,
+      customer: job.customer,
+      employee: job.assignedEmployee || actor,
+      vendor: "None",
+      job: displayNumber(job),
+      type: "Contracts",
+      folder: "Jobs",
+      uploadedBy: actor,
+      date: new Date().toISOString().split("T")[0],
+      size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
+      status: "Draft",
+      isFavorite: false,
+      isArchived: false,
+      notes: "Generated from the Jobs page.",
+      tags: ["Job", "Generated"],
+      estimateId: "None",
+      invoiceId: "None",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
+    };
+    if (pdfBase64.length <= MAX_INLINE_BASE64_LENGTH) {
+      (newDoc as any).pdfBase64 = pdfBase64;
+    } else {
+      triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
+    }
+    setDocuments(prev => [...prev, newDoc]);
+    if (logOperationalEvent) logOperationalEvent("Job PDF Stored", `${filename} saved to Documents`, "📄");
   };
 
   return <div className="space-y-5 animate-fade-in text-left">
@@ -316,7 +361,7 @@ export const JobsPage: React.FC = () => {
       <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Completion</button></div></td></tr>)}</tbody></table></div>}
 
     {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
-      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
+      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>void storeJobPdf(selected)} className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700"><FileText className="mr-1 inline h-3.5 w-3.5"/>Store as PDF</button><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
       <div className="space-y-5 p-5">
         <button onClick={()=>openCompletion(selected)} className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Project Completion Tracking</button>
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
@@ -396,7 +441,7 @@ export const JobsPage: React.FC = () => {
 
     {modal && <JobForm
       form={form} setForm={setForm} customers={customerOptions} roster={recentRoster}
-      onClose={()=>setModal(null)} onSave={()=>saveForm(false)} onGenerate={()=>saveForm(true)} title={modal==="create"?"Create Job":"Edit Job"}
+      onClose={()=>setModal(null)} onSave={()=>saveForm("save")} onStorePdf={()=>saveForm("pdf-store")} onGenerate={()=>saveForm("pdf")} title={modal==="create"?"Create Job":"Edit Job"}
     />}
     {completionJob && businessId && <ProjectCompletionTracking
       job={completionJob} plan={completionPlans.find(plan=>plan.jobId===completionJob.id)}
@@ -427,7 +472,7 @@ const JobCard = ({job,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:Sc
   return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Project Completion Tracking</button></div></div>;
 };
 
-const JobForm = ({form,setForm,customers,roster,onClose,onSave,onGenerate,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
+const JobForm = ({form,setForm,customers,roster,onClose,onSave,onStorePdf,onGenerate,title}:any) => <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm" onMouseDown={(e:any)=>e.target===e.currentTarget&&onClose()}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#9EC8EF] bg-[#C7E3FA] px-4 py-3"><div><p className="text-[8px] font-black uppercase tracking-widest text-[#315C9F]">Job Record</p><h3 className="text-base font-black text-[#1F3557]">{title}</h3></div><button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white" aria-label="Close job form"><X className="h-4 w-4"/></button></div>
   <div className="grid gap-3 p-4 sm:grid-cols-2">
     <div className="sm:col-span-2"><Field label="Select customer"><select value={form.addAsNewCustomer?"__add__":form.customerId} onChange={(e:any)=>{if(e.target.value==="__add__"){setForm({...form,customerId:"",addAsNewCustomer:true,customerName:"",customerPhone:"",location:""});return;}const c=customers.find((x:any)=>x.id===e.target.value);setForm({...form,customerId:e.target.value,addAsNewCustomer:false,customerName:c?(c.contact||c.company):form.customerName,customerPhone:c?.phone||form.customerPhone,location:c?.address||form.location});}} className="input"><option value="">Select customer...</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.contact || c.company}{c.contact&&c.company?` — ${c.company}`:""}</option>)}<option value="__add__">＋ Add customer</option></select>{form.addAsNewCustomer&&<p className="mt-1 text-[10px] font-bold text-amber-700">Enter the new customer's details below. Customers will ask you to edit and confirm the record.</p>}</Field></div>
     <Field label="Name *"><input value={form.customerName} onChange={(e:any)=>setForm({...form,customerName:e.target.value})} className="input" placeholder="Customer name"/></Field>
@@ -454,7 +499,7 @@ const JobForm = ({form,setForm,customers,roster,onClose,onSave,onGenerate,title}
       <div className="sm:col-span-2"><Field label="Internal notes"><textarea rows={2} value={form.notes} onChange={(e:any)=>setForm({...form,notes:e.target.value})} className="input"/></Field></div>
     </div>
   </details>
-  <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-3"><button type="button" onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button><button type="button" onClick={onGenerate} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white"><FileText className="mr-1 inline h-4 w-4"/>Generate PDF</button><button type="button" onClick={onSave} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white"><Check className="mr-1 inline h-4 w-4"/>Save Job</button></div>
+  <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-3"><button type="button" onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button><button type="button" onClick={onStorePdf} className="rounded-xl border border-emerald-600 bg-white px-4 py-2 text-xs font-black text-emerald-700"><FileText className="mr-1 inline h-4 w-4"/>Save (and Store as PDF)</button><button type="button" onClick={onGenerate} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white"><FileText className="mr-1 inline h-4 w-4"/>Save &amp; Generate PDF</button><button type="button" onClick={onSave} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white"><Check className="mr-1 inline h-4 w-4"/>Save Job</button></div>
 </div></div>;
 
 const Field=({label,children}:{label:string;children:React.ReactNode})=><label className="block"><span className="mb-1 block text-[9px] font-black uppercase tracking-wide text-[#5E7393]">{label}</span>{children}</label>;

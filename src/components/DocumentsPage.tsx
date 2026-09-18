@@ -171,6 +171,17 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorDocName, setPdfEditorDocName] = useState("");
   const [pdfEditorBase64, setPdfEditorBase64] = useState("");
   const [pdfEditorAutoOpenPicker, setPdfEditorAutoOpenPicker] = useState(false);
+  // SECURITY/CORRECTNESS: SelfieSaveEditor decides once, on mount, whether to
+  // show its "Start with a blank document" setup screen (based on whether a
+  // real document/draft was handed to it). Without a key that changes on
+  // every open, React reuses the SAME component instance across separate
+  // "open the editor" actions (they all render at the same JSX position), so
+  // that one-time decision never re-runs -- open a blank draft once, and
+  // every later open from a real Lead/Estimate/Customer/Job PDF incorrectly
+  // shows the blank-document screen again despite real content being loaded.
+  // Bumped on every distinct "open the editor" action below so each open is
+  // a fresh mount.
+  const [pdfEditorSessionKey, setPdfEditorSessionKey] = useState(0);
 
   useEffect(() => {
     if (!generatedPdfDraft) return;
@@ -178,6 +189,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocName(generatedPdfDraft.filename);
     setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(false);
+    setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
   }, [generatedPdfDraft]);
 
@@ -191,6 +203,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocName("");
     setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(true);
+    setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
   }, [pendingSignatureCapture]);
   const signatureCaptureHint = pendingSignatureCapture ? { customerName: pendingSignatureCapture.customerName } : null;
@@ -274,6 +287,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocName(doc?.name || "");
     setPdfEditorBase64((doc as any)?.pdfBase64 || "");
     setPdfEditorAutoOpenPicker(autoOpenPdfPicker);
+    setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
     if (doc) {
       triggerNotification(`Opening ${doc.name} in SelfieSave eSign`);
@@ -1481,7 +1495,9 @@ export const DocumentsPage: React.FC = () => {
                       if (tpl.action === "esign") {
                         setPdfEditorDocId(null);
                         setPdfEditorDocName(tpl.name + ".pdf");
+                        setPdfEditorBase64("");
                         setPdfEditorAutoOpenPicker(false);
+                        setPdfEditorSessionKey(k => k + 1);
                         setIsPDFEditorOpen(true);
                       } else {
                         window.open(tpl.url, "_blank", "noopener,noreferrer");
@@ -1889,6 +1905,12 @@ export const DocumentsPage: React.FC = () => {
           no external site, no popup window: SelfieSaveEditor is a genuine
           React component living in src/components/SelfieSaveEditor.tsx. */}
       {isPDFEditorOpen && (
+        // Keyed on a React.Fragment (rather than on SelfieSaveEditor itself)
+        // -- this project has no usable React prop types for custom
+        // components' `key`, only for intrinsic/Fragment elements -- so this
+        // still forces the fresh remount described above without fighting
+        // that gap.
+        <React.Fragment key={pdfEditorSessionKey}>
         <SelfieSaveEditor
           accountEmail={loggedInUser?.email || "owner@ownerslocal.app"}
           accountName={loggedInUser?.name}
@@ -1905,6 +1927,7 @@ export const DocumentsPage: React.FC = () => {
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
         />
+        </React.Fragment>
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
@@ -2035,8 +2058,10 @@ export const DocumentsPage: React.FC = () => {
                 // SelfieSave manages its own canvas — just open it with the doc name
                 setPdfEditorDocId(null);
                 setPdfEditorDocName(photoToPdfName);
+                setPdfEditorBase64("");
                 setPdfEditorAutoOpenPicker(false);
                 setIsPhotoToPDFModalOpen(false);
+                setPdfEditorSessionKey(k => k + 1);
                 setIsPDFEditorOpen(true);
                 triggerNotification("📸 Photo compiling session complete! Opening compiled documents inside Editor.");
               }}
