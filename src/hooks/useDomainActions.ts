@@ -3,6 +3,7 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { Customer, Estimate, SchedulingEvent } from "../types/domain";
 import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
+import { buildNewCustomerRecord } from "../lib/customerDefaults";
 
 /**
  * Single home for the cross-domain writes that today happen ad hoc inside
@@ -22,25 +23,18 @@ export function useDomainActions() {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return null;
 
-    const newCustomer: Customer = {
-      id: "cust_" + Math.random().toString(36).substring(2, 9),
+    // Marketing attribution -- carries the real Lead source through into
+    // the Customer record so it survives past this conversion.
+    const newCustomer = buildNewCustomerRecord({
+      name: lead.name,
       company: lead.company || lead.name + " Inc",
-      contact: lead.name,
       phone: lead.phone,
       email: lead.email,
-      address: lead.address || "",
-      openJobs: 0,
-      outstandingBalance: 0,
-      lifetimeValue: lead.estimatedValue || 0,
-      status: "Active",
-      type: "Residential",
-      isVIP: false,
-      recentlyAdded: true,
-      // Marketing attribution -- carries the real Lead source through into
-      // the Customer record so it survives past this conversion.
+      address: lead.address,
+      lifetimeValue: lead.estimatedValue,
       source: lead.source,
       sourceLeadId: lead.id
-    };
+    });
 
     setCustomers(prev => [newCustomer, ...prev]);
     setLeads(prev => prev.map(l => (l.id === leadId ? { ...l, status: "Won" } : l)));
@@ -202,23 +196,17 @@ export function useDomainActions() {
         }
       } else if (input.customer) {
         // No CRM record at all — create an Active customer from the same data.
-        const newCustomer: Customer = {
-          id: "cust_" + Math.random().toString(36).substring(2, 9),
+        const newCustomer = buildNewCustomerRecord({
+          name: input.customer,
           company: input.customer,
-          contact: input.customer,
-          phone: input.customerPhone || "",
-          email: input.customerEmail || "",
-          address: input.customerAddress || input.location || "",
+          phone: input.customerPhone,
+          email: input.customerEmail,
+          address: input.customerAddress || input.location,
           openJobs: 1,
-          outstandingBalance: 0,
-          lifetimeValue: input.budget || 0,
-          status: "Active",
-          type: "Residential",
-          isVIP: false,
-          recentlyAdded: true,
+          lifetimeValue: input.budget,
           source: input.source || "Manual Entry",
           sourceLeadId: input.sourceLeadId
-        };
+        });
         setCustomers(prev => [newCustomer, ...prev]);
         logOperationalEvent("Customer Created", `${input.customer} added as Active customer from ${input.sourceEstimateId ? "accepted estimate" : "converted lead"}`, "🤝", { screen: "customers", customerId: newCustomer.id });
       }
@@ -257,26 +245,18 @@ export function useDomainActions() {
     );
     if (alreadyExists) return;
 
-    const newCustomer: Customer = {
-      id: "cust_" + Math.random().toString(36).substring(2, 9),
+    // No Lead means this customer was typed in directly -- "Manual Entry"
+    // is the honest attribution unless the caller already knows better
+    // (e.g. an estimate that itself carries a real Lead source).
+    const newCustomer = buildNewCustomerRecord({
+      name: trimmedName,
       company: company?.trim() || trimmedName + " Inc",
-      contact: trimmedName,
-      phone: phone?.trim() || "",
-      email: "",
-      address: address?.trim() || "",
-      openJobs: 0,
-      outstandingBalance: 0,
-      lifetimeValue: 0,
+      phone,
+      address,
       status: "Potential",
-      type: "Residential",
-      isVIP: false,
-      recentlyAdded: true,
-      // No Lead means this customer was typed in directly -- "Manual Entry"
-      // is the honest attribution unless the caller already knows better
-      // (e.g. an estimate that itself carries a real Lead source).
       source: source || "Manual Entry",
       sourceLeadId
-    };
+    });
 
     setCustomers(prev => [newCustomer, ...prev]);
     logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮", { screen: "customers", customerId: newCustomer.id });

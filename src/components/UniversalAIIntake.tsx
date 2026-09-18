@@ -12,8 +12,9 @@ import { authedFetch } from "../lib/apiClient";
 import { useVisualViewportBottomRight } from "../hooks/useVisualViewportBottomRight";
 import { buildScanSnapshotDocument, SNAPSHOT_PHOTO_MAX_BASE64_LENGTH } from "../lib/scanSnapshotDocument";
 import type { ScannedLineItem } from "../types/scannedReceipt";
-import type { InventoryItem, Customer, Lead, Estimate } from "../types/domain";
+import type { InventoryItem, Lead, Estimate } from "../types/domain";
 import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
+import { buildNewCustomerRecord } from "../lib/customerDefaults";
 
 type RecordType = "bill" | "customer" | "lead" | "estimate" | "inventory" | "address" | "onboarding" | "material_expense" | "payroll" | "financial" | "unknown";
 
@@ -255,21 +256,13 @@ export function UniversalAIIntake({ snapshotFolder }: UniversalAIIntakeProps = {
       // add, CSV import, lead/estimate conversion) -- so a scanned customer
       // shows up identically everywhere the others do instead of leaving
       // fields blank/NaN (openJobs, lifetimeValue, status, type, isVIP).
-      const customer: Customer = {
-        id: id("cust"),
+      const customer = buildNewCustomerRecord({
+        name: String(fields.contact || fields.name || ""),
         company: String(fields.company || fields.name || fields.contact || "New Customer"),
-        contact: String(fields.contact || fields.name || ""),
         phone: String(fields.phone || ""),
         email: String(fields.email || ""),
-        address: [fields.address, fields.city, fields.state, fields.zip].filter(Boolean).join(", "),
-        openJobs: 0,
-        outstandingBalance: 0,
-        lifetimeValue: 0,
-        status: "Active",
-        type: "Residential",
-        isVIP: false,
-        recentlyAdded: true
-      };
+        address: [fields.address, fields.city, fields.state, fields.zip].filter(Boolean).join(", ")
+      });
       data.setCustomers(prev => [customer, ...prev]);
     } else if (recordType === "lead") {
       // Same real Lead shape LeadsPage's own add-lead form builds, so a
