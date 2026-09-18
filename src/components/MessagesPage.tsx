@@ -45,7 +45,8 @@ import {
   Building,
   DollarSign,
   Phone,
-  MessageCircle
+  MessageCircle,
+  Inbox
 } from "lucide-react";
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
@@ -54,6 +55,9 @@ import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "fi
 import { db } from "../firebase";
 import { hasPermission } from "../types/permissions";
 import { composeSms, callNumber } from "../lib/deviceHandoff";
+import { TextMessage } from "../types/domain";
+import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
+import { normalizePhoneForMatch } from "../lib/spreadsheetImport";
 
 // Let's define the Types
 export interface MessageAttachment {
@@ -219,6 +223,69 @@ export const MessagesPage: React.FC = () => {
       }));
     }
   }, [selectedConvId]);
+
+  // Which top-level tab is active: internal team chat vs. the real, automatically
+  // captured customer text inbox (native SMS on the companion phone -- see
+  // text_messages Firestore collection). Access to this page already requires
+  // the "messages" view permission, so anyone who can see MessagesPage at all
+  // can see both tabs.
+  const [activeMainTab, setActiveMainTab] = useState<"chats" | "inbox">("chats");
+
+  // Every real text captured by the companion Android app (incoming customer
+  // replies, and outgoing texts sent from the phone's own Messages app),
+  // read-only here -- there is no "send" path from the web app, only the
+  // Reply/Call deep-links below that hand off to the phone's native apps.
+  const [textMessages] = useFirestoreCollection<TextMessage>("text_messages", businessId);
+
+  interface TextThread {
+    phoneKey: string;
+    phoneNumber: string;
+    customerId: string | null;
+    leadId: string | null;
+    displayName: string;
+    messages: TextMessage[];
+    lastMessage: TextMessage;
+  }
+
+  const textThreads = useMemo<TextThread[]>(() => {
+    const byPhone = new Map<string, TextMessage[]>();
+    textMessages.forEach(msg => {
+      const key = normalizePhoneForMatch(msg.phoneNumber) || msg.phoneNumber;
+      if (!byPhone.has(key)) byPhone.set(key, []);
+      byPhone.get(key)!.push(msg);
+    });
+
+    const threads: TextThread[] = [];
+    byPhone.forEach((msgs, key) => {
+      const sorted = [...msgs].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      const last = sorted[sorted.length - 1];
+      const matchedCustomer =
+        customersList.find(c => c.id === last.customerId) ||
+        customersList.find(c => normalizePhoneForMatch(c.phone) === key);
+      threads.push({
+        phoneKey: key,
+        phoneNumber: last.phoneNumber,
+        customerId: last.customerId,
+        leadId: last.leadId,
+        displayName: matchedCustomer ? (matchedCustomer.company || matchedCustomer.contact) : last.phoneNumber,
+        messages: sorted,
+        lastMessage: last
+      });
+    });
+
+    return threads.sort((a, b) => b.lastMessage.timestamp.localeCompare(a.lastMessage.timestamp));
+  }, [textMessages, customersList]);
+
+  const [selectedInboxPhoneKey, setSelectedInboxPhoneKey] = useState<string>("");
+  const activeInboxThread = useMemo(() => {
+    return textThreads.find(t => t.phoneKey === selectedInboxPhoneKey) || textThreads[0];
+  }, [textThreads, selectedInboxPhoneKey]);
+
+  const formatThreadTimestamp = (iso: string) => {
+    const parsed = new Date(iso);
+    if (isNaN(parsed.getTime())) return iso;
+    return parsed.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
 
   // Navigation and Filter states
   const [searchQuery, setSearchQuery] = useState("");
@@ -711,9 +778,181 @@ export const MessagesPage: React.FC = () => {
     triggerRealTimeNotification(`Created new channel: ${newC.title}`);
   };
 
+  // Reused in every render branch below so users can jump between internal
+  // Team Chat and the real, automatically-captured Text Inbox no matter
+  // which branch (empty state, inbox, or the main chat view) is showing.
+  const mainTabSwitcher = (
+    <div className="flex items-center gap-1.5 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-1.5 w-fit">
+      <button
+        onClick={() => setActiveMainTab("chats")}
+        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+          activeMainTab === "chats" ? "bg-[#4A9BFF] text-white shadow-sm" : "text-[#315C9F] hover:bg-[#C7E3FB]"
+        }`}
+      >
+        <MessageSquare className="w-3.5 h-3.5" /> Team Chat
+      </button>
+      <button
+        onClick={() => setActiveMainTab("inbox")}
+        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+          activeMainTab === "inbox" ? "bg-[#4A9BFF] text-white shadow-sm" : "text-[#315C9F] hover:bg-[#C7E3FB]"
+        }`}
+      >
+        <Inbox className="w-3.5 h-3.5" /> Text Inbox
+        {textThreads.length > 0 && (
+          <span className={`ml-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md font-bold ${activeMainTab === "inbox" ? "bg-white/25 text-white" : "bg-[#C7E3FB] text-[#315C9F]"}`}>
+            {textThreads.length}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+
+  if (activeMainTab === "inbox") {
+    return (
+      <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">
+        {latestNotification && (
+          <div className="fixed top-4 right-4 z-[9999] bg-[#315C9F] text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 border border-[#4A9BFF] animate-bounce">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+            <span>{latestNotification}</span>
+          </div>
+        )}
+
+        <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+          <div>
+            <div className="flex items-center gap-2">
+              <Inbox className="w-5 h-5 text-[#315C9F]" />
+              <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">
+                Customer Text Inbox
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 font-sans mt-1">
+              Every real text your customers send to and receive from your business phone, captured automatically by the companion app — no separate SMS service required.
+            </p>
+          </div>
+          {mainTabSwitcher}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[560px]">
+          {/* THREAD LIST */}
+          <div className="lg:col-span-4 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex flex-col gap-3 max-h-[640px] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-2">
+              <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
+                <MessageCircle className="w-4 h-4 text-[#315C9F]" /> Conversations
+              </h3>
+              <span className="text-[9px] bg-[#C7E3FB] text-[#315C9F] font-mono px-2 py-0.5 rounded-md font-bold">
+                {textThreads.length} Number{textThreads.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <div className="space-y-2 flex-1">
+              {textThreads.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-xs font-semibold px-2">
+                  No texts captured yet. Incoming and outgoing texts on your companion phone will appear here automatically.
+                </div>
+              ) : (
+                textThreads.map(thread => {
+                  const isSelected = !!activeInboxThread && thread.phoneKey === activeInboxThread.phoneKey;
+                  return (
+                    <div
+                      key={thread.phoneKey}
+                      onClick={() => setSelectedInboxPhoneKey(thread.phoneKey)}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                        isSelected ? "bg-[#C7E3FB] border-[#4A9BFF] shadow-sm" : "bg-[#F5FAFF] border-[#A9CDEE] hover:bg-[#EAF5FF]"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-1">
+                        <h4 className="text-xs font-extrabold text-slate-800 line-clamp-1 leading-tight">{thread.displayName}</h4>
+                        <span className="text-[9px] text-slate-400 font-mono shrink-0">{formatThreadTimestamp(thread.lastMessage.timestamp)}</span>
+                      </div>
+                      <p className="text-[9px] font-mono text-slate-400">{thread.phoneNumber}</p>
+                      <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                        <strong className="text-slate-700">{thread.lastMessage.direction === "incoming" ? "Them" : "You"}:</strong> {thread.lastMessage.body}
+                      </p>
+                      {!thread.customerId && !thread.leadId && (
+                        <span className="text-[8.5px] uppercase font-bold text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded w-fit">Unmatched Number</span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* THREAD VIEW */}
+          <div className="lg:col-span-8 bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex flex-col justify-between max-h-[640px]">
+            {!activeInboxThread ? (
+              <div className="flex-1 flex items-center justify-center text-center text-slate-400 text-xs font-semibold px-4">
+                Select a conversation to view the full text thread.
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-[#A9CDEE] pb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider leading-none">{activeInboxThread.displayName}</h3>
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{activeInboxThread.phoneNumber}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => callNumber(activeInboxThread.phoneNumber)}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Phone className="w-3.5 h-3.5" /> Call
+                    </button>
+                    <button
+                      onClick={() => composeSms({ to: activeInboxThread.phoneNumber })}
+                      className="px-3 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" /> Reply
+                    </button>
+                    {activeInboxThread.customerId && (
+                      <button
+                        onClick={() => onNavigateToScreen && onNavigateToScreen("customers", { customerId: activeInboxThread.customerId })}
+                        className="px-3 py-2 bg-[#F5FAFF] hover:bg-[#E3F3FF] text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <User className="w-3.5 h-3.5" /> Customer Card
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 rounded-xl my-3 max-h-[380px] flex flex-col">
+                  {activeInboxThread.messages.map(msg => {
+                    const isOutgoing = msg.direction === "outgoing";
+                    return (
+                      <div key={msg.id} className={`flex flex-col max-w-[85%] text-left ${isOutgoing ? "ml-auto items-end" : "mr-auto items-start"}`}>
+                        <span className="text-[9px] font-sans font-bold uppercase text-slate-400 mb-0.5">
+                          {isOutgoing ? "You" : activeInboxThread.displayName} · {formatThreadTimestamp(msg.timestamp)}
+                        </span>
+                        <div
+                          className={`p-3 rounded-2xl text-xs leading-relaxed border shadow-xs ${
+                            isOutgoing ? "bg-[#315C9F] text-white border-[#1F3557] rounded-tr-none" : "bg-white text-slate-800 border-[#A9CDEE] rounded-tl-none"
+                          }`}
+                        >
+                          <p className="whitespace-pre-line font-medium font-sans">{msg.body}</p>
+                        </div>
+                        {msg.createdNewLead && (
+                          <span className="text-[8.5px] text-emerald-600 font-bold mt-0.5">✓ New lead created from this text</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className="text-[9px] text-slate-400 text-center">
+                  Captured automatically from your companion phone's text messages. Reply and Call open your phone's own apps — nothing is sent from here. The full thread also appears on this customer's card, printable as PDF.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeConv) {
     return (
       <div className="rounded-3xl border border-[#A9CDEE] bg-[#C7E3FB] p-6 text-left shadow-sm">
+        <div className="mb-4">{mainTabSwitcher}</div>
         <div className="rounded-2xl border border-[#A9CDEE] bg-[#E3F3FF] p-8 text-center">
           <MessageSquare className="mx-auto h-8 w-8 text-[#315C9F]" />
           <h2 className="mt-3 text-base font-extrabold text-[#342D7E]">No conversations yet</h2>
@@ -750,6 +989,8 @@ export const MessagesPage: React.FC = () => {
           <span>{latestNotification}</span>
         </div>
       )}
+
+      {mainTabSwitcher}
 
       {/* TOP HEADER CARD */}
       <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">

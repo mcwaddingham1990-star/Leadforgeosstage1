@@ -3,7 +3,7 @@
 // sample document). Used by every "Generate PDF" / "Compile Documents"
 // button across Estimates, Accounting (Invoices), Customers, and Documents.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib";
-import type { Estimate, Customer, DocumentItem, Lead, MissedCallEvent } from "../types/domain";
+import type { Estimate, Customer, DocumentItem, Lead, MissedCallEvent, TextMessage } from "../types/domain";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
 
 export interface BusinessProfile {
@@ -325,7 +325,12 @@ const directionLabel: Record<MissedCallEvent["direction"], string> = {
 };
 
 /** Real record of a customer's call/text history from the Missed Call Text-Back app (see CrmLinker.kt), oldest first, for the Customer Card's "Convert to PDF" button. */
-export async function buildCallTextHistoryPdf(customer: Customer, events: MissedCallEvent[], business: BusinessProfile): Promise<Uint8Array> {
+/** Merges call events and real text messages into one chronological feed for buildCallTextHistoryPdf -- the same merge CustomersPage.tsx's Call & Text History panel builds for on-screen display. */
+type CallTextEntry =
+  | { sortKey: string; kind: "call"; event: MissedCallEvent }
+  | { sortKey: string; kind: "text"; event: TextMessage };
+
+export async function buildCallTextHistoryPdf(customer: Customer, events: MissedCallEvent[], texts: TextMessage[], business: BusinessProfile): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -336,21 +341,36 @@ export async function buildCallTextHistoryPdf(customer: Customer, events: Missed
   writer.text(customer.contact, { gap: 1 });
   writer.text(customer.phone || "—", { gap: 8 });
 
-  const sorted = [...events].sort((a, b) => a.callTimestamp.localeCompare(b.callTimestamp));
-  if (!sorted.length) {
+  const timeline: CallTextEntry[] = [
+    ...events.map((event): CallTextEntry => ({ sortKey: event.callTimestamp, kind: "call", event })),
+    ...texts.map((event): CallTextEntry => ({ sortKey: event.timestamp, kind: "text", event }))
+  ].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  if (!timeline.length) {
     writer.text("No calls or texts on file yet.", { color: SLATE, gap: 4 });
     return doc.save();
   }
 
-  for (const event of sorted) {
+  for (const entry of timeline) {
     writer.rule();
-    writer.text(`${directionLabel[event.direction] || "Call"} — ${event.callTimestamp}`, { font: bold, gap: 2 });
-    writer.text(`Number: ${event.phoneNumber}`, { gap: 2 });
-    if (event.autoReplySent && event.autoReplyMessage) {
-      writer.text(`Auto-reply text sent: "${event.autoReplyMessage}"`, { color: SLATE, gap: 2 });
-    }
-    if (event.createdNewLead) {
-      writer.text("A new lead was created from this call.", { color: SLATE, gap: 2 });
+    if (entry.kind === "call") {
+      const event = entry.event;
+      writer.text(`${directionLabel[event.direction] || "Call"} — ${event.callTimestamp}`, { font: bold, gap: 2 });
+      writer.text(`Number: ${event.phoneNumber}`, { gap: 2 });
+      if (event.autoReplySent && event.autoReplyMessage) {
+        writer.text(`Auto-reply text sent: "${event.autoReplyMessage}"`, { color: SLATE, gap: 2 });
+      }
+      if (event.createdNewLead) {
+        writer.text("A new lead was created from this call.", { color: SLATE, gap: 2 });
+      }
+    } else {
+      const event = entry.event;
+      const who = event.direction === "outgoing" ? "Sent" : "Received";
+      writer.text(`Text ${who} — ${event.timestamp}`, { font: bold, gap: 2 });
+      writer.text(`"${event.body}"`, { color: SLATE, gap: 2 });
+      if (event.createdNewLead) {
+        writer.text("A new lead was created from this text.", { color: SLATE, gap: 2 });
+      }
     }
   }
 

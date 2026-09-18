@@ -91,16 +91,15 @@ export interface Lead {
 }
 
 /**
- * One call or its follow-up text, written by the Missed Call Text-Back
- * Android app (see missed-call-text-back-app/.../data/CrmLinker.kt) straight
- * to Firestore over the REST API -- the web app only ever reads this
- * collection, never writes to it. `direction` covers every call the phone's
- * call log records, not just missed ones: "missed" is the one that actually
+ * One call, written by the Missed Call Text-Back Android app (see
+ * missed-call-text-back-app/.../data/CrmLinker.kt) straight to Firestore
+ * over the REST API -- the web app only ever reads this collection, never
+ * writes to it. `direction` covers every call the phone's call log
+ * records, not just missed ones: "missed" is the one that actually
  * triggers `autoReplyMessage`/`autoReplySent`; "incoming"/"outgoing" are
- * answered calls logged for the record with no auto-text. Two-way inbound
- * texting (a customer replying) isn't wired up yet -- that needs a real SMS
- * provider (e.g. Twilio) with its own phone number, which nothing here has
- * been given credentials for.
+ * answered calls logged for the record with no auto-text. The follow-up
+ * text conversation itself (both the auto-reply and any real back-and-forth)
+ * lives in TextMessage below, not here.
  */
 export interface MissedCallEvent {
   id: string;
@@ -113,6 +112,30 @@ export interface MissedCallEvent {
   autoReplyMessage: string;
   autoReplySent: boolean;
   callTimestamp: string;
+  createdAt: string;
+}
+
+/**
+ * One real SMS, either direction, written by the same Android app --
+ * SmsReceiver.kt for an incoming customer reply, OutgoingSmsObserver.kt for
+ * an outgoing text actually sent from the owner's phone (the automated
+ * missed-call auto-reply, or a manual reply typed into the phone's native
+ * Messages app after tapping "Reply" on the web app -- see composeSms in
+ * deviceHandoff.ts, which just opens that native app with the number
+ * pre-filled; there's no way to send FROM the web app directly). The web
+ * app only ever reads this collection. Sorted by `timestamp`, this is the
+ * real two-way conversation a business had with one phone number.
+ */
+export interface TextMessage {
+  id: string;
+  businessId: string;
+  phoneNumber: string;
+  direction: "incoming" | "outgoing";
+  body: string;
+  customerId: string | null;
+  leadId: string | null;
+  createdNewLead: boolean;
+  timestamp: string;
   createdAt: string;
 }
 

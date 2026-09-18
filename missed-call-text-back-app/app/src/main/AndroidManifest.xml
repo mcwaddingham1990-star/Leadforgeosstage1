@@ -3,6 +3,15 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- RECEIVE_SMS: lets SmsReceiver see a customer's reply text as it
+         arrives. READ_SMS: lets OutgoingSmsObserver read back what the
+         owner actually typed into their phone's native Messages app after
+         sending it (there's no other way to know what a reply said once it
+         leaves this app's control); both required for the web app's
+         two-way Call & Text History / Inbox to show a real conversation
+         instead of only the auto-reply. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -61,6 +70,20 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Manifest-registered like CallStateReceiver above, for the same
+             reason: SMS_RECEIVED_ACTION is one of the implicit broadcasts
+             Android still delivers to a manifest receiver even if this
+             app's process isn't already running, so a customer's reply
+             lands even if the app was killed since the last time it ran. -->
+        <receiver
+            android:name=".service.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
 

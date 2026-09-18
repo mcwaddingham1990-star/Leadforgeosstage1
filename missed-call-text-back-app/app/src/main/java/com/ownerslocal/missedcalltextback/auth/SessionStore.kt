@@ -69,6 +69,11 @@ class SessionStore(context: Context) {
         get() = prefs.getLong(KEY_LAST_CALL_LOG_ID, -1L)
         set(value) = prefs.edit().putLong(KEY_LAST_CALL_LOG_ID, value).apply()
 
+    /** Dedupes OutgoingSmsObserver against reprocessing the same Sent-folder row twice. */
+    var lastProcessedSentSmsId: Long
+        get() = prefs.getLong(KEY_LAST_SENT_SMS_ID, -1L)
+        set(value) = prefs.edit().putLong(KEY_LAST_SENT_SMS_ID, value).apply()
+
     val isSignedIn: Boolean
         get() = !refreshToken.isNullOrBlank() && !uid.isNullOrBlank()
 
@@ -87,5 +92,6 @@ class SessionStore(context: Context) {
         private const val KEY_WATCHED_PACKAGES = "watched_packages"
         private const val KEY_LAST_SYNC = "last_sync_at"
         private const val KEY_LAST_CALL_LOG_ID = "last_call_log_id"
+        private const val KEY_LAST_SENT_SMS_ID = "last_sent_sms_id"
     }
 }

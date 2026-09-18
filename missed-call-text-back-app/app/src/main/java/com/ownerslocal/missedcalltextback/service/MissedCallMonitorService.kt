@@ -3,6 +3,7 @@ package com.ownerslocal.missedcalltextback.service
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -21,11 +22,32 @@ import java.util.concurrent.TimeUnit
  * services.
  */
 class MissedCallMonitorService : Service() {
+    private var outgoingSmsObserver: OutgoingSmsObserver? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(Config.FOREGROUND_NOTIFICATION_ID, buildNotification())
         schedulePeriodicSync()
+        registerOutgoingSmsObserver()
         return START_STICKY
+    }
+
+    // A ContentObserver only fires while something holds a live registration
+    // -- unlike SmsReceiver's manifest-registered broadcast, this has to be
+    // (re-)registered here every time the service (re)starts. contentObserver
+    // registration is idempotent-safe to call more than once, but avoid
+    // leaking a second registration on every onStartCommand (START_STICKY
+    // can call this repeatedly) by clearing any previous one first.
+    private fun registerOutgoingSmsObserver() {
+        outgoingSmsObserver?.let { contentResolver.unregisterContentObserver(it) }
+        val observer = OutgoingSmsObserver(this)
+        outgoingSmsObserver = observer
+        contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+    }
+
+    override fun onDestroy() {
+        outgoingSmsObserver?.let { contentResolver.unregisterContentObserver(it) }
+        outgoingSmsObserver = null
+        super.onDestroy()
     }
 
     private fun buildNotification() = NotificationCompat.Builder(this, Config.NOTIFICATION_CHANNEL_ID)
