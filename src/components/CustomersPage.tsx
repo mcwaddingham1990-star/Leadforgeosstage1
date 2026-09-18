@@ -83,7 +83,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads, setBuildJobPrefill } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -967,17 +967,27 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 Create Estimate
               </button>
               <button
+                disabled={!selectedCustomer}
+                title={selectedCustomer ? undefined : "Select a customer first"}
                 onClick={() => {
-                  if (onNavigateToScreen) {
-                    onNavigateToScreen("scheduling", { customerId: selectedCustomer?.id });
-                    if (logOperationalEvent) {
-                      logOperationalEvent("Navigate", `Opened scheduling calendar for ${selectedCustomer ? selectedCustomer.company : "new booking"}`, "📅");
-                    }
-                  } else {
-                    onOpenPlaceholder("scheduling", "📅");
+                  if (!selectedCustomer) return;
+                  // Same shared Build Job popup as Leads/Estimates -- pre-filled
+                  // from this customer, then hand off to Jobs so "Schedule Job"
+                  // is one canonical flow no matter where it's triggered from.
+                  setBuildJobPrefill({
+                    customerId: selectedCustomer.id,
+                    customerName: selectedCustomer.contact || selectedCustomer.company,
+                    customerPhone: selectedCustomer.phone,
+                    customerEmail: selectedCustomer.email,
+                    customerAddress: selectedCustomer.address,
+                    source: selectedCustomer.source
+                  });
+                  onNavigateToScreen("jobs");
+                  if (logOperationalEvent) {
+                    logOperationalEvent("Navigate", `Opened Build Job for ${selectedCustomer.company}`, "📅");
                   }
                 }}
-                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
+                className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#EAF5FF]"
               >
                 <Calendar className="w-3.5 h-3.5 text-[#1F3557]" />
                 Schedule Job

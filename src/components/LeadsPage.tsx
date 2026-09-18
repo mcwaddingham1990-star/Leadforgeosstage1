@@ -49,7 +49,7 @@ export const INITIAL_LEADS: Lead[] = [];
 
 export const LeadsPage: React.FC = () => {
   const { convertLeadToCustomer } = useDomainActions();
-  const { leads: propsLeads, setLeads, setDocuments, businessProfile, setGeneratedPdfDraft, setEstimatePrefill } = useDomainData();
+  const { leads: propsLeads, setLeads, setDocuments, businessProfile, setGeneratedPdfDraft, setEstimatePrefill, setBuildJobPrefill } = useDomainData();
   const {
     openPlaceholderPage: onOpenPlaceholder,
     takeSnapshot: onTakeSnapshot,
@@ -221,6 +221,23 @@ export const LeadsPage: React.FC = () => {
     onNavigateToScreen("estimates");
   };
 
+  // Queues the shared Build Job popup pre-filled with this lead's info via
+  // the buildJobPrefill handoff, then navigates to Jobs -- same pattern as
+  // openEstimateFromLead above, so "build a job straight from a lead" opens
+  // the exact same popup as building one from a Customer or an Estimate.
+  const openBuildJobFromLead = (lead: Lead) => {
+    setBuildJobPrefill({
+      customerName: lead.name,
+      customerPhone: lead.phone,
+      customerAddress: lead.address,
+      notes: lead.notes,
+      budget: lead.estimatedValue,
+      sourceLeadId: lead.id,
+      source: lead.source
+    });
+    onNavigateToScreen("jobs");
+  };
+
   const buildNewLeadFromForm = (): Lead | null => {
     if (!formName.trim()) return null;
     const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ") || "(555) 000-0000";
@@ -337,6 +354,12 @@ export const LeadsPage: React.FC = () => {
   const handleCreateEstimate = () => {
     if (!selectedLead) return;
     openEstimateFromLead(selectedLead);
+    setSelectedLead(null);
+  };
+
+  const handleBuildJob = () => {
+    if (!selectedLead) return;
+    openBuildJobFromLead(selectedLead);
     setSelectedLead(null);
   };
 
@@ -1424,6 +1447,13 @@ export const LeadsPage: React.FC = () => {
                       >
                         <FileText className="w-4 h-4 text-blue-600" />
                         Build Estimate
+                      </button>
+                      <button
+                        onClick={handleBuildJob}
+                        className="col-span-2 px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] hover:text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <Briefcase className="w-4 h-4 text-[#315C9F]" />
+                        Build Job
                       </button>
                     </div>
                   </div>

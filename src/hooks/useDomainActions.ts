@@ -1,5 +1,6 @@
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { useAuth } from "../context/AuthContext";
 import { Customer, Estimate, SchedulingEvent } from "../types/domain";
 import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 
@@ -14,6 +15,8 @@ import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } fr
 export function useDomainActions() {
   const { leads, setLeads, customers, setCustomers, estimates, setEstimates, schedulingEvents, setSchedulingEvents } = useDomainData();
   const { logOperationalEvent } = useNavTelemetry();
+  const { loggedInUser, simulatedRole } = useAuth();
+  const actor = loggedInUser?.name || loggedInUser?.email || simulatedRole || loggedInUser?.role || "Owner";
 
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
@@ -74,120 +77,170 @@ export function useDomainActions() {
     return newEstimate;
   };
 
-  const approveEstimateToJob = (estimateId: string, schedule?: {
+  /**
+   * Single real job-creation path -- every "build a job" entry point in the
+   * app (Jobs page, the shared BuildJobModal, an accepted Estimate, a Lead,
+   * the Map's quick-approve) funnels through this same function instead of
+   * each hand-rolling its own SchedulingEvent, so they can never drift out
+   * of sync with each other (missing fields, missing customer sync, or --
+   * the real bug this replaced -- missing the sourceEstimateId that makes
+   * the idempotency check below actually work).
+   *
+   * Conversion from a sourceEstimateId is intentionally idempotent: a
+   * double submit or a reopened accepted estimate must never create a
+   * duplicate job.
+   */
+  const createJob = (input: {
+    customerId?: string;
+    customer: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    location?: string;
+    title?: string;
+    customType?: string;
+    jobType?: string;
     date: string;
     startTime: string;
     endTime: string;
     assignedEmployee?: string;
     assignedCrew?: string;
+    assignedVehicle?: string;
     priority?: SchedulingEvent["priority"];
+    department?: string;
+    description?: string;
     notes?: string;
-  }) => {
-    const estimate = estimates.find(e => e.id === estimateId);
-    if (!estimate) return null;
+    purchaseOrder?: string;
+    budget?: number;
+    laborRate?: number;
+    status?: SchedulingEvent["status"];
+    sourceEstimateId?: string;
+    sourceLeadId?: string;
+    source?: Customer["source"];
+  }): SchedulingEvent => {
+    if (input.sourceEstimateId) {
+      const existingJob = schedulingEvents.find(event => event.sourceEstimateId === input.sourceEstimateId);
+      if (existingJob) return existingJob;
+    }
 
-    // Conversion is intentionally idempotent. A double tap or a reopened
-    // accepted estimate must never create a duplicate job.
-    const existingJob = schedulingEvents.find(event => event.sourceEstimateId === estimateId);
-    if (existingJob) return existingJob;
-
-    // Cross-reference the real customer record for real contact info —
-    // an estimate itself only stores a customer name/company, not
-    // phone/email. No real match means honestly blank fields, not
-    // fabricated placeholder contact details.
-    const matchedCustomer = customers.find(
-      c => c.contact === estimate.customerName || c.company === estimate.company
-    );
-
+    const jobsCount = schedulingEvents.filter(e => e.eventType === "Job").length;
+    const now = new Date().toISOString();
     const newJob: SchedulingEvent = {
       id: "job_" + Math.random().toString(36).substring(2, 9),
       eventType: "Job",
-      date: schedule?.date || new Date().toISOString().slice(0, 10),
-      startTime: schedule?.startTime || "09:00",
-      endTime: schedule?.endTime || "12:00",
-      customer: estimate.customerName,
-      customerPhone: matchedCustomer?.phone || estimate.phone || "",
-      customerEmail: matchedCustomer?.email || "",
-      customerAddress: matchedCustomer?.address || estimate.address || "",
-      // No real rule exists yet for which employee should get an
-      // auto-created job — leaving it unassigned for a real dispatcher
-      // to pick is honest; a hardcoded name never matching a real
-      // employee is not.
-      assignedEmployee: schedule?.assignedEmployee || "",
-      assignedCrew: schedule?.assignedCrew || "",
-      location: matchedCustomer?.address || estimate.address || "",
-      priority: schedule?.priority || "Medium",
-      notes: ["Created from accepted estimate " + estimate.number, schedule?.notes].filter(Boolean).join(" — "),
-      status: schedule?.assignedEmployee ? "Assigned" : "Scheduled",
-      sourceEstimateId: estimate.id,
-      title: `${estimate.company || estimate.customerName} project`,
-      description: `Approved scope from estimate ${estimate.number}`,
-      budget: estimate.amount,
+      jobNumber: `JOB-${new Date().getFullYear()}-${String(jobsCount + 1).padStart(4, "0")}`,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      customerId: input.customerId,
+      customer: input.customer,
+      customerPhone: input.customerPhone || "",
+      customerEmail: input.customerEmail || "",
+      customerAddress: input.customerAddress || input.location || "",
+      location: input.location || input.customerAddress || "",
+      title: input.title,
+      customType: input.customType || input.title,
+      jobType: input.jobType,
+      // No real rule exists for which employee should get an auto-created
+      // job -- leaving it unassigned for a real dispatcher to pick is
+      // honest; a hardcoded name never matching a real employee is not.
+      assignedEmployee: input.assignedEmployee || "",
+      assignedCrew: input.assignedCrew,
+      assignedVehicle: input.assignedVehicle,
+      priority: input.priority || "Medium",
+      department: input.department,
+      description: input.description,
+      notes: input.notes,
+      purchaseOrder: input.purchaseOrder,
+      budget: input.budget,
+      laborRate: input.laborRate,
+      status: input.status && input.status !== "Unassigned" ? input.status : input.assignedEmployee ? "Assigned" : "Scheduled",
+      sourceEstimateId: input.sourceEstimateId,
+      sourceLeadId: input.sourceLeadId,
+      source: input.source,
       progress: 0,
-      source: estimate.source ?? matchedCustomer?.source,
-      sourceLeadId: estimate.sourceLeadId ?? matchedCustomer?.sourceLeadId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      checklist: [],
+      materials: [],
+      createdAt: now,
+      updatedAt: now,
       activity: [{
         id: "activity_" + Math.random().toString(36).substring(2, 9),
-        timestamp: new Date().toISOString(),
-        action: "Job created from accepted estimate",
-        by: "Owners Event Engine",
-        detail: estimate.number
+        timestamp: now,
+        action: input.sourceEstimateId ? "Job created from accepted estimate" : "Job created",
+        by: actor
       }]
     };
 
     setSchedulingEvents(prev => [newJob, ...prev]);
-    setEstimates(prev => prev.map(e => (e.id === estimateId ? { ...e, status: "Accepted" } : e)));
 
-    // Upgrade a "Potential" customer to "Active" now that they have a real job.
-    // If no customer record exists yet (estimate was created without a CRM entry),
-    // create the full Active record so the CRM stays in sync.
-    const existingCustomer = customers.find(
-      c => c.contact === estimate.customerName || c.company === estimate.company
-    );
-    if (existingCustomer) {
-      const needsActivation = existingCustomer.status === "Potential";
-      // Backfill attribution onto a customer record that predates this
-      // estimate's source (e.g. created via a bare "Potential" upsert
-      // before a Lead was ever linked) so later Estimates/Jobs for the
-      // same customer still resolve a real source instead of "Other".
-      const needsSourceBackfill = !existingCustomer.source && estimate.source;
-      if (needsActivation || needsSourceBackfill) {
-        setCustomers(prev =>
-          prev.map(c =>
-            c.id === existingCustomer.id
-              ? { ...c, ...(needsActivation ? { status: "Active" as const } : {}), ...(needsSourceBackfill ? { source: estimate.source, sourceLeadId: estimate.sourceLeadId } : {}) }
-              : c
-          )
-        );
-        if (needsActivation) logOperationalEvent("Customer Activated", `${estimate.customerName} moved from Potential → Active`, "🤝", { screen: "customers", customerId: existingCustomer.id });
-      }
-    } else {
-      // No CRM record at all — create an Active customer from estimate data.
-      const newCustomer: Customer = {
-        id: "cust_" + Math.random().toString(36).substring(2, 9),
-        company: estimate.company || estimate.customerName + " Inc",
-        contact: estimate.customerName,
-        phone: "",
-        email: "",
-        address: estimate.address || "",
-        openJobs: 1,
-        outstandingBalance: estimate.amount || 0,
-        lifetimeValue: estimate.amount || 0,
-        status: "Active",
-        type: "Residential",
-        isVIP: false,
-        recentlyAdded: true,
-        source: estimate.source || "Manual Entry",
-        sourceLeadId: estimate.sourceLeadId
-      };
-      setCustomers(prev => [newCustomer, ...prev]);
-      logOperationalEvent("Customer Created", `${estimate.customerName} added as Active customer from accepted estimate`, "🤝", { screen: "customers", customerId: newCustomer.id });
+    if (input.sourceEstimateId) {
+      setEstimates(prev => prev.map(e => (e.id === input.sourceEstimateId ? { ...e, status: "Accepted" } : e)));
     }
 
-    logOperationalEvent("Estimate Accepted", `${estimate.number} confirmed and converted to ${newJob.status} Job`, "✅", { screen: "jobs" });
+    // Customer sync only applies to a real pipeline conversion (from a Lead
+    // or an Estimate) -- a job typed directly into the Jobs form already
+    // handles its own customer record (see BuildJobModal's "Add customer"
+    // path) and shouldn't have this silently create a second one.
+    if (input.sourceEstimateId || input.sourceLeadId) {
+      const existingCustomer = customers.find(c => c.id === input.customerId || c.contact === input.customer || c.company === input.customer);
+      if (existingCustomer) {
+        const needsActivation = existingCustomer.status === "Potential";
+        // Backfill attribution onto a customer record that predates this
+        // conversion's source (e.g. created via a bare "Potential" upsert
+        // before a Lead was ever linked) so later Estimates/Jobs for the
+        // same customer still resolve a real source instead of "Other".
+        const needsSourceBackfill = !existingCustomer.source && input.source;
+        if (needsActivation || needsSourceBackfill) {
+          setCustomers(prev =>
+            prev.map(c =>
+              c.id === existingCustomer.id
+                ? { ...c, ...(needsActivation ? { status: "Active" as const } : {}), ...(needsSourceBackfill ? { source: input.source, sourceLeadId: input.sourceLeadId } : {}) }
+                : c
+            )
+          );
+          if (needsActivation) logOperationalEvent("Customer Activated", `${input.customer} moved from Potential → Active`, "🤝", { screen: "customers", customerId: existingCustomer.id });
+        }
+      } else if (input.customer) {
+        // No CRM record at all — create an Active customer from the same data.
+        const newCustomer: Customer = {
+          id: "cust_" + Math.random().toString(36).substring(2, 9),
+          company: input.customer,
+          contact: input.customer,
+          phone: input.customerPhone || "",
+          email: input.customerEmail || "",
+          address: input.customerAddress || input.location || "",
+          openJobs: 1,
+          outstandingBalance: 0,
+          lifetimeValue: input.budget || 0,
+          status: "Active",
+          type: "Residential",
+          isVIP: false,
+          recentlyAdded: true,
+          source: input.source || "Manual Entry",
+          sourceLeadId: input.sourceLeadId
+        };
+        setCustomers(prev => [newCustomer, ...prev]);
+        logOperationalEvent("Customer Created", `${input.customer} added as Active customer from ${input.sourceEstimateId ? "accepted estimate" : "converted lead"}`, "🤝", { screen: "customers", customerId: newCustomer.id });
+      }
+    }
+
+    logOperationalEvent(input.sourceEstimateId ? "Estimate Accepted" : "Job Created", `${newJob.jobNumber} ${input.sourceEstimateId ? "confirmed and converted to" : "created for"} ${newJob.status} Job — ${input.customer}`, "💼", { screen: "jobs" });
     return newJob;
+  };
+
+  const updateJob = (jobId: string, updates: Partial<SchedulingEvent>, actionLabel = "Job details edited"): SchedulingEvent | null => {
+    const existing = schedulingEvents.find(e => e.id === jobId);
+    if (!existing) return null;
+    const now = new Date().toISOString();
+    const updated: SchedulingEvent = {
+      ...existing,
+      ...updates,
+      updatedAt: now,
+      activity: [...(existing.activity || []), { id: "activity_" + Math.random().toString(36).substring(2, 9), timestamp: now, action: actionLabel, by: actor }]
+    };
+    setSchedulingEvents(prev => prev.map(e => e.id === jobId ? updated : e));
+    logOperationalEvent("Job Updated", `${updated.jobNumber || updated.id} — ${actionLabel}`, "💼", { screen: "jobs" });
+    return updated;
   };
 
   /**
@@ -229,5 +282,5 @@ export function useDomainActions() {
     logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮", { screen: "customers", customerId: newCustomer.id });
   };
 
-  return { convertLeadToCustomer, createEstimateFromLead, approveEstimateToJob, upsertPotentialCustomer };
+  return { convertLeadToCustomer, createEstimateFromLead, createJob, updateJob, upsertPotentialCustomer };
 }
