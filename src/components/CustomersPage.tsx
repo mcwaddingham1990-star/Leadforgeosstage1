@@ -50,7 +50,7 @@ import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
-import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildTextDocumentPdf, buildCallTextHistoryPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
+import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildLeadPdf, buildTextDocumentPdf, buildCallTextHistoryPdf, mergePdfs, base64ToBytes, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { BulkImportModal } from "./BulkImportModal";
@@ -83,7 +83,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -119,27 +119,40 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const setCustomers = propSetCustomers || setLocalCustomers;
   const pendingCustomers = useMemo(() => customers.filter(customer => customer.pendingConfirmation), [customers]);
   // Real "Compile Documents": builds one actual merged PDF containing the
-  // customer's estimate(s), invoice(s), job planning/summary + the
-  // completing employee's notes and checklist, and any receipts/other
-  // documents on file -- not a text list of ID numbers.
+  // customer's originating lead, estimate(s), job planning/summary + the
+  // completing employee's notes and checklist, the real call/text
+  // conversation history, invoice(s), and any receipts/other documents on
+  // file -- not a text list of ID numbers. Section order matches how an
+  // owner would actually read the story of this customer: Lead -> Estimate
+  // -> Job Details -> Call & Text History -> Invoicing.
   const compileCustomerDocuments = async (customer: Customer) => {
     const names = [customer.id, customer.contact, customer.company].filter(Boolean);
     const customerEstimates = estimates.filter(item => names.includes(item.customerName) || names.includes(item.company));
     const customerInvoices = invoices.filter(item => names.includes(item.customer));
     const customerJobs = schedulingEvents.filter(item => names.includes(item.customer) || item.customerId === customer.id);
     const customerDocs = documents.filter(item => names.includes(item.customer));
+    const originatingLead = customer.sourceLeadId
+      ? leads.find(l => l.id === customer.sourceLeadId)
+      : leads.find(l => names.includes(l.name) || names.includes(l.company));
+    const targetPhoneDigits = normalizePhoneDigits(customer.phone || "");
+    const customerCalls = allCallEvents
+      .filter(event => event.customerId === customer.id || (targetPhoneDigits && normalizePhoneDigits(event.phoneNumber) === targetPhoneDigits))
+      .sort((a, b) => a.callTimestamp.localeCompare(b.callTimestamp));
+    const customerTexts = allTextMessages
+      .filter(msg => msg.customerId === customer.id || (targetPhoneDigits && normalizePhoneDigits(msg.phoneNumber) === targetPhoneDigits))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     triggerNotification("Compiling documents into one PDF…");
 
     const parts: Uint8Array[] = [];
     parts.push(await buildCustomerProfilePdf(customer, { estimates: customerEstimates, invoices: customerInvoices }, businessProfile));
 
+    if (originatingLead) {
+      parts.push(await buildLeadPdf(originatingLead, businessProfile));
+    }
+
     for (const est of customerEstimates) {
       const savedDoc = customerDocs.find(d => d.estimateId === est.id && (d as any).pdfBase64);
       parts.push(savedDoc ? base64ToBytes((savedDoc as any).pdfBase64) : await buildEstimatePdf(est, customer, businessProfile));
-    }
-    for (const inv of customerInvoices) {
-      const savedDoc = customerDocs.find(d => d.invoiceId === inv.id && (d as any).pdfBase64);
-      parts.push(savedDoc ? base64ToBytes((savedDoc as any).pdfBase64) : await buildInvoicePdf(inv, customer, businessProfile));
     }
     for (const job of customerJobs) {
       const plan = completionPlans.find(p => p.jobId === job.id);
@@ -161,6 +174,15 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         });
       }
       parts.push(await buildTextDocumentPdf(`Job Summary — ${job.title || job.jobNumber || job.id}`, sections, businessProfile));
+    }
+
+    if (customerCalls.length || customerTexts.length) {
+      parts.push(await buildCallTextHistoryPdf(customer, customerCalls, customerTexts, businessProfile));
+    }
+
+    for (const inv of customerInvoices) {
+      const savedDoc = customerDocs.find(d => d.invoiceId === inv.id && (d as any).pdfBase64);
+      parts.push(savedDoc ? base64ToBytes((savedDoc as any).pdfBase64) : await buildInvoicePdf(inv, customer, businessProfile));
     }
     // Receipts and any other real document already on file for this
     // customer/job that isn't one of the estimates/invoices already merged
@@ -193,7 +215,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       status: "Draft",
       isFavorite: false,
       isArchived: false,
-      notes: `Compiled from ${customerEstimates.length} estimate(s), ${customerInvoices.length} invoice(s), ${customerJobs.length} job(s).`,
+      notes: `Compiled from ${originatingLead ? "1 lead, " : ""}${customerEstimates.length} estimate(s), ${customerJobs.length} job(s), ${customerCalls.length + customerTexts.length} call/text record(s), ${customerInvoices.length} invoice(s).`,
       tags: ["Compiled", "Customer Package"],
       estimateId: "None",
       invoiceId: "None",
@@ -222,7 +244,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       pdfBase64
     });
     onNavigateToScreen("documents");
-    if (logOperationalEvent) logOperationalEvent("Documents Compiled", `${filename} (${customerEstimates.length} estimates, ${customerInvoices.length} invoices, ${customerJobs.length} jobs)`, "📎");
+    if (logOperationalEvent) logOperationalEvent("Documents Compiled", `${filename} (${originatingLead ? "lead, " : ""}${customerEstimates.length} estimates, ${customerJobs.length} jobs, ${customerCalls.length + customerTexts.length} calls/texts, ${customerInvoices.length} invoices)`, "📎");
   };
 
   useEffect(() => {
