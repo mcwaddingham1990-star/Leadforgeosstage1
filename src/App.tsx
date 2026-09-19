@@ -4461,18 +4461,25 @@ Access to full financial telemetry is restricted.`;
 
   // The real paywall enforcement point -- everything above just computes
   // subscription state; this is the only place that actually blocks usage.
-  // Gated only once a real signed-in, onboarded business exists (loggedInUser
-  // is never set otherwise -- see the isEmployee || isOnboarded check around
-  // the profile-load effect above), only when billing is actually configured
-  // on this deployment (nothing to gate against otherwise), and never for
-  // the.owner@ownerslocal.com's own business (isAdminBusiness, checked
-  // server-side in subscriptionRoutes.ts) or while the status check itself
-  // is still loading/erroring (never lock someone out over a transient
-  // network failure).
+  // Once an owner/employee is authenticated, access remains closed until the
+  // server positively verifies an active subscription, valid bypass, or the
+  // platform-admin business. A timeout, missing configuration, or temporary
+  // verification error must never become free access.
+  if (isLoggedIn && loggedInUser && subscription.loading) {
+    return (
+      <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl px-8 py-7 text-center">
+          <div className="text-[#315C9F] text-xs font-black uppercase tracking-wider animate-pulse">
+            Verifying subscription…
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (
-    isLoggedIn && loggedInUser && !subscription.loading &&
-    subscription.configured && !subscription.isAdminBusiness &&
-    !subscription.subscriptionActive && !subscription.bypassActive
+    isLoggedIn && loggedInUser && !subscription.isAdminBusiness &&
+    (!subscription.configured || (!subscription.subscriptionActive && !subscription.bypassActive))
   ) {
     return <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />;
   }
