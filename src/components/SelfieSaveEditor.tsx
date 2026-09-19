@@ -11,6 +11,7 @@ import { PriceBookModal } from "./PriceBookModal";
 import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import SignaturePad from "./SignaturePad";
 import SendChoiceModal from "./SendChoiceModal";
+import { ESignLegalInfoModal, ESignComplianceFooter } from "./ESignLegalInfoModal";
 
 type FieldKind = "signature" | "initials";
 type SignField = { id:number; party:number; line:number; kind:FieldKind; signed:boolean; committed:boolean; role?:string; name?:string; image?:string; signatureImage?:string; stamp?:string; centralStamp?:string; coords?:string };
@@ -106,6 +107,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const [active,setActive]=useState<number|null>(null);
   const [signerName,setSignerName]=useState("");
   const [consent,setConsent]=useState(false);
+  const [showLegalInfo,setShowLegalInfo]=useState(false);
   const [cameraError,setCameraError]=useState("");
   const [finalLocked,setFinalLocked]=useState(false);
   const [toast,setToast]=useState("");
@@ -752,7 +754,8 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     </div></div>}
     <SendChoiceModal isOpen={sendOpen} onClose={()=>setSendOpen(false)} label={filename||"document"} phone={customerPhone} email={customerEmail} body={sendBody} />
     {setup&&<div className="modal-backdrop"><div className="modal setup-modal"><p className="eyebrow">DOCUMENT REQUIREMENTS</p><h2>Choose the evidence for this document</h2><p>Select any combination. Signers will see and consent to the requirements before signing.</p>{Object.entries({signatures:"Signature fields",initials:"Initials fields",selfies:"Selfie with signing actions",photoId:"Photo ID before signing",location:"Capture device coordinates",displayLocation:"Display coordinates on document",timestamps:"Device time + Central Time",draftingDate:"Verified drafting date"}).map(([k,label])=><label className="check option" key={k}><input type="checkbox" checked={features[k as keyof Features]} onChange={()=>updateFeature(k as keyof Features)}/>{label}</label>)}<button className="capture" onClick={()=>setSetup(false)}>Draft Blank PDF</button></div></div>}
-    {active&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setActive(null)}}>×</button><p className="eyebrow">SIGNER EVIDENCE</p><h2>Complete this signing field</h2><p>Review the document, enter your legal name, and consent before saving this field. Your whole portion stays editable until you commit it.</p>{features.selfies&&<div className="camera">{cameraError?<div className="camera-error">Camera unavailable -- continuing without a selfie<br/><small>{cameraError}</small></div>:<video ref={videoRef} autoPlay muted playsInline/>}<span>FRONT CAMERA</span></div>}<label>Full legal name<input value={signerName} onChange={e=>setSignerName(e.target.value)} placeholder="Type your legal name"/></label>{signMethod==="drawn"&&<div style={{margin:"10px 0"}}><SignaturePad onChange={setDrawnSignature} /></div>}<label className="check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I consent to electronic records and intend this action to sign this document.</label><button className="capture" disabled={!signerName.trim()||!consent||(signMethod==="drawn"&&!drawnSignature)} onClick={saveMark}>Save this field for review</button></div></div>}
+    {active&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setActive(null)}}>×</button><p className="eyebrow">SIGNER EVIDENCE</p><h2>Complete this signing field</h2><p>Review the document, enter your legal name, and consent before saving this field. Your whole portion stays editable until you commit it.</p>{features.selfies&&<div className="camera">{cameraError?<div className="camera-error">Camera unavailable -- continuing without a selfie<br/><small>{cameraError}</small></div>:<video ref={videoRef} autoPlay muted playsInline/>}<span>FRONT CAMERA</span></div>}<label>Full legal name<input value={signerName} onChange={e=>setSignerName(e.target.value)} placeholder="Type your legal name"/></label>{signMethod==="drawn"&&<div style={{margin:"10px 0"}}><SignaturePad onChange={setDrawnSignature} /></div>}<label className="check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I consent to electronic records and intend this action to sign this document.</label><ESignComplianceFooter onLearnMore={()=>setShowLegalInfo(true)}/><button className="capture" disabled={!signerName.trim()||!consent||(signMethod==="drawn"&&!drawnSignature)} onClick={saveMark}>Save this field for review</button></div></div>}
+    {showLegalInfo&&<ESignLegalInfoModal onClose={()=>setShowLegalInfo(false)}/>}
   </main>
   <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} pickerMode={{onPick:handlePricingModelPicked}}/>
   </div>
