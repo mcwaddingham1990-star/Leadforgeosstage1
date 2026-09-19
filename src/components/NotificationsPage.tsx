@@ -164,7 +164,7 @@ export const NotificationsPage: React.FC = () => {
               : "bg-[#E3F3FF] text-[#315C9F] border-[#A9CDEE] hover:bg-white"
           }`}
         >
-          View Unread
+          Unread
         </button>
         <button
           type="button"
@@ -175,14 +175,14 @@ export const NotificationsPage: React.FC = () => {
               : "bg-[#E3F3FF] text-[#315C9F] border-[#A9CDEE] hover:bg-white"
           }`}
         >
-          View Read
+          Read
         </button>
         <button
           type="button"
           onClick={clearRead}
           className="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors border bg-[#E3F3FF] text-rose-600 border-[#A9CDEE] hover:bg-rose-50"
         >
-          Clear Read
+          Delete Read Notifications
         </button>
       </div>
     </div>

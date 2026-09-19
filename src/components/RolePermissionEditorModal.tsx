@@ -113,7 +113,7 @@ export function RolePermissionEditorModal<T extends EditableRole>({
           <div>
             <h3 className="text-xs font-extrabold text-blue-950 uppercase tracking-tight flex items-center gap-1.5">
               <Shield className="w-4 h-4 text-blue-600" />
-              <span>Module Permissions</span>
+              <span>Choose What This Role Can Do</span>
             </h3>
             <p style={{ fontSize: "9.5px" }} className="text-blue-600 font-sans font-bold block">
               Editing: {role.name}
@@ -130,7 +130,7 @@ export function RolePermissionEditorModal<T extends EditableRole>({
 
         <div className="flex-1 overflow-y-auto my-3 pr-1 space-y-2 scrollbar-thin scrollbar-thumb-blue-100">
           <p style={{ fontSize: "9px" }} className="text-slate-400 font-sans leading-normal pb-1">
-            Every module is independent — select any combination of View, Create & Edit, and Delete. No Access clears all three.
+            Choose what this role can do in each area. Select View, Add or Edit, and Delete. Choose No Access to hide that area completely.
           </p>
 
           {MODULE_CATALOG.map((mod) => {

@@ -479,7 +479,7 @@ export const LeadsPage: React.FC = () => {
               Lead Management
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              Track new opportunities, follow-ups, and sales progress
+              Track potential customers from first contact to completed sale.
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -635,10 +635,10 @@ export const LeadsPage: React.FC = () => {
       <div className="bg-[#C7E3FA] rounded-2xl p-5 border border-[#9EC8EF] shadow-sm space-y-4">
         <div>
           <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
-            Sales Pipeline Breakdown
+            Lead Status
           </h3>
           <p className="text-[10.5px] text-[#5E7393] font-sans font-semibold mt-0.5">
-            Interactive metrics. Click any funnel phase below to apply an instant table filter.
+            Select a status to show matching leads.
           </p>
         </div>
 
@@ -765,7 +765,7 @@ export const LeadsPage: React.FC = () => {
                 {filteredLeads.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
-                      No matching leads found. Try relaxing your search query or filters.
+                      No leads found. Clear your filters or add a lead.
                     </td>
                   </tr>
                 ) : (
@@ -818,10 +818,10 @@ export const LeadsPage: React.FC = () => {
           {/* Footer of table */}
           <div className="mt-4 pt-3 border-t border-[#9EC8EF]/40 flex justify-between items-center text-[10.5px] font-sans font-bold text-[#5E7393]">
             <span>
-              Showing {filteredLeads.length} of {leads.length} opportunities loaded
+              {filteredLeads.length} leads
             </span>
             <span className="px-2 py-0.5 bg-[#EAF5FF] border border-[#9EC8EF]/60 rounded-lg text-[#1F3557]">
-              Pipeline Connected
+              Lead list is up to date
             </span>
           </div>
         </div>
@@ -832,7 +832,7 @@ export const LeadsPage: React.FC = () => {
       <div className="space-y-3.5">
         <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5" />
-          Lead Insights & Performance
+          Lead Summary
         </h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -842,7 +842,7 @@ export const LeadsPage: React.FC = () => {
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  New Opportunities
+                  New Leads
                 </span>
                 <Clock className="w-4 h-4 text-[#1F3557]" />
               </div>
@@ -858,7 +858,7 @@ export const LeadsPage: React.FC = () => {
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Highest Value
+                  Highest-Value Lead
                 </span>
                 <DollarSign className="w-4 h-4 text-[#1F3557]" />
               </div>
@@ -874,7 +874,7 @@ export const LeadsPage: React.FC = () => {
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-rose-300 text-rose-600 px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Attention Required
+                  Needs Follow-Up
                 </span>
                 <AlertCircle className="w-4 h-4 text-rose-600" />
               </div>
@@ -890,7 +890,7 @@ export const LeadsPage: React.FC = () => {
             <div>
               <div className="flex justify-between items-start">
                 <span className="text-[9.5px] bg-[#EAF5FF] border border-[#9EC8EF] text-[#1F3557] px-2 py-0.5 rounded font-black uppercase tracking-wider">
-                  Acquisition
+                  Sales Results
                 </span>
                 <TrendingUp className="w-4 h-4 text-[#1F3557]" />
               </div>
@@ -910,7 +910,7 @@ export const LeadsPage: React.FC = () => {
                 </span>
                 <Briefcase className="w-4 h-4 text-[#1F3557]" />
               </div>
-              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Open Pipeline Value</p>
+              <p className="text-xs font-extrabold text-[#1F3557] mt-3">Value of Open Leads</p>
               <p className="text-[11px] text-[#5E7393] font-medium mt-1 leading-normal">
                 {openPipelineValue === 0 ? "No open leads with a value yet." : `$${openPipelineValue.toLocaleString()} across all open leads.`}
               </p>

@@ -269,7 +269,7 @@ export const AccountingPage: React.FC = () => {
           <Landmark className="w-5 h-5 text-[#315C9F]" /> Accounting &amp; Bookkeeping
         </h2>
         <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-          Real double-entry books, synced automatically with every real event across the app.
+          Your income and expenses update automatically when you use Owner’sLOCAL.
         </p>
         <div className="flex flex-wrap gap-1.5 mt-3">
           {TABS.map(t => (
@@ -446,7 +446,7 @@ function DashboardTab({
     { label: "Payments Collected", val: invoicesPaid, icon: CreditCard, color: "text-emerald-600", bg: "bg-emerald-500/10" },
     { label: "Unpaid Invoices", val: arBalance, icon: FileText, color: "text-blue-600", bg: "bg-blue-500/10", sub: `${openInvoiceCount} open invoice${openInvoiceCount === 1 ? "" : "s"}` },
     { label: "Expenses Paid", val: expensesPaid, icon: Receipt, color: "text-rose-600", bg: "bg-rose-500/10" },
-    { label: "Outstanding Expenses", val: apBalance, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-500/10", sub: `${openBillCount} open bill${openBillCount === 1 ? "" : "s"}` }
+    { label: "Unpaid Bills", val: apBalance, icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-500/10", sub: `${openBillCount} open bill${openBillCount === 1 ? "" : "s"}` }
   ];
   return (
     <div className="space-y-5">
@@ -1093,7 +1093,7 @@ function ExpensesTab({ bills, setBills, setJournalEntries, vendors, setVendors, 
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-black text-[#1F3557] uppercase">Expenses</h3>
-        <p className="text-[10px] text-[#5E7393]">Bills, fuel, materials, and every other operating cost. Scan a receipt, invoice, bill, or check with the Snapshot button in the bottom-right corner -- it works from any screen.</p>
+        <p className="text-[10px] text-[#5E7393]">Track bills, fuel, materials, and other business costs. Use Scan Receipt from any page to save a receipt, bill, invoice, or check.</p>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {EXPENSES_SUB_TABS.map(t => (
@@ -1674,7 +1674,10 @@ function ChartOfAccountsTab({ accounts, setAccounts, accountBalances, canEdit, t
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-black text-[#1F3557] uppercase">Chart of Accounts</h3>
+        <div>
+          <h3 className="text-sm font-black text-[#1F3557] uppercase">Chart of Accounts</h3>
+          <p className="text-[10px] text-[#5E7393] mt-0.5">Categories used to organize income, expenses, assets, and debts.</p>
+        </div>
         {canEdit && (
           <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> Add Account
@@ -1766,7 +1769,10 @@ function JournalTab({ journalEntries, setJournalEntries, accounts, canEdit, trig
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-black text-[#1F3557] uppercase">Journal Entries</h3>
+        <div>
+          <h3 className="text-sm font-black text-[#1F3557] uppercase">Journal Entries</h3>
+          <p className="text-[10px] text-[#5E7393] mt-0.5">Manual changes made to your accounting records.</p>
+        </div>
         {canEdit && (
           <button onClick={() => setIsAdding(true)} className="px-3 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> Manual Entry

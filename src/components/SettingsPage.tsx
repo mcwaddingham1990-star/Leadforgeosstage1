@@ -415,42 +415,43 @@ export default function SettingsPage({
 
   // Categories definition
   const categories = [
-    { id: "company", label: "Company", icon: <Settings className="w-4 h-4 text-[#315C9F]" />, group: "Corporate" },
-    { id: "users", label: "Users", icon: <Users className="w-4 h-4 text-[#315C9F]" />, group: "Corporate" },
-    { id: "roles", label: "Roles", icon: <UserCheck className="w-4 h-4 text-[#315C9F]" />, group: "Corporate" },
-    { id: "permissions", label: "Permissions", icon: <Shield className="w-4 h-4 text-[#315C9F]" />, group: "Corporate" },
-    { id: "departments", label: "Departments", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Corporate" },
-    
-    { id: "hours", label: "Business Hours", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "working_days", label: "Working Days", icon: <CheckCircle2 className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "holiday_calendar", label: "Holiday Calendar", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "payroll", label: "Payroll", icon: <DollarSign className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "revenue", label: "Revenue Settings", icon: <Percent className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "taxes", label: "Taxes", icon: <Percent className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
-    { id: "vehicles", label: "Vehicles", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Operational Rules" },
+    { id: "company", label: "Company", icon: <Settings className="w-4 h-4 text-[#315C9F]" />, group: "Business" },
+    { id: "users", label: "Users", icon: <Users className="w-4 h-4 text-[#315C9F]" />, group: "Business" },
+    { id: "roles", label: "Roles", icon: <UserCheck className="w-4 h-4 text-[#315C9F]" />, group: "Business" },
+    { id: "permissions", label: "Permissions", icon: <Shield className="w-4 h-4 text-[#315C9F]" />, group: "Business" },
+    { id: "departments", label: "Departments", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Business" },
 
-    { id: "inventory_defaults", label: "Inventory Defaults", icon: <Archive className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "customer_defaults", label: "Customer Defaults", icon: <Users className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "lead_defaults", label: "Lead Defaults", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "estimate_defaults", label: "Estimate Defaults", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "scheduling_defaults", label: "Scheduling Defaults", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "dispatch_defaults", label: "Dispatch Defaults", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "route_defaults", label: "Route Defaults", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "job_defaults", label: "Job Defaults", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "document_defaults", label: "Document Defaults", icon: <FileCode className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "message_defaults", label: "Message Defaults", icon: <Volume2 className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "review_automation", label: "Automate Reviews", icon: <Star className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
-    { id: "training_defaults", label: "Training Defaults", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Module Defaults" },
+    { id: "hours", label: "Business Hours", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "working_days", label: "Working Days", icon: <CheckCircle2 className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "holiday_calendar", label: "Holiday Calendar", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "payroll", label: "Payroll", icon: <DollarSign className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "revenue", label: "Revenue Settings", icon: <Percent className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "taxes", label: "Taxes", icon: <Percent className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
+    { id: "vehicles", label: "Vehicles", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Business Rules" },
 
-    { id: "ai_settings", label: "AI Settings", icon: <Sparkles className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "notifications", label: "Notification Settings", icon: <Bell className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "security", label: "Security", icon: <Lock className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "appearance", label: "Appearance", icon: <Layout className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "backup", label: "Backup & Restore", icon: <Database className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "audit_logs", label: "Audit Logs", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "api_keys", label: "API Keys", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    { id: "advanced", label: "Advanced Settings", icon: <ShieldAlert className="w-4 h-4 text-[#315C9F]" />, group: "System Control" },
-    ...(isPlatformAdmin ? [{ id: "platform_admin", label: "Platform Admin", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "System Control" }] : [])
+    { id: "inventory_defaults", label: "Inventory Defaults", icon: <Archive className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "customer_defaults", label: "Customer Defaults", icon: <Users className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "lead_defaults", label: "Lead Defaults", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "estimate_defaults", label: "Estimate Defaults", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "scheduling_defaults", label: "Scheduling Defaults", icon: <Calendar className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "dispatch_defaults", label: "Dispatch Defaults", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "route_defaults", label: "Route Defaults", icon: <Truck className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "job_defaults", label: "Job Defaults", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "document_defaults", label: "Document Defaults", icon: <FileCode className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "message_defaults", label: "Message Defaults", icon: <Volume2 className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "review_automation", label: "Automate Reviews", icon: <Star className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+    { id: "training_defaults", label: "Training Defaults", icon: <Sliders className="w-4 h-4 text-[#315C9F]" />, group: "Default Settings" },
+
+    { id: "ai_settings", label: "AI Settings", icon: <Sparkles className="w-4 h-4 text-[#315C9F]" />, group: "App and Security" },
+    { id: "notifications", label: "Notification Settings", icon: <Bell className="w-4 h-4 text-[#315C9F]" />, group: "App and Security" },
+    { id: "security", label: "Security", icon: <Lock className="w-4 h-4 text-[#315C9F]" />, group: "App and Security" },
+    { id: "appearance", label: "Appearance", icon: <Layout className="w-4 h-4 text-[#315C9F]" />, group: "App and Security" },
+
+    { id: "backup", label: "Backup & Restore", icon: <Database className="w-4 h-4 text-[#315C9F]" />, group: "Advanced" },
+    { id: "audit_logs", label: "Audit Logs", icon: <FileText className="w-4 h-4 text-[#315C9F]" />, group: "Advanced" },
+    { id: "api_keys", label: "API Keys", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "Advanced" },
+    { id: "advanced", label: "Advanced Settings", icon: <ShieldAlert className="w-4 h-4 text-[#315C9F]" />, group: "Advanced" },
+    ...(isPlatformAdmin ? [{ id: "platform_admin", label: "Platform Admin", icon: <Key className="w-4 h-4 text-[#315C9F]" />, group: "Advanced" }] : [])
   ].filter(cat => activeRole === "Owner" || cat.id === "appearance");
 
   // Grouped Categories for sidebar
@@ -879,8 +880,8 @@ export default function SettingsPage({
           <div className="flex items-center gap-3">
             <span className="text-2xl select-none">⚙️</span>
             <div>
-              <h1 className="text-lg font-sans font-black text-[#342D7E] uppercase tracking-wider">Company Settings Control Center</h1>
-              <p className="text-xs text-[#5E7393] font-sans font-semibold">Configure core parameters, administrative permissions, and cross-module synchronization settings</p>
+              <h1 className="text-lg font-sans font-black text-[#342D7E] uppercase tracking-wider">Settings</h1>
+              <p className="text-xs text-[#5E7393] font-sans font-semibold">Change your business information, employee access, app preferences, and security settings.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -1015,7 +1016,7 @@ export default function SettingsPage({
                 </h2>
               </div>
               <span className="px-2.5 py-0.5 bg-[#E3F3FF] border border-[#A9CDEE] text-[10px] font-mono font-bold rounded-lg text-[#315C9F]">
-                Active Module
+                Current Section
               </span>
             </div>
 
@@ -2650,14 +2651,14 @@ export default function SettingsPage({
           {/* FRAMEWORK CONNECTIONS */}
           <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] shadow-sm space-y-4">
             <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider border-b border-[#A9CDEE]/50 pb-2 flex items-center gap-1.5">
-              <RefreshCw className="w-4 h-4 text-[#315C9F] animate-spin" /> Connected Areas
+              <RefreshCw className="w-4 h-4 text-[#315C9F] animate-spin" /> Where These Settings Apply
             </h3>
             <p className="text-[10.5px] text-slate-500 font-sans font-medium leading-relaxed">
-              Settings apply across these areas of the app.
+              These settings affect the following parts of Owner'sLOCAL.
             </p>
 
             <div className="space-y-2">
-              <span className="text-[9.5px] uppercase font-extrabold text-emerald-600 block">Connected ({16})</span>
+              <span className="text-[9.5px] uppercase font-extrabold text-emerald-600 block">Currently Used ({16})</span>
               <div className="grid grid-cols-1 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
                 {[
                   "Dashboard", "Revenue", "Customers", "Leads", "Estimates & Bids", "Scheduling",
@@ -2673,7 +2674,7 @@ export default function SettingsPage({
             </div>
 
             <div className="space-y-2 pt-2 border-t border-[#A9CDEE]/40">
-              <span className="text-[9.5px] uppercase font-extrabold text-[#315C9F] block">Ready to Connect ({2})</span>
+              <span className="text-[9.5px] uppercase font-extrabold text-[#315C9F] block">Not Set Up ({2})</span>
               <div className="space-y-1.5">
                 {["Integrations Pipeline", "Outbound Notification System"].map((item) => (
                   <div key={item} className="flex items-center gap-2 px-3 py-1.5 bg-[#F5FAFF]/60 rounded-xl border border-[#A9CDEE]/20 text-xs font-bold text-[#5E7393]">
@@ -2687,22 +2688,22 @@ export default function SettingsPage({
 
           {/* ACTIVE PARAMETERS MONITOR */}
           <div className="bg-[#C7E3FB] rounded-3xl p-5 border border-[#A9CDEE] shadow-sm space-y-3">
-            <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider">Active System Monitor</h3>
+            <h3 className="text-xs font-black uppercase text-[#342D7E] tracking-wider">Account Summary</h3>
             <div className="space-y-2 text-[11px] text-slate-600 font-sans">
               <div className="flex justify-between border-b border-[#A9CDEE]/20 pb-1">
-                <span>Business Title:</span>
+                <span>Business Name:</span>
                 <strong className="text-slate-800">{businessNames[0] || "Default"}</strong>
               </div>
               <div className="flex justify-between border-b border-[#A9CDEE]/20 pb-1">
-                <span>Master AI Engine:</span>
+                <span>AI Assistant:</span>
                 <strong className="text-emerald-600 uppercase">{globalAiSetting}</strong>
               </div>
               <div className="flex justify-between border-b border-[#A9CDEE]/20 pb-1">
-                <span>Roster Headcount:</span>
+                <span>Employees:</span>
                 <strong className="text-[#315C9F]">{activeRosterHeadcount} Active</strong>
               </div>
               <div className="flex justify-between pb-1">
-                <span>Graph Interval:</span>
+                <span>Dashboard Date Range:</span>
                 <strong className="text-slate-800">{revenueResetInterval}</strong>
               </div>
             </div>

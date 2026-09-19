@@ -120,7 +120,7 @@ export const BillingPage: React.FC = () => {
         <h1 className="text-lg font-black">Billing</h1>
       </div>
       <p className="text-xs text-slate-500 -mt-3">
-        Your business's own OwnersLOCAL subscription. This is separate from Payments, which is where you connect Stripe to charge your customers.
+        This page manages your Owner’sLOCAL subscription. To accept payments from customers, open Payments and connect Stripe.
       </p>
 
       {justCheckedOut && !subscription.subscriptionActive && (
@@ -139,7 +139,7 @@ export const BillingPage: React.FC = () => {
         <div className="bg-[#FFF6E3] border border-[#F0D999] rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-[#8A6D1F] shrink-0 mt-0.5" />
           <div className="text-xs text-[#5B4A15]">
-            Subscription billing isn't configured on this deployment yet. An administrator needs to set <code className="font-mono">STRIPE_BASE_PRICE</code> (and Stripe keys) on the server.
+            Owner’sLOCAL billing is not ready yet. The server administrator must finish the Stripe subscription setup.
           </div>
         </div>
       ) : subscription.error ? (
@@ -187,7 +187,7 @@ export const BillingPage: React.FC = () => {
         <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F3557]">
             <KeyRound className="w-3.5 h-3.5 text-[#315C9F]" />
-            Have an access code?
+            Enter a discount or access code
           </div>
           <div className="flex gap-2">
             <input
@@ -204,7 +204,7 @@ export const BillingPage: React.FC = () => {
               disabled={isRedeeming || !accessCode.trim()}
               className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer flex items-center gap-1.5"
             >
-              {isRedeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+              {isRedeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply Code"}
             </button>
           </div>
           {redeemError && <p className="text-[11px] text-rose-600 font-semibold">{redeemError}</p>}

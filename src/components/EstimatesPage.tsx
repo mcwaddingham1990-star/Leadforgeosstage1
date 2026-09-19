@@ -628,7 +628,7 @@ export const EstimatesPage: React.FC = () => {
             {metrics.openEstimates}
           </span>
           <span className="text-[9px] text-[#5E7393]/80 font-bold uppercase tracking-wider">
-            In active workflow
+            Still being worked
           </span>
         </div>
 
@@ -640,7 +640,7 @@ export const EstimatesPage: React.FC = () => {
             {metrics.pendingApproval}
           </span>
           <span className="text-[9px] text-[#5E7393]/80 font-bold uppercase tracking-wider">
-            Awaiting dispatch
+            Waiting to be scheduled
           </span>
         </div>
 
@@ -652,7 +652,7 @@ export const EstimatesPage: React.FC = () => {
             {metrics.accepted}
           </span>
           <span className="text-[9px] text-[#5E7393]/80 font-bold uppercase tracking-wider">
-            Ready to build job
+            Ready to turn into a job
           </span>
         </div>
 
@@ -664,19 +664,19 @@ export const EstimatesPage: React.FC = () => {
             {metrics.declined}
           </span>
           <span className="text-[9px] text-[#5E7393]/80 font-bold uppercase tracking-wider">
-            Needs review / edit
+            Needs changes
           </span>
         </div>
 
         <div className="col-span-2 md:col-span-1 bg-[#315C9F] border border-[#1F3557] p-4 rounded-2xl flex flex-col items-start gap-1 shadow-md text-white">
           <span className="text-[10px] text-blue-100 font-extrabold uppercase tracking-widest">
-            Revenue Pending
+            Possible Income
           </span>
           <span className="text-xl font-mono font-black text-white">
             ${metrics.revenuePending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
           <span className="text-[9px] text-blue-200/90 font-bold uppercase tracking-wider">
-            Outstanding volume
+            Total Value of Open Estimates
           </span>
         </div>
       </div>
@@ -695,7 +695,7 @@ export const EstimatesPage: React.FC = () => {
                 Estimates
               </h3>
               <p className="text-[10px] text-[#5E7393] font-bold">
-                Filtered: {filteredEstimates.length} of {estimates.length} proposals
+                Showing {filteredEstimates.length} estimates
               </p>
             </div>
           </div>
@@ -750,7 +750,7 @@ export const EstimatesPage: React.FC = () => {
               {filteredEstimates.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-[#5E7393] font-bold uppercase tracking-wider bg-white">
-                    No matching estimates found in this system node partition.
+                    No estimates found. Clear your filters or create a new estimate.
                   </td>
                 </tr>
               ) : (
@@ -823,7 +823,7 @@ export const EstimatesPage: React.FC = () => {
                 Estimate Actions
               </h3>
               <p className="text-[10px] text-[#5E7393] font-semibold">
-                Generate PDFs, duplicate contract drafts, or dispatch direct alerts
+                Download, copy, schedule, or send an estimate.
               </p>
             </div>
           </div>
@@ -885,7 +885,7 @@ export const EstimatesPage: React.FC = () => {
                 AI Estimate Tools
               </h3>
               <p className="text-[10px] text-[#5E7393] font-semibold">
-                Predict profit margins, recommend catalog items, and scan cost indices
+                Get help with pricing, materials, labor, and profit.
               </p>
             </div>
           </div>
@@ -976,12 +976,12 @@ export const EstimatesPage: React.FC = () => {
             </div>
           </div>
           <span className="px-2 py-0.5 bg-amber-100 border border-amber-300 text-amber-800 text-[8px] font-mono font-bold rounded-lg uppercase tracking-widest">
-            Pending Core Map
+            WHAT HAPPENS AFTER ACCEPTANCE
           </span>
         </div>
 
         <p className="text-slate-600 text-[11px] leading-relaxed font-sans font-semibold">
-          <strong>Accepted estimate workflow:</strong> After you confirm the job details, OwnersLOCAL creates one linked <strong>Job</strong> and adds it to Jobs, Scheduling, Dispatch, and Map.
+          When you approve an accepted estimate, Owner’sLOCAL creates one job and adds it to Jobs, Scheduling, Dispatch, and the Map.
         </p>
 
         {/* CLICKABLE CONNECTION NODES */}
@@ -995,8 +995,8 @@ export const EstimatesPage: React.FC = () => {
             { id: "documents", label: "Documents", icon: "📂" },
             { id: "revenue", label: "Revenue", icon: "💰" },
             { id: "ai_assistant", label: "AI Assistant", icon: "🤖" },
-            { id: "dashboard", label: "HQ Dashboard", icon: "📊" },
-            { id: "shared_events", label: "Activity", icon: "⚙️" }
+            { id: "dashboard", label: "Dashboard", icon: "📊" },
+            { id: "shared_events", label: "History", icon: "⚙️" }
           ].map((node) => (
             <button
               key={node.id}

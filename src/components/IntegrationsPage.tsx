@@ -169,7 +169,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "Stripe",
       apiType: "REST",
       logo: "💳",
-      description: "Accept card payments, send digital secure checkout links, and process job deposits.",
+      description: "Accept card payments, send payment links, and collect job deposits.",
       connected: false,
       lastSync: "Never",
       aiEnabled: false,
@@ -190,7 +190,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "OwnersLOCAL",
       apiType: "REST",
       logo: "📝",
-      description: "Copy-paste embed code for your own business website. Every submission creates a real Lead here automatically.",
+      description: "Add this form to your website. Each submission will create a new lead in Owner'sLOCAL.",
       connected: true,
       lastSync: "N/A",
       aiEnabled: false,
@@ -548,7 +548,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                 Connected Apps
               </h1>
               <p className="text-xs text-slate-500 font-sans font-medium">
-                Everything hooked up to your business, in one place
+                Connect Owner'sLOCAL to the other tools your business uses.
               </p>
             </div>
           </div>
@@ -569,11 +569,11 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       {/* PLAIN-LANGUAGE STATUS ROW */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { key: "Connected" as const, label: "Working", count: summaryCounts.connected, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+          { key: "Connected" as const, label: "Connected", count: summaryCounts.connected, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
           { key: "Available" as const, label: "Not Set Up", count: summaryCounts.available, color: "text-[#315C9F] bg-[#E3F3FF] border-[#A9CDEE]" },
-          { key: null, label: "Problems", count: summaryCounts.errors, color: summaryCounts.errors > 0 ? "text-rose-600 bg-rose-50 border-rose-200" : "text-emerald-600 bg-emerald-50 border-emerald-200" }
+          { key: null, label: "Needs Attention", count: summaryCounts.errors, color: summaryCounts.errors > 0 ? "text-rose-600 bg-rose-50 border-rose-200" : "text-emerald-600 bg-emerald-50 border-emerald-200" }
         ].map((card) => {
-          const isProblems = card.label === "Problems";
+          const isProblems = card.label === "Needs Attention";
           const isActive = !isProblems && activeSummaryFilter === card.key;
           return (
             <div
@@ -629,7 +629,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                           {item.name}
                         </h4>
                         <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                          {isWebForm ? "Built in — ready now" : item.developer}
+                          {isWebForm ? "Ready to use" : item.developer}
                         </p>
                       </div>
                     </div>
@@ -643,7 +643,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                             : "bg-[#F5FAFF] text-slate-400 border-[#A9CDEE]"
                       }`}
                     >
-                      {item.connected ? "Working" : item.comingSoon ? "Coming Soon" : "Not Set Up"}
+                      {item.connected ? "Connected" : item.comingSoon ? "Coming Soon" : "Not Set Up"}
                     </span>
                   </div>
 
@@ -751,7 +751,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
             >
               <span className="flex items-center gap-2 text-xs font-bold text-slate-700 font-sans">
                 <Database className="h-4 w-4 text-[#315C9F] shrink-0" />
-                Everything else is already working — nothing to set up
+                Built-in Owner'sLOCAL tools are ready to use.
               </span>
               <span className="text-[10px] font-bold text-[#315C9F] shrink-0">
                 {isFeaturesListOpen ? "Hide list ▾" : "See list ▸"}
@@ -793,7 +793,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
           className="w-full flex items-center justify-between gap-2 p-4 text-left cursor-pointer"
         >
           <span className="text-xs font-bold text-slate-700 font-sans">
-            More options — backup, activity log, developer tools
+            Advanced options
           </span>
           <span className="text-[10px] font-bold text-[#315C9F] shrink-0">
             {isAdvancedOpen ? "Hide ▾" : "Show ▸"}

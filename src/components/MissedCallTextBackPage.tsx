@@ -159,13 +159,9 @@ export const MissedCallTextBackPage: React.FC = () => {
       <div className="bg-[#E3F3FF] p-4 rounded-2xl border border-[#A9CDEE] flex items-start gap-2.5">
         <Info className="h-4 w-4 text-[#315C9F] mt-0.5 flex-shrink-0" />
         <p className="text-[11px] text-slate-600 font-sans leading-relaxed">
-          Detecting a missed call and sending the text happens on your phone, in the separate{" "}
-          <strong>Missed Call Text-Back</strong> Android app installed there — it reads these
-          settings when you sign in with this same account (and keeps working in the background
-          even after you close the app or lock the phone). Nothing here works without that app
-          installed and its phone/SMS permissions granted. Every call it sees and every auto-reply
-          it sends is logged in real time to the Call Log below and to that customer's Call &amp;
-          Text History on their Customer Card.
+          Install the Owner'sLOCAL Text-Back app on your Android phone. Sign in with this same
+          account and allow Phone, SMS, Notifications, and Call Log access. When you miss a call,
+          the app can automatically send the message below.
         </p>
       </div>
 
@@ -211,9 +207,8 @@ export const MissedCallTextBackPage: React.FC = () => {
           </h3>
         </div>
         <p className="text-[11px] text-slate-500 font-sans leading-relaxed">
-          TextNow, Google Voice, WhatsApp, and similar apps route calls entirely inside
-          themselves, so the phone app catches them by reading that app's own missed-call
-          notification. Only works when that notification actually contains a phone number.
+          Owner'sLOCAL can also detect missed-call notifications from supported calling apps.
+          This only works when the notification includes the caller's phone number.
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {KNOWN_APPS.map((app) => (
@@ -231,8 +226,11 @@ export const MissedCallTextBackPage: React.FC = () => {
         </div>
         <div>
           <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-            Other app package names (comma-separated)
+            Other Calling Apps
           </label>
+          <p className="text-[10.5px] text-slate-500 font-sans mb-1">
+            Enter each Android app package name separated by a comma.
+          </p>
           <input
             type="text"
             value={customPackages}
@@ -252,13 +250,12 @@ export const MissedCallTextBackPage: React.FC = () => {
           </h3>
         </div>
         <p className="text-[11px] text-slate-500 font-sans leading-relaxed">
-          Every call the companion app has seen for this business, newest first — missed calls it
-          auto-texted back, and answered incoming/outgoing calls it logged for the record.
+          This list shows calls detected by the Android app and any automatic replies it sent.
         </p>
         <div className="bg-white rounded-xl border border-[#A9CDEE] divide-y divide-[#A9CDEE]/60 max-h-96 overflow-y-auto">
           {sortedCallEvents.length === 0 ? (
             <p className="text-[11px] text-slate-500 font-sans p-3">
-              No calls logged yet. This fills in automatically once the Android app is installed, signed in, and granted its phone/SMS/call-log permissions.
+              No calls have been recorded. Install the Android app, sign in, and allow the required permissions to begin.
             </p>
           ) : (
             sortedCallEvents.map((event) => (

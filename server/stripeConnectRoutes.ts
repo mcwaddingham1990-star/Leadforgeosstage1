@@ -60,7 +60,7 @@ export async function handleGetOrCreateAccount(req: Request, res: Response) {
   try {
     const businessId = await resolveBusinessId(req.firebaseUser!.uid);
     if (!businessId) {
-      res.status(503).json({ error: "This server isn't configured for Stripe Connect yet, or your account has no business linked." });
+      res.status(503).json({ error: "Stripe is not ready yet. Connect Stripe or ask the Owner’sLOCAL administrator to finish the Stripe setup." });
       return;
     }
     const accountId = await getOrCreateConnectedAccountId(businessId);
@@ -75,7 +75,7 @@ export async function handleCreateAccountSession(req: Request, res: Response) {
   try {
     const businessId = await resolveBusinessId(req.firebaseUser!.uid);
     if (!businessId) {
-      res.status(503).json({ error: "This server isn't configured for Stripe Connect yet, or your account has no business linked." });
+      res.status(503).json({ error: "Stripe is not ready yet. Connect Stripe or ask the Owner’sLOCAL administrator to finish the Stripe setup." });
       return;
     }
     const accountId = await getOrCreateConnectedAccountId(businessId);
@@ -91,7 +91,7 @@ export async function handleGetAccountStatus(req: Request, res: Response) {
   try {
     const businessId = await resolveBusinessId(req.firebaseUser!.uid);
     if (!businessId) {
-      res.status(503).json({ error: "This server isn't configured for Stripe Connect yet, or your account has no business linked." });
+      res.status(503).json({ error: "Stripe is not ready yet. Connect Stripe or ask the Owner’sLOCAL administrator to finish the Stripe setup." });
       return;
     }
     const app = getAdminApp();

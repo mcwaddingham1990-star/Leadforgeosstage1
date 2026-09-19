@@ -1084,16 +1084,16 @@ export const SchedulingPage: React.FC = () => {
       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm">
         <div className="border-b border-[#9EC8EF] pb-3 mb-4 text-left">
           <h3 className="text-sm font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">This Week's Jobs</h3>
-          <p className="text-xs text-slate-500">Sun–Sat &middot; unfinished jobs drop to Past Due once their date passes</p>
+          <p className="text-xs text-slate-500">Jobs are marked Past Due when their scheduled date passes.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Upcoming</p>
-            {renderTicker(upcoming, "Nothing left scheduled this week.", "upcoming")}
+            {renderTicker(upcoming, "No upcoming jobs this week.", "upcoming")}
           </div>
           <div>
             <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Past Due</p>
-            {renderTicker(pastDue, "Nothing overdue -- nice.", "pastDue")}
+            {renderTicker(pastDue, "No overdue jobs.", "pastDue")}
           </div>
         </div>
       </div>
@@ -1110,11 +1110,11 @@ export const SchedulingPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-[#315C9F]" />
               <h2 className="text-xl font-display font-extrabold text-[#1F3557] tracking-tight uppercase">
-                Scheduling Center
+                Schedule
               </h2>
             </div>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              Plan appointments, assign crews, and keep dispatch schedules up to date
+              Schedule jobs, appointments, employees, and crews.
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -1230,7 +1230,7 @@ export const SchedulingPage: React.FC = () => {
                 onClick={() => setActiveView("recurring")}
                 className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${activeView === "recurring" ? "bg-[#315C9F] text-white shadow-xs" : "text-[#1F3557] hover:bg-[#BDDDF8]/50"}`}
               >
-                Recurring Maintenance
+                Repeating Jobs
               </button>
             </div>
           </div>
