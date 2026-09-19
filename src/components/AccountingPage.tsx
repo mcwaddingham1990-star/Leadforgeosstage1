@@ -42,7 +42,9 @@ import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import SendChoiceModal from "./SendChoiceModal";
 import ESignChoiceModal from "./ESignChoiceModal";
-import type { DocumentItem, Estimate } from "../types/domain";
+import { buildCustomerPortalLink } from "../lib/customerPortalClient";
+import { ensureCustomerPortalAccess } from "../lib/customerPortalAccess";
+import type { DocumentItem, Estimate, Customer } from "../types/domain";
 import {
   LayoutDashboard,
   FileText,
@@ -541,7 +543,7 @@ function InvoicesTab({
   autoOpenCreate,
   onAutoOpenCreateHandled
 }: any) {
-  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates } = useDomainData();
+  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates, setCustomers } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
   useEffect(() => {
@@ -561,7 +563,11 @@ function InvoicesTab({
   const [paymentAmount, setPaymentAmount] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [isSendOpen, setIsSendOpen] = useState(false);
-  const [sendMatch, setSendMatch] = useState<{ email?: string; phone?: string } | null>(null);
+  // Holds the full Customer record (not just contact info) so "Send for
+  // Payment" can turn on their Customer Portal access and embed a real,
+  // working "pay this invoice online" link -- the same Stripe Connect
+  // checkout the Customer Portal's own "Pay Invoice" button already uses.
+  const [sendMatch, setSendMatch] = useState<Customer | null>(null);
   // The front-door eSign choice ("Send for eSign" / "Sign in Person" /
   // "Send for Payment" / "Save as PDF") that now backs the invoice "Send"
   // button -- "Send for Payment" reuses the existing plain isSendOpen/
@@ -1019,7 +1025,7 @@ function InvoicesTab({
         label={`Invoice ${viewingInvoice?.invoiceNumber || ""}`}
         phone={sendMatch?.phone}
         email={sendMatch?.email}
-        body={viewingInvoice ? `Hi, here's Invoice ${viewingInvoice.invoiceNumber} -- balance due ${fmt(invoiceBalanceDue(viewingInvoice))} by ${viewingInvoice.dueDate}.` : undefined}
+        body={viewingInvoice ? `Hi, here's Invoice ${viewingInvoice.invoiceNumber} -- balance due ${fmt(invoiceBalanceDue(viewingInvoice))} by ${viewingInvoice.dueDate}.${sendMatch?.portalToken ? ` Pay online: ${buildCustomerPortalLink(sendMatch.portalToken)}` : ""}` : undefined}
       />
       <ESignChoiceModal
         isOpen={!!esignSendTarget}
@@ -1029,7 +1035,18 @@ function InvoicesTab({
         onSignInPerson={() => esignSendTarget && void generateInvoicePdf(esignSendTarget, true, true)}
         onSkip={() => esignSendTarget && void generateInvoicePdf(esignSendTarget)}
         skipLabel="Save as PDF"
-        extraAction={{ label: "Send for Payment", onClick: () => setIsSendOpen(true) }}
+        extraAction={{
+          label: "Send for Payment",
+          onClick: () => {
+            // Turns on the real Customer Portal payment link (the same
+            // Stripe Connect checkout the portal's own "Pay Invoice" button
+            // uses) before the text/email handoff, so this message actually
+            // gives the customer somewhere to pay -- not just a balance-due
+            // reminder with no way to act on it.
+            if (sendMatch) setSendMatch(ensureCustomerPortalAccess(sendMatch, setCustomers));
+            setIsSendOpen(true);
+          }
+        }}
       />
 
       {payingInvoice && (
