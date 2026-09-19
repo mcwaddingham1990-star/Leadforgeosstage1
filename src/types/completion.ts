@@ -32,6 +32,14 @@ export interface CompletionGoal {
   lastUpdatedAt?: string;
   materials: CompletionMaterial[];
   attachments: CompletionAttachment[];
+  // Per-goal manager sign-off -- distinct from the whole-plan
+  // finalCloseoutApproved below. Lets a manager review and approve (or leave
+  // notes on) each technician's/foreman's individual completed goal at any
+  // time, rather than only being able to approve the entire plan at once.
+  managerReviewed: boolean;
+  managerReviewedBy?: string;
+  managerReviewedAt?: string;
+  managerReviewNotes: string;
 }
 
 export interface ProjectCompletionPlan {
