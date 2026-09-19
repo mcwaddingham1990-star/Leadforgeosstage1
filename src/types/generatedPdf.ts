@@ -20,6 +20,14 @@ export interface GeneratedPdfDraft {
    * so a "Collect Signatures" action lands the user straight on a
    * ready-to-sign document instead of a blank editor. */
   autoCaptureSignatures?: boolean;
+  /** When true (alongside autoCaptureSignatures), also opens the "How will
+   * the customer sign?" chooser (send remote / in person typed / in person
+   * drawn) as soon as the fields are seeded -- lands the user straight on
+   * that real choice instead of requiring an extra "Save & Prepare for
+   * Signing" click first. Used by the front-door eSign prompts (Estimate
+   * Send/Convert to Job, Invoice Send) so picking "Send for Remote eSign" or
+   * "Sign in Person" there goes straight into the actual signing setup. */
+  autoOpenSignSetup?: boolean;
 }
 
 /** Handoff for opening the Estimate form pre-filled from another page (e.g.

@@ -39,7 +39,7 @@ import {
 import { CustomerPickerModal } from "./CustomerPickerModal";
 import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
-import SendChoiceModal from "./SendChoiceModal";
+import ESignChoiceModal from "./ESignChoiceModal";
 import { downloadCsv, parseCsv } from "../lib/csv";
 import type { DocumentItem, WorkOrder } from "../types/domain";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
@@ -86,8 +86,14 @@ export const EstimatesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isConversionPickerOpen, setIsConversionPickerOpen] = useState(false);
-  const [isSendOpen, setIsSendOpen] = useState(false);
-  const [sendMatch, setSendMatch] = useState<{ email?: string; phone?: string } | null>(null);
+  // The front-door eSign choice ("Send for Remote eSign" / "Sign in Person"
+  // / "Skip" / "Remind Me Later") -- esignSendTarget backs the "Send"
+  // button, esignConvertTarget backs every "Convert to Job" entry point.
+  // Holding the target estimate (not just a boolean) means the choice modal
+  // always knows exactly which record to act on regardless of which button
+  // opened it.
+  const [esignSendTarget, setEsignSendTarget] = useState<Estimate | null>(null);
+  const [esignConvertTarget, setEsignConvertTarget] = useState<Estimate | null>(null);
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -222,7 +228,7 @@ export const EstimatesPage: React.FC = () => {
   // review it and optionally capture signatures. This is the estimate's
   // "Save & Generate PDF" action everywhere it appears (create form, review
   // screen).
-  const generateEstimatePdf = async (est: Estimate, autoCaptureSignatures = false) => {
+  const generateEstimatePdf = async (est: Estimate, autoCaptureSignatures = false, autoOpenSignSetup = false) => {
     const { pdfBase64, matchedCustomer } = await buildAndStoreEstimatePdf(est);
     setGeneratedPdfDraft({
       filename: `${est.number}.pdf`,
@@ -235,7 +241,8 @@ export const EstimatesPage: React.FC = () => {
       representativeName: est.salesRep || loggedInUser?.name || "Company Representative",
       lines: [],
       pdfBase64,
-      autoCaptureSignatures
+      autoCaptureSignatures,
+      autoOpenSignSetup
     });
     onNavigateToScreen("documents");
     if (logOperationalEvent) logOperationalEvent("Estimate PDF Generated", `${est.number} for ${est.customerName}`, "📄");
@@ -297,7 +304,7 @@ export const EstimatesPage: React.FC = () => {
     if (action === "pdf-store") void storeEstimatePdf(newEst);
     if (action === "signatures") void generateEstimatePdf(newEst, true);
     if (action === "convert") {
-      openBuildJobFromEstimate(newEst);
+      setEsignConvertTarget(newEst);
     }
   };
 
@@ -344,7 +351,7 @@ export const EstimatesPage: React.FC = () => {
     if (action === "pdf-store") void storeEstimatePdf(updated);
     if (action === "signatures") void generateEstimatePdf(updated, true);
     if (action === "convert" || (selectedEstimate.status !== "Accepted" && updated.status === "Accepted")) {
-      openBuildJobFromEstimate(updated);
+      setEsignConvertTarget(updated);
     }
   };
 
@@ -383,6 +390,24 @@ export const EstimatesPage: React.FC = () => {
 
   const chooseEstimateForConversion = (estimate: Estimate) => {
     setIsConversionPickerOpen(false);
+    setEsignConvertTarget(estimate);
+  };
+
+  // The Convert to Job eSign prompt's three real choices -- whichever one is
+  // picked, the job conversion always follows right after (job creation
+  // isn't gated on signing, per "every step after job creation needs to be
+  // skippable"). "Send for Remote eSign"/"Sign in Person" additionally save
+  // the estimate to Documents first so there's something to open and sign;
+  // the actual signing UI is reached from there rather than blocking the Jobs
+  // navigation this action always ends on.
+  const handleEsignThenConvert = async (estimate: Estimate | null, savePdfFirst: boolean, remindNote?: string) => {
+    if (!estimate) return;
+    if (savePdfFirst) {
+      await buildAndStoreEstimatePdf(estimate);
+      triggerNotification(`${estimate.number} saved to Documents -- open it anytime to send it for signing.`);
+    } else if (remindNote) {
+      triggerNotification(remindNote);
+    }
     openBuildJobFromEstimate(estimate);
   };
 
@@ -1399,7 +1424,7 @@ export const EstimatesPage: React.FC = () => {
                         {selectedEstimate.status === "Accepted" ? "Accepted — ready to schedule" : "Confirm customer acceptance"}
                       </p>
                       <button
-                        onClick={() => openBuildJobFromEstimate(selectedEstimate.status === "Accepted" ? selectedEstimate : { ...selectedEstimate, status: "Accepted" })}
+                        onClick={() => setEsignConvertTarget(selectedEstimate.status === "Accepted" ? selectedEstimate : { ...selectedEstimate, status: "Accepted" })}
                         className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 border border-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                       >
                         <CheckCircle className="w-4 h-4" />
@@ -1443,9 +1468,8 @@ export const EstimatesPage: React.FC = () => {
                         Open Customer
                       </button>
                       <button
-                        disabled={!match?.email && !match?.phone}
-                        onClick={() => { setSendMatch(match || null); setIsSendOpen(true); }}
-                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setEsignSendTarget(selectedEstimate)}
+                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                       >
                         Send
                       </button>
@@ -1481,7 +1505,7 @@ export const EstimatesPage: React.FC = () => {
                 {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true)} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}
                 {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("convert")} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 disabled:text-slate-500">Convert to Job</button>}
                 {!isEditMode && selectedEstimate && !schedulingEvents.some(event => event.sourceEstimateId === selectedEstimate.id) && (
-                  <button type="button" onClick={() => openBuildJobFromEstimate(selectedEstimate)} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
+                  <button type="button" onClick={() => setEsignConvertTarget(selectedEstimate)} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
                 )}
                 {!isEditMode && selectedEstimate && (
                   <button
@@ -1553,7 +1577,25 @@ export const EstimatesPage: React.FC = () => {
         </div>
       )}
 
-      <SendChoiceModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} label={`Estimate ${selectedEstimate?.number || ""}`} phone={sendMatch?.phone} email={sendMatch?.email} />
+      <ESignChoiceModal
+        isOpen={!!esignSendTarget}
+        onClose={() => setEsignSendTarget(null)}
+        label={`Estimate ${esignSendTarget?.number || ""}`}
+        onSendRemote={() => esignSendTarget && void generateEstimatePdf(esignSendTarget, true, true)}
+        onSignInPerson={() => esignSendTarget && void generateEstimatePdf(esignSendTarget, true, true)}
+        onSkip={() => esignSendTarget && void storeEstimatePdf(esignSendTarget)}
+        skipLabel="Save as PDF & Skip Signing"
+      />
+      <ESignChoiceModal
+        isOpen={!!esignConvertTarget}
+        onClose={() => setEsignConvertTarget(null)}
+        label={`Estimate ${esignConvertTarget?.number || ""}`}
+        onSendRemote={() => void handleEsignThenConvert(esignConvertTarget, true)}
+        onSignInPerson={() => void handleEsignThenConvert(esignConvertTarget, true)}
+        onSkip={() => void handleEsignThenConvert(esignConvertTarget, false)}
+        skipLabel="Skip"
+        onRemindLater={() => void handleEsignThenConvert(esignConvertTarget, false, `We'll remind you to set up e-signing for ${esignConvertTarget?.number}.`)}
+      />
       <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
       <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} prefillBase={membershipPrefillBase} />
       <PriceBookModal isOpen={isPriceBookOpen} onClose={() => setIsPriceBookOpen(false)} />

@@ -41,6 +41,7 @@ import {
 import { buildInvoicePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import SendChoiceModal from "./SendChoiceModal";
+import ESignChoiceModal from "./ESignChoiceModal";
 import type { DocumentItem, Estimate } from "../types/domain";
 import {
   LayoutDashboard,
@@ -561,6 +562,11 @@ function InvoicesTab({
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [sendMatch, setSendMatch] = useState<{ email?: string; phone?: string } | null>(null);
+  // The front-door eSign choice ("Send for eSign" / "Sign in Person" /
+  // "Send for Payment" / "Save as PDF") that now backs the invoice "Send"
+  // button -- "Send for Payment" reuses the existing plain isSendOpen/
+  // sendMatch/SendChoiceModal text-or-email handoff below.
+  const [esignSendTarget, setEsignSendTarget] = useState<Invoice | null>(null);
 
   // Accepted estimates not already linked to another invoice -- the pool
   // Accounting's "Pending Revenue" tile draws from. Without a real link
@@ -588,7 +594,7 @@ function InvoicesTab({
   // required), saves it to the Documents Hub immediately, then opens the
   // PDF Editor for review/signing. This is the invoice's "Generate PDF"
   // action everywhere it appears (create form, table row, review screen).
-  const generateInvoicePdf = async (invoice: Invoice) => {
+  const generateInvoicePdf = async (invoice: Invoice, autoCaptureSignatures = false, autoOpenSignSetup = false) => {
     const matchedCustomer = customers.find((c: any) => c.contact === invoice.customer || c.company === invoice.customer);
     const bytes = await buildInvoicePdf(invoice, matchedCustomer, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
@@ -634,7 +640,9 @@ function InvoicesTab({
       customerEmail: matchedCustomer?.email,
       representativeName: loggedInUser?.name || loggedInUser?.email || "Company Representative",
       lines: [],
-      pdfBase64
+      pdfBase64,
+      autoCaptureSignatures,
+      autoOpenSignSetup
     });
     navigateToScreen("documents");
     if (logOperationalEvent) logOperationalEvent("Invoice PDF Generated", `${invoice.invoiceNumber} for ${invoice.customer}`, "📄");
@@ -992,7 +1000,7 @@ function InvoicesTab({
                 return (
                   <div className="flex gap-2">
                     <button onClick={() => match ? navigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Open Customer</button>
-                    <button disabled={!match?.email && !match?.phone} onClick={() => { setSendMatch(match || null); setIsSendOpen(true); }} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Send</button>
+                    <button onClick={() => { setSendMatch(match || null); setEsignSendTarget(viewingInvoice); }} className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer">Send</button>
                   </div>
                 );
               })()}
@@ -1005,7 +1013,24 @@ function InvoicesTab({
         </div>
       )}
 
-      <SendChoiceModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} label={`Invoice ${viewingInvoice?.invoiceNumber || ""}`} phone={sendMatch?.phone} email={sendMatch?.email} />
+      <SendChoiceModal
+        isOpen={isSendOpen}
+        onClose={() => setIsSendOpen(false)}
+        label={`Invoice ${viewingInvoice?.invoiceNumber || ""}`}
+        phone={sendMatch?.phone}
+        email={sendMatch?.email}
+        body={viewingInvoice ? `Hi, here's Invoice ${viewingInvoice.invoiceNumber} -- balance due ${fmt(invoiceBalanceDue(viewingInvoice))} by ${viewingInvoice.dueDate}.` : undefined}
+      />
+      <ESignChoiceModal
+        isOpen={!!esignSendTarget}
+        onClose={() => setEsignSendTarget(null)}
+        label={`Invoice ${esignSendTarget?.invoiceNumber || ""}`}
+        onSendRemote={() => esignSendTarget && void generateInvoicePdf(esignSendTarget, true, true)}
+        onSignInPerson={() => esignSendTarget && void generateInvoicePdf(esignSendTarget, true, true)}
+        onSkip={() => esignSendTarget && void generateInvoicePdf(esignSendTarget)}
+        skipLabel="Save as PDF"
+        extraAction={{ label: "Send for Payment", onClick: () => setIsSendOpen(true) }}
+      />
 
       {payingInvoice && (
         <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
