@@ -73,11 +73,16 @@ export interface SelfieSaveEditorProps {
   // Signatures" adds manually -- so a "Collect Signatures" action from
   // another page lands the user straight on a ready-to-sign document.
   autoCaptureSignatures?: boolean;
+  // When true (alongside autoCaptureSignatures), also opens the "How will
+  // the customer sign?" chooser right after the fields are seeded, so a
+  // front-door eSign choice ("Send for Remote eSign" / "Sign in Person")
+  // lands the user straight on the real chooser instead of an extra click.
+  autoOpenSignSetup?: boolean;
   onClose: () => void;
   onSave: (docId: string, updatedName: string, metaProperties?: any) => void;
 }
 
-export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,customerPhone,customerEmail,businessProfile,autoCaptureSignatures,onClose,onSave}:SelfieSaveEditorProps){
+export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,customerPhone,customerEmail,businessProfile,autoCaptureSignatures,autoOpenSignSetup,onClose,onSave}:SelfieSaveEditorProps){
   const [splash,setSplash]=useState(true);
   const [setup,setSetup]=useState(!autoOpenPdfPicker && !initialPdfBase64 && !initialDraft);
   const [features,setFeatures]=useState(defaultFeatures);
@@ -170,7 +175,8 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     if(!autoCaptureSignatures||autoCaptureTriggeredRef.current||pdfPages.length===0)return;
     autoCaptureTriggeredRef.current=true;
     captureSignatures();
-  },[autoCaptureSignatures,pdfPages]);
+    if(autoOpenSignSetup)setSignSetup(true);
+  },[autoCaptureSignatures,autoOpenSignSetup,pdfPages]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
   useEffect(()=>{
     const updatePdfSelection=()=>{

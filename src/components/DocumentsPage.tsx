@@ -1923,6 +1923,7 @@ export const DocumentsPage: React.FC = () => {
           customerPhone={generatedPdfDraft?.customerPhone || pendingSignatureCapture?.customerPhone}
           customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail}
           autoCaptureSignatures={generatedPdfDraft?.autoCaptureSignatures}
+          autoOpenSignSetup={generatedPdfDraft?.autoOpenSignSetup}
           businessProfile={businessProfile}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
