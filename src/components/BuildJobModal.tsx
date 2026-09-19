@@ -232,7 +232,10 @@ export function BuildJobModal({
   const handleSaveJob = () => {
     const job = doSave();
     if (!job) return;
-    openTrackingThen(job, onClose);
+    // Plain Save closes the form right away -- Job Tracking stays reachable
+    // afterward from the Jobs list's own "Update Job Progress" button, so
+    // nothing is lost by not funneling through it here.
+    onClose();
   };
   const handleSaveAndPdf = () => {
     const job = doSave();
@@ -321,7 +324,7 @@ export function BuildJobModal({
       </details>
       <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-[#9EC8EF] bg-[#EAF5FF] p-3">
         <button type="button" onClick={onClose} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold">Cancel</button>
-        <button type="button" onClick={handleSaveJob} className="rounded-xl border border-[#315C9F] bg-white px-4 py-2 text-xs font-black text-[#315C9F]"><Check className="mr-1 inline h-4 w-4" />Save Job</button>
+        <button type="button" onClick={handleSaveJob} className="rounded-xl border border-[#315C9F] bg-white px-4 py-2 text-xs font-black text-[#315C9F]"><Check className="mr-1 inline h-4 w-4" />{savedJob ? "Save Changes" : "Save Job"}</button>
         <button type="button" onClick={handleSaveAndPdf} className="rounded-xl border border-emerald-600 bg-white px-4 py-2 text-xs font-black text-emerald-700"><FileText className="mr-1 inline h-4 w-4" />Save and Convert to PDF</button>
         <button type="button" onClick={handleScheduleJob} className="rounded-xl bg-[#315C9F] px-5 py-2 text-xs font-black text-white">Schedule Job</button>
       </div>

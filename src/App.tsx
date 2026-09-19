@@ -5884,14 +5884,26 @@ Access to full financial telemetry is restricted.`;
                           <button
                             type="button"
                             onClick={async () => {
+                              // This flag is what onAuthStateChanged checks on every reload
+                              // to decide "onboarded" vs. "send back to Create Your
+                              // Business" -- silently continuing into the dashboard when
+                              // this write fails leaves the local session working for this
+                              // tab while Firestore still says not-onboarded, so the very
+                              // next reload bounces the signed-in Owner back to onboarding.
+                              // Require the write to actually succeed before letting the
+                              // Owner in, and let them retry on failure instead of masking it.
+                              if (!auth.currentUser) {
+                                triggerNotification("Your session expired -- please sign in again.");
+                                return;
+                              }
                               try {
-                                if (auth.currentUser) {
-                                  await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
-                                    isOnboarded: true
-                                  }, { merge: true });
-                                }
+                                await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
+                                  isOnboarded: true
+                                }, { merge: true });
                               } catch (err) {
                                 console.error("Error setting onboarded flag:", err);
+                                triggerNotification("Couldn't finish setup -- check your connection and try again.");
+                                return;
                               }
                               const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
                               setLoggedInUser({

@@ -1046,39 +1046,50 @@ export const SchedulingPage: React.FC = () => {
       .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date < b.date ? -1 : 1))
       .map(evt => ({ id: evt.id, label: evt.title || evt.customer || "Job", sub: evt.date }));
 
-    const renderTicker = (items: Array<{ id: string; label: string; sub: string }>, emptyText: string, tone: "upcoming" | "pastDue") => (
-      <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-40 overflow-hidden relative">
-        {items.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">{emptyText}</div>
-        ) : (
-          <div
-            className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
-            style={{ animation: `ticker-scroll ${Math.max(12, items.length * 3)}s linear infinite` }}
-          >
-            {[0, 1].map(copy => (
-              <div key={copy}>
-                {items.map((item, idx) => (
-                  <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-sky-500/15 text-xs font-mono">
-                    <span
-                      className={`font-semibold truncate ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
-                      style={{ textShadow: tone === "upcoming" ? "0 0 6px rgba(0,230,118,0.85), 0 0 14px rgba(0,200,83,0.5)" : "0 0 6px rgba(255,23,68,0.85), 0 0 14px rgba(255,23,68,0.5)" }}
-                    >
-                      {item.label}
-                    </span>
-                    <span
-                      className={`font-mono font-bold shrink-0 ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
-                      style={{ textShadow: tone === "upcoming" ? "0 0 7px rgba(0,230,118,0.9), 0 0 16px rgba(0,200,83,0.6)" : "0 0 7px rgba(255,23,68,0.9), 0 0 16px rgba(255,23,68,0.55)" }}
-                    >
-                      {new Date(item.sub + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+    const renderTicker = (items: Array<{ id: string; label: string; sub: string }>, emptyText: string, tone: "upcoming" | "pastDue") => {
+      // De-duplicate by job document ID -- a job can only ever appear once
+      // in "This Week's Jobs" regardless of how many source fields overlap.
+      const uniqueItems = Array.from(new Map(items.map(item => [item.id, item])).values());
+      // Only repeat the list for the seamless marquee loop when there are
+      // enough rows to actually need scrolling. With few items, a single
+      // static copy fits the fixed-height container and looks correct;
+      // rendering the [0, 1] duplicate copy in that case made a single real
+      // job look like two identical entries.
+      const needsScroll = uniqueItems.length > 4;
+      return (
+        <div className="bg-[linear-gradient(145deg,rgba(224,242,255,0.94),rgba(195,227,251,0.96))] rounded-lg border border-white/95 shadow-[0_0_14px_rgba(56,189,248,0.36),inset_0_0_18px_rgba(255,255,255,0.82)] h-40 overflow-hidden relative">
+          {uniqueItems.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-[11px] font-mono text-[#2473aa]/60">{emptyText}</div>
+          ) : (
+            <div
+              className="absolute inset-x-0 top-0 hover:[animation-play-state:paused]"
+              style={needsScroll ? { animation: `ticker-scroll ${Math.max(12, uniqueItems.length * 3)}s linear infinite` } : undefined}
+            >
+              {(needsScroll ? [0, 1] : [0]).map(copy => (
+                <div key={copy}>
+                  {uniqueItems.map((item, idx) => (
+                    <div key={`${copy}_${item.id}_${idx}`} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-sky-500/15 text-xs font-mono">
+                      <span
+                        className={`font-semibold truncate ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
+                        style={{ textShadow: tone === "upcoming" ? "0 0 6px rgba(0,230,118,0.85), 0 0 14px rgba(0,200,83,0.5)" : "0 0 6px rgba(255,23,68,0.85), 0 0 14px rgba(255,23,68,0.5)" }}
+                      >
+                        {item.label}
+                      </span>
+                      <span
+                        className={`font-mono font-bold shrink-0 ${tone === "upcoming" ? "text-[#00C853]" : "text-[#FF1744]"}`}
+                        style={{ textShadow: tone === "upcoming" ? "0 0 7px rgba(0,230,118,0.9), 0 0 16px rgba(0,200,83,0.6)" : "0 0 7px rgba(255,23,68,0.9), 0 0 16px rgba(255,23,68,0.55)" }}
+                      >
+                        {new Date(item.sub + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="bg-[#C7E3FA] rounded-3xl p-6 border border-[#9EC8EF] shadow-sm">
