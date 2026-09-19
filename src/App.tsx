@@ -5904,7 +5904,14 @@ Access to full financial telemetry is restricted.`;
                                 return;
                               }
                               try {
+                                const ownerEmail = auth.currentUser.email?.trim().toLowerCase();
+                                if (!ownerEmail) {
+                                  triggerNotification("Your account email is missing -- please sign in again.");
+                                  return;
+                                }
                                 await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
+                                  businessEmail: ownerEmail,
+                                  role: "Owner",
                                   isOnboarded: true
                                 }, { merge: true });
                               } catch (err) {
