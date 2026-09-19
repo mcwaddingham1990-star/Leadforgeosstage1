@@ -13,7 +13,7 @@ import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
-import { handleGetSubscriptionStatus, handleCreateSubscriptionCheckout, handleCreateBillingPortalSession } from './server/subscriptionRoutes';
+import { handleGetSubscriptionStatus, handleGetSubscriptionInvoices, handleCreateSubscriptionCheckout, handleCreateBillingPortalSession } from './server/subscriptionRoutes';
 import { handleRedeemBypassCode, handleSetBypassCode } from './server/paywallBypass';
 import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
 import {
@@ -47,6 +47,22 @@ app.all('/api/stripe/webhook', (_req, res) => { res.status(405).json({ error: 'M
 // Stripe Dashboard) -- see server/stripeConnectWebhook.ts.
 app.post('/api/stripe/connect-webhook', express.raw({ type: 'application/json' }), handleStripeConnectWebhook);
 app.all('/api/stripe/connect-webhook', (_req, res) => { res.status(405).json({ error: 'Method Not Allowed -- this endpoint only accepts POST.' }); });
+
+// The public marketing site's Account page uses the same Firebase login and
+// calls only these authenticated APIs. Keep CORS narrow: no wildcard origins,
+// and every account route still verifies the caller's Firebase ID token.
+const marketingAccountOrigins = new Set(['https://ownerslocal.com', 'https://www.ownerslocal.com']);
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || '');
+  if (marketingAccountOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  }
+  next();
+});
 
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));
@@ -117,6 +133,7 @@ app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 6
 // own-uid pattern, so one business can never start or manage billing for a
 // different one. See server/subscriptionRoutes.ts.
 app.get('/api/subscription/status', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionStatus);
+app.get('/api/subscription/invoices', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionInvoices);
 app.post('/api/subscription/checkout', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateSubscriptionCheckout);
 app.post('/api/subscription/portal', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateBillingPortalSession);
 app.post('/api/paywall/redeem', requireAuth, rateLimit('paywall-redeem', 60_000, 10), handleRedeemBypassCode);
