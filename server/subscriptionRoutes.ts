@@ -185,6 +185,33 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
   }
 }
 
+export async function handleGetSubscriptionInvoices(req: Request, res: Response) {
+  try {
+    if (!isSubscriptionBillingConfigured()) {
+      res.status(503).json({ error: "Subscription billing is not configured on this server yet." });
+      return;
+    }
+    const businessId = await resolveCallerBusinessId(req.firebaseUser!.uid);
+    const db = getDb();
+    if (!businessId || !db) {
+      res.status(503).json({ error: "Your account has no business linked yet." });
+      return;
+    }
+    const profileSnap = await db.collection("business_profiles").doc(businessId).get();
+    const customerId = profileSnap.data()?.stripeSubscriptionCustomerId;
+    if (typeof customerId !== "string" || !customerId) {
+      res.json({ invoices: [] });
+      return;
+    }
+    const stripe = getStripeClient();
+    const invoices = await stripe.invoices.list({ customer: customerId, limit: 12 });
+    res.json({ invoices: invoices.data.map(invoice => ({ id: invoice.id, date: invoice.created, amountPaid: invoice.amount_paid, status: invoice.status || "unknown", hostedInvoiceUrl: invoice.hosted_invoice_url, invoicePdf: invoice.invoice_pdf })) });
+  } catch (err) {
+    console.error("Error loading subscription invoices:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not load payment history." });
+  }
+}
+
 export async function handleCreateSubscriptionCheckout(req: Request, res: Response) {
   try {
     const priceId = process.env.STRIPE_BASE_PRICE;
@@ -291,9 +318,11 @@ export async function handleCreateBillingPortalSession(req: Request, res: Respon
 
     const stripe = getStripeClient();
     const appUrl = resolveAppUrl(req);
+    const requestedReturnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : "";
+    const marketingAccountUrl = /^https:\/\/(www\.)?ownerslocal\.com\/account(?:[/?#]|$)/i.test(requestedReturnUrl);
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${appUrl}/app/billing`,
+      return_url: marketingAccountUrl ? requestedReturnUrl : `${appUrl}/app/billing`,
     });
     res.json({ url: session.url });
   } catch (err) {
