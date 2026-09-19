@@ -1038,6 +1038,8 @@ export const EstimatesPage: React.FC = () => {
                     if (!customer) return;
                     setFormCustomerName(customer.contact || customer.company);
                     setFormCompany(customer.company);
+                    setFormPhone(customer.phone || "");
+                    setFormAddress(customer.address || "");
                   }}
                   className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
                 >
