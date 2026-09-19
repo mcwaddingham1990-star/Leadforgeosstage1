@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { Send, UserCheck, FileDown, X, Clock } from "lucide-react";
+import { ESignLegalInfoModal, ESignComplianceFooter } from "./ESignLegalInfoModal";
 
 export interface ESignChoiceModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export interface ESignChoiceModalProps {
  * duplicate the signing UI itself.
  */
 export default function ESignChoiceModal({ isOpen, onClose, label, onSendRemote, onSignInPerson, onSkip, skipLabel = "Save as PDF & Skip Signing", extraAction, onRemindLater }: ESignChoiceModalProps) {
+  const [showLegalInfo, setShowLegalInfo] = useState(false);
   if (!isOpen) return null;
   const pick = (fn: () => void) => {
     fn();
@@ -71,7 +73,9 @@ export default function ESignChoiceModal({ isOpen, onClose, label, onSendRemote,
             <Clock className="w-3.5 h-3.5" /> Remind Me Later
           </button>
         )}
+        <ESignComplianceFooter onLearnMore={() => setShowLegalInfo(true)} />
       </div>
+      {showLegalInfo && <div onClick={e => e.stopPropagation()}><ESignLegalInfoModal onClose={() => setShowLegalInfo(false)} /></div>}
     </div>
   );
 }

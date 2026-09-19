@@ -12,6 +12,7 @@ import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { buildNewCustomerRecord } from "../lib/customerDefaults";
 import { AssignEmployeeField } from "./AssignEmployeeField";
+import ESignChoiceModal from "./ESignChoiceModal";
 import type { SchedulingEvent, DocumentItem, Customer } from "../types/domain";
 import type { ProjectCompletionPlan } from "../types/completion";
 import type { BuildJobPrefill } from "../types/generatedPdf";
@@ -100,6 +101,11 @@ export function BuildJobModal({
   // opened manually via its own button, so dismissing it just returns to
   // the still-open Build Job popup underneath, per the original design.
   const [afterTracking, setAfterTracking] = useState<(() => void) | null>(null);
+  // The second eSign checkpoint the pipeline spec calls for: after Job
+  // Tracking is dismissed, right before Schedule Job actually leaves for
+  // Scheduling. Holding the job itself (not just a boolean) lets the choice
+  // modal act on the right record regardless of when it fires.
+  const [esignScheduleTarget, setEsignScheduleTarget] = useState<SchedulingEvent | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -233,10 +239,11 @@ export function BuildJobModal({
     if (!job) return;
     void storeJobPdf(job).then(() => openTrackingThen(job, onClose));
   };
+  const finishScheduleNav = (job: SchedulingEvent) => { onClose(); navigateToScreen("scheduling", { customerId: job.customerId }); };
   const handleScheduleJob = () => {
     const job = doSave();
     if (!job) return;
-    openTrackingThen(job, () => { onClose(); navigateToScreen("scheduling", { customerId: job.customerId }); });
+    openTrackingThen(job, () => setEsignScheduleTarget(job));
   };
   const handleOpenTracking = () => {
     const job = savedJob || doSave();
@@ -327,6 +334,16 @@ export function BuildJobModal({
       setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={closeTracking} notify={triggerNotification}
       onSkip={handleSkipTracking} onRemindLater={handleRemindLaterTracking}
     />}
+    <ESignChoiceModal
+      isOpen={!!esignScheduleTarget}
+      onClose={() => setEsignScheduleTarget(null)}
+      label={esignScheduleTarget ? displayNumber(esignScheduleTarget) : ""}
+      onSendRemote={() => { if (esignScheduleTarget) { const job = esignScheduleTarget; void storeJobPdf(job).then(() => triggerNotification(`${displayNumber(job)} saved to Documents -- open it anytime to send it for signing.`)); finishScheduleNav(job); } }}
+      onSignInPerson={() => { if (esignScheduleTarget) { const job = esignScheduleTarget; void storeJobPdf(job).then(() => triggerNotification(`${displayNumber(job)} saved to Documents -- open it anytime to send it for signing.`)); finishScheduleNav(job); } }}
+      onSkip={() => { if (esignScheduleTarget) finishScheduleNav(esignScheduleTarget); }}
+      skipLabel="Skip"
+      onRemindLater={() => { if (esignScheduleTarget) { triggerNotification(`We'll remind you to set up e-signing for ${displayNumber(esignScheduleTarget)}.`); finishScheduleNav(esignScheduleTarget); } }}
+    />
   </div>;
 }
 

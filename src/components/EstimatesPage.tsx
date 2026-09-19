@@ -94,6 +94,11 @@ export const EstimatesPage: React.FC = () => {
   // opened it.
   const [esignSendTarget, setEsignSendTarget] = useState<Estimate | null>(null);
   const [esignConvertTarget, setEsignConvertTarget] = useState<Estimate | null>(null);
+  // The proactive, skippable "set up e-signing on this estimate" prompt --
+  // fires on a plain Save (not on the PDF/Collect Signatures/Convert
+  // actions, which already are the e-sign path themselves), so every
+  // estimate gets offered the choice once, right after it's drafted.
+  const [esignDraftTarget, setEsignDraftTarget] = useState<Estimate | null>(null);
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -306,6 +311,9 @@ export const EstimatesPage: React.FC = () => {
     if (action === "convert") {
       setEsignConvertTarget(newEst);
     }
+    if (action === "save") {
+      setEsignDraftTarget(newEst);
+    }
   };
 
   const openViewModal = (est: Estimate) => {
@@ -350,8 +358,11 @@ export const EstimatesPage: React.FC = () => {
     if (action === "pdf") void generateEstimatePdf(updated);
     if (action === "pdf-store") void storeEstimatePdf(updated);
     if (action === "signatures") void generateEstimatePdf(updated, true);
-    if (action === "convert" || (selectedEstimate.status !== "Accepted" && updated.status === "Accepted")) {
+    const autoAccepting = selectedEstimate.status !== "Accepted" && updated.status === "Accepted";
+    if (action === "convert" || autoAccepting) {
       setEsignConvertTarget(updated);
+    } else if (action === "save") {
+      setEsignDraftTarget(updated);
     }
   };
 
@@ -1595,6 +1606,16 @@ export const EstimatesPage: React.FC = () => {
         onSkip={() => void handleEsignThenConvert(esignConvertTarget, false)}
         skipLabel="Skip"
         onRemindLater={() => void handleEsignThenConvert(esignConvertTarget, false, `We'll remind you to set up e-signing for ${esignConvertTarget?.number}.`)}
+      />
+      <ESignChoiceModal
+        isOpen={!!esignDraftTarget}
+        onClose={() => setEsignDraftTarget(null)}
+        label={`Estimate ${esignDraftTarget?.number || ""}`}
+        onSendRemote={() => esignDraftTarget && void generateEstimatePdf(esignDraftTarget, true, true)}
+        onSignInPerson={() => esignDraftTarget && void generateEstimatePdf(esignDraftTarget, true, true)}
+        onSkip={() => {}}
+        skipLabel="Skip for Now"
+        onRemindLater={() => triggerNotification(`We'll remind you to set up e-signing for ${esignDraftTarget?.number}.`)}
       />
       <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
       <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} prefillBase={membershipPrefillBase} />
