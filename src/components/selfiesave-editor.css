@@ -9,4 +9,9 @@
 }.selfiesave-editor-root /* Imported PDF pages use an absolutely positioned image, .selfiesave-editor-root so they need an
    explicit inline size instead of relying on intrinsic content sizing. */
 .document-pages {justify-items:center}.selfiesave-editor-root .document-pages>.paper {width:100%}
-
+.selfiesave-editor-root .workspace.signature-only-workspace {grid-template-columns:1fr}
+.selfiesave-editor-root .signature-only-workspace .editor-wrap {padding:18px 16px 110px}
+.selfiesave-editor-root .signature-only-workspace .editor-tools>div,
+.selfiesave-editor-root .signature-only-workspace .editor-tools>span:last-child {display:none}
+.selfiesave-editor-root .signature-only-actionbar {justify-content:center;text-align:center;color:#174f9d;padding:12px 18px}
+.selfiesave-editor-root .signature-only-actionbar strong {font-size:13px;line-height:1.4}

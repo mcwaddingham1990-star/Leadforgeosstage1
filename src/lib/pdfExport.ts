@@ -516,7 +516,7 @@ export async function mergePdfs(sources: Array<Uint8Array | string>): Promise<Ui
 /** Appends a real, standard-format signing certificate page (who signed, when, from where, with what evidence) to an existing PDF -- the same pattern DocuSign/Adobe Sign use, and far more robust than trying to burn signature images onto the original document's exact pixel coordinates. */
 export async function appendSignatureCertificate(
   pdfBytes: Uint8Array,
-  signers: Array<{ name: string; role: string; kind: string; timestamp: string; centralTimestamp?: string; selfieDataUrl?: string; coords?: string }>,
+  signers: Array<{ name: string; role: string; kind: string; timestamp: string; centralTimestamp?: string; signatureDataUrl?: string; selfieDataUrl?: string; coords?: string }>,
   business: BusinessProfile
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -530,6 +530,19 @@ export async function appendSignatureCertificate(
     writer.text(`${signer.name || "Unnamed signer"} — ${signer.role || ""}`, { font: bold, gap: 2 });
     writer.text(`${signer.kind} completed ${signer.timestamp}${signer.centralTimestamp ? ` (${signer.centralTimestamp})` : ""}`, { gap: 2 });
     if (signer.coords) writer.text(`Location at signing: ${signer.coords}`, { gap: 2 });
+    if (signer.signatureDataUrl) {
+      try {
+        const isPng = signer.signatureDataUrl.startsWith("data:image/png");
+        const bytes = base64ToBytes(signer.signatureDataUrl.split(",")[1] || "");
+        const image = isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+        const h = 48, w = Math.min(220, (image.width / image.height) * h);
+        writer.ensureRoom(h + 10);
+        writer.page.drawImage(image, { x: MARGIN, y: writer.y - h, width: w, height: h });
+        writer.y -= h + 10;
+      } catch {
+        // A bad signature image must not prevent the signed PDF from saving.
+      }
+    }
     if (signer.selfieDataUrl) {
       try {
         const isPng = signer.selfieDataUrl.startsWith("data:image/png");

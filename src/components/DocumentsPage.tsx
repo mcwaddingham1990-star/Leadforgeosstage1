@@ -1922,8 +1922,9 @@ export const DocumentsPage: React.FC = () => {
           signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : signatureCaptureHint}
           customerPhone={generatedPdfDraft?.customerPhone || pendingSignatureCapture?.customerPhone}
           customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail}
-          autoCaptureSignatures={generatedPdfDraft?.autoCaptureSignatures}
+          autoCaptureSignatures={Boolean(pendingSignatureCapture || generatedPdfDraft?.autoCaptureSignatures)}
           autoOpenSignSetup={generatedPdfDraft?.autoOpenSignSetup}
+          signatureOnlyMode={Boolean(pendingSignatureCapture || (generatedPdfDraft?.autoCaptureSignatures && !generatedPdfDraft?.autoOpenSignSetup))}
           businessProfile={businessProfile}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
