@@ -343,7 +343,7 @@ export const RosterPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
             <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">Roster</h2>
-            <p className="text-xs text-[#5E7393] font-sans font-semibold mt-0.5">Real employee directory — {employees.length} team member{employees.length === 1 ? "" : "s"}</p>
+            <p className="text-xs text-[#5E7393] font-sans font-semibold mt-0.5">{employees.length} employees</p>
           </div>
           {canManageRoles && (
             <div className="flex flex-wrap gap-2">
@@ -382,7 +382,7 @@ export const RosterPage: React.FC = () => {
           </h3>
           <p className="text-xs text-[#5E7393] font-sans mt-1 max-w-sm mx-auto">
             {employees.length === 0
-              ? "Invite your first team member to start assigning jobs, tracking hours, and managing permissions."
+              ? "Invite an employee so you can assign jobs, track hours, and choose what they can access."
               : "Try a different search."}
           </p>
         </div>
@@ -435,7 +435,7 @@ export const RosterPage: React.FC = () => {
       <div className="bg-white/60 border border-dashed border-[#9EC8EF] rounded-2xl p-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-[#1F3557]">
           <Shield className="w-4 h-4 text-[#315C9F] shrink-0" />
-          <span>Permissions are managed by role, not per person — configure what each role can access.</span>
+          <span>Access is based on employee roles. Choose what each role can view, add, edit, or delete.</span>
         </div>
         <button
           onClick={() => {
@@ -444,7 +444,7 @@ export const RosterPage: React.FC = () => {
           }}
           className="px-3 py-1.5 bg-[#EAF5FF] hover:bg-white border border-[#9EC8EF] text-[#315C9F] text-[10.5px] font-bold rounded-xl uppercase whitespace-nowrap cursor-pointer"
         >
-          Manage Roles
+          Choose Role Access
         </button>
       </div>
 

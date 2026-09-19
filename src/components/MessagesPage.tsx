@@ -1061,10 +1061,10 @@ export const MessagesPage: React.FC = () => {
         <div className="rounded-2xl border border-[#A9CDEE] bg-[#E3F3FF] p-8 text-center">
           <MessageSquare className="mx-auto h-8 w-8 text-[#315C9F]" />
           <h2 className="mt-3 text-base font-extrabold text-[#342D7E]">No conversations yet</h2>
-          <p className="mt-1 text-xs text-slate-500">Your team conversations will appear here after you start one.</p>
+          <p className="mt-1 text-xs text-slate-500">Select New Message to start a team conversation.</p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <button onClick={() => setIsNewMsgModalOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#4A9BFF] px-4 py-2.5 text-xs font-black uppercase text-white hover:bg-[#3583E6]"><Send className="h-4 w-4" /> New message</button>
-            <button onClick={() => setIsContactCustomerOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-700"><Phone className="h-4 w-4" /> Contact Customer</button>
+            <button onClick={() => setIsContactCustomerOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-700"><Phone className="h-4 w-4" /> Message a Customer</button>
           </div>
         </div>
         {isNewMsgModalOpen && (
@@ -1072,7 +1072,7 @@ export const MessagesPage: React.FC = () => {
             <div onClick={e => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-3xl border border-[#9EC8EF] bg-white p-6 text-left shadow-2xl">
               <div className="flex items-center justify-between border-b pb-2"><h4 className="text-xs font-extrabold uppercase tracking-wider text-[#342D7E]">Start a conversation</h4><button onClick={() => setIsNewMsgModalOpen(false)} className="p-1 font-bold text-slate-400">✕</button></div>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Team member<select value={newConvRecipient} onChange={e => { const value=e.target.value; setNewConvRecipient(value); const name=value.replace(/^staff:/,""); setNewConvTitle(name?`Chat with ${name}`:""); }} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">Select team member…</option>{mockStaff.filter(s=>s.name!==currentUserName).map(s=><option key={s.name} value={`staff:${s.name}`}>{s.name} — {s.role}</option>)}</select></label>
-              <p className="text-[9px] text-slate-400 -mt-2">Messages here are internal, between your team — they never reach a customer. Use "Contact Customer" to actually call or text one.</p>
+              <p className="text-[9px] text-slate-400 -mt-2">Messages here are internal, between your team — they never reach a customer. Use "Message a Customer" to actually call or text one.</p>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Related job (optional)<select value={newConvJobId} onChange={e => setNewConvJobId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">No job link</option>{schedulingEvents.filter(job => job.eventType === "Job").map(job => <option key={job.id} value={job.id}>{job.customer} · {job.jobNumber || job.id}</option>)}</select></label>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Related estimate (optional)<select value={newConvEstimateId} onChange={e => setNewConvEstimateId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2.5 text-xs text-[#1F3557]"><option value="">No estimate link</option>{estimates.map(estimate => <option key={estimate.id} value={estimate.id}>{estimate.customerName} · {estimate.number}</option>)}</select></label>
               <label className="block text-[9px] font-bold uppercase text-slate-500">Conversation title<input value={newConvTitle} onChange={e=>setNewConvTitle(e.target.value)} className="mt-1 w-full rounded-xl border border-[#A9CDEE] bg-slate-50 px-3 py-2.5 text-xs" /></label>
@@ -1131,7 +1131,7 @@ export const MessagesPage: React.FC = () => {
             onClick={() => { setContactCustomerId(""); setIsContactCustomerOpen(true); }}
             className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
           >
-            <Phone className="w-3.5 h-3.5" /> Contact Customer
+            <Phone className="w-3.5 h-3.5" /> Message a Customer
           </button>
 
           <button
@@ -1973,7 +1973,7 @@ export const MessagesPage: React.FC = () => {
                   <option className="bg-white text-[#1F3557]" value="">Select team member...</option>
                   {mockStaff.filter(s => s.name !== currentUserName).map(s => <option key={s.name} value={`staff:${s.name}`}>{s.name} — {s.role}</option>)}
                 </select>
-                <p className="text-[9px] text-slate-400">Internal, between your team -- never reaches a customer. Use "Contact Customer" to call or text one.</p>
+                <p className="text-[9px] text-slate-400">Internal, between your team -- never reaches a customer. Use "Message a Customer" to call or text one.</p>
               </div>
 
               <div className="space-y-1">
@@ -2089,7 +2089,7 @@ export const MessagesPage: React.FC = () => {
             >
               <div className="flex items-center justify-between border-b pb-2">
                 <h4 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider flex items-center gap-1.5">
-                  <Phone className="w-4 h-4 text-emerald-600" /> Contact Customer
+                  <Phone className="w-4 h-4 text-emerald-600" /> Message a Customer
                 </h4>
                 <button onClick={() => setIsContactCustomerOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-sm p-1 cursor-pointer">✕</button>
               </div>

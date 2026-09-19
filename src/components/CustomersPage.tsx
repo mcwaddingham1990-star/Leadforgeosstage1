@@ -779,10 +779,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-display font-extrabold text-[#1F3557] tracking-tight uppercase">
-              Customer Database
+              Customers
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
-              Complete operational log, filters, and client statistics hub
+              Find customers, view their history, and manage their jobs.
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -827,10 +827,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
               <button
                 onClick={() => onOpenAIAnalysis("customers", "Customers")}
                 className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
-                title="AI Option"
+                title="Ask AI About Customers"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                AI Option
+                Ask AI About Customers
               </button>
             )}
           </div>
@@ -1065,7 +1065,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 onClick={() => selectedCustomer && void compileCustomerDocuments(selectedCustomer)}
                 className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-800 text-left transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
               >
-                <FileText className="w-3.5 h-3.5" /> Compile Documents
+                <FileText className="w-3.5 h-3.5" /> Combine Customer Documents
               </button>
               <button
                 disabled={!selectedCustomer}
@@ -1139,7 +1139,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 {filteredCustomers.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
-                      No matching customers found. Try altering your filter or search criteria.
+                      No customers found. Clear your filters or add a customer.
                     </td>
                   </tr>
                 ) : (
@@ -1193,10 +1193,10 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           {/* Footer of the table card showing counter */}
           <div className="mt-4 pt-3 border-t border-[#9EC8EF]/40 flex justify-between items-center text-[10.5px] font-sans font-bold text-[#5E7393]">
             <span>
-              Showing {filteredCustomers.length} of {customers.length} total customers
+              {filteredCustomers.length} customers
             </span>
             <span className="px-2 py-0.5 bg-[#EAF5FF] border border-[#9EC8EF]/60 rounded-lg text-[#1F3557]">
-              Database Active
+              Customer list is up to date
             </span>
           </div>
         </div>

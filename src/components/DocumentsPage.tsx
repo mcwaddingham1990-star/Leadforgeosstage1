@@ -986,7 +986,7 @@ export const DocumentsPage: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-display font-extrabold text-[#1F3557] tracking-tight uppercase">
-              Documents Hub
+              Documents
             </h2>
             <p className="text-xs text-[#5E7393] font-sans font-semibold mt-1">
               Upload, find, and open your business documents
@@ -1019,7 +1019,7 @@ export const DocumentsPage: React.FC = () => {
               className="px-3.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <Camera className="w-3.5 h-3.5" />
-              Snapshot AI
+              Scan Document
             </button>
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -1269,7 +1269,7 @@ export const DocumentsPage: React.FC = () => {
           className="px-4 py-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer"
         >
           <FolderOpen className="w-4 h-4" />
-          Open PDF — Device / Drive
+          Open PDF from Device or Drive
         </button>
         <button
           onClick={() => handleOpenPDFEditor(null, true)}
@@ -1535,7 +1535,7 @@ export const DocumentsPage: React.FC = () => {
                 {activeDocTab === "templates" ? null : tabFilteredDocs.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-[#5E7393] text-xs font-semibold">
-                      No matching files or documents located.
+                      No documents found. Clear your filters or upload a document.
                     </td>
                   </tr>
                 ) : (
@@ -1636,10 +1636,10 @@ export const DocumentsPage: React.FC = () => {
           )}
           <div className="mt-4 pt-3 border-t border-[#9EC8EF]/40 flex justify-between items-center text-[10px] font-sans font-bold text-[#5E7393]">
             <span>
-              Showing {tabFilteredDocs.length} of {documents.length} files
+              {tabFilteredDocs.length} documents
             </span>
             <span className="px-2 py-0.5 bg-[#EAF5FF] border border-[#9EC8EF]/60 rounded-lg text-[#1F3557]">
-              Synced Storage Active
+              Documents are up to date
             </span>
           </div>
         </div>
@@ -1649,7 +1649,7 @@ export const DocumentsPage: React.FC = () => {
           <div className="flex items-center justify-between border-b border-[#9EC8EF]/40 pb-2">
             <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5" />
-              Document Inspector
+              Document Details
             </h3>
             {activeDoc && (
               <button
@@ -1895,7 +1895,7 @@ export const DocumentsPage: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-12 text-[#5E7393] text-xs font-semibold">
-              Select a file on the table to inspect details and triggers.
+              Select a document to view its details and available actions.
             </div>
           )}
         </div>
@@ -2472,7 +2472,7 @@ export const DocumentsPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-blue-400 animate-pulse" />
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">Snapshot AI Scanner</h3>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">Scan Document</h3>
               </div>
               <button onClick={() => { setIsSnapshotModalOpen(false); triggerNotification("Document processing canceled."); }} className="text-slate-400 hover:text-white font-bold text-sm">✕</button>
             </div>

@@ -80,7 +80,7 @@ export const EmployeeLocationsPage: React.FC = () => {
             <MapPin className="w-5 h-5 text-emerald-400" /> Employee Locations
           </h2>
           <p className="text-xs text-slate-400 mt-1 font-sans font-semibold">
-            Real-time status, GPS tracking permissions, and route history for every employee -- pins on a real map live on the Interactive Map page.
+            See an employee’s location and route while they are clocked in.
           </p>
         </div>
         <button
@@ -95,11 +95,11 @@ export const EmployeeLocationsPage: React.FC = () => {
 
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-3.5">
-          <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Live Now</p>
+          <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Clocked In and Sharing Location</p>
           <p className="text-xl font-extrabold text-emerald-400 mt-1">{summary.liveNow}</p>
         </div>
         <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-3.5">
-          <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Tracking Enabled</p>
+          <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Location Allowed</p>
           <p className="text-xl font-extrabold text-white mt-1">{summary.trackingOn}</p>
         </div>
         <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-3.5">

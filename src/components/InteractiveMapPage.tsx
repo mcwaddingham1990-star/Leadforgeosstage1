@@ -1423,7 +1423,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
           {/* EDITABLE SERVICE TERRITORIES CONTROLLER */}
           <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-[28px] p-5 shadow-lg space-y-4">
             <h3 className="text-xs font-extrabold text-slate-200 uppercase tracking-wider border-b border-white/10 pb-2">
-              Territories &amp; Sectors
+              Service Areas
             </h3>
 
             <button
@@ -1466,8 +1466,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               {serviceTerritories.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 px-4 py-5 text-center">
                   <MapPin className="mx-auto mb-2 h-5 w-5 text-slate-500" />
-                  <p className="text-xs font-bold text-slate-300">No service territories created</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Territories you create will appear here. OwnersLOCAL will never fill this area with demo data.</p>
+                  <p className="text-xs font-bold text-slate-300">No service areas yet.</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Create a service area to show where your business accepts jobs.</p>
                 </div>
               )}
               {serviceTerritories.map(t => (
@@ -1704,7 +1704,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     : "bg-slate-800 hover:bg-slate-700 text-slate-200"
                 }`}
               >
-                {isMultiSelectMode ? "🔒 Exit Lasso Mode" : "🎯 Lasso / Multi-Select Mode"}
+                {isMultiSelectMode ? "🔒 Exit Lasso Mode" : "🎯 Select Several Map Pins"}
               </button>
             </div>
 
@@ -2077,7 +2077,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                 <div>
                   <h4 className="text-[11px] font-extrabold text-white uppercase tracking-wider">Map Results</h4>
                   <p className="text-[10px] text-slate-400 font-bold">
-                    Showing {filteredPins.length} mapped records.
+                    {filteredPins.length === 0 ? "No customers, leads, jobs, or employees are ready to show on the map." : `Showing ${filteredPins.length} mapped records.`}
                   </p>
                 </div>
               </div>
@@ -2254,7 +2254,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <div className="bg-slate-800/50 border border-white/5 p-3 rounded-2xl">
                 <div className="flex justify-between items-start">
                   <span className="p-1 bg-cyan-500/10 rounded-lg"><Truck className="w-4 h-4 text-cyan-400" /></span>
-                  <span className="text-xs text-slate-400 font-bold font-sans">Fleet Cars</span>
+                  <span className="text-xs text-slate-400 font-bold font-sans">Vehicles</span>
                 </div>
                 <p className="text-xl font-extrabold text-white mt-1.5">{counts.vehicles}</p>
               </div>
@@ -2263,11 +2263,11 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
             <div className="border-t border-white/10 pt-3 space-y-2">
               <div className="flex justify-between items-center text-xs text-slate-400 font-bold">
-                <span>Revenue Generated:</span>
+                <span>Revenue:</span>
                 <span className="text-emerald-400 font-extrabold">${counts.revenueToday.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center text-xs text-slate-400 font-bold">
-                <span>Active Emergency Alerts:</span>
+                <span>Emergency Alerts:</span>
                 <span className={`px-2 py-0.5 rounded text-[10px] ${counts.emergency > 0 ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse" : "bg-slate-800 text-slate-400"}`}>
                   {counts.emergency} Alert{counts.emergency !== 1 ? "s" : ""}
                 </span>

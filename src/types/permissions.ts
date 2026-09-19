@@ -12,7 +12,7 @@ export const PERMISSION_LEVELS: PermissionLevel[] = ["none", "view", "edit", "de
 export const PERMISSION_LEVEL_LABELS: Record<PermissionLevel, string> = {
   none: "No Access",
   view: "View",
-  edit: "Create & Edit",
+  edit: "Add or Edit",
   delete: "Delete"
 };
 

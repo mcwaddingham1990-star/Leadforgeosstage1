@@ -3213,7 +3213,7 @@ Access to full financial telemetry is restricted.`;
       id: "owner",
       name: "Owner",
       count: 1,
-      description: "Full access to every module",
+      description: "Can use every part of Owner’sLOCAL",
       permissions: MODULE_CATALOG.map(m => m.id),
       modulePermissions: fullAccessGranular(MODULE_CATALOG.map(m => m.id))
     }
@@ -3775,7 +3775,7 @@ Access to full financial telemetry is restricted.`;
     const firstValue = (values: string[]) => String(values?.[0] || "").trim();
     const businessEmail = String(businessId || email || "").trim();
 
-    if (!firstValue(ownerNames)) errors["account administrator name"] = "Account Administrator Name is required.";
+    if (!firstValue(ownerNames)) errors["your name"] = "Account Administrator Name is required.";
     if (!firstValue(businessNames)) errors["business name"] = "Business Name is required.";
     if (!businessEmail) errors["business email"] = "Business Email is required.";
 
@@ -4514,12 +4514,7 @@ Access to full financial telemetry is restricted.`;
         <header className="hidden sm:flex w-full max-w-7xl mx-auto px-4 py-3 sm:py-4 flex-col sm:flex-row items-center justify-between gap-3 border-b border-blue-200/50 bg-white/45 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">
             <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">OWNER'S LOCAL OS CLOUD GATEWAY v2.8.4</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="text-xs text-[#342D7E]/75 font-mono bg-blue-100/60 px-2 py-1 rounded">
-              PORT: 3000 (SECURE)
-            </div>
+            <span className="font-mono text-xs tracking-wider text-[#342D7E]/60">OWNER’SLOCAL</span>
           </div>
         </header>
       )}
@@ -4611,7 +4606,7 @@ Access to full financial telemetry is restricted.`;
                       }}
                       className="font-bold text-blue-900/60 font-sans"
                     >
-                      OR SIGN IN WITH PASSWORD
+                      OR USE YOUR EMAIL
                     </span>
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
                   </div>
@@ -4760,7 +4755,7 @@ Access to full financial telemetry is restricted.`;
                         }}
                         className="w-full h-full border-0 font-sans font-bold uppercase tracking-[0.08em] text-white cursor-pointer select-none relative overflow-hidden transition-all duration-300 bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-110 hover:shadow-[0_0_24px_rgba(0,176,255,0.5)] active:shadow-[0_0_35px_rgba(0,176,255,0.7)] active:scale-[0.98] flex items-center justify-center gap-2"
                       >
-                        <span>Sign In ➔</span>
+                        <span>Sign In</span>
                       </button>
                     </div>
 
@@ -4817,7 +4812,7 @@ Access to full financial telemetry is restricted.`;
                       }}
                       className="font-bold text-blue-900/60 font-sans"
                     >
-                      FIELD SERVICE LOG IN
+                      EMPLOYEE LOGIN
                     </span>
                     <div className="h-[1px] flex-1 bg-blue-900/30 shadow-[0_0_1px_rgba(0,240,255,0.4)]" />
                   </div>
@@ -4835,7 +4830,7 @@ Access to full financial telemetry is restricted.`;
                       }}
                       className="block font-bold text-blue-900/80"
                     >
-                      ENTER EMPLOYEE INVITE CODE
+                      Enter your employee code
                     </label>
                     <div
                       style={{ height: `${50 * scale}px` }}
@@ -4877,7 +4872,7 @@ Access to full financial telemetry is restricted.`;
                       }}
                       className="w-full h-full border-0 font-sans font-bold uppercase tracking-[0.05em] text-white cursor-pointer select-none relative overflow-hidden transition-all duration-300 bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-110 hover:shadow-[0_0_24px_rgba(0,176,255,0.5)] active:shadow-[0_0_35px_rgba(0,176,255,0.7)] active:scale-[0.98] flex items-center justify-center"
                     >
-                      <span>Go ➔</span>
+                      <span>Continue</span>
                     </button>
                   </div>
 
@@ -4946,7 +4941,7 @@ Access to full financial telemetry is restricted.`;
                               Create Your Business
                             </h2>
                             <p style={getFontSize(10.5)} className="font-sans text-slate-500 font-medium">
-                              Step 1 of 2. Profile settings
+                              Step 1 of 2: Tell us about your business
                             </p>
                           </div>
                         </div>
@@ -4965,9 +4960,9 @@ Access to full financial telemetry is restricted.`;
 
                       {/* FORM FIELDS - SCROLLABLE GROUP */}
                       <div className="relative z-10 flex-1 space-y-3.5 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-blue-200/50">
-                        {renderDynamicField("account administrator name", ownerNames, setOwnerNames, "e.g. John Doe")}
-                        {renderDynamicField("administrator phone (optional)", ownerPhones, setOwnerPhones, "e.g. (206) 555-0199")}
-                        {renderDynamicField("business name", businessNames, setBusinessNames, "e.g. Ironclad Plumbing & HVAC")}
+                        {renderDynamicField("Your name", ownerNames, setOwnerNames, "e.g. John Doe")}
+                        {renderDynamicField("Your phone number (optional)", ownerPhones, setOwnerPhones, "e.g. (206) 555-0199")}
+                        {renderDynamicField("Business name", businessNames, setBusinessNames, "e.g. Ironclad Plumbing & HVAC")}
                         <div className="space-y-1.5">
                           <label style={getFontSize(11)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider px-1">
                             Business Email
@@ -4982,21 +4977,21 @@ Access to full financial telemetry is restricted.`;
                           />
                           {onboardingErrors["business email"] && <p className="text-[10px] font-bold text-rose-600 px-1">{onboardingErrors["business email"]}</p>}
                         </div>
-                        {renderDynamicField("business phone (optional)", businessPhones, setBusinessPhones, "e.g. (206) 565-0144")}
+                        {renderDynamicField("Business phone (optional)", businessPhones, setBusinessPhones, "e.g. (206) 565-0144")}
                         <StructuredAddressFields
-                          label="Business Headquarters Address (Optional)"
+                          label="Main business address (optional)"
                           value={businessAddresses[0] || ""}
                           onChange={(value) => setBusinessAddresses(prev => [value, ...prev.slice(1)])}
                         />
-                        {renderDynamicField("business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
-                        {renderDynamicField("company locations (optional)", companyLocations, setCompanyLocations, "e.g. Main Office")}
+                        {renderDynamicField("Business logo (optional)", businessLogos, setBusinessLogos, "e.g. https://logo-url.png")}
+                        {renderDynamicField("Other business locations (optional)", companyLocations, setCompanyLocations, "e.g. Main Office")}
                         <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 text-[10px] leading-relaxed text-blue-950">
                           <p className="flex items-center gap-1.5 font-black uppercase tracking-wide">
                             <Shield className="h-3.5 w-3.5 shrink-0 text-blue-600" />
-                            Your information and privacy
+                            How we protect your information
                           </p>
                           <p className="mt-1 font-semibold text-slate-600">
-                            Owners Local OS does not sell or disseminate user data. Information is handled through integrated databases and services using appropriate security and encryption. Authorized Stuffapp personnel or service providers may have limited access when needed to operate, secure, support, or comply with legal requirements.
+                            Owner’sLOCAL does not sell your information. We use secure services to store and protect it. Authorized support staff may access limited information when needed to operate the app, fix problems, prevent fraud, or follow the law.
                           </p>
                         </div>
                       </div>
@@ -5068,7 +5063,7 @@ Access to full financial telemetry is restricted.`;
                               Build Your Team
                             </h2>
                             <p style={getFontSize(9.5)} className="text-slate-400 font-sans font-medium">
-                              Step 2 of 2 • Assign initial roles & codes
+                              Step 2 of 2: Add your team
                             </p>
                           </div>
                         </div>
@@ -5081,7 +5076,7 @@ Access to full financial telemetry is restricted.`;
                           }}
                           className="font-sans font-bold text-blue-700 bg-blue-50 border border-blue-200 uppercase tracking-wider select-none shrink-0"
                         >
-                          Team Assignment
+                          YOUR TEAM
                         </span>
                       </div>
 
@@ -5097,10 +5092,10 @@ Access to full financial telemetry is restricted.`;
                         <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                         <div className="space-y-0.5">
                           <p style={getFontSize(10)} className="font-sans font-bold text-emerald-950">
-                            Role-Based System Permissions Initiated
+                            Choose what each employee can access.
                           </p>
                           <p style={getFontSize(8.5)} className="text-emerald-800 leading-normal font-sans font-medium">
-                            Each staff member receives an individual invite code. Employees only see sidebar tabs corresponding directly to assigned permissions.
+                            Each employee gets their own invite code. They will only see the tools you allow them to use.
                           </p>
                         </div>
                       </div>
@@ -5109,7 +5104,7 @@ Access to full financial telemetry is restricted.`;
                       <div className="relative z-10 space-y-1.5 mb-2 shrink-0">
                         <div className="flex items-center justify-between px-1">
                           <label style={getFontSize(10)} className="font-sans font-bold text-[#342D7E] uppercase tracking-wider flex items-center gap-1">
-                            <span>Select Roles to Add</span>
+                            <span>Add an employee role</span>
                             {/* Floating panel explanation icon */}
                             <button
                               type="button"
@@ -5120,7 +5115,7 @@ Access to full financial telemetry is restricted.`;
                             </button>
                           </label>
                           <span style={getFontSize(9)} className="text-slate-400 font-mono">
-                            {normalizeSelectedRoles(selectedRoles).reduce((acc, role) => acc + role.count, 0)} Seats Configured
+                            {normalizeSelectedRoles(selectedRoles).reduce((acc, role) => acc + role.count, 0)} role added
                           </span>
                         </div>
                         
@@ -5143,7 +5138,7 @@ Access to full financial telemetry is restricted.`;
                           >
                             <option value="">+ Add a team role...</option>
                             <option value="__create_custom__" className="text-blue-600 font-bold">
-                              ★ + Create Custom Role from scratch...
+                              Create a custom role
                             </option>
                             {/* Custom Role stays first; Owner is already added. */}
                             {Object.entries(DEFAULT_ROLES_DATA)
@@ -5285,7 +5280,7 @@ Access to full financial telemetry is restricted.`;
                                   className="font-sans font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
                                 >
                                   <Settings className="w-3 h-3 text-blue-500 animate-spin-slow" />
-                                  <span>Customize Permissions</span>
+                                  <span>Choose Access</span>
                                 </button>
 
                                 <div className="flex items-center gap-2.5">
@@ -5295,7 +5290,7 @@ Access to full financial telemetry is restricted.`;
                                     className="font-sans font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
                                   >
                                     <Copy className="w-3 h-3 text-slate-400" />
-                                    <span>Duplicate</span>
+                                    <span>Copy This Role</span>
                                   </button>
 
                                   {role.id !== "owner" && (
@@ -5350,7 +5345,7 @@ Access to full financial telemetry is restricted.`;
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           ) : (
                             <>
-                              <span>Launch OS</span>
+                              <span>Open Owner’sLOCAL</span>
                               <ChevronRight className="w-4 h-4" />
                             </>
                           )}
@@ -5690,9 +5685,9 @@ Access to full financial telemetry is restricted.`;
                   {showOptionalProfileWarning && (
                     <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
                       <div className="w-[92%] max-w-[360px] rounded-3xl border border-blue-100 bg-white p-5 text-left shadow-2xl">
-                        <h3 className="text-sm font-black uppercase tracking-tight text-blue-950">Optional profile information is missing</h3>
+                        <h3 className="text-sm font-black uppercase tracking-tight text-blue-950">Some optional information is missing</h3>
                         <p className="mt-2 text-[11px] font-semibold leading-relaxed text-slate-600">
-                          These fields are not required, but leaving them blank may limit address-based tools, contact workflows, maps, branding, and other relevant features.
+                          You can continue without these details. Some features, such as maps, customer contact tools, and business branding, may not work until you add them.
                         </p>
                         <ul className="mt-3 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10.5px] font-bold text-amber-900">
                           {optionalProfileFields.map(field => <li key={field}>• {field}</li>)}
@@ -5703,14 +5698,14 @@ Access to full financial telemetry is restricted.`;
                             onClick={() => setShowOptionalProfileWarning(false)}
                             className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100"
                           >
-                            Complete Profile
+                            Add Missing Information
                           </button>
                           <button
                             type="button"
                             onClick={finishBusinessProfileStep}
                             className="flex-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow hover:bg-blue-700"
                           >
-                            Continue Anyway
+                            Skip for Now
                           </button>
                         </div>
                       </div>
@@ -6242,7 +6237,7 @@ Access to full financial telemetry is restricted.`;
                 style={{ marginTop: `${10 * scale}px`, ...getFontSize(11) }}
                 className="font-bold text-[#5E7393] hover:text-[#1F3557] hover:underline cursor-pointer"
               >
-                Customer? Log in to your free account here
+                Customer Login
               </button>
             )}
 
@@ -6386,13 +6381,13 @@ Access to full financial telemetry is restricted.`;
                 {/* Role preview card */}
                 {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
                   <div className="mx-1 my-3 p-4 bg-[#1F3557]/5 border border-[#1F3557]/10 rounded-2xl flex flex-col gap-1.5 text-left animate-fade-in">
-                    <p className="text-[8.5px] font-black text-[#1F3557]/80 uppercase tracking-wider">ROLE PREVIEW</p>
+                    <p className="text-[8.5px] font-black text-[#1F3557]/80 uppercase tracking-wider">VIEW AS EMPLOYEE</p>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-[#1F3557]">Preview employee access</span>
+                      <span className="text-xs font-black text-[#1F3557]">See what an employee can access</span>
                       <ChevronRight className="w-3.5 h-3.5 text-[#1F3557]" />
                     </div>
                     <p className="text-[10px] text-[#1F3557]/60 leading-relaxed font-sans font-medium">
-                      Instantly switch roles to preview permission-guarded tools.
+                      Choose a role to see which tools that employee can use.
                     </p>
                   </div>
                 )}
@@ -6586,7 +6581,7 @@ Access to full financial telemetry is restricted.`;
               {activeScreen.id !== "dashboard" && (
                 <div className="px-5 py-3 border-b border-[#9EC8EF] bg-[#C7E3FA] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-[#5E7393] uppercase font-mono tracking-wider">Workspace:</span>
+                  <span className="text-[10px] font-bold text-[#5E7393] uppercase font-mono tracking-wider">CURRENT PAGE:</span>
                   <div className="flex items-center gap-1">
                     <span className="text-xs font-extrabold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] px-2.5 py-1 rounded-xl">
                       {activeScreen.label}
@@ -6596,7 +6591,7 @@ Access to full financial telemetry is restricted.`;
                   {/* Simulated Role Dropdown (Only visible to Owners) */}
                   {loggedInUser?.role === "Owner" && (
                     <div className="relative flex items-center gap-1.5 ml-2 pl-2 border-l border-[#9EC8EF]">
-                      <span className="text-[9px] text-[#5E7393] font-mono">SIMULATION:</span>
+                      <span className="text-[9px] text-[#5E7393] font-mono">VIEWING AS:</span>
                       <select
                         value={simulatedRole || "Owner"}
                         onChange={(e) => {
@@ -6729,7 +6724,7 @@ Access to full financial telemetry is restricted.`;
                                       </span>
                                     )}
                                   </p>
-                                  <p className="text-[9px] text-[#5E7393] font-bold mt-0.5">Live Income vs Expenses & Taxes</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-0.5">Income, expenses, and estimated taxes</p>
                                 </div>
 
                                 <div className="flex-1 w-full min-h-[100px] mt-2 relative">
@@ -6811,7 +6806,7 @@ Access to full financial telemetry is restricted.`;
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
                                   <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{leads.length} Leads</p>
-                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Adjusted from connected sources</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Leads from all connected sources</p>
                                 </div>
 
                                 <div className="space-y-1 my-3 text-[10px] text-[#1F3557]/85 font-semibold">
@@ -6832,7 +6827,7 @@ Access to full financial telemetry is restricted.`;
 
                                 <span className="text-[8.5px] uppercase tracking-wider font-black text-[#315C9F] flex items-center gap-1 mt-1">
                                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                                  Active Live CRM Sync OK
+                                  Leads are up to date
                                 </span>
                               </div>
                             </div>
@@ -6858,7 +6853,7 @@ Access to full financial telemetry is restricted.`;
                               <div className="my-1.5 text-left flex-1 flex flex-col justify-between">
                                 <div>
                                   <p className="text-xl font-sans font-black text-[#1F3557] tracking-tight leading-none">{todayEvents.length} Jobs Scheduled</p>
-                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Populated from monthly calendar</p>
+                                  <p className="text-[9px] text-[#5E7393] font-bold mt-1">Jobs from your schedule</p>
                                 </div>
 
                                 <div className="space-y-1.5 my-3 text-[9.5px] font-semibold text-[#1F3557]/85">
@@ -7048,14 +7043,14 @@ Access to full financial telemetry is restricted.`;
                           <div className="text-left space-y-1 bg-transparent border-none p-0 shadow-none">
                             <div className="flex items-center gap-1.5 text-[10px] font-black text-[#1F3557] uppercase tracking-wider">
                               <Laptop className="w-3.5 h-3.5 text-[#315C9F]" />
-                              <span>TEAM DASHBOARD</span>
+                              <span>BUSINESS DASHBOARD</span>
                             </div>
                             <h2 className="text-base md:text-lg font-sans font-black tracking-tight text-[#1F3557] flex items-center gap-2">
                               Welcome, {loggedInUser?.name || (loggedInUser?.email ? loggedInUser.email.split("@")[0] : "waterdrops2001")}!
                               <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
                             </h2>
                             <p className="text-[11px] font-sans font-bold text-[#5E7393]">
-                              Role: <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Hours Clocked This Session: <strong className="text-[#1F3557]">{totalHours} hours</strong>
+                              Signed in as <span className="text-[#1F3557] uppercase font-mono">{simulatedRole || loggedInUser?.role || "Owner"}</span> • Today’s hours: <strong className="text-[#1F3557]">{totalHours}</strong>
                             </p>
                           </div>
 
@@ -7069,7 +7064,7 @@ Access to full financial telemetry is restricted.`;
                                 {liveTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                               </span>
                               <span className="text-[8px] font-bold text-blue-200 font-mono mt-1 uppercase tracking-widest leading-none">
-                                Secure Workspace
+                                Your business dashboard
                               </span>
                             </div>
                             <div className="flex gap-2 w-full">
@@ -7083,15 +7078,15 @@ Access to full financial telemetry is restricted.`;
                                 title="Take Page Snapshot"
                               >
                                 <Camera className="w-3.5 h-3.5 text-[#315C9F]" />
-                                Snapshot
+                                Save This Page
                               </button>
                               <button
                                 onClick={() => openPageAIAnalysis("dashboard", "Dashboard")}
                                 className="flex-1 px-3 py-1.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-[10px] uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
-                                title="AI Option"
+                                title="Ask AI About This Page"
                               >
                                 <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                                AI Option
+                                Ask AI About This Page
                               </button>
                             </div>
                           </div>
@@ -7125,7 +7120,7 @@ Access to full financial telemetry is restricted.`;
                           {isAuthorizedToCustomize ? (
                             <>
                               <Sliders className="w-3.5 h-3.5" />
-                              <span>Configure Dashboard ➔</span>
+                              <span>Choose Dashboard Cards</span>
                             </>
                           ) : (
                             <span>Restricted To Management 🔒</span>
@@ -7172,7 +7167,7 @@ Access to full financial telemetry is restricted.`;
                               <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3.5 mb-4">
                                 <div className="flex items-center gap-2">
                                   <Sliders className="w-5 h-5 text-[#315C9F]" />
-                                  <h3 className="text-sm font-black text-[#1F3557] uppercase tracking-wider">Customize Daily View</h3>
+                                  <h3 className="text-sm font-black text-[#1F3557] uppercase tracking-wider">CHOOSE YOUR DASHBOARD</h3>
                                 </div>
                                 <button 
                                   onClick={(e) => {
@@ -7186,12 +7181,12 @@ Access to full financial telemetry is restricted.`;
                               </div>
 
                               <p className="text-xs text-[#5E7393] font-sans font-semibold mb-4 leading-relaxed">
-                                Select which metric cards populate your primary three dashboard panel slots. Save to update immediately.
+                                Choose the three cards you want to see on your dashboard.
                               </p>
 
                               <div className="space-y-4">
                                 <div className="space-y-1 flex flex-col">
-                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 1 Metric Card</label>
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">FIRST CARD</label>
                                   <CustomDropdown
                                     value={customCardTargets.card1}
                                     onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card1: val }))}
@@ -7201,7 +7196,7 @@ Access to full financial telemetry is restricted.`;
                                 </div>
 
                                 <div className="space-y-1 flex flex-col">
-                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 2 Metric Card</label>
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">SECOND CARD</label>
                                   <CustomDropdown
                                     value={customCardTargets.card2}
                                     onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card2: val }))}
@@ -7211,7 +7206,7 @@ Access to full financial telemetry is restricted.`;
                                 </div>
 
                                 <div className="space-y-1 flex flex-col">
-                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">Slot 3 Metric Card</label>
+                                  <label className="text-[9.5px] uppercase tracking-wider text-[#5E7393] font-bold">THIRD CARD</label>
                                   <CustomDropdown
                                     value={customCardTargets.card3}
                                     onChange={(val) => setCustomCardTargets(prev => ({ ...prev, card3: val }))}
@@ -7239,7 +7234,7 @@ Access to full financial telemetry is restricted.`;
                                   }}
                                   className="flex-1 py-2.5 bg-[#4A86F7] hover:bg-[#3977EE] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center shadow-sm uppercase tracking-wider"
                                 >
-                                  Save Layout
+                                  SAVE DASHBOARD
                                 </button>
                               </div>
                             </div>
@@ -7621,7 +7616,7 @@ Access to full financial telemetry is restricted.`;
                               <div className="flex items-center justify-between gap-3 flex-wrap border-b border-white/90 pb-3">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="select-none text-xl" style={{ filter: 'drop-shadow(0 0 6px rgba(14,165,233,0.55))' }}>💰</span>
-                                  <h2 className="text-base font-mono font-black text-[#07599a] uppercase tracking-[0.2em]" style={{ textShadow: '0 0 10px rgba(255,255,255,0.95)' }}>Money Tracker</h2>
+                                  <h2 className="text-base font-mono font-black text-[#07599a] uppercase tracking-[0.2em]" style={{ textShadow: '0 0 10px rgba(255,255,255,0.95)' }}>Money</h2>
                                   <select
                                     aria-label="Graph interval"
                                     value={revenuePageFilter}
@@ -7642,7 +7637,7 @@ Access to full financial telemetry is restricted.`;
                                 </div>
                                 <span className="flex items-center gap-1.5 text-[10px] font-mono font-black text-[#078e64] uppercase tracking-wider bg-white/45 border border-white px-2.5 py-1 rounded-md shadow-[0_0_10px_rgba(56,189,248,0.28)]">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ boxShadow: '0 0 6px rgba(52,211,153,0.9)' }} />
-                                  Live Data
+                                  Current totals
                                 </span>
                               </div>
 
@@ -7789,7 +7784,7 @@ Access to full financial telemetry is restricted.`;
                                   onClick={() => setIsFinancialSnapshotOpen(true)}
                                   className="min-h-10 px-3.5 py-2 text-[10.5px] font-mono font-extrabold uppercase tracking-wide rounded-md bg-gradient-to-r from-[#0EA5E9] to-[#1485F4] text-white cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_18px_rgba(14,165,233,0.72),inset_0_0_7px_rgba(255,255,255,0.42)]"
                                 >
-                                  <Landmark className="w-3.5 h-3.5" /> View Financial Reports
+                                  <Landmark className="w-3.5 h-3.5" /> View Reports
                                 </button>
                                 <button
                                   onClick={() => setIsPriceBookOpen(true)}
@@ -7802,7 +7797,7 @@ Access to full financial telemetry is restricted.`;
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
-                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Revenue Breakdown</p>
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Where Your Income Came From</p>
                                   {revenueSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No revenue this period yet.</p>
                                   ) : (
@@ -7831,7 +7826,7 @@ Access to full financial telemetry is restricted.`;
                                 </div>
 
                                 <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
-                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Expense Breakdown</p>
+                                  <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Where Your Money Went</p>
                                   {expenseSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No expenses this period yet.</p>
                                   ) : (
@@ -7906,19 +7901,19 @@ Access to full financial telemetry is restricted.`;
                                   card on this page. */}
                               {(() => {
                                 const jobCostingColumns: Array<{ key: string; header: string; bold: boolean; color: string; get: (r: typeof jobCostingRows[number]) => string }> = [
-                                  { key: "estPlus", header: "Estimated +", bold: false, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
-                                  { key: "estMinus", header: "Estimated -", bold: false, color: "#FF1744", get: r => fmt(r.totalCost) },
-                                  { key: "labor", header: "Labor -", bold: false, color: "#FF1744", get: r => fmt(r.laborCost) },
-                                  { key: "material", header: "Material -", bold: false, color: "#FF1744", get: r => fmt(r.materialCost) },
-                                  { key: "other", header: "Other -", bold: false, color: "#FF1744", get: r => fmt(r.otherCost) },
+                                  { key: "estPlus", header: "Estimated income", bold: false, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
+                                  { key: "estMinus", header: "Estimated costs", bold: false, color: "#FF1744", get: r => fmt(r.totalCost) },
+                                  { key: "labor", header: "Labor cost", bold: false, color: "#FF1744", get: r => fmt(r.laborCost) },
+                                  { key: "material", header: "Material cost", bold: false, color: "#FF1744", get: r => fmt(r.materialCost) },
+                                  { key: "other", header: "Other costs", bold: false, color: "#FF1744", get: r => fmt(r.otherCost) },
                                   { key: "totalMinus", header: "Total -", bold: true, color: "#FF1744", get: r => fmt(r.totalCost) },
-                                  { key: "totalPlus", header: "Total +", bold: true, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
-                                  { key: "profit", header: "Profit +", bold: true, color: "#168BFF", get: r => fmt(r.grossProfit) },
+                                  { key: "totalPlus", header: "Total income", bold: true, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
+                                  { key: "profit", header: "Profit", bold: true, color: "#168BFF", get: r => fmt(r.grossProfit) },
                                   { key: "margin", header: "Margin %", bold: true, color: "#168BFF", get: r => r.marginPercent == null ? "—" : `${r.marginPercent.toFixed(1)}%` },
                                 ];
                                 return (
                                   <div>
-                                    <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Job Costing</p>
+                                    <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Job Costs and Profit</p>
                                     <div className="overflow-x-auto">
                                       <div className="min-w-[760px]">
                                         <div className="grid grid-cols-9 gap-1 px-3 pb-1.5">
@@ -7967,7 +7962,7 @@ Access to full financial telemetry is restricted.`;
                                   Job -> Invoice -> Revenue -> Profit chain shown in Reports, dropped
                                   in here too (point 5) so an owner sees it without leaving Revenue. */}
                               <div className="rounded-2xl border border-[#9EC8EF] bg-white/70 p-4">
-                                <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">Marketing Attribution</p>
+                                <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">Where Your Customers Came From</p>
                                 <MarketingAttributionView
                                   leads={leads} customers={customers} estimates={estimates} jobs={schedulingEvents} invoices={invoices}
                                   timeClockLogs={timeClockLogs} employees={employees} transactions={transactions} payrollWorkweekStart={payrollWorkweekStart}
@@ -8041,7 +8036,7 @@ Access to full financial telemetry is restricted.`;
                             <div className="space-y-3">
                               <div className="flex justify-between items-center px-1">
                                 <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Payments</h3>
-                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{paymentItems.length} line item{paymentItems.length === 1 ? "" : "s"}</span>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{paymentItems.length === 0 ? "No payments yet" : `${paymentItems.length} line item${paymentItems.length === 1 ? "" : "s"}`}</span>
                               </div>
                               <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -8094,7 +8089,7 @@ Access to full financial telemetry is restricted.`;
                             <div className="space-y-3">
                               <div className="flex justify-between items-center px-1">
                                 <h3 className="text-xs font-extrabold text-[#1F3557] uppercase tracking-wider">Expenses</h3>
-                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{expenseItems.length} line item{expenseItems.length === 1 ? "" : "s"}</span>
+                                <span className="text-[10px] font-mono font-bold text-[#5E7393] uppercase">{expenseItems.length === 0 ? "No expenses yet" : `${expenseItems.length} line item${expenseItems.length === 1 ? "" : "s"}`}</span>
                               </div>
                               <div className="bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-3">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -8146,7 +8141,7 @@ Access to full financial telemetry is restricted.`;
                                     onClick={saveTotalStatement}
                                     className="px-3.5 py-2 text-[11px] font-bold rounded-xl bg-[#4A86F7] hover:bg-[#3977EE] text-white cursor-pointer flex items-center gap-1.5"
                                   >
-                                    <FileText className="w-3.5 h-3.5" /> Compile and Save Total Statement as CSV
+                                    <FileText className="w-3.5 h-3.5" /> Download All Transactions
                                   </button>
                                 </div>
                               </div>
@@ -8291,7 +8286,7 @@ Access to full financial telemetry is restricted.`;
                           <h2 className="text-lg font-sans font-extrabold text-[#1F3557] uppercase tracking-wider flex items-center gap-2">
                             <span className="select-none text-xl">💵</span> Payroll
                           </h2>
-                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Run payroll, track hours, and manage pay periods for your crew</p>
+                          <p className="text-xs text-[#5E7393] font-sans font-semibold">Review employee hours and prepare payroll.</p>
                         </div>
                       </div>
 
@@ -8301,7 +8296,7 @@ Access to full financial telemetry is restricted.`;
                           <div>
                             <span className="text-[10px] uppercase font-bold tracking-wider text-[#5E7393]">Personnel Overview</span>
                             <h3 className="text-base font-sans font-black text-[#1F3557] tracking-tight">Payroll Overview</h3>
-                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Active crew hours, overtime coefficients, and cumulative gross wages</p>
+                            <p className="text-xs text-[#5E7393] font-sans font-semibold">Employee hours, overtime, and estimated pay.</p>
                           </div>
                           
                           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
@@ -8350,7 +8345,7 @@ Access to full financial telemetry is restricted.`;
                         <div className="grid gap-3 rounded-2xl border border-[#9EC8EF] bg-[#EAF5FF] p-4 lg:grid-cols-6">
                           <label className="text-[9px] font-black uppercase text-[#5E7393]">Work state
                             <select value={payrollState} onChange={e => setPayrollState(e.target.value)} className="mt-1 block w-full rounded-lg border border-[#9EC8EF] bg-white px-2 py-2 text-xs font-bold text-[#1F3557]">
-                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — setup required"}</option>)}
+                              {US_PAYROLL_STATES.map(state => <option key={state} value={state}>{state}{state === "TX" ? " — configured" : " — Not set up"}</option>)}
                             </select>
                           </label>
                           <label className="text-[9px] font-black uppercase text-[#5E7393] lg:col-span-2">Pay schedule
@@ -8382,7 +8377,7 @@ Access to full financial telemetry is restricted.`;
                             <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(-1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">← Previous</button>
                             <button type="button" disabled={payrollSchedule === "custom"} onClick={useCurrentPayrollPeriod} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Current period</button>
                             <button type="button" disabled={payrollSchedule === "custom"} onClick={()=>movePayrollPeriod(1)} className="rounded-lg border border-[#9EC8EF] bg-white px-3 py-1.5 text-[10px] font-bold disabled:opacity-40">Next →</button>
-                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Saved automatically for this business.</span>
+                            <span className="self-center text-[10px] font-semibold text-[#5E7393]">Changes save automatically.</span>
                           </div>
                         </div>
 
@@ -8429,7 +8424,7 @@ Access to full financial telemetry is restricted.`;
                                     {rows.length === 0 && (
                                       <tr>
                                         <td colSpan={6} className="px-4 py-6 text-center text-[#5E7393] font-sans font-medium">
-                                          No real employees onboarded yet.
+                                          No employees have been added yet.
                                         </td>
                                       </tr>
                                     )}
@@ -8478,7 +8473,7 @@ Access to full financial telemetry is restricted.`;
                             onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wages", icon: "👥" })}
                             className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
                           >
-                            View All Employees ➔
+                            View Employees
                           </button>
                         </div>
                       </div>
@@ -8511,8 +8506,8 @@ Access to full financial telemetry is restricted.`;
                     <div className="bg-[#C7E3FB] rounded-3xl p-6 border border-[#A9CDEE] shadow-sm space-y-6 animate-fade-in text-left">
                       <div className="flex items-center justify-between border-b border-[#A9CDEE] pb-4">
                         <div>
-                          <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Company Bulletins Center</h2>
-                          <p className="text-xs text-slate-500">Read official notifications or post announcements for administrative approval</p>
+                          <h2 className="text-base font-sans font-extrabold text-[#342D7E] uppercase tracking-wider">Company Announcements</h2>
+                          <p className="text-xs text-slate-500">Post announcements for your team.</p>
                         </div>
                         <span className="px-3 py-1 bg-[#E3F3FF] text-[#4A9BFF] text-xs font-mono font-bold rounded-xl border border-[#A9CDEE]">
                           Active Notices
@@ -8523,9 +8518,9 @@ Access to full financial telemetry is restricted.`;
                         {/* Post bulletin form */}
                         <div className="bg-[#E3F3FF] p-5 rounded-2xl border border-[#A9CDEE] space-y-4 h-fit">
                           <div>
-                            <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Post New Notice</h3>
+                            <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">New Announcement</h3>
                             <p className="text-[10.5px] text-slate-600 mt-1">
-                              Note: If you are not an owner, manager, or scheduler, your bulletin will require approval.
+                              Announcements from other employees must be approved by an owner, manager, or scheduler.
                             </p>
                           </div>
 
@@ -8631,11 +8626,11 @@ Access to full financial telemetry is restricted.`;
                             </div>
                           )}
 
-                          <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Active Bulletins Board</h3>
+                          <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Current Announcements</h3>
                           <div className="space-y-3.5">
                             {bulletins.filter(b => b.status === "approved").length === 0 ? (
                               <div className="text-center py-8 text-slate-400 text-xs">
-                                No announcements active currently.
+                                No active announcements.
                               </div>
                             ) : (
                               bulletins.filter(b => b.status === "approved").map((b) => (

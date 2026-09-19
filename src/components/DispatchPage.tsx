@@ -379,14 +379,14 @@ export const DispatchPage: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">Dispatch Center</h2>
+              <h2 className="text-base font-sans font-extrabold text-[#1F3557] uppercase tracking-wider">Dispatch</h2>
               {!hasWriteAccess && (
                 <span className="flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold">
                   <Lock className="w-2.5 h-2.5" /> View-Only (Technician View)
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 font-sans font-semibold">Real-time scheduling, tracking, and fleet distribution hub</p>
+            <p className="text-xs text-slate-500 font-sans font-semibold">Assign jobs and see where your crew is.</p>
           </div>
           {hasWriteAccess && (
             <button
@@ -720,7 +720,7 @@ export const DispatchPage: React.FC = () => {
         <div className="lg:col-span-7 flex flex-col gap-3 min-h-[350px]">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <span>📋 Dispatch Queue</span>
+              <span>📋 Jobs Waiting for Dispatch</span>
               <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-800 text-[10px] font-mono font-bold rounded-lg">
                 {filteredEvents.length} active
               </span>
@@ -738,7 +738,7 @@ export const DispatchPage: React.FC = () => {
                 <AlertCircle className="w-8 h-8 text-[#5E7393]/60 mb-2" />
                 <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">No Dispatches Found</h4>
                 <p className="text-[11px] text-slate-500 mt-1 max-w-xs leading-relaxed">
-                  No active events meet the filter requirements for {selectedDate}. Adjust filters or add scheduling assignments.
+                  No jobs match these filters. Clear the filters or schedule a job.
                 </p>
               </div>
             ) : (
@@ -1204,12 +1204,12 @@ export const DispatchPage: React.FC = () => {
       <div className="bg-[#E3F3FF] p-3 rounded-xl border border-[#A9CDEE] text-[10.5px] font-sans font-semibold text-slate-600 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping shrink-0" />
-          <span>Fleet telemetry operational • Regional dispatch loop synced with Scheduling calendar database</span>
+          <span>Dispatch is connected to your schedule.</span>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => handleNavigateToScreen("timeclock", "Clock details")} className="hover:underline text-[#315C9F] font-bold">⏱️ Clock-in Tracker</button>
+          <button onClick={() => handleNavigateToScreen("timeclock", "Clock details")} className="hover:underline text-[#315C9F] font-bold">⏱️ See Who’s Clocked In</button>
           <span className="text-slate-300">|</span>
-          <button onClick={() => handleNavigateToScreen("ai_assistant", "AI chat helper")} className="hover:underline text-indigo-600 font-bold">🤖 Operational Assistant</button>
+          <button onClick={() => handleNavigateToScreen("ai_assistant", "AI chat helper")} className="hover:underline text-indigo-600 font-bold">🤖 Ask for Dispatch Help</button>
         </div>
       </div>
 
