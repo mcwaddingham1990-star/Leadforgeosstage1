@@ -11,6 +11,7 @@ export interface PaywallActionResult {
   success: boolean;
   error?: string;
   bypassExpiresAt?: number;
+  accessDays?: number;
 }
 
 export async function redeemBypassCode(code: string): Promise<PaywallActionResult> {
@@ -22,18 +23,18 @@ export async function redeemBypassCode(code: string): Promise<PaywallActionResul
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error || "Could not redeem that code." };
-    return { success: true, bypassExpiresAt: data.bypassExpiresAt };
+    return { success: true, bypassExpiresAt: data.bypassExpiresAt, accessDays: data.accessDays };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Could not redeem that code." };
   }
 }
 
-export async function setBypassCode(newCode: string): Promise<PaywallActionResult> {
+export async function setBypassCode(newCode: string, kind: "standard" | "trial" = "standard"): Promise<PaywallActionResult> {
   try {
     const res = await authedFetch("/api/paywall/set-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ newCode }),
+      body: JSON.stringify({ newCode, kind }),
     });
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error || "Could not set the access code." };
