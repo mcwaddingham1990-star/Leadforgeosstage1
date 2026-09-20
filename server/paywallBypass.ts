@@ -101,13 +101,15 @@ export async function handleRedeemBypassCode(req: Request, res: Response) {
     const config = configSnap.data() || {};
     const storedHash = config.codeHash;
     const trialCodeHash = config.trialCodeHash;
-    if ((typeof storedHash !== "string" || !storedHash) && (typeof trialCodeHash !== "string" || !trialCodeHash)) {
+    const secondaryCodeHash = config.secondaryCodeHash;
+    if ((typeof storedHash !== "string" || !storedHash) && (typeof trialCodeHash !== "string" || !trialCodeHash) && (typeof secondaryCodeHash !== "string" || !secondaryCodeHash)) {
       res.status(503).json({ error: "No access code has been set up yet." });
       return;
     }
     const isTrialCode = typeof trialCodeHash === "string" && !!trialCodeHash && verifyCode(code, trialCodeHash);
     const isThirtyDayCode = typeof storedHash === "string" && !!storedHash && verifyCode(code, storedHash);
-    if (!isTrialCode && !isThirtyDayCode) {
+    const isSecondaryThirtyDayCode = typeof secondaryCodeHash === "string" && !!secondaryCodeHash && verifyCode(code, secondaryCodeHash);
+    if (!isTrialCode && !isThirtyDayCode && !isSecondaryThirtyDayCode) {
       res.status(401).json({ error: "That access code isn't valid." });
       return;
     }
@@ -140,7 +142,7 @@ export async function handleSetBypassCode(req: Request, res: Response) {
       return;
     }
     const newCode = typeof req.body?.newCode === "string" ? req.body.newCode.trim() : "";
-    const codeKind = req.body?.kind === "trial" ? "trial" : "standard";
+    const codeKind = req.body?.kind === "trial" ? "trial" : req.body?.kind === "secondary" ? "secondary" : "standard";
     if (newCode.length < 6) {
       res.status(400).json({ error: "Access code must be at least 6 characters." });
       return;
@@ -150,7 +152,7 @@ export async function handleSetBypassCode(req: Request, res: Response) {
       res.status(503).json({ error: "Not configured on this server yet." });
       return;
     }
-    const hashField = codeKind === "trial" ? "trialCodeHash" : "codeHash";
+    const hashField = codeKind === "trial" ? "trialCodeHash" : codeKind === "secondary" ? "secondaryCodeHash" : "codeHash";
     await db.collection(CONFIG_DOC_PATH[0]).doc(CONFIG_DOC_PATH[1]).set(
       { [hashField]: hashCode(newCode), updatedAt: Date.now(), updatedBy: callerEmail },
       { merge: true }
