@@ -192,6 +192,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
   useEffect(()=>{const t=setTimeout(()=>setSplash(false),1400);return()=>clearTimeout(t)},[]);
+  // SelfieSave is a true full-screen editor, not a card inside Documents.
+  // Lock the page underneath while it is open so mobile Safari/Chrome cannot
+  // scroll the Documents screen behind the editor.
+  useEffect(()=>{
+    const bodyOverflow=document.body.style.overflow;
+    const htmlOverflow=document.documentElement.style.overflow;
+    document.body.style.overflow="hidden";
+    document.documentElement.style.overflow="hidden";
+    return()=>{
+      document.body.style.overflow=bodyOverflow;
+      document.documentElement.style.overflow=htmlOverflow;
+    };
+  },[]);
   useEffect(()=>{
     if(!initialDraft||initialDraftLoadedRef.current)return;
     initialDraftLoadedRef.current=true;
@@ -814,8 +827,12 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
 
   const displayName=accountName||accountEmail;
 
-  if(splash)return <div className="selfiesave-editor-root"><main className="splash"><div className="splash-mark">P</div><h1>PDF Editor</h1><p>eSign by SelfieSave — optional, on demand</p><small>…by Stuffapp…</small><button onClick={()=>setSplash(false)}>Enter now</button></main></div>;
-  return <div className="selfiesave-editor-root"><main className="app-shell">
+  // Portal the ENTIRE editor to document.body. Portaling only the bottom
+  // buttons did not solve the actual stacking-context bug: the editor itself
+  // was still trapped inside the transformed/scrolled Documents layout, so
+  // chunks of the underlying app showed around/through it on mobile.
+  if(splash)return createPortal(<div className="selfiesave-editor-root"><main className="splash"><div className="splash-mark">P</div><h1>PDF Editor</h1><p>eSign by SelfieSave — optional, on demand</p><small>…by Stuffapp…</small><button onClick={()=>setSplash(false)}>Enter now</button></main></div>,document.body);
+  return createPortal(<div className="selfiesave-editor-root"><main className="app-shell">
     {toast&&<div className="toast">✓ {toast}</div>}
     {confirmState&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><p>{confirmState.message}</p><div style={{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"18px"}}><button type="button" style={{border:0,borderRadius:"8px",padding:"11px 16px",background:"#eef2f6",color:"#1d2b3a",fontWeight:"bold"}} onClick={()=>resolveConfirm(false)}>Cancel</button><button type="button" style={{border:0,borderRadius:"8px",padding:"11px 16px",background:"var(--blue)",color:"white",fontWeight:"bold"}} onClick={()=>resolveConfirm(true)}>Confirm</button></div></div></div>}
     {pendingField&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>setPendingField(null)}>×</button><p className="eyebrow">ASSIGN FIELD</p><h2>Add {pendingField.kind} line</h2><p>Choose which signer must complete this field.</p><label>Signer number<input type="number" min="1" inputMode="numeric" autoFocus value={pendingParty} onChange={e=>setPendingParty(e.target.value)}/></label><button className="capture" onClick={confirmAddField}>Add to document</button></div></div>}
@@ -849,5 +866,5 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     {showLegalInfo&&<ESignLegalInfoModal onClose={()=>setShowLegalInfo(false)}/>}
   </main>
   <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} pickerMode={{onPick:handlePricingModelPicked}}/>
-  </div>
+  </div>,document.body);
 }
