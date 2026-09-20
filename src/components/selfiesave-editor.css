@@ -157,3 +157,80 @@
     grid-template-columns:repeat(3,minmax(0,1fr));
   }
 }
+
+
+/* PDF ACTIONS — live directly above the document and remain pinned there
+   while the PDF itself scrolls underneath. */
+.selfiesave-editor-root .selfiesave-action-dock {
+  position:sticky;
+  top:0;
+  z-index:28;
+  width:100%;
+  margin:0 0 12px;
+  background:#fff;
+  border:1px solid #cbd7e3;
+  border-radius:10px;
+  box-shadow:0 6px 18px #10243e24;
+  overflow:hidden;
+}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar {
+  position:static !important;
+  inset:auto !important;
+  width:100%;
+  min-height:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  padding:8px 10px;
+  background:#fff;
+  border:0;
+  box-shadow:none;
+}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar>div {
+  margin-right:auto;
+  display:grid;
+  grid-template-columns:auto 120px;
+  gap:3px 10px;
+  align-items:center;
+  min-width:180px;
+}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar strong {font-size:10px}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar span {height:4px;background:#e7edf3;border-radius:4px}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar i {display:block;height:100%;background:var(--blue);border-radius:4px}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar small {grid-column:1/3;color:#738094;font-size:8px}
+.selfiesave-editor-root .selfiesave-action-dock .actionbar button {
+  flex:0 0 auto;
+  border-radius:7px;
+  padding:9px 10px;
+  font-size:10px;
+  font-weight:bold;
+  cursor:pointer;
+}
+.selfiesave-editor-root .selfiesave-action-dock .save-draft {display:block;background:white;border:1px solid #bdc9d5}
+.selfiesave-editor-root .selfiesave-action-dock .finalize {width:auto;background:var(--navy);color:white;border:1px solid var(--navy)}
+.selfiesave-editor-root .selfiesave-action-dock .signature-only-actionbar {justify-content:center;text-align:center;color:#174f9d}
+
+@media(max-width:800px){
+  .selfiesave-editor-root .workspace {height:calc(100svh - 72px)}
+  .selfiesave-editor-root .editor-wrap {padding-bottom:36px !important}
+  .selfiesave-editor-root .selfiesave-action-dock .actionbar {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+    padding:7px;
+  }
+  .selfiesave-editor-root .selfiesave-action-dock .actionbar>div {display:none}
+  .selfiesave-editor-root .selfiesave-action-dock .actionbar button {
+    width:100%;
+    min-width:0;
+    padding:8px 6px;
+    font-size:9px;
+    line-height:1.15;
+    white-space:normal;
+    text-align:center;
+  }
+  .selfiesave-editor-root .selfiesave-action-dock .signature-only-actionbar {
+    display:flex;
+  }
+}
