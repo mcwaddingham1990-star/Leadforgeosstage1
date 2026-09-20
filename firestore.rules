@@ -117,6 +117,15 @@ service cloud.firestore {
         (request.auth.uid == uid
           && request.resource.data.businessEmail == resource.data.businessEmail
           && request.resource.data.role == resource.data.role)
+        || (request.auth.uid == uid
+          && request.resource.data.businessEmail == request.auth.token.email
+          && request.resource.data.role == "Owner"
+          && (
+            (!resource.data.keys().hasAll(['businessEmail'])
+              && (!resource.data.keys().hasAll(['role']) || resource.data.role == "Owner"))
+            || (!resource.data.keys().hasAll(['role'])
+              && resource.data.businessEmail == request.auth.token.email)
+          ))
         || resource.data.businessEmail == request.auth.token.email
       );
       allow delete: if isAuthenticated() && resource.data.businessEmail == request.auth.token.email;
