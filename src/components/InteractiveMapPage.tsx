@@ -1320,10 +1320,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
         <button
           id="btn_toggle_heatmap"
           onClick={() => setShowRevenueHeatmap(!showRevenueHeatmap)}
-          className={`px-4 py-2.5 font-extrabold rounded-xl text-[11px] uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 border ${
+          className={`px-4 py-2.5 font-extrabold rounded-xl text-xs uppercase tracking-wide transition-all duration-200 cursor-pointer flex items-center gap-1.5 border ${
             showRevenueHeatmap 
               ? "bg-pink-600 border-pink-400 text-white shadow-[0_4px_12px_rgba(219,39,119,0.3)]" 
-              : "bg-slate-800/80 border-white/10 text-slate-300 hover:bg-slate-800"
+              : "bg-slate-950 border-slate-600 text-white hover:bg-slate-800 hover:border-slate-400"
           }`}
         >
           <Activity className="w-4 h-4" /> Revenue Heatmap Overlay
@@ -1429,7 +1429,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
             <button
               type="button"
               onClick={() => setIsCreatingTerritory(value => !value)}
-              className="w-full rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider text-white transition-colors hover:bg-blue-500"
+              className="w-full rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white transition-colors hover:bg-blue-500"
             >
               <Plus className="mr-1 inline h-3 w-3" /> Create Territory
             </button>
@@ -1456,8 +1456,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   />
                 </label>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setIsCreatingTerritory(false)} className="flex-1 rounded-lg bg-slate-700 py-1.5 text-[10px] font-bold text-slate-200">Cancel</button>
-                  <button type="button" onClick={createTerritory} disabled={!newTerritoryName.trim()} className="flex-1 rounded-lg bg-emerald-600 py-1.5 text-[10px] font-bold text-white disabled:opacity-40">Save</button>
+                  <button type="button" onClick={() => setIsCreatingTerritory(false)} className="flex-1 rounded-lg border border-slate-500 bg-slate-800 py-2 text-[11px] font-extrabold text-white">Cancel</button>
+                  <button type="button" onClick={createTerritory} disabled={!newTerritoryName.trim()} className="flex-1 rounded-lg bg-emerald-600 py-2 text-[11px] font-extrabold text-white disabled:opacity-40">Save</button>
                 </div>
               </div>
             )}
@@ -1559,10 +1559,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     setFilterType(type);
                     setSelectedPin(null);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border cursor-pointer transition-colors ${
+                  className={`px-3 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-wide border cursor-pointer transition-colors ${
                     filterType === type
                       ? "bg-blue-600 border-blue-400 text-white shadow-md shadow-blue-500/20"
-                      : "bg-slate-800/70 border-white/5 text-slate-300 hover:bg-slate-800 hover:text-white"
+                      : "bg-slate-950 border-slate-600 text-white hover:bg-slate-800 hover:border-slate-400"
                   }`}
                 >
                   {type === "All" ? "🌍 All Layers" : `${type}s`}
@@ -1662,7 +1662,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
 
             <button
               onClick={() => onNavigateToScreen?.("employee_locations")}
-              className="px-3 py-2 rounded-xl text-[10px] font-black border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl text-[11px] font-black border border-emerald-400 bg-emerald-950/80 text-emerald-200 hover:bg-emerald-900 flex items-center gap-1.5"
               title="Full GPS employee locations interface -- roster status, GPS permissions, and route history"
             >
               <Navigation className="w-3.5 h-3.5" /> Open Employee Locations
@@ -1698,10 +1698,10 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   setIsMultiSelectMode(!isMultiSelectMode);
                   setSelectedBasketIds([]);
                 }}
-                className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                className={`px-3 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-wide border transition-all cursor-pointer ${
                   isMultiSelectMode 
-                    ? "bg-amber-500 text-slate-900 shadow-md" 
-                    : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                    ? "bg-amber-400 border-amber-300 text-slate-950 shadow-md" 
+                    : "bg-slate-950 border-slate-600 hover:bg-slate-800 text-white"
                 }`}
               >
                 {isMultiSelectMode ? "🔒 Exit Lasso Mode" : "🎯 Select Several Map Pins"}
@@ -2126,7 +2126,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   </div>
                   <button
                     onClick={() => setSelectedBasketIds([])}
-                    className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                    className="text-xs font-bold text-white hover:text-slate-200 underline cursor-pointer"
                   >
                     Clear Selection
                   </button>
@@ -2170,7 +2170,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       if (!recipients.length) { triggerNotification?.("No email addresses on file for the selected jobs."); return; }
                       composeEmail({ bcc: recipients, subject: "Job update" });
                     }}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-[10px] uppercase rounded-lg border border-white/5 cursor-pointer"
+                    className="px-3 py-2 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[11px] uppercase rounded-lg border border-slate-600 cursor-pointer"
                   >
                     📧 Mass Email
                   </button>
@@ -2180,14 +2180,14 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                       if (!recipients.length) { triggerNotification?.("No phone numbers on file for the selected jobs."); return; }
                       composeSms({ to: recipients[0], body: recipients.length > 1 ? `(also selected: ${recipients.slice(1).join(", ")})` : undefined });
                     }}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-[10px] uppercase rounded-lg border border-white/5 cursor-pointer"
+                    className="px-3 py-2 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[11px] uppercase rounded-lg border border-slate-600 cursor-pointer"
                   >
                     💬 Mass SMS Text
                   </button>
                   {selectedBasketIds.length >= 2 && (
                     <button
                       onClick={handleDispatchOptimizedRoute}
-                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] uppercase rounded-lg shadow-md cursor-pointer ml-auto flex items-center gap-1"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] uppercase rounded-lg shadow-md cursor-pointer ml-auto flex items-center gap-1"
                     >
                       <Zap className="w-3.5 h-3.5 text-yellow-300" /> One-Click Dispatch Route
                     </button>
@@ -2422,7 +2422,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                           if (!phone) { triggerNotification?.("No phone number on file."); return; }
                           callNumber(phone);
                         }}
-                        className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white border border-blue-400 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Phone className="w-3.5 h-3.5" /> Call Client
                       </button>
@@ -2432,7 +2432,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                           if (!phone) { triggerNotification?.("No phone number on file."); return; }
                           composeSms({ to: phone });
                         }}
-                        className="px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        className="px-3 py-2 bg-purple-700 hover:bg-purple-600 text-white border border-purple-400 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Send className="w-3.5 h-3.5" /> SMS Text
                       </button>
@@ -2442,7 +2442,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                           if (!email) { triggerNotification?.("No email address on file."); return; }
                           composeEmail({ to: email });
                         }}
-                        className="px-3 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                        className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 border border-amber-300 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
                         <Mail className="w-3.5 h-3.5" /> Send Email
                       </button>
