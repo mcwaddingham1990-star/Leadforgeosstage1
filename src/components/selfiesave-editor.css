@@ -16,3 +16,29 @@
 .selfiesave-editor-root .signature-only-actionbar {justify-content:center;text-align:center;color:#174f9d;padding:12px 18px}
 .selfiesave-editor-root .signature-only-actionbar strong {font-size:13px;line-height:1.4}
 .selfiesave-editor-root {background:#e6f1f8;isolation:isolate}
+
+/* Keep the editor and its controls tied to the real screen, not to the
+   transformed Documents card that opened it. The global AI/receipt pills sit
+   at z-index 40, so the editor stays immediately beneath them. */
+.selfiesave-editor-root {z-index:30}
+.selfiesave-editor-root .app-shell {padding-bottom:174px}
+.selfiesave-editor-root .actionbar {
+  bottom:calc(76px + env(safe-area-inset-bottom));
+  box-shadow:0 -8px 24px #10243e24;
+}
+
+@media(max-width:800px){
+  .selfiesave-editor-root .app-shell {padding-bottom:0}
+  .selfiesave-editor-root .workspace {height:calc(100svh - 220px)}
+  .selfiesave-editor-root .actionbar {
+    min-height:68px;
+    justify-content:flex-start;
+    gap:8px;
+    overflow-x:auto;
+    padding:8px 10px;
+    scrollbar-width:thin;
+  }
+  .selfiesave-editor-root .actionbar .save-draft {display:block}
+  .selfiesave-editor-root .actionbar button {flex:0 0 auto;padding:10px 12px}
+  .selfiesave-editor-root .actionbar .finalize {width:auto}
+}
