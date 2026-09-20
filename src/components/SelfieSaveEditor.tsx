@@ -12,6 +12,7 @@ import { PriceBookModal } from "./PriceBookModal";
 import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import SignaturePad from "./SignaturePad";
 import SendChoiceModal from "./SendChoiceModal";
+import ESignChoiceModal from "./ESignChoiceModal";
 import { ESignLegalInfoModal, ESignComplianceFooter } from "./ESignLegalInfoModal";
 
 type FieldKind = "signature" | "initials";
@@ -133,21 +134,11 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   // getBoundingClientRect() vs its offsetWidth to derive a scale factor, so
   // placing/moving/resizing items keeps working correctly at any zoom level.
   const [zoom,setZoom]=useState(1);
-  const pinchRef=useRef<{distance:number;zoom:number}|null>(null);
+  const zoomRef=useRef(1);
   const zoomIn=()=>setZoom(z=>Math.min(2.5,Math.round((z+0.1)*100)/100));
   const zoomOut=()=>setZoom(z=>Math.max(0.4,Math.round((z-0.1)*100)/100));
   const zoomReset=()=>setZoom(1);
-  const touchDistance=(touches:React.TouchList)=>Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
-  const beginPinch=(event:React.TouchEvent)=>{
-    if(event.touches.length===2)pinchRef.current={distance:touchDistance(event.touches),zoom};
-  };
-  const movePinch=(event:React.TouchEvent)=>{
-    if(event.touches.length!==2||!pinchRef.current)return;
-    event.preventDefault();
-    const next=pinchRef.current.zoom*(touchDistance(event.touches)/pinchRef.current.distance);
-    setZoom(Math.max(.4,Math.min(2.5,Math.round(next*100)/100)));
-  };
-  const endPinch=(event:React.TouchEvent)=>{if(event.touches.length<2)pinchRef.current=null};
+  useEffect(()=>{zoomRef.current=zoom},[zoom]);
   const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number;boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number}|null>(null);
   const pdfInputRef=useRef<HTMLInputElement>(null);
   const textInputRef=useRef<HTMLInputElement>(null);
@@ -155,6 +146,43 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const streamRef=useRef<MediaStream|null>(null);
   const paperRef=useRef<HTMLElement>(null);
   const editorRef=useRef<HTMLElement>(null);
+  // Use native non-passive touch listeners on the actual document viewport.
+  // React/browser touch handling can treat touchmove as passive on mobile,
+  // which makes preventDefault unreliable and is why pinch-to-zoom kept
+  // appearing "fixed" in code while still failing on Android. One finger is
+  // left completely alone for native document scrolling; only a genuine
+  // two-finger gesture is intercepted for PDF zoom.
+  useEffect(()=>{
+    const editor=editorRef.current;
+    if(!editor)return;
+    let pinch:{distance:number;zoom:number}|null=null;
+    const distance=(touches:TouchList)=>Math.hypot(
+      touches[0].clientX-touches[1].clientX,
+      touches[0].clientY-touches[1].clientY
+    );
+    const start=(event:TouchEvent)=>{
+      if(event.touches.length!==2)return;
+      event.preventDefault();
+      pinch={distance:distance(event.touches),zoom:zoomRef.current};
+    };
+    const move=(event:TouchEvent)=>{
+      if(event.touches.length!==2||!pinch)return;
+      event.preventDefault();
+      const next=pinch.zoom*(distance(event.touches)/pinch.distance);
+      setZoom(Math.max(.4,Math.min(2.5,Math.round(next*100)/100)));
+    };
+    const end=(event:TouchEvent)=>{if(event.touches.length<2)pinch=null};
+    editor.addEventListener("touchstart",start,{passive:false});
+    editor.addEventListener("touchmove",move,{passive:false});
+    editor.addEventListener("touchend",end,{passive:false});
+    editor.addEventListener("touchcancel",end,{passive:false});
+    return()=>{
+      editor.removeEventListener("touchstart",start);
+      editor.removeEventListener("touchmove",move);
+      editor.removeEventListener("touchend",end);
+      editor.removeEventListener("touchcancel",end);
+    };
+  },[]);
   const lastScrollTopRef=useRef(0);
   const nextIdRef=useRef(Date.now());
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
@@ -165,6 +193,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
   useEffect(()=>{const t=setTimeout(()=>setSplash(false),1400);return()=>clearTimeout(t)},[]);
+  // SelfieSave is a true full-screen editor, not a card inside Documents.
+  // Lock the page underneath while it is open so mobile Safari/Chrome cannot
+  // scroll the Documents screen behind the editor.
+  useEffect(()=>{
+    const bodyOverflow=document.body.style.overflow;
+    const htmlOverflow=document.documentElement.style.overflow;
+    document.body.style.overflow="hidden";
+    document.documentElement.style.overflow="hidden";
+    return()=>{
+      document.body.style.overflow=bodyOverflow;
+      document.documentElement.style.overflow=htmlOverflow;
+    };
+  },[]);
   useEffect(()=>{
     if(!initialDraft||initialDraftLoadedRef.current)return;
     initialDraftLoadedRef.current=true;
@@ -193,8 +234,13 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   useEffect(()=>{
     if(!autoCaptureSignatures||autoCaptureTriggeredRef.current||pdfPages.length===0)return;
     autoCaptureTriggeredRef.current=true;
-    captureSignatures();
-    if(autoOpenSignSetup&&!signatureOnlyMode)setSignSetup(true);
+    if(signatureOnlyMode){
+      ensureInPersonSignatureField();
+      setSignMethod("drawn");
+      setSetup(false);
+    }else if(autoOpenSignSetup){
+      openCollectSignatures();
+    }
   },[autoCaptureSignatures,autoOpenSignSetup,pdfPages,signatureOnlyMode]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
   useEffect(()=>{
@@ -308,40 +354,33 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     setPendingField(null);
     notify(`${kind==="signature"?"Signature":"Initials"} line added for Signer ${party}`);
   };
-  // "Capture Signatures" is an explicit, on-demand action -- it's the only
-  // thing that ever adds signature/initials fields to a document. Nothing
-  // requires signing just to view or export the PDF.
-  const captureSignatures=()=>{
-    if(contentLocked)return;
-    if(fields.length>0){if(!signatureOnlyMode)setSetup(true);return}
+  // Signature collection should never restart the editor or throw the user
+  // back into Document Requirements. The current PDF stays on screen.
+  // In-person signing gets one generic signer field; remote signing does not
+  // require a customer/contact record at all.
+  const ensureInPersonSignatureField=()=>{
+    if(contentLocked||fields.length>0)return;
     const page=pageCount;
     const id=newId();
-    const customerLabel=signerHint?.customerName?`Customer — ${signerHint.customerName}`:"Signer 1";
+    const label=signerHint?.customerName?`Signer — ${signerHint.customerName}`:"Signer";
+    setFields([{id,party:1,line:1,kind:"signature",role:label,signed:false,committed:false}]);
+    nextIdRef.current=id+1;
+    setPlacements(v=>({...v,[`field:${id}`]:{page,x:70,y:575,w:680,h:120}}));
+  };
+  const openCollectSignatures=()=>{
+    if(contentLocked)return;
+    setSetup(false);
+    setSignSetup(true);
+  };
+  const captureSignatures=()=>{
     if(signatureOnlyMode){
-      setFields([{id,party:1,line:1,kind:"signature",role:customerLabel,signed:false,committed:false}]);
-      nextIdRef.current=id+1;
-      setPlacements(v=>({...v,[`field:${id}`]:{page,x:70,y:575,w:680,h:120}}));
+      ensureInPersonSignatureField();
       setSetup(false);
       setSignMethod("drawn");
-      notify("Review the PDF, then tap the signature field");
+      notify("Review the full PDF, then tap the signature box");
       return;
     }
-    const repLabel=signerHint?.representativeName?`Company representative — ${signerHint.representativeName}`:"Signer 2";
-    setFields([
-      {id,party:1,line:1,kind:"signature",role:customerLabel,signed:false,committed:false},
-      {id:id+1,party:1,line:2,kind:"initials",role:customerLabel,signed:false,committed:false},
-      {id:id+2,party:2,line:1,kind:"signature",role:repLabel,signed:false,committed:false},
-      {id:id+3,party:2,line:2,kind:"initials",role:repLabel,signed:false,committed:false}
-    ]);
-    nextIdRef.current=id+4;
-    setPlacements(v=>({...v,
-      [`field:${id}`]:{page,x:70,y:575,w:325,h:90},
-      [`field:${id+1}`]:{page,x:70,y:690,w:325,h:90},
-      [`field:${id+2}`]:{page,x:425,y:575,w:325,h:90},
-      [`field:${id+3}`]:{page,x:425,y:690,w:325,h:90}
-    }));
-    setSetup(true);
-    notify("Signature lines added — choose evidence options, then have each signer complete their fields");
+    openCollectSignatures();
   };
   const addObject=(kind:CanvasObject["kind"])=>{if(contentLocked)return;const base=kind==="text"?"Type here":kind==="image"?"Paste image URL":kind==="link"?"Paste link URL":"Paste video URL";setObjects(v=>[...v,{id:newId(),kind,page:targetPage(),x:menu?.x||90,y:menu?.y||180,w:kind==="text"?96:280,h:kind==="text"?40:160,value:base,scale:1}]);setMenu(null)};
   const imageInputRef=useRef<HTMLInputElement>(null);
@@ -712,17 +751,15 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       setSavingCompleted(false);
     }
   }
-  // "Save & Prepare for Signing" -- in-person branch. Adds the standard
-  // signer fields (same ones "Capture Signatures" adds) if none exist yet,
-  // sets which method the signing modal below offers, then persists the
-  // Awaiting-Signature status right away so Documents reflects it even
-  // before anyone actually signs.
-  function prepareInPerson(method:"typed"|"drawn"){
-    setSignMethod(method);
+  // In-person signing stays in this exact editor session with the full PDF
+  // still visible. No blank-document/setup restart and no customer required.
+  function prepareInPerson(){
+    setSignMethod("drawn");
     setSignSetup(false);
-    if(fields.length===0)captureSignatures();
-    else setSetup(true);
-    persist("Awaiting Signature",{keepEditorOpen:true});
+    setSetup(false);
+    ensureInPersonSignatureField();
+    requestAnimationFrame(()=>editorRef.current?.scrollTo({top:0,left:0,behavior:"smooth"}));
+    notify("In-person signing ready — review the full PDF, then tap the signature box");
   }
   // "Save & Prepare for Signing" -- remote branch. Builds the real PDF right
   // now (so the signer has something to review), generates a single-use
@@ -787,14 +824,18 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
 
   const displayName=accountName||accountEmail;
 
-  if(splash)return <div className="selfiesave-editor-root"><main className="splash"><div className="splash-mark">P</div><h1>PDF Editor</h1><p>eSign by SelfieSave — optional, on demand</p><small>…by Stuffapp…</small><button onClick={()=>setSplash(false)}>Enter now</button></main></div>;
-  return <div className="selfiesave-editor-root"><main className="app-shell">
+  // Portal the ENTIRE editor to document.body. Portaling only the bottom
+  // buttons did not solve the actual stacking-context bug: the editor itself
+  // was still trapped inside the transformed/scrolled Documents layout, so
+  // chunks of the underlying app showed around/through it on mobile.
+  if(splash)return createPortal(<div className="selfiesave-editor-root"><main className="splash"><div className="splash-mark">P</div><h1>PDF Editor</h1><p>eSign by SelfieSave — optional, on demand</p><small>…by Stuffapp…</small><button onClick={()=>setSplash(false)}>Enter now</button></main></div>,document.body);
+  return createPortal(<div className="selfiesave-editor-root"><main className="app-shell">
     {toast&&<div className="toast">✓ {toast}</div>}
     {confirmState&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><p>{confirmState.message}</p><div style={{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"18px"}}><button type="button" style={{border:0,borderRadius:"8px",padding:"11px 16px",background:"#eef2f6",color:"#1d2b3a",fontWeight:"bold"}} onClick={()=>resolveConfirm(false)}>Cancel</button><button type="button" style={{border:0,borderRadius:"8px",padding:"11px 16px",background:"var(--blue)",color:"white",fontWeight:"bold"}} onClick={()=>resolveConfirm(true)}>Confirm</button></div></div></div>}
     {pendingField&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>setPendingField(null)}>×</button><p className="eyebrow">ASSIGN FIELD</p><h2>Add {pendingField.kind} line</h2><p>Choose which signer must complete this field.</p><label>Signer number<input type="number" min="1" inputMode="numeric" autoFocus value={pendingParty} onChange={e=>setPendingParty(e.target.value)}/></label><button className="capture" onClick={confirmAddField}>Add to document</button></div></div>}
-    <header className="topbar"><a className="brand" href="#" onClick={e=>e.preventDefault()}><span className="brand-mark">P</span><span>{signatureOnlyMode?"Sign PDF":"PDF Editor"}<small>{signatureOnlyMode?"Review and sign":"eSign optional"}</small></span></a>{!signatureOnlyMode&&<nav aria-label="Document tools"><button onClick={resetDocument}><Icon>＋</Icon><span>New</span></button><button disabled={contentLocked||loadingPdf} onClick={openPdfPicker}><Icon>⇧</Icon><span>{loadingPdf?"Opening…":"Load PDF"}</span></button><input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/><button disabled={contentLocked} onClick={()=>textInputRef.current?.click()}><Icon>▤</Icon><span>Load text</span></button><input ref={textInputRef} className="pdf-file-input" type="file" accept="text/plain,text/markdown,text/csv,.txt,.text,.md,.csv" onChange={e=>{const file=e.target.files?.[0];if(file)void loadText(file)}}/><input ref={imageInputRef} className="pdf-file-input" type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)void handleImageFileSelected(file)}}/><button disabled={contentLocked} onClick={()=>notify("Select PDF text or tap a text box to edit it directly")}><Icon>✎</Icon><span>Edit</span></button><button disabled={contentLocked} onClick={captureSignatures} className="capture-signatures-btn"><Icon>🖊</Icon><span>Capture Signatures</span></button></nav>}{signatureOnlyMode&&<input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/>}<div className="header-actions"><span className="account-email">{displayName}</span><button type="button" className="sign-out" onClick={onClose}>Close</button><span className={`status ${finalLocked?"locked":""}`}>{finalLocked?"🔒 Signed":signatureOnlyMode?"● Ready to sign":contentLocked?"🔏 Signed version":"● Draft"}</span></div></header>
+    <header className="topbar"><a className="brand" href="#" onClick={e=>e.preventDefault()}><span className="brand-mark">P</span><span>{signatureOnlyMode?"Sign PDF":"PDF Editor"}<small>{signatureOnlyMode?"Review and sign":"eSign optional"}</small></span></a>{!signatureOnlyMode&&<nav aria-label="Document tools"><button onClick={resetDocument}><Icon>＋</Icon><span>New</span></button><button disabled={contentLocked||loadingPdf} onClick={openPdfPicker}><Icon>⇧</Icon><span>{loadingPdf?"Opening…":"Load PDF"}</span></button><input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/><button disabled={contentLocked} onClick={()=>textInputRef.current?.click()}><Icon>▤</Icon><span>Load text</span></button><input ref={textInputRef} className="pdf-file-input" type="file" accept="text/plain,text/markdown,text/csv,.txt,.text,.md,.csv" onChange={e=>{const file=e.target.files?.[0];if(file)void loadText(file)}}/><input ref={imageInputRef} className="pdf-file-input" type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)void handleImageFileSelected(file)}}/><button disabled={contentLocked} onClick={()=>notify("Select PDF text or tap a text box to edit it directly")}><Icon>✎</Icon><span>Edit</span></button><button disabled={contentLocked} onClick={openCollectSignatures} className="capture-signatures-btn"><Icon>🖊</Icon><span>Collect Signatures</span></button></nav>}{signatureOnlyMode&&<input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/>}<div className="header-actions"><span className="account-email">{displayName}</span><button type="button" className="sign-out" onClick={onClose}>Close</button><span className={`status ${finalLocked?"locked":""}`}>{finalLocked?"🔒 Signed":signatureOnlyMode?"● Ready to sign":contentLocked?"🔏 Signed version":"● Draft"}</span></div></header>
     <section className={`workspace ${signatureOnlyMode?"signature-only-workspace":""}`}>{!signatureOnlyMode&&<aside className="sidebar"><div className="side-head"><h2>Document setup</h2></div><label>File name<input value={filename} disabled={contentLocked} onChange={e=>setFilename(e.target.value)}/></label><p className="fixed-name">Final file: <strong>{filename||"Untitled"}.pdf</strong></p><hr/><h3>Insert anywhere</h3><button className="insert" onClick={()=>addObject("text")} disabled={contentLocked}><Icon>T</Icon><span><strong>Free text box</strong><small>Type directly on page</small></span><b>＋</b></button><button className="insert" onClick={triggerImageUpload} disabled={contentLocked}><Icon>▧</Icon><span><strong>Upload image</strong><small>From your device</small></span><b>＋</b></button><button className="insert" onClick={openPriceBook} disabled={contentLocked}><Icon>💲</Icon><span><strong>Add Flat Rate Pricing Model</strong><small>Insert from the Price Book</small></span><b>＋</b></button><button className="insert" onClick={addClause} disabled={contentLocked}><Icon>§</Icon><span><strong>Contract clause</strong><small>Numbered text field</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("signature")} disabled={contentLocked}><Icon>⌁</Icon><span><strong>Signature line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("initials")} disabled={contentLocked}><Icon>Ab</Icon><span><strong>Initials line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>setSetup(true)} disabled={contentLocked}><Icon>⚙</Icon><span><strong>Evidence options</strong><small>Choose document requirements</small></span><b>›</b></button>{contentLocked&&<div className="security"><Icon>🔒</Icon><p><strong>Signed copy protected</strong><br/>Editing is disabled because a signer committed. Make a new unsigned version for any changes.</p></div>}</aside>}
-      <section ref={editorRef} className="editor-wrap" onScroll={growPages} onTouchStart={beginPinch} onTouchMove={movePinch} onTouchEnd={endPinch} onTouchCancel={endPinch}><div className="editor-tools"><span>{signatureOnlyMode?"Review the PDF and tap the signature box":contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><button type="button" onClick={zoomOut} disabled={zoom<=0.4} aria-label="Zoom out">−</button><button type="button" onClick={zoomReset} aria-label="Reset zoom">{Math.round(zoom*100)}%</button><button type="button" onClick={zoomIn} disabled={zoom>=2.5} aria-label="Zoom in">＋</button><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><input aria-label="Font color" type="color" disabled={contentLocked||!selectedTextObject} value={selectedTextColor} onChange={e=>setSelectedTextColor(e.target.value)} style={{width:28,height:28,padding:0,border:"1px solid #d7e3ee",borderRadius:6,cursor:selectedTextObject?"pointer":"not-allowed"}}/><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
+      <section ref={editorRef} className="editor-wrap" onScroll={growPages}><div className="editor-tools"><span>{signatureOnlyMode?"Review the PDF and tap the signature box":contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><button type="button" onClick={zoomOut} disabled={zoom<=0.4} aria-label="Zoom out">−</button><button type="button" onClick={zoomReset} aria-label="Reset zoom">{Math.round(zoom*100)}%</button><button type="button" onClick={zoomIn} disabled={zoom>=2.5} aria-label="Zoom in">＋</button><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><input aria-label="Font color" type="color" disabled={contentLocked||!selectedTextObject} value={selectedTextColor} onChange={e=>setSelectedTextColor(e.target.value)} style={{width:28,height:28,padding:0,border:"1px solid #d7e3ee",borderRadius:6,cursor:selectedTextObject?"pointer":"not-allowed"}}/><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
         {/* transform-origin is "top left", not "top center" -- centering the
             origin would grow the page symmetrically left AND right when
             zoomed in, but a scroll container can never scroll to a negative
@@ -810,17 +851,22 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
         </article>})}</div></section></section>
     {pdfSelection&&<button type="button" className="pdf-selection-edit" style={{left:pdfSelection.left,top:pdfSelection.top}} onPointerDown={e=>e.preventDefault()} onClick={()=>editImportedPdfText(pdfSelection.page,pdfSelection.item,pdfSelection.value,pdfSelection)}>Edit selected text</button>}
     {menu&&<div className="object-menu-backdrop" onPointerDown={()=>setMenu(null)}><div className="floating" role="dialog" aria-modal="true" aria-label="Add object" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>addObject("text")}>T Custom text field</button><button onClick={addClause}>§ Contract clause</button><button onClick={()=>addField("signature")}>⌁ Signature line</button><button onClick={()=>addField("initials")}>Ab Initials line</button><button onClick={triggerImageUpload}>▧ Upload Image</button><button onClick={openPriceBook}>💲 Pricing Model</button><button onClick={()=>addObject("link")}>↗ Link</button><button onClick={()=>addObject("video")}>▶ Video</button></div></div>}
-    {createPortal(<div className="selfiesave-action-portal">{signatureOnlyMode?<footer className="actionbar signature-only-actionbar"><strong>{exporting?"Saving signature…":"Tap the signature box on the PDF. Type your name, sign with your finger, then tap Save Signature."}</strong></footer>:<footer className="actionbar"><div><strong>{fields.length?`${fields.filter(f=>f.committed).length} of ${fields.length} fields committed`:"No signatures requested"}</strong><span><i style={{width:`${fields.length?fields.filter(f=>f.committed).length/fields.length*100:0}%`}}/></span><small>{fields.length===0?"Save a draft or a completed copy any time -- signatures are optional. Use \"Prepare for Signing\" only if this document needs one.":contentLocked&&!complete?"Agreement text locked; remaining signers may complete only their assigned fields.":complete?"All parties committed. Ready for final lock.":"Each signer must complete and commit every assigned field."}</small></div><button className="save-draft" disabled={exporting} onClick={()=>exportPdf(false)}>{exporting?"Building PDF…":"💾 Save Draft"}</button><button className="save-draft" disabled={savingCompleted} onClick={saveCompleted}>{savingCompleted?"Building PDF…":"✅ Save Completed Document"}</button><button className="save-draft" disabled={contentLocked} onClick={()=>setSignSetup(true)}>✍️ Save & Prepare for Signing</button><button className="save-draft" onClick={()=>{setSendBody("");setSendOpen(true)}}>📤 Send</button><button className="finalize" disabled={!complete||finalLocked||exporting} onClick={finalize}>🔒 Save final signed copy</button></footer>}</div>,document.body)}
-    {signSetup&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal setup-modal"><button className="modal-close" onClick={()=>setSignSetup(false)}>×</button><p className="eyebrow">CUSTOMER SIGNING</p><h2>How will the customer sign?</h2><p>Choose how this document collects the customer's signature.</p>
-      <button className="capture" onClick={()=>prepareInPerson("drawn")}>🖊 In person — sign with a stylus or finger</button>
-      <button className="capture" onClick={()=>prepareInPerson("typed")}>⌨ In person — type name on this device</button>
-      <button className="capture" disabled={preparingRemote} onClick={sendRemotely}>{preparingRemote?"Preparing link…":"✉ Send remotely — customer picks stylus or typed, on their own device"}</button>
-    </div></div>}
+    {createPortal(<div className="selfiesave-action-portal">{signatureOnlyMode?<footer className="actionbar signature-only-actionbar"><strong>{exporting?"Saving signature…":"Tap the signature box on the PDF. Type your name, sign with your finger, then tap Save Signature."}</strong></footer>:<footer className="actionbar"><div><strong>{fields.length?`${fields.filter(f=>f.committed).length} of ${fields.length} fields committed`:"No signatures requested"}</strong><span><i style={{width:`${fields.length?fields.filter(f=>f.committed).length/fields.length*100:0}%`}}/></span><small>{fields.length===0?"Save a draft or a completed copy any time -- signatures are optional. Use \"Prepare for Signing\" only if this document needs one.":contentLocked&&!complete?"Agreement text locked; remaining signers may complete only their assigned fields.":complete?"All parties committed. Ready for final lock.":"Each signer must complete and commit every assigned field."}</small></div><button className="save-draft" disabled={exporting} onClick={()=>exportPdf(false)}>{exporting?"Building PDF…":"💾 Save Draft"}</button><button className="save-draft" disabled={savingCompleted} onClick={saveCompleted}>{savingCompleted?"Building PDF…":"✅ Save Completed Document"}</button><button className="save-draft" disabled={contentLocked} onClick={openCollectSignatures}>✍️ Collect Signatures</button><button className="save-draft" onClick={()=>{setSendBody("");setSendOpen(true)}}>📤 Send</button><button className="finalize" disabled={!complete||finalLocked||exporting} onClick={finalize}>🔒 Save final signed copy</button></footer>}</div>,document.body)}
+    <ESignChoiceModal
+      isOpen={signSetup}
+      onClose={()=>setSignSetup(false)}
+      label={filename||"Document"}
+      onSendRemote={()=>{void sendRemotely()}}
+      onSignInPerson={prepareInPerson}
+      onSkip={()=>setSignSetup(false)}
+      skipLabel="Skip Signing"
+      onRemindLater={()=>{setSignSetup(false);notify("Signing left for later — your document is unchanged.")}}
+    />
     <SendChoiceModal isOpen={sendOpen} onClose={()=>setSendOpen(false)} label={filename||"document"} phone={customerPhone} email={customerEmail} body={sendBody} />
     {setup&&!signatureOnlyMode&&<div className="modal-backdrop"><div className="modal setup-modal"><p className="eyebrow">DOCUMENT REQUIREMENTS</p><h2>Choose the evidence for this document</h2><p>Select any combination. Signers will see and consent to the requirements before signing.</p>{Object.entries({signatures:"Signature fields",initials:"Initials fields",selfies:"Selfie with signing actions",photoId:"Photo ID before signing",location:"Capture device coordinates",displayLocation:"Display coordinates on document",timestamps:"Device time + Central Time",draftingDate:"Verified drafting date"}).map(([k,label])=><label className="check option" key={k}><input type="checkbox" checked={features[k as keyof Features]} onChange={()=>updateFeature(k as keyof Features)}/>{label}</label>)}<button className="capture" onClick={()=>setSetup(false)}>Draft Blank PDF</button></div></div>}
     {active&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>{streamRef.current?.getTracks().forEach(t=>t.stop());setActive(null)}}>×</button><p className="eyebrow">{signatureOnlyMode?"SIGN DOCUMENT":"SIGNER EVIDENCE"}</p><h2>{signatureOnlyMode?"Add your signature":"Complete this signing field"}</h2><p>{signatureOnlyMode?"Both parts are required. Type your legal name, then sign with your finger or stylus. Your location is added automatically. A selfie is not required.":"Review the document, enter your legal name, and consent before saving this field. Your whole portion stays editable until you commit it."}</p>{features.selfies&&<div className="camera">{cameraError?<div className="camera-error">Camera unavailable -- continuing without a selfie<br/><small>{cameraError}</small></div>:<video ref={videoRef} autoPlay muted playsInline/>}<span>FRONT CAMERA</span></div>}<label>Type your full legal name *<input value={signerName} onChange={e=>setSignerName(e.target.value)} placeholder="Type your legal name"/></label>{(signatureOnlyMode||signMethod==="drawn")&&<div style={{margin:"10px 0"}}><strong>Sign with your finger or stylus *</strong><SignaturePad onChange={setDrawnSignature} /></div>}<label className="check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/> I consent to electronic records and intend this action to sign this document.</label><ESignComplianceFooter onLearnMore={()=>setShowLegalInfo(true)}/><button className="capture" disabled={!signerName.trim()||!consent||((signatureOnlyMode||signMethod==="drawn")&&!drawnSignature)||exporting} onClick={saveMark}>{signatureOnlyMode?(exporting?"Saving…":"Save Signature"):"Save this field for review"}</button></div></div>}
     {showLegalInfo&&<ESignLegalInfoModal onClose={()=>setShowLegalInfo(false)}/>}
   </main>
   <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} pickerMode={{onPick:handlePricingModelPicked}}/>
-  </div>
+  </div>,document.body);
 }

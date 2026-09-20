@@ -92,7 +92,68 @@
 .selfiesave-editor-root .resize-handle {touch-action:none}
 
 @media(max-width:800px){
-  .selfiesave-action-portal .actionbar {min-height:68px;justify-content:flex-start;gap:8px;overflow-x:auto;padding:8px 10px;scrollbar-width:thin}
+  /* Do not put the PDF actions in another horizontally scrolling strip.
+     That made the "fixed" buttons disappear off the right edge again.
+     All five actions stay visible at once in a compact two-row grid, parked
+     above Owner's AI + Snapshot instead of underneath/through them. */
+  .selfiesave-action-portal .actionbar {
+    bottom:calc(148px + env(safe-area-inset-bottom));
+    min-height:0;
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-auto-rows:minmax(46px,auto);
+    gap:7px;
+    overflow:visible;
+    padding:8px 10px;
+  }
   .selfiesave-action-portal .actionbar>div {display:none}
-  .selfiesave-action-portal .actionbar button {padding:10px 12px}
+  .selfiesave-action-portal .actionbar button {
+    width:100%;
+    min-width:0;
+    padding:8px 7px;
+    font-size:10px;
+    line-height:1.15;
+    white-space:normal;
+    text-align:center;
+  }
+  /* The dock overlays the viewport by design, so give the scrollable PDF
+     enough real bottom runway that the final part of the page can always be
+     scrolled completely above the dock instead of hiding behind it. */
+  .selfiesave-editor-root .editor-wrap {
+    padding-bottom:calc(285px + env(safe-area-inset-bottom));
+  }
+}
+
+
+/* PDF EDITOR — full-screen isolation. Nothing from Owner'sLOCAL behind the
+   editor should be visible while SelfieSave is open. */
+.selfiesave-editor-root {
+  z-index:2147483000 !important;
+  background:#e6f1f8 !important;
+  width:100vw;
+  height:100dvh;
+  max-width:100vw;
+  max-height:100dvh;
+  overflow:hidden !important;
+  isolation:isolate;
+}
+.selfiesave-editor-root .app-shell {
+  width:100%;
+  min-width:100%;
+  height:100dvh;
+  max-height:100dvh;
+  background:#e6f1f8;
+  overflow:hidden;
+}
+.selfiesave-action-portal {
+  z-index:2147483001 !important;
+}
+@media(max-width:800px){
+  .selfiesave-action-portal .actionbar {
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:env(safe-area-inset-bottom);
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
 }
