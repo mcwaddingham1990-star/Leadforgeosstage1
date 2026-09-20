@@ -1579,7 +1579,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <select
                 value={filterJobStatus}
                 onChange={(e) => setFilterJobStatus(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
               >
                 <option value="All">All Jobs</option>
                 <option value="Scheduled">Scheduled</option>
@@ -1596,7 +1596,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <select
                 value={filterPriority}
                 onChange={(e) => setFilterPriority(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
               >
                 <option value="All">All Priorities</option>
                 <option value="High">Emergency / High</option>
@@ -1610,7 +1610,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <select
                 value={filterLeadStatus}
                 onChange={(e) => setFilterLeadStatus(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
               >
                 <option value="All">All Leads</option>
                 <option value="New">New</option>
@@ -1627,7 +1627,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
               >
                 <option value="All">All Sectors</option>
                 <option value="Residential">Residential</option>
@@ -1651,7 +1651,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                     setFilterType("Technician");
                   }
                 }}
-                className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
               >
                 <option value="All">All Technicians</option>
                 {activeTechnicians.map(tech => (
@@ -1679,7 +1679,7 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
                   <select
                     value={selectedRouteId || ""}
                     onChange={(e) => setSelectedRouteId(e.target.value || null)}
-                    className="bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
+                    className="map-filter-select bg-slate-800 border border-white/10 rounded px-2.5 py-1 text-xs text-white"
                   >
                     {technicianRoutes.map(r => (
                       <option key={r.id} value={r.id}>
