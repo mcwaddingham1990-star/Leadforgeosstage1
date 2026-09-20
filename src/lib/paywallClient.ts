@@ -29,7 +29,7 @@ export async function redeemBypassCode(code: string): Promise<PaywallActionResul
   }
 }
 
-export async function setBypassCode(newCode: string, kind: "standard" | "trial" = "standard"): Promise<PaywallActionResult> {
+export async function setBypassCode(newCode: string, kind: "standard" | "trial" | "secondary" = "standard"): Promise<PaywallActionResult> {
   try {
     const res = await authedFetch("/api/paywall/set-code", {
       method: "POST",
