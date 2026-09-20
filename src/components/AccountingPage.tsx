@@ -1913,7 +1913,7 @@ function ReportsTab({ accounts, journalEntries, invoices, bills, transactions, r
     { id: "sales_tax", label: "Sales Tax" },
     { id: "payroll", label: "Payroll" },
     { id: "inventory_val", label: "Inventory Valuation" },
-    { id: "attribution", label: "Marketing Attribution" }
+    { id: "attribution", label: "Where Customers Came From" }
   ];
 
   const exportCsv = (rows: Array<[string, number]>, filename: string) => {
