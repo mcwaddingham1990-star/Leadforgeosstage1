@@ -3612,6 +3612,12 @@ Access to full financial telemetry is restricted.`;
         throw new Error(payload?.error || "Password reset failed.");
       }
 
+      // Keep the login form tied to the exact mailbox whose password is
+      // being reset. This prevents account-switching state / Remember Me
+      // from leaving a different email in the login field after the user
+      // returns from Firebase's reset page.
+      setEmail(targetEmail);
+      setPassword("");
       setForgotEmail(targetEmail);
       setForgotSubmitted(true);
       triggerNotification(`Password reset request sent to ${targetEmail}.`);
