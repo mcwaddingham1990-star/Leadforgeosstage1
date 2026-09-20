@@ -54,6 +54,7 @@ import { buildCustomerProfilePdf, buildEstimatePdf, buildInvoicePdf, buildLeadPd
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { BulkImportModal } from "./BulkImportModal";
+import { MarketingAttributionView } from "./MarketingAttributionView";
 import { normalizePhoneForMatch, normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
 
 type CustomerImportKey = "company" | "contact" | "phone" | "email" | "address" | "type" | "status" | "vip";
@@ -83,7 +84,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads, setBuildJobPrefill } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads, setBuildJobPrefill, timeClockLogs, employees, transactions, payrollWorkweekStart } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -946,6 +947,26 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             </p>
           </div>
         </button>
+      </div>
+
+      {/* Customer acquisition and conversion attribution belongs with the customer workspace,
+          not the Revenue dashboard. Keep the full Lead -> Customer -> Estimate -> Job ->
+          Invoice -> Revenue -> Profit chain here so owners can see where customers came from. */}
+      <div className="rounded-2xl border border-[#9EC8EF] bg-white/70 p-4">
+        <h3 className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">
+          Where Your Customers Came From
+        </h3>
+        <MarketingAttributionView
+          leads={leads}
+          customers={customers}
+          estimates={estimates}
+          jobs={schedulingEvents}
+          invoices={invoices}
+          timeClockLogs={timeClockLogs}
+          employees={employees}
+          transactions={transactions}
+          payrollWorkweekStart={payrollWorkweekStart}
+        />
       </div>
 
       {/* Grid containing QUICK ACTIONS + TABLE */}

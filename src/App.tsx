@@ -30,7 +30,6 @@ import { computeJobCosting } from "./lib/jobCostingEngine";
 import { PriceBookModal } from "./components/PriceBookModal";
 import RemoteSigningPage from "./components/RemoteSigningPage";
 import CustomerPortalPage from "./components/CustomerPortalPage";
-import { MarketingAttributionView } from "./components/MarketingAttributionView";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
@@ -8085,17 +8084,6 @@ Access to full financial telemetry is restricted.`;
                                   </div>
                                 );
                               })()}
-
-                              {/* Marketing Attribution -- same real Lead -> Customer -> Estimate ->
-                                  Job -> Invoice -> Revenue -> Profit chain shown in Reports, dropped
-                                  in here too (point 5) so an owner sees it without leaving Revenue. */}
-                              <div className="rounded-2xl border border-[#9EC8EF] bg-white/70 p-4">
-                                <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">Where Your Customers Came From</p>
-                                <MarketingAttributionView
-                                  leads={leads} customers={customers} estimates={estimates} jobs={schedulingEvents} invoices={invoices}
-                                  timeClockLogs={timeClockLogs} employees={employees} transactions={transactions} payrollWorkweekStart={payrollWorkweekStart}
-                                />
-                              </div>
 
                               {/* Upcoming Job Payments (left) and Upcoming Bills & Expenses (right) --
                                   two independent scrolling columns, bottom to top */}
