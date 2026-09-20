@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -1904,7 +1905,7 @@ export const DocumentsPage: React.FC = () => {
       {/* SELFIESAVE ESIGN — the real editor, native in this app. No iframe,
           no external site, no popup window: SelfieSaveEditor is a genuine
           React component living in src/components/SelfieSaveEditor.tsx. */}
-      {isPDFEditorOpen && (
+      {isPDFEditorOpen && createPortal(
         // Keyed on a React.Fragment (rather than on SelfieSaveEditor itself)
         // -- this project has no usable React prop types for custom
         // components' `key`, only for intrinsic/Fragment elements -- so this
@@ -1929,7 +1930,8 @@ export const DocumentsPage: React.FC = () => {
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
         />
-        </React.Fragment>
+        </React.Fragment>,
+        document.body
       )}
 
       {/* GOOGLE DRIVE SYNC IMPORT MODAL */}
