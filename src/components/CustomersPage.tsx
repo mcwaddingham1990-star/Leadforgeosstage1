@@ -1204,7 +1204,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         
       </div>
 
-      {/* Standalone bottom-of-page customer-source section. No enclosing page-level card. */}
+      {/* Customer source report stays standalone at the very bottom of the page. */}
       <div className="space-y-3 pt-2">
         <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
           Where Your Customers Came From
