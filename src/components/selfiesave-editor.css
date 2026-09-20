@@ -123,3 +123,37 @@
     padding-bottom:calc(285px + env(safe-area-inset-bottom));
   }
 }
+
+
+/* PDF EDITOR — full-screen isolation. Nothing from Owner'sLOCAL behind the
+   editor should be visible while SelfieSave is open. */
+.selfiesave-editor-root {
+  z-index:2147483000 !important;
+  background:#e6f1f8 !important;
+  width:100vw;
+  height:100dvh;
+  max-width:100vw;
+  max-height:100dvh;
+  overflow:hidden !important;
+  isolation:isolate;
+}
+.selfiesave-editor-root .app-shell {
+  width:100%;
+  min-width:100%;
+  height:100dvh;
+  max-height:100dvh;
+  background:#e6f1f8;
+  overflow:hidden;
+}
+.selfiesave-action-portal {
+  z-index:2147483001 !important;
+}
+@media(max-width:800px){
+  .selfiesave-action-portal .actionbar {
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:env(safe-area-inset-bottom);
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
