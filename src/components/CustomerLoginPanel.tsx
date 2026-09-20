@@ -34,7 +34,7 @@ export const CustomerLoginPanel: React.FC<{ onSwitchToBusiness: () => void }> = 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
+    const cleanPassword = password;
     if (!cleanEmail || !cleanPassword) {
       setError("Enter your email and password.");
       return;
