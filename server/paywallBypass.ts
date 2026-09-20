@@ -6,8 +6,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // A manually-issued escape hatch around the real Stripe paywall -- one
-// shared code (set/rotated only by the platform admin account below) that
-// any business can redeem to unlock full access for 30 days, no payment
+// admin-managed codes that businesses can redeem without payment. The
+// original code keeps its 30-day window; a separate trial code grants 3 days.
 // involved. Meant for comped accounts, testers, and anyone the admin wants
 // to let in without going through Stripe.
 //
@@ -23,7 +23,8 @@ import firebaseConfig from "../firebase-applet-config.json";
 // turn bypassActive on is to actually know the real code and go through
 // handleRedeemBypassCode below.
 const ADMIN_BUSINESS_EMAIL = "the.owner@ownerslocal.com";
-const BYPASS_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const BYPASS_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // existing access code
+const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // separate trial code
 const CONFIG_DOC_PATH = ["app_config", "paywall_bypass"] as const;
 const SCRYPT_KEYLEN = 64;
 
@@ -97,22 +98,29 @@ export async function handleRedeemBypassCode(req: Request, res: Response) {
     }
 
     const configSnap = await db.collection(CONFIG_DOC_PATH[0]).doc(CONFIG_DOC_PATH[1]).get();
-    const storedHash = configSnap.data()?.codeHash;
-    if (typeof storedHash !== "string" || !storedHash) {
+    const config = configSnap.data() || {};
+    const storedHash = config.codeHash;
+    const trialCodeHash = config.trialCodeHash;
+    const secondaryCodeHash = config.secondaryCodeHash;
+    if ((typeof storedHash !== "string" || !storedHash) && (typeof trialCodeHash !== "string" || !trialCodeHash) && (typeof secondaryCodeHash !== "string" || !secondaryCodeHash)) {
       res.status(503).json({ error: "No access code has been set up yet." });
       return;
     }
-    if (!verifyCode(code, storedHash)) {
+    const isTrialCode = typeof trialCodeHash === "string" && !!trialCodeHash && verifyCode(code, trialCodeHash);
+    const isThirtyDayCode = typeof storedHash === "string" && !!storedHash && verifyCode(code, storedHash);
+    const isSecondaryThirtyDayCode = typeof secondaryCodeHash === "string" && !!secondaryCodeHash && verifyCode(code, secondaryCodeHash);
+    if (!isTrialCode && !isThirtyDayCode && !isSecondaryThirtyDayCode) {
       res.status(401).json({ error: "That access code isn't valid." });
       return;
     }
 
-    const expiresAt = Date.now() + BYPASS_DURATION_MS;
+    const durationMs = isTrialCode ? TRIAL_DURATION_MS : BYPASS_DURATION_MS;
+    const expiresAt = Date.now() + durationMs;
     await db.collection("business_profiles").doc(businessId).set(
       { bypassActive: true, bypassExpiresAt: expiresAt },
       { merge: true }
     );
-    res.json({ success: true, bypassExpiresAt: expiresAt });
+    res.json({ success: true, bypassExpiresAt: expiresAt, accessDays: isTrialCode ? 3 : 30 });
   } catch (err) {
     console.error("Error redeeming paywall bypass code:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Could not redeem that code." });
@@ -134,6 +142,7 @@ export async function handleSetBypassCode(req: Request, res: Response) {
       return;
     }
     const newCode = typeof req.body?.newCode === "string" ? req.body.newCode.trim() : "";
+    const codeKind = req.body?.kind === "trial" ? "trial" : req.body?.kind === "secondary" ? "secondary" : "standard";
     if (newCode.length < 6) {
       res.status(400).json({ error: "Access code must be at least 6 characters." });
       return;
@@ -143,8 +152,9 @@ export async function handleSetBypassCode(req: Request, res: Response) {
       res.status(503).json({ error: "Not configured on this server yet." });
       return;
     }
+    const hashField = codeKind === "trial" ? "trialCodeHash" : codeKind === "secondary" ? "secondaryCodeHash" : "codeHash";
     await db.collection(CONFIG_DOC_PATH[0]).doc(CONFIG_DOC_PATH[1]).set(
-      { codeHash: hashCode(newCode), updatedAt: Date.now(), updatedBy: callerEmail },
+      { [hashField]: hashCode(newCode), updatedAt: Date.now(), updatedBy: callerEmail },
       { merge: true }
     );
     res.json({ success: true });
