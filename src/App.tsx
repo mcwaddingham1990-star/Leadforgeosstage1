@@ -43,7 +43,10 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect
+  signInWithRedirect,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
 } from "firebase/auth";
 import { Capacitor } from "@capacitor/core";
 import { 
@@ -1588,12 +1591,10 @@ export default function App() {
     }
     return "";
   });
-  const [password, setPassword] = useState(() => {
-    if (localStorage.getItem("rememberMe") === "true") {
-      return localStorage.getItem("rememberedPassword") || "";
-    }
-    return "";
-  });
+  // Never preload a password from localStorage. Firebase owns credentials;
+  // keeping a plaintext password in browser storage makes account switching
+  // error-prone and exposes the credential unnecessarily.
+  const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [onboardingErrors, setOnboardingErrors] = useState<Record<string, string>>({});
@@ -3346,7 +3347,7 @@ Access to full financial telemetry is restricted.`;
     const cleanEmail = signUpInstructionsEmail.trim().toLowerCase();
     const cleanUser = signUpInstructionsBusinessName.trim();
     const cleanOwner = signUpInstructionsOwnerName.trim();
-    const cleanPass = signUpInstructionsPassword.trim();
+    const cleanPass = signUpInstructionsPassword;
 
     if (!cleanUser || !cleanOwner || !cleanEmail || !cleanPass) {
       setSignUpInstructionsError("All fields are required.");
@@ -3473,17 +3474,7 @@ Access to full financial telemetry is restricted.`;
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPass = password.trim();
-
-    if (rememberMe) {
-      localStorage.setItem("rememberMe", "true");
-      localStorage.setItem("rememberedEmail", email);
-      localStorage.setItem("rememberedPassword", password);
-    } else {
-      localStorage.removeItem("rememberMe");
-      localStorage.removeItem("rememberedEmail");
-      localStorage.removeItem("rememberedPassword");
-    }
+    const cleanPass = password;
 
     // 1. Business Email must be a valid email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -3505,9 +3496,23 @@ Access to full financial telemetry is restricted.`;
     setLoginMethod("password");
     
     try {
+      // Keep only the Firebase session persistent when "Remember Me" is on.
+      // Do not store the plaintext password in localStorage.
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+
       // Authenticate with real Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
       const user = userCredential.user;
+
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true");
+        localStorage.setItem("rememberedEmail", cleanEmail);
+      } else {
+        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("rememberedEmail");
+      }
+      // Clean up credentials saved by older builds.
+      localStorage.removeItem("rememberedPassword");
 
       // Fetch user profile from user_profiles to load their role and permissions
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
@@ -3595,7 +3600,7 @@ Access to full financial telemetry is restricted.`;
       return;
     }
     try {
-      await sendPasswordResetEmail(auth, forgotEmail.trim());
+      await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
       setForgotSubmitted(true);
       triggerNotification("Password recovery email transmitted successfully!");
     } catch (err: any) {
@@ -3696,20 +3701,29 @@ Access to full financial telemetry is restricted.`;
 
   // Logout routine
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
+    const clearSessionUi = () => {
       setIsLoggedIn(false);
+      setLoggedInUser(null);
+      setCustomerSession(null);
       setCurrentView("login");
       setLoginMethod(null);
-      setPassword("••••••••••••••••");
+      setLoginError(null);
+      // IMPORTANT: an old build put literal bullet characters here. Those
+      // bullets became the real password field value and could be submitted
+      // (and even stored by Remember Me) when switching accounts.
+      setPassword("");
+      setForgotSubmitted(false);
+      setForgotEmail("");
+      setShowForgotPassword(false);
+    };
+
+    try {
+      await signOut(auth);
+      clearSessionUi();
       triggerNotification("Logged out of OwnersLOCAL.");
     } catch (err) {
       console.error("Logout error:", err);
-      // Fallback
-      setIsLoggedIn(false);
-      setCurrentView("login");
-      setLoginMethod(null);
-      setPassword("••••••••••••••••");
+      clearSessionUi();
     }
   };
 
@@ -4701,7 +4715,11 @@ Access to full financial telemetry is restricted.`;
                         </label>
                         <button
                           type="button"
-                          onClick={() => setShowForgotPassword(true)}
+                          onClick={() => {
+                            setForgotSubmitted(false);
+                            setForgotEmail(email.trim().toLowerCase());
+                            setShowForgotPassword(true);
+                          }}
                           style={getFontSize(11.5)}
                           className="font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
                         >
