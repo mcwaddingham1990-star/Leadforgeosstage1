@@ -1310,7 +1310,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                   </div>
 
                   <div className="pt-2 border-t border-[#A9CDEE]/50">
-                    <p className="text-[10px] text-slate-500 font-sans font-medium">A real Stripe connection isn't wired up yet, so there's nothing to test or rotate keys against here.</p>
+                    <p className="text-[10px] text-slate-500 font-sans font-medium">Stripe connection setup is handled securely in Payments. No Stripe secret keys need to be pasted into this screen.</p>
                   </div>
                 </div>
               )}
@@ -1465,11 +1465,21 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                 <div className="flex items-center justify-between pt-2 border-t border-[#A9CDEE] text-xs">
                   <button
                     type="button"
-                    disabled
-                    title="A real Stripe connection isn't wired up yet"
-                    className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-xl font-bold font-sans cursor-not-allowed"
+                    onClick={() => {
+                      if (selectedIntegration.id === "stripe") {
+                        setIsDetailPopupOpen(false);
+                        onNavigateToScreen("payments");
+                      }
+                    }}
+                    disabled={selectedIntegration.id !== "stripe"}
+                    title={selectedIntegration.id === "stripe" ? "Open Stripe setup in Payments" : "This integration is not available yet"}
+                    className={`px-3 py-1.5 rounded-xl font-bold font-sans ${
+                      selectedIntegration.id === "stripe"
+                        ? "bg-[#315C9F] hover:bg-[#254A84] text-white cursor-pointer shadow-sm"
+                        : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                    }`}
                   >
-                    Connect Integration
+                    {selectedIntegration.id === "stripe" ? "Connect Stripe" : "Connect Integration"}
                   </button>
 
                   <div className="flex items-center gap-2">
