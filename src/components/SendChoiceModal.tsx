@@ -11,7 +11,8 @@ export interface SendChoiceModalProps {
   email?: string;
   /** Pre-filled subject/body. Left blank by default -- the point of this
    * button is handing off to the device's own text/email app with the
-   * recipient already filled in, not writing the message for the user. */
+   * recipient already filled in when available. Without a saved contact, the
+   * device app still opens with a blank recipient so the user can enter one. */
   subject?: string;
   body?: string;
   /** Fires after the device app is handed off to, so the caller can e.g.
@@ -22,7 +23,8 @@ export interface SendChoiceModalProps {
 /**
  * The universal "Send" popup: pick Text or Email, then hand off to the
  * device's own SMS/mail app (via sms:/mailto: links) with the recipient
- * pre-filled and the message left blank for the user to write. Reusable
+ * pre-filled when known. If no recipient is known, it opens a blank email or
+ * text instead of blocking the user. Reusable
  * across every Save/Generate PDF flow in the app -- Estimates, Invoices,
  * Jobs, the PDF Editor -- so each only needs to pass in a label + contact.
  */
@@ -49,27 +51,25 @@ export default function SendChoiceModal({ isOpen, onClose, label, phone, email, 
         <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
-            disabled={!hasPhone}
             onClick={() => send("sms")}
-            className="p-3.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] disabled:opacity-40 disabled:cursor-not-allowed border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1.5 text-center cursor-pointer transition-colors"
+            className="p-3.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1.5 text-center cursor-pointer transition-colors"
           >
             <MessageCircle className="w-5 h-5 text-[#315C9F]" />
             <span className="text-[10px] font-black uppercase text-[#1F3557]">Text</span>
-            <span className="text-[9px] text-[#5E7393] truncate w-full">{hasPhone ? phone : "No phone on file"}</span>
+            <span className="text-[9px] text-[#5E7393] truncate w-full">{hasPhone ? phone : "Enter number in text app"}</span>
           </button>
           <button
             type="button"
-            disabled={!hasEmail}
             onClick={() => send("email")}
-            className="p-3.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] disabled:opacity-40 disabled:cursor-not-allowed border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1.5 text-center cursor-pointer transition-colors"
+            className="p-3.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1.5 text-center cursor-pointer transition-colors"
           >
             <Mail className="w-5 h-5 text-[#315C9F]" />
             <span className="text-[10px] font-black uppercase text-[#1F3557]">Email</span>
-            <span className="text-[9px] text-[#5E7393] truncate w-full">{hasEmail ? email : "No email on file"}</span>
+            <span className="text-[9px] text-[#5E7393] truncate w-full">{hasEmail ? email : "Enter email in mail app"}</span>
           </button>
         </div>
         {!hasPhone && !hasEmail && (
-          <p className="text-[10px] text-rose-600 font-bold mt-3">No phone or email on file for this customer yet -- add one to their profile first.</p>
+          <p className="text-[10px] text-[#5E7393] font-semibold mt-3">No contact selected. Choose Text or Email, then enter the recipient in your phone's app.</p>
         )}
       </div>
     </div>
