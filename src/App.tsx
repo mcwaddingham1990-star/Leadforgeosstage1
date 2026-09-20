@@ -3417,6 +3417,11 @@ Access to full financial telemetry is restricted.`;
         companyLocations: [""],
         updatedAt: new Date().toISOString()
       });
+      // Firebase authenticates the new owner before these profile writes
+      // finish. The first subscription check can therefore arrive too early
+      // to resolve the business. Re-check now that the business exists so the
+      // paywall opens immediately instead of waiting for another login.
+      subscription.refresh();
       // Brand-new account -- there are no existing AI settings to clobber,
       // so it's safe to start persisting real changes right away.
       aiSettingsLoadedRef.current = true;
@@ -4465,7 +4470,15 @@ Access to full financial telemetry is restricted.`;
   // server positively verifies an active subscription, valid bypass, or the
   // platform-admin business. A timeout, missing configuration, or temporary
   // verification error must never become free access.
-  if (isLoggedIn && loggedInUser && subscription.loading) {
+  // A newly-created owner is already authenticated but deliberately remains
+  // `isLoggedIn === false` while completing business setup. That onboarding
+  // state used to fall through the paywall because the gate only checked
+  // isLoggedIn. Treat any authenticated, recognized owner as gated too; after
+  // payment the same onboarding screen resumes exactly where they left it.
+  const subscriptionGateApplies = !!loggedInUser && !!auth.currentUser &&
+    (isLoggedIn || (!loggedInUser.isEmployee && currentView === "placeholder_password"));
+
+  if (subscriptionGateApplies && subscription.loading) {
     return (
       <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl px-8 py-7 text-center">
@@ -4478,10 +4491,16 @@ Access to full financial telemetry is restricted.`;
   }
 
   if (
-    isLoggedIn && loggedInUser && !subscription.isAdminBusiness &&
+    subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness &&
     (!subscription.configured || (!subscription.subscriptionActive && !subscription.bypassActive))
   ) {
-    return <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />;
+    return (
+      <AuthContext.Provider value={authContextValue}>
+        <NavTelemetryContext.Provider value={navTelemetryContextValue}>
+          <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />
+        </NavTelemetryContext.Provider>
+      </AuthContext.Provider>
+    );
   }
 
   return (
