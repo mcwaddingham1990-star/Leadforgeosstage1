@@ -133,21 +133,11 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   // getBoundingClientRect() vs its offsetWidth to derive a scale factor, so
   // placing/moving/resizing items keeps working correctly at any zoom level.
   const [zoom,setZoom]=useState(1);
-  const pinchRef=useRef<{distance:number;zoom:number}|null>(null);
+  const zoomRef=useRef(1);
   const zoomIn=()=>setZoom(z=>Math.min(2.5,Math.round((z+0.1)*100)/100));
   const zoomOut=()=>setZoom(z=>Math.max(0.4,Math.round((z-0.1)*100)/100));
   const zoomReset=()=>setZoom(1);
-  const touchDistance=(touches:React.TouchList)=>Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
-  const beginPinch=(event:React.TouchEvent)=>{
-    if(event.touches.length===2)pinchRef.current={distance:touchDistance(event.touches),zoom};
-  };
-  const movePinch=(event:React.TouchEvent)=>{
-    if(event.touches.length!==2||!pinchRef.current)return;
-    event.preventDefault();
-    const next=pinchRef.current.zoom*(touchDistance(event.touches)/pinchRef.current.distance);
-    setZoom(Math.max(.4,Math.min(2.5,Math.round(next*100)/100)));
-  };
-  const endPinch=(event:React.TouchEvent)=>{if(event.touches.length<2)pinchRef.current=null};
+  useEffect(()=>{zoomRef.current=zoom},[zoom]);
   const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number;boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number}|null>(null);
   const pdfInputRef=useRef<HTMLInputElement>(null);
   const textInputRef=useRef<HTMLInputElement>(null);
@@ -155,6 +145,43 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const streamRef=useRef<MediaStream|null>(null);
   const paperRef=useRef<HTMLElement>(null);
   const editorRef=useRef<HTMLElement>(null);
+  // Use native non-passive touch listeners on the actual document viewport.
+  // React/browser touch handling can treat touchmove as passive on mobile,
+  // which makes preventDefault unreliable and is why pinch-to-zoom kept
+  // appearing "fixed" in code while still failing on Android. One finger is
+  // left completely alone for native document scrolling; only a genuine
+  // two-finger gesture is intercepted for PDF zoom.
+  useEffect(()=>{
+    const editor=editorRef.current;
+    if(!editor)return;
+    let pinch:{distance:number;zoom:number}|null=null;
+    const distance=(touches:TouchList)=>Math.hypot(
+      touches[0].clientX-touches[1].clientX,
+      touches[0].clientY-touches[1].clientY
+    );
+    const start=(event:TouchEvent)=>{
+      if(event.touches.length!==2)return;
+      event.preventDefault();
+      pinch={distance:distance(event.touches),zoom:zoomRef.current};
+    };
+    const move=(event:TouchEvent)=>{
+      if(event.touches.length!==2||!pinch)return;
+      event.preventDefault();
+      const next=pinch.zoom*(distance(event.touches)/pinch.distance);
+      setZoom(Math.max(.4,Math.min(2.5,Math.round(next*100)/100)));
+    };
+    const end=(event:TouchEvent)=>{if(event.touches.length<2)pinch=null};
+    editor.addEventListener("touchstart",start,{passive:false});
+    editor.addEventListener("touchmove",move,{passive:false});
+    editor.addEventListener("touchend",end,{passive:false});
+    editor.addEventListener("touchcancel",end,{passive:false});
+    return()=>{
+      editor.removeEventListener("touchstart",start);
+      editor.removeEventListener("touchmove",move);
+      editor.removeEventListener("touchend",end);
+      editor.removeEventListener("touchcancel",end);
+    };
+  },[]);
   const lastScrollTopRef=useRef(0);
   const nextIdRef=useRef(Date.now());
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
@@ -794,7 +821,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     {pendingField&&<div className="modal-backdrop" role="dialog" aria-modal="true"><div className="modal"><button className="modal-close" onClick={()=>setPendingField(null)}>×</button><p className="eyebrow">ASSIGN FIELD</p><h2>Add {pendingField.kind} line</h2><p>Choose which signer must complete this field.</p><label>Signer number<input type="number" min="1" inputMode="numeric" autoFocus value={pendingParty} onChange={e=>setPendingParty(e.target.value)}/></label><button className="capture" onClick={confirmAddField}>Add to document</button></div></div>}
     <header className="topbar"><a className="brand" href="#" onClick={e=>e.preventDefault()}><span className="brand-mark">P</span><span>{signatureOnlyMode?"Sign PDF":"PDF Editor"}<small>{signatureOnlyMode?"Review and sign":"eSign optional"}</small></span></a>{!signatureOnlyMode&&<nav aria-label="Document tools"><button onClick={resetDocument}><Icon>＋</Icon><span>New</span></button><button disabled={contentLocked||loadingPdf} onClick={openPdfPicker}><Icon>⇧</Icon><span>{loadingPdf?"Opening…":"Load PDF"}</span></button><input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/><button disabled={contentLocked} onClick={()=>textInputRef.current?.click()}><Icon>▤</Icon><span>Load text</span></button><input ref={textInputRef} className="pdf-file-input" type="file" accept="text/plain,text/markdown,text/csv,.txt,.text,.md,.csv" onChange={e=>{const file=e.target.files?.[0];if(file)void loadText(file)}}/><input ref={imageInputRef} className="pdf-file-input" type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)void handleImageFileSelected(file)}}/><button disabled={contentLocked} onClick={()=>notify("Select PDF text or tap a text box to edit it directly")}><Icon>✎</Icon><span>Edit</span></button><button disabled={contentLocked} onClick={captureSignatures} className="capture-signatures-btn"><Icon>🖊</Icon><span>Capture Signatures</span></button></nav>}{signatureOnlyMode&&<input ref={pdfInputRef} className="pdf-file-input" type="file" accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)void loadPdf(file)}}/>}<div className="header-actions"><span className="account-email">{displayName}</span><button type="button" className="sign-out" onClick={onClose}>Close</button><span className={`status ${finalLocked?"locked":""}`}>{finalLocked?"🔒 Signed":signatureOnlyMode?"● Ready to sign":contentLocked?"🔏 Signed version":"● Draft"}</span></div></header>
     <section className={`workspace ${signatureOnlyMode?"signature-only-workspace":""}`}>{!signatureOnlyMode&&<aside className="sidebar"><div className="side-head"><h2>Document setup</h2></div><label>File name<input value={filename} disabled={contentLocked} onChange={e=>setFilename(e.target.value)}/></label><p className="fixed-name">Final file: <strong>{filename||"Untitled"}.pdf</strong></p><hr/><h3>Insert anywhere</h3><button className="insert" onClick={()=>addObject("text")} disabled={contentLocked}><Icon>T</Icon><span><strong>Free text box</strong><small>Type directly on page</small></span><b>＋</b></button><button className="insert" onClick={triggerImageUpload} disabled={contentLocked}><Icon>▧</Icon><span><strong>Upload image</strong><small>From your device</small></span><b>＋</b></button><button className="insert" onClick={openPriceBook} disabled={contentLocked}><Icon>💲</Icon><span><strong>Add Flat Rate Pricing Model</strong><small>Insert from the Price Book</small></span><b>＋</b></button><button className="insert" onClick={addClause} disabled={contentLocked}><Icon>§</Icon><span><strong>Contract clause</strong><small>Numbered text field</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("signature")} disabled={contentLocked}><Icon>⌁</Icon><span><strong>Signature line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>addField("initials")} disabled={contentLocked}><Icon>Ab</Icon><span><strong>Initials line</strong><small>Assign any signer</small></span><b>＋</b></button><button className="insert" onClick={()=>setSetup(true)} disabled={contentLocked}><Icon>⚙</Icon><span><strong>Evidence options</strong><small>Choose document requirements</small></span><b>›</b></button>{contentLocked&&<div className="security"><Icon>🔒</Icon><p><strong>Signed copy protected</strong><br/>Editing is disabled because a signer committed. Make a new unsigned version for any changes.</p></div>}</aside>}
-      <section ref={editorRef} className="editor-wrap" onScroll={growPages} onTouchStart={beginPinch} onTouchMove={movePinch} onTouchEnd={endPinch} onTouchCancel={endPinch}><div className="editor-tools"><span>{signatureOnlyMode?"Review the PDF and tap the signature box":contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><button type="button" onClick={zoomOut} disabled={zoom<=0.4} aria-label="Zoom out">−</button><button type="button" onClick={zoomReset} aria-label="Reset zoom">{Math.round(zoom*100)}%</button><button type="button" onClick={zoomIn} disabled={zoom>=2.5} aria-label="Zoom in">＋</button><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><input aria-label="Font color" type="color" disabled={contentLocked||!selectedTextObject} value={selectedTextColor} onChange={e=>setSelectedTextColor(e.target.value)} style={{width:28,height:28,padding:0,border:"1px solid #d7e3ee",borderRadius:6,cursor:selectedTextObject?"pointer":"not-allowed"}}/><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
+      <section ref={editorRef} className="editor-wrap" onScroll={growPages}><div className="editor-tools"><span>{signatureOnlyMode?"Review the PDF and tap the signature box":contentLocked?"Signed document viewer":"Free-form document editor"}</span><div><button type="button" onClick={zoomOut} disabled={zoom<=0.4} aria-label="Zoom out">−</button><button type="button" onClick={zoomReset} aria-label="Reset zoom">{Math.round(zoom*100)}%</button><button type="button" onClick={zoomIn} disabled={zoom>=2.5} aria-label="Zoom in">＋</button><select disabled={contentLocked}><option>Georgia</option><option>Arial</option></select><select aria-label="Font size" disabled={contentLocked||!selectedTextObject} value={selectedFontSize} onChange={e=>setSelectedFontSize(Number(e.target.value))}>{Array.from({length:30},(_,index)=>index+1).map(size=><option key={size} value={size}>{size} pt</option>)}</select><input aria-label="Font color" type="color" disabled={contentLocked||!selectedTextObject} value={selectedTextColor} onChange={e=>setSelectedTextColor(e.target.value)} style={{width:28,height:28,padding:0,border:"1px solid #d7e3ee",borderRadius:6,cursor:selectedTextObject?"pointer":"not-allowed"}}/><button disabled={contentLocked}><b>B</b></button><button disabled={contentLocked}><i>I</i></button></div><span>{selected&&!contentLocked?"Use the blue Grab to move tab":""}</span></div>
         {/* transform-origin is "top left", not "top center" -- centering the
             origin would grow the page symmetrically left AND right when
             zoomed in, but a scroll container can never scroll to a negative
