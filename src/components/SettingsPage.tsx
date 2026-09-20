@@ -281,6 +281,9 @@ export default function SettingsPage({
   const [newAccessCode, setNewAccessCode] = useState("");
   const [isSavingAccessCode, setIsSavingAccessCode] = useState(false);
   const [accessCodeError, setAccessCodeError] = useState<string | null>(null);
+  const [trialAccessCode, setTrialAccessCode] = useState("");
+  const [isSavingTrialCode, setIsSavingTrialCode] = useState(false);
+  const [trialCodeError, setTrialCodeError] = useState<string | null>(null);
 
   const handleSaveAccessCode = async () => {
     if (newAccessCode.trim().length < 6) {
@@ -297,6 +300,23 @@ export default function SettingsPage({
     }
     setNewAccessCode("");
     triggerNotification("✅ Paywall access code updated.");
+  };
+
+  const handleSaveTrialCode = async () => {
+    if (trialAccessCode.trim().length < 6) {
+      setTrialCodeError("Trial code must be at least 6 characters.");
+      return;
+    }
+    setIsSavingTrialCode(true);
+    setTrialCodeError(null);
+    const result = await setBypassCode(trialAccessCode.trim(), "trial");
+    setIsSavingTrialCode(false);
+    if (!result.success) {
+      setTrialCodeError(result.error || "Could not set the trial code.");
+      return;
+    }
+    setTrialAccessCode("");
+    triggerNotification("✅ 3-day trial code updated.");
   };
 
   // Completed employee records are the primary roster source. Include active
@@ -2556,6 +2576,32 @@ export default function SettingsPage({
                       </button>
                     </div>
                     {accessCodeError && <p className="text-[11px] text-rose-600 font-semibold">{accessCodeError}</p>}
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-[#A9CDEE] space-y-3">
+                    <div>
+                      <p className="font-extrabold text-slate-800">3-Day Free Trial Code</p>
+                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                        This is separate from the 30-day access code. Anyone who enters it gets full access for exactly 3 days.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={trialAccessCode}
+                        onChange={e => setTrialAccessCode(e.target.value)}
+                        placeholder="3-day trial code"
+                        className="flex-1 px-3 py-2 text-xs border border-[#A9CDEE] rounded-xl focus:outline-none focus:border-[#315C9F] font-mono"
+                      />
+                      <button
+                        onClick={() => void handleSaveTrialCode()}
+                        disabled={isSavingTrialCode || trialAccessCode.trim().length < 6}
+                        className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer"
+                      >
+                        {isSavingTrialCode ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    {trialCodeError && <p className="text-[11px] text-rose-600 font-semibold">{trialCodeError}</p>}
                   </div>
                 </div>
               )}
