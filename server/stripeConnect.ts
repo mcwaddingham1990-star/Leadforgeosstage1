@@ -61,6 +61,10 @@ export async function createAccountSession(accountId: string): Promise<{ clientS
     account: accountId,
     components: {
       account_onboarding: { enabled: true },
+      notification_banner: { enabled: true },
+      account_management: { enabled: true },
+      payments: { enabled: true },
+      payouts: { enabled: true },
     },
   });
   return { clientSecret: accountSession.client_secret };
