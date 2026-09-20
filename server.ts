@@ -9,6 +9,7 @@ import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } fr
 import { processDueRecurringTransactions, processDueMembershipMaintenance, processDueMembershipBilling, processDueReviewRequests, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
+import { handlePasswordResetRequest } from './server/passwordReset';
 import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
 import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
@@ -73,6 +74,7 @@ app.use(express.json({ limit: '10mb' }));
 // of this server's paid AI key. requireAuth confines them to real signed-in
 // app users; the rate limit caps how much any single account can spend.
 app.use('/api/ai', requireAuth, rateLimit('ai', 60_000, 20));
+app.post('/api/auth/password-reset', rateLimit('password-reset', 60_000, 5), handlePasswordResetRequest);
 
 app.post('/api/ai/ask', async (req, res) => {
   try {

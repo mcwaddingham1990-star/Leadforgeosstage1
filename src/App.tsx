@@ -37,7 +37,6 @@ import { LogTransactionModal } from "./components/LogTransactionModal";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   sendEmailVerification,
   signOut,
   onAuthStateChanged,
@@ -3595,17 +3594,32 @@ Access to full financial telemetry is restricted.`;
   };
 
   const handleForgotPasswordSubmit = async () => {
-    if (!forgotEmail) {
+    const targetEmail = forgotEmail.trim().toLowerCase();
+    if (!targetEmail) {
       triggerNotification("Please provide an email.");
       return;
     }
+
     try {
-      await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
+      const response = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: targetEmail })
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.error || "Password reset failed.");
+      }
+
+      setForgotEmail(targetEmail);
       setForgotSubmitted(true);
-      triggerNotification("Password recovery email transmitted successfully!");
+      triggerNotification(`Password reset request sent to ${targetEmail}.`);
     } catch (err: any) {
       console.error("Password reset failed:", err);
-      triggerNotification("Reset failed: " + (err.message || "Unknown error"));
+      const message = err instanceof Error ? err.message : "Password reset failed.";
+      triggerNotification(message);
+      setLoginError(message);
     }
   };
 
@@ -6043,7 +6057,7 @@ Access to full financial telemetry is restricted.`;
                         <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
                         <p className="text-xs font-bold text-slate-800 mb-1">Transmission Transmitted!</p>
                         <p className="text-[10px] text-slate-500 mb-4 leading-relaxed">
-                          If {forgotEmail} is in our system registry, you will receive a code shortly.
+                          If {forgotEmail} is registered, Firebase will send a password-reset link. Check Inbox and Spam.
                         </p>
                         <button
                           type="button"
