@@ -2632,6 +2632,50 @@ export default function App() {
     triggerNotification(`Snapshot captured: ${filenameStr} saved to Snapshots Folder`);
   };
 
+  const repairOwnerProfileForAuthUser = async (user: any, existingProfileData?: any) => {
+    const ownerEmail = user.email?.trim().toLowerCase();
+    if (!ownerEmail) {
+      throw new Error("Authenticated user is missing an email address.");
+    }
+
+    const ownerPerms = DEFAULT_ROLES_DATA.owner.permissions;
+    const repairedProfile = {
+      uid: user.uid,
+      email: ownerEmail,
+      role: "Owner",
+      permissions: existingProfileData?.permissions || ownerPerms,
+      granularPermissions: existingProfileData?.granularPermissions || fullAccessGranular(ownerPerms),
+      name: validPersonName(existingProfileData?.name) || validPersonName(user.displayName) || "Owner",
+      businessName: existingProfileData?.businessName || "",
+      goals: existingProfileData?.goals || "",
+      isEmployee: false,
+      businessEmail: ownerEmail,
+      isOnboarded: existingProfileData?.isOnboarded ?? false,
+      createdAt: existingProfileData?.createdAt || new Date().toISOString(),
+      repairedAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, "user_profiles", user.uid), repairedProfile, { merge: true });
+
+    const businessProfileRef = doc(db, "business_profiles", ownerEmail);
+    const businessProfileSnap = await getDoc(businessProfileRef);
+    if (businessProfileSnap.exists()) {
+      await setDoc(businessProfileRef, { updatedAt: new Date().toISOString() }, { merge: true });
+    } else {
+      await setDoc(businessProfileRef, {
+        businessNames: existingProfileData?.businessName ? [existingProfileData.businessName] : ["Your Business"],
+        ownerNames: [repairedProfile.name],
+        businessPhones: [""],
+        businessAddresses: [""],
+        businessLogos: [""],
+        companyLocations: [""],
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    return repairedProfile;
+  };
+
   // Real-time Firebase Authentication listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -2656,7 +2700,11 @@ export default function App() {
 
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
           if (profileSnap.exists()) {
-            const profileData = profileSnap.data();
+            const rawProfileData = profileSnap.data();
+            const needsOwnerProfileRepair = !rawProfileData.isEmployee && (!rawProfileData.businessEmail || !rawProfileData.role);
+            const profileData = needsOwnerProfileRepair
+              ? await repairOwnerProfileForAuthUser(user, rawProfileData)
+              : rawProfileData;
             const isEmployee = profileData.isEmployee ?? false;
             const isOnboarded = profileData.isOnboarded ?? false;
 
@@ -2731,14 +2779,16 @@ export default function App() {
               setCurrentView("placeholder_password");
             }
           } else {
+            const repairedProfile = await repairOwnerProfileForAuthUser(user);
             setLoggedInUser({
               email: user.email || "",
-              role: "Owner",
-              permissions: ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
-              granularPermissions: fullAccessGranular(["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
+              role: repairedProfile.role,
+              permissions: repairedProfile.permissions,
+              granularPermissions: repairedProfile.granularPermissions,
               isEmployee: false,
-              name: validPersonName(user.displayName) || "Owner",
-              goals: ""
+              name: repairedProfile.name,
+              goals: repairedProfile.goals,
+              businessEmail: repairedProfile.businessEmail
             });
             setIsLoggedIn(false);
             setCurrentView("placeholder_password");
@@ -3437,7 +3487,7 @@ Access to full financial telemetry is restricted.`;
 
       // Update relevant states for consistency
       setEmail(cleanEmail);
-      setPassword(cleanPass);
+      setPassword("");
       setBusinessNames([cleanUser]);
       setOwnerNames([cleanOwner]);
 
@@ -3516,7 +3566,11 @@ Access to full financial telemetry is restricted.`;
       // Fetch user profile from user_profiles to load their role and permissions
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
       if (profileSnap.exists()) {
-        const profileData = profileSnap.data();
+        const rawProfileData = profileSnap.data();
+        const needsOwnerProfileRepair = !rawProfileData.isEmployee && (!rawProfileData.businessEmail || !rawProfileData.role);
+        const profileData = needsOwnerProfileRepair
+          ? await repairOwnerProfileForAuthUser(user, rawProfileData)
+          : rawProfileData;
         const isEmployeeAcct = profileData.isEmployee ?? false;
         const resolvedPerms = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
         setLoggedInUser({
@@ -3541,36 +3595,27 @@ Access to full financial telemetry is restricted.`;
           triggerNotification(`Signed in as Owner`);
         }
       } else {
-        const ownerPerms = DEFAULT_ROLES_DATA.owner.permissions;
         const pendingRaw = localStorage.getItem("ownerslocalPendingOwnerSignup");
         let pending: { email?: string; businessName?: string; ownerName?: string } | null = null;
         try { pending = pendingRaw ? JSON.parse(pendingRaw) : null; } catch { pending = null; }
         const recoverable = pending?.email?.toLowerCase() === cleanEmail;
-        const ownerName = validPersonName(recoverable ? pending?.ownerName : user.displayName) || "Owner";
+        const recoveredProfile = await repairOwnerProfileForAuthUser(user, recoverable ? {
+          businessName: pending?.businessName,
+          name: pending?.ownerName
+        } : undefined);
 
         if (recoverable) {
-          await setDoc(doc(db, "user_profiles", user.uid), {
-            uid: user.uid, email: cleanEmail, role: "Owner", permissions: ownerPerms,
-            granularPermissions: fullAccessGranular(ownerPerms), name: ownerName,
-            isEmployee: false, businessEmail: cleanEmail, isOnboarded: false,
-            createdAt: new Date().toISOString()
-          });
-          await setDoc(doc(db, "business_profiles", cleanEmail), {
-            businessNames: [pending?.businessName || "Your Business"], ownerNames: [ownerName],
-            businessPhones: [""], businessAddresses: [""], businessLogos: [""],
-            companyLocations: [""],
-            updatedAt: new Date().toISOString()
-          });
           localStorage.removeItem("ownerslocalPendingOwnerSignup");
         }
         setLoggedInUser({
           email: user.email || "",
-          role: "Owner",
-          permissions: ownerPerms,
-          granularPermissions: fullAccessGranular(ownerPerms),
+          role: recoveredProfile.role,
+          permissions: recoveredProfile.permissions,
+          granularPermissions: recoveredProfile.granularPermissions,
           isEmployee: false,
-          name: ownerName,
-          goals: ""
+          name: recoveredProfile.name,
+          goals: recoveredProfile.goals,
+          businessEmail: recoveredProfile.businessEmail
         });
         setIsLoggedIn(true);
         setActiveScreen(OS_SCREENS[0]);
