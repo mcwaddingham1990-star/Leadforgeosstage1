@@ -284,6 +284,9 @@ export default function SettingsPage({
   const [trialAccessCode, setTrialAccessCode] = useState("");
   const [isSavingTrialCode, setIsSavingTrialCode] = useState(false);
   const [trialCodeError, setTrialCodeError] = useState<string | null>(null);
+  const [secondaryAccessCode, setSecondaryAccessCode] = useState("");
+  const [isSavingSecondaryCode, setIsSavingSecondaryCode] = useState(false);
+  const [secondaryCodeError, setSecondaryCodeError] = useState<string | null>(null);
 
   const handleSaveAccessCode = async () => {
     if (newAccessCode.trim().length < 6) {
@@ -317,6 +320,23 @@ export default function SettingsPage({
     }
     setTrialAccessCode("");
     triggerNotification("✅ 3-day trial code updated.");
+  };
+
+  const handleSaveSecondaryCode = async () => {
+    if (secondaryAccessCode.trim().length < 6) {
+      setSecondaryCodeError("Access code must be at least 6 characters.");
+      return;
+    }
+    setIsSavingSecondaryCode(true);
+    setSecondaryCodeError(null);
+    const result = await setBypassCode(secondaryAccessCode.trim(), "secondary");
+    setIsSavingSecondaryCode(false);
+    if (!result.success) {
+      setSecondaryCodeError(result.error || "Could not set the second 30-day code.");
+      return;
+    }
+    setSecondaryAccessCode("");
+    triggerNotification("✅ Second 30-day access code updated.");
   };
 
   // Completed employee records are the primary roster source. Include active
@@ -2602,6 +2622,32 @@ export default function SettingsPage({
                       </button>
                     </div>
                     {trialCodeError && <p className="text-[11px] text-rose-600 font-semibold">{trialCodeError}</p>}
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-[#A9CDEE] space-y-3">
+                    <div>
+                      <p className="font-extrabold text-slate-800">Second 30-Day Access Code</p>
+                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                        This grants 30 days and does not replace or change your original 30-day code.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={secondaryAccessCode}
+                        onChange={e => setSecondaryAccessCode(e.target.value)}
+                        placeholder="Second 30-day access code"
+                        className="flex-1 px-3 py-2 text-xs border border-[#A9CDEE] rounded-xl focus:outline-none focus:border-[#315C9F] font-mono"
+                      />
+                      <button
+                        onClick={() => void handleSaveSecondaryCode()}
+                        disabled={isSavingSecondaryCode || secondaryAccessCode.trim().length < 6}
+                        className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer"
+                      >
+                        {isSavingSecondaryCode ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    {secondaryCodeError && <p className="text-[11px] text-rose-600 font-semibold">{secondaryCodeError}</p>}
                   </div>
                 </div>
               )}
