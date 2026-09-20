@@ -81,7 +81,7 @@ export const MarketingAttributionView: React.FC<MarketingAttributionViewProps> =
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "marketing_attribution.csv"; a.click();
+    a.href = url; a.download = "where_customers_came_from.csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
