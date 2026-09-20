@@ -949,26 +949,6 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         </button>
       </div>
 
-      {/* Customer acquisition and conversion attribution belongs with the customer workspace,
-          not the Revenue dashboard. Keep the full Lead -> Customer -> Estimate -> Job ->
-          Invoice -> Revenue -> Profit chain here so owners can see where customers came from. */}
-      <div className="rounded-2xl border border-[#9EC8EF] bg-white/70 p-4">
-        <h3 className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-3">
-          Where Your Customers Came From
-        </h3>
-        <MarketingAttributionView
-          leads={leads}
-          customers={customers}
-          estimates={estimates}
-          jobs={schedulingEvents}
-          invoices={invoices}
-          timeClockLogs={timeClockLogs}
-          employees={employees}
-          transactions={transactions}
-          payrollWorkweekStart={payrollWorkweekStart}
-        />
-      </div>
-
       {/* Grid containing QUICK ACTIONS + TABLE */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
@@ -1222,6 +1202,24 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           </div>
         </div>
         
+      </div>
+
+      {/* Customer source report stays standalone at the very bottom of the page. */}
+      <div className="space-y-3 pt-2">
+        <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider">
+          Where Your Customers Came From
+        </h3>
+        <MarketingAttributionView
+          leads={leads}
+          customers={customers}
+          estimates={estimates}
+          jobs={schedulingEvents}
+          invoices={invoices}
+          timeClockLogs={timeClockLogs}
+          employees={employees}
+          transactions={transactions}
+          payrollWorkweekStart={payrollWorkweekStart}
+        />
       </div>
 
       {/* Summary tile popup -- lists the customers behind whichever tile was clicked */}
