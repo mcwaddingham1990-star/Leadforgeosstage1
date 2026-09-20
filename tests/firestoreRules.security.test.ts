@@ -287,6 +287,42 @@ describe("Privilege escalation via user_profiles", () => {
     await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { role: "Owner" }));
   });
 
+  test("an orphaned owner profile CAN repair missing owner trust fields to their own auth email", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "user_profiles", "orphan-owner-uid"), {
+        email: "orphanowner@example.com",
+        name: "Orphan Owner",
+      });
+    });
+    const db = ctxFor("orphan-owner-uid", "orphanowner@example.com").firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "user_profiles", "orphan-owner-uid"), {
+        email: "orphanowner@example.com",
+        name: "Orphan Owner",
+        businessEmail: "orphanowner@example.com",
+        role: "Owner",
+      }, { merge: true })
+    );
+  });
+
+  test("a malformed employee profile cannot use owner repair to self-promote", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "user_profiles", "malformed-emp-uid"), {
+        email: "malformedemp@example.com",
+        role: "Technician",
+        name: "Malformed Employee",
+      });
+    });
+    const db = ctxFor("malformed-emp-uid", "malformedemp@example.com").firestore();
+    await assertFails(
+      setDoc(doc(db, "user_profiles", "malformed-emp-uid"), {
+        email: "malformedemp@example.com",
+        role: "Owner",
+        businessEmail: "malformedemp@example.com",
+      }, { merge: true })
+    );
+  });
+
   test("an existing employee CAN update other fields of their own profile", async () => {
     const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
     await assertSucceeds(updateDoc(doc(db, "user_profiles", EMP_A_UID), { name: "Employee A Updated" }));
