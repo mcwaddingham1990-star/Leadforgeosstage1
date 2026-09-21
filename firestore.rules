@@ -142,7 +142,8 @@ service cloud.firestore {
             || (!resource.data.keys().hasAll(['role'])
               && resource.data.businessEmail == request.auth.token.email)
           ))
-        || resource.data.businessEmail == request.auth.token.email
+        || (resource.data.businessEmail == request.auth.token.email
+          && request.resource.data.businessEmail == resource.data.businessEmail)
       );
       allow delete: if isAuthenticated() && resource.data.businessEmail == request.auth.token.email;
     }
