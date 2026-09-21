@@ -610,7 +610,9 @@ const resolveBusinessIdentity = async (user: any, profileData: any) => {
       if (inviteSnap.exists()) {
         const inviteData = inviteSnap.data();
         const inviteBusinessEmail = normalizeBusinessEmail(inviteData.businessEmail);
-        const roleMatches = !profileData?.role || !inviteData.role || inviteData.role === profileData.role;
+        const roleMatches = typeof profileData?.role === "string"
+          && typeof inviteData.role === "string"
+          && inviteData.role === profileData.role;
         if (inviteBusinessEmail && roleMatches) {
           if (businessEmail !== inviteBusinessEmail) {
             // firestore.rules only permits this protected-field repair when
