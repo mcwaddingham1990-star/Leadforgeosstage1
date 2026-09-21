@@ -576,6 +576,69 @@ const validPersonName = (value: unknown): string => {
   return name && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) ? name : "";
 };
 
+const normalizeBusinessEmail = (value: unknown): string =>
+  typeof value === "string" ? value.trim().toLowerCase() : "";
+
+const profileLooksLikeEmployee = (profileData: any): boolean => {
+  const role = String(profileData?.role || "").trim();
+  return profileData?.isEmployee === true
+    || (!!role && role !== "Owner")
+    || (typeof profileData?.inviteCode === "string" && !!profileData.inviteCode.trim());
+};
+
+/**
+ * Resolves the one canonical workspace/tenant for a Firebase account.
+ *
+ * Owner'sLOCAL stores business data under the owner's email. Employee
+ * accounts must therefore use the owner's businessEmail, never their own
+ * login email. Older/malformed employee profiles can have isEmployee missing
+ * or a stale businessEmail; when the original invite is still recorded we
+ * safely recover the business from that invite and repair the profile.
+ */
+const resolveBusinessIdentity = async (user: any, profileData: any) => {
+  const authEmail = normalizeBusinessEmail(user?.email);
+  let businessEmail = normalizeBusinessEmail(profileData?.businessEmail);
+  const inviteCode = typeof profileData?.inviteCode === "string"
+    ? profileData.inviteCode.trim().toUpperCase()
+    : "";
+  const employeeLike = profileLooksLikeEmployee(profileData)
+    || (!!businessEmail && !!authEmail && businessEmail !== authEmail);
+
+  if (inviteCode && employeeLike) {
+    try {
+      const inviteSnap = await getDoc(doc(db, "employee_invites", inviteCode));
+      if (inviteSnap.exists()) {
+        const inviteData = inviteSnap.data();
+        const inviteBusinessEmail = normalizeBusinessEmail(inviteData.businessEmail);
+        const roleMatches = !profileData?.role || !inviteData.role || inviteData.role === profileData.role;
+        if (inviteBusinessEmail && roleMatches) {
+          if (businessEmail !== inviteBusinessEmail) {
+            // firestore.rules only permits this protected-field repair when
+            // the profile's existing inviteCode resolves to this exact
+            // business + role. A forged tenant switch is still rejected.
+            await setDoc(doc(db, "user_profiles", user.uid), {
+              businessEmail: inviteBusinessEmail
+            }, { merge: true });
+          }
+          businessEmail = inviteBusinessEmail;
+        }
+      }
+    } catch (error) {
+      console.warn("Couldn't repair employee business linkage from invite; using the saved profile linkage.", error);
+    }
+  }
+
+  if (!businessEmail) businessEmail = authEmail;
+
+  return {
+    authEmail,
+    businessEmail,
+    isEmployee: profileData?.isEmployee === true
+      || (!!businessEmail && !!authEmail && businessEmail !== authEmail)
+      || (employeeLike && String(profileData?.role || "") !== "Owner")
+  };
+};
+
 export type WorkspaceTheme = "light-basic" | "light-extreme" | "dark-basic" | "dark-dynamic";
 
 export const workspaceThemeFromSetting = (value?: string): WorkspaceTheme => {
@@ -1735,7 +1798,7 @@ export default function App() {
   // employee's own email is a different tenant and would resolve every
   // collection to empty. (TrainingPage.tsx already used this exact
   // ternary, anticipating businessEmail would be populated here.)
-  const businessId = loggedInUser?.isEmployee ? loggedInUser?.businessEmail : loggedInUser?.email;
+  const businessId = normalizeBusinessEmail(loggedInUser?.businessEmail || loggedInUser?.email) || undefined;
 
   // OwnersLOCAL's own SaaS paywall (see server/subscriptionRoutes.ts and
   // server/paywallBypass.ts). Called unconditionally here, alongside every
@@ -2700,29 +2763,31 @@ export default function App() {
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
           if (profileSnap.exists()) {
             const rawProfileData = profileSnap.data();
-            const needsOwnerProfileRepair = !rawProfileData.isEmployee && (!rawProfileData.businessEmail || !rawProfileData.role);
+            const needsOwnerProfileRepair = !profileLooksLikeEmployee(rawProfileData) && (!rawProfileData.businessEmail || !rawProfileData.role);
             const profileData = needsOwnerProfileRepair
               ? await repairOwnerProfileForAuthUser(user, rawProfileData)
               : rawProfileData;
-            const isEmployee = profileData.isEmployee ?? false;
+            const identity = await resolveBusinessIdentity(user, profileData);
+            const isEmployee = identity.isEmployee;
             const isOnboarded = profileData.isOnboarded ?? false;
 
             if (isEmployee || isOnboarded) {
               const resolvedPermissions = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
               setLoggedInUser({
-                email: user.email || "",
+                email: identity.authEmail || user.email || "",
                 role: profileData.role || "Owner",
                 permissions: resolvedPermissions,
                 granularPermissions: profileData.granularPermissions || (isEmployee ? defaultGranularFromModuleList(resolvedPermissions, "edit") : fullAccessGranular(resolvedPermissions)),
-                isEmployee: isEmployee,
+                isEmployee,
                 name: validPersonName(profileData.name) || validPersonName(user.displayName) || "Owner",
                 goals: profileData.goals || "",
-                businessEmail: isEmployee ? profileData.businessEmail : (user.email || "")
+                businessEmail: identity.businessEmail
               });
               setIsLoggedIn(true);
               
-              // Also, restore their settings from the business profile!
-              const businessId = isEmployee ? profileData.businessEmail : user.email;
+              // Also, restore their settings from the same canonical business
+              // profile every other module uses.
+              const businessId = identity.businessEmail;
               if (businessId) {
                 // Business profile and clock state don't depend on each
                 // other -- fetch them concurrently instead of one after the
@@ -2766,13 +2831,14 @@ export default function App() {
               setBusinessNames([profileData.businessName || ""]);
               setOwnerNames([validPersonName(profileData.name)]);
               setLoggedInUser({
-                email: user.email || "",
+                email: identity.authEmail || user.email || "",
                 role: "Owner",
                 permissions: profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"],
                 granularPermissions: profileData.granularPermissions || fullAccessGranular(profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"]),
                 isEmployee: false,
                 name: validPersonName(profileData.name) || "Owner",
-                goals: ""
+                goals: "",
+                businessEmail: identity.businessEmail
               });
               setIsLoggedIn(false);
               setCurrentView("placeholder_password");
@@ -3497,7 +3563,8 @@ Access to full financial telemetry is restricted.`;
         granularPermissions: userProfile.granularPermissions,
         isEmployee: false,
         name: cleanOwner,
-        goals: ""
+        goals: "",
+        businessEmail: cleanEmail
       });
 
       // Directly show Step 1 of Onboarding!
@@ -3566,25 +3633,26 @@ Access to full financial telemetry is restricted.`;
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
       if (profileSnap.exists()) {
         const rawProfileData = profileSnap.data();
-        const needsOwnerProfileRepair = !rawProfileData.isEmployee && (!rawProfileData.businessEmail || !rawProfileData.role);
+        const needsOwnerProfileRepair = !profileLooksLikeEmployee(rawProfileData) && (!rawProfileData.businessEmail || !rawProfileData.role);
         const profileData = needsOwnerProfileRepair
           ? await repairOwnerProfileForAuthUser(user, rawProfileData)
           : rawProfileData;
-        const isEmployeeAcct = profileData.isEmployee ?? false;
+        const identity = await resolveBusinessIdentity(user, profileData);
+        const isEmployeeAcct = identity.isEmployee;
         const resolvedPerms = profileData.permissions || ["dashboard", "customers", "leads", "estimates", "scheduling", "inventory", "documents", "messages", "settings"];
         setLoggedInUser({
-          email: user.email || "",
+          email: identity.authEmail || user.email || "",
           role: profileData.role || "Owner",
           permissions: resolvedPerms,
           granularPermissions: profileData.granularPermissions || (isEmployeeAcct ? defaultGranularFromModuleList(resolvedPerms, "edit") : fullAccessGranular(resolvedPerms)),
           isEmployee: isEmployeeAcct,
           name: validPersonName(profileData.name) || validPersonName(user.displayName) || "Owner",
           goals: profileData.goals || "",
-          businessEmail: isEmployeeAcct ? profileData.businessEmail : (user.email || "")
+          businessEmail: identity.businessEmail
         });
         setIsLoggedIn(true);
 
-        const isEmployee = profileData.isEmployee ?? false;
+        const isEmployee = identity.isEmployee;
         if (isEmployee) {
           const firstPermitted = OS_SCREENS.find(s => (profileData.permissions || []).includes(s.id)) || OS_SCREENS[0];
           setActiveScreen(firstPermitted);
@@ -6022,10 +6090,12 @@ Access to full financial telemetry is restricted.`;
                               }
                               const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
                               setLoggedInUser({
-                                email,
+                                email: ownerEmail,
                                 role: "Owner",
                                 permissions: ownerDashboardPerms,
-                                granularPermissions: fullAccessGranular(ownerDashboardPerms)
+                                granularPermissions: fullAccessGranular(ownerDashboardPerms),
+                                isEmployee: false,
+                                businessEmail: ownerEmail
                               });
                               setIsLoggedIn(true);
                               setActiveScreen(OS_SCREENS[0]); // Go to dashboard
