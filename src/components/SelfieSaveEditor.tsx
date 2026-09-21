@@ -685,6 +685,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       const finalName=(filename.trim()||"Signed document")+".pdf";
       onSave(docId,finalName,{
         status:"Signed",
+        folder:"Signed Contracts",
         ...(pdfBase64.length<=900_000?{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"}:{}),
         objects,
         auditTrail:nextFields.map(f=>({id:`field_${f.id}`,signerName:f.name,role:`party_${f.party}_${f.kind}`,action:"committed",timestamp:f.stamp,centralTime:f.centralStamp,coords:f.coords,hasSelfie:!!f.image,hasDrawnSignature:!!f.signatureImage})),
