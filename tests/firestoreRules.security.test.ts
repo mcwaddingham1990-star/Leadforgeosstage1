@@ -287,6 +287,59 @@ describe("Privilege escalation via user_profiles", () => {
     await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { role: "Owner" }));
   });
 
+  test("a malformed employee CAN repair a stale businessEmail from their original completed invite", async () => {
+    const brokenUid = "broken-office-uid";
+    const brokenEmail = "brokenoffice@example.com";
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "employee_invites", "RECOVER_OFFICE"), {
+        businessEmail: BIZ_A,
+        role: "Office Manager",
+        status: "completed",
+        usedBy: brokenEmail,
+      });
+      await setDoc(doc(db, "user_profiles", brokenUid), {
+        businessEmail: brokenEmail,
+        role: "Office Manager",
+        email: brokenEmail,
+        isEmployee: false,
+        inviteCode: "RECOVER_OFFICE",
+      });
+    });
+
+    const db = ctxFor(brokenUid, brokenEmail).firestore();
+    await assertSucceeds(updateDoc(doc(db, "user_profiles", brokenUid), { businessEmail: BIZ_A }));
+    await assertSucceeds(getDoc(doc(db, "customers", "cust_a1")));
+    await assertFails(getDoc(doc(db, "customers", "cust_b1")));
+  });
+
+  test("an employee cannot swap inviteCode and use it to tenant-hop", async () => {
+    const uid = "invite-swap-uid";
+    const employeeEmail = "inviteswap@example.com";
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "employee_invites", "INVITE_B_TECH"), {
+        businessEmail: BIZ_B,
+        role: "Technician",
+        status: "completed",
+        usedBy: employeeEmail,
+      });
+      await setDoc(doc(db, "user_profiles", uid), {
+        businessEmail: BIZ_A,
+        role: "Technician",
+        email: employeeEmail,
+        isEmployee: true,
+        inviteCode: "INVITE_A_TECH",
+      });
+    });
+
+    const db = ctxFor(uid, employeeEmail).firestore();
+    await assertFails(updateDoc(doc(db, "user_profiles", uid), {
+      inviteCode: "INVITE_B_TECH",
+      businessEmail: BIZ_B,
+    }));
+  });
+
   test("an orphaned owner profile CAN repair missing owner trust fields to their own auth email", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "user_profiles", "orphan-owner-uid"), {
