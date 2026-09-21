@@ -6074,12 +6074,12 @@ Access to full financial telemetry is restricted.`;
                                 triggerNotification("Your session expired -- please sign in again.");
                                 return;
                               }
+                              const ownerEmail = auth.currentUser.email?.trim().toLowerCase();
+                              if (!ownerEmail) {
+                                triggerNotification("Your account email is missing -- please sign in again.");
+                                return;
+                              }
                               try {
-                                const ownerEmail = auth.currentUser.email?.trim().toLowerCase();
-                                if (!ownerEmail) {
-                                  triggerNotification("Your account email is missing -- please sign in again.");
-                                  return;
-                                }
                                 await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
                                   businessEmail: ownerEmail,
                                   role: "Owner",
