@@ -1717,6 +1717,74 @@ export const DocumentsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* SELECTED DOCUMENT ACTIONS */}
+        {activeDoc && (
+          <div className="lg:col-span-5 grid grid-cols-2 gap-1.5">
+            <button
+              onClick={async () => {
+                await downloadDocumentFile(activeDoc);
+                triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
+              }}
+              className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Open File
+            </button>
+            <button
+              onClick={async () => {
+                await downloadDocumentFile(activeDoc);
+                triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
+              }}
+              className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download
+            </button>
+            <button
+              onClick={() => {
+                setRenameName(activeDoc.name);
+                setIsRenameModalOpen(true);
+              }}
+              className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Rename
+            </button>
+            <button
+              onClick={() => {
+                setUploadName(activeDoc.name);
+                setUploadFolder(activeDoc.folder || inferFolderForDoc(activeDoc));
+                setUploadType(activeDoc.type);
+                setUploadCustomer(activeDoc.customer);
+                setUploadEmployee(activeDoc.employee);
+                setUploadVendor(activeDoc.vendor);
+                setUploadJob(activeDoc.job);
+                setUploadNotes(activeDoc.notes);
+                setUploadTags(activeDoc.tags.join(", "));
+                setIsUploadModalOpen(true);
+              }}
+              className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Replace
+            </button>
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-600 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+            <button
+              onClick={() => handleToggleArchive(activeDoc)}
+              className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {activeDoc.isArchived ? "Restore" : "Archive"}
+            </button>
+          </div>
+        )}
+
         {/* ATTACH TO MENU */}
         <div className="lg:col-span-5 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-[#9EC8EF]/40 pb-2">
