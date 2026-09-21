@@ -263,6 +263,7 @@ export const DocumentsPage: React.FC = () => {
   const [isMainShareModalOpen, setIsMainShareModalOpen] = useState(false);
   const [shareDocItem, setShareDocItem] = useState<DocumentItem | null>(null);
   const [shareRecipient, setShareRecipient] = useState("");
+  const [actionMenuDoc, setActionMenuDoc] = useState<DocumentItem | null>(null);
 
   // Photo-to-PDF selection state
   const [photoToPdfName, setPhotoToPdfName] = useState("Photo Compilation.pdf");
@@ -292,6 +293,70 @@ export const DocumentsPage: React.FC = () => {
     setIsPDFEditorOpen(true);
     if (doc) {
       triggerNotification(`Opening ${doc.name} in SelfieSave eSign`);
+    }
+  };
+
+  const base64ToBlob = (base64: string, mimeType = "application/pdf") => {
+    const cleanBase64 = base64.includes(",") ? base64.split(",").pop() || "" : base64;
+    const binary = window.atob(cleanBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mimeType });
+  };
+
+  const safePdfFileName = (name: string) => name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
+
+  const getDocumentShareFile = async (doc: DocumentItem) => {
+    const pdfBase64 = (doc as any)?.pdfBase64;
+    if (pdfBase64) {
+      return new File([base64ToBlob(pdfBase64)], safePdfFileName(doc.name), { type: "application/pdf" });
+    }
+    if (doc.url) {
+      const response = await fetch(doc.url);
+      const blob = await response.blob();
+      const type = blob.type || "application/pdf";
+      return new File([blob], safePdfFileName(doc.name), { type });
+    }
+    const fallback = new Blob([`OwnersLOCAL document record\n\n${JSON.stringify(doc, null, 2)}`], { type: "text/plain" });
+    return new File([fallback], doc.name.toLowerCase().endsWith(".txt") ? doc.name : `${doc.name}.txt`, { type: "text/plain" });
+  };
+
+  const downloadDocumentFile = async (doc: DocumentItem) => {
+    const file = await getDocumentShareFile(doc);
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const markDocumentSent = (doc: DocumentItem) => {
+    setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, folder: "eSign", status: "Sent" } : d));
+  };
+
+  const shareDocumentWithAttachment = async (doc: DocumentItem, channel: "share" | "email" | "text" = "share") => {
+    try {
+      const file = await getDocumentShareFile(doc);
+      const shareData = {
+        title: doc.name,
+        text: channel === "text" ? `Please review ${doc.name} from OwnersLOCAL.` : `Please review the attached OwnersLOCAL document: ${doc.name}`,
+        files: [file]
+      };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        await navigator.share(shareData);
+        if (channel !== "share") markDocumentSent(doc);
+        return true;
+      }
+      await downloadDocumentFile(doc);
+      triggerNotification("This browser cannot attach files directly here, so the document was downloaded for attachment.");
+      return false;
+    } catch (error) {
+      console.error(error);
+      triggerNotification("Unable to prepare that document for sharing.");
+      return false;
     }
   };
 
@@ -1545,7 +1610,10 @@ export const DocumentsPage: React.FC = () => {
                     return (
                       <tr
                         key={doc.id}
-                        onClick={() => setSelectedDocId(doc.id)}
+                        onClick={() => {
+                          setSelectedDocId(doc.id);
+                          setActionMenuDoc(doc);
+                        }}
                         className={`hover:bg-[#BDDDF8]/50 transition-colors cursor-pointer text-xs ${
                           isSelected ? "bg-[#EAF5FF] border-l-4 border-l-[#315C9F]" : ""
                         }`}
@@ -1595,7 +1663,10 @@ export const DocumentsPage: React.FC = () => {
                           <div className="flex items-center justify-center gap-1.5">
                             {hasManagePermission && (
                             <button
-                              onClick={() => handleOpenPDFEditor(doc)}
+                              onClick={() => {
+                                setActionMenuDoc(null);
+                                handleOpenPDFEditor(doc);
+                              }}
                               className="p-1 hover:bg-[#BDDDF8]/50 text-[#315C9F] rounded transition-colors"
                               title="Open in eSign Editor"
                             >
@@ -1604,6 +1675,7 @@ export const DocumentsPage: React.FC = () => {
                             )}
                             <button
                               onClick={() => {
+                                setActionMenuDoc(null);
                                 setShareDocItem(doc);
                                 setIsMainShareModalOpen(true);
                               }}
@@ -1645,12 +1717,12 @@ export const DocumentsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* DOCUMENT DETAILS PANEL (5 COLS) */}
+        {/* ATTACH TO MENU */}
         <div className="lg:col-span-5 bg-[#C7E3FA] rounded-2xl p-4 border border-[#9EC8EF] shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-[#9EC8EF]/40 pb-2">
             <h3 className="text-xs font-display font-black text-[#1F3557] uppercase tracking-wider flex items-center gap-1.5">
-              <Eye className="w-3.5 h-3.5" />
-              Document Details
+              <Link className="w-3.5 h-3.5" />
+              Attach To
             </h3>
             {activeDoc && (
               <button
@@ -1664,199 +1736,10 @@ export const DocumentsPage: React.FC = () => {
           </div>
 
           {activeDoc ? (
-            <div className="space-y-4">
-              {/* Document Mockup Preview Container */}
-              <div className="bg-[#EAF5FF] rounded-xl border border-[#9EC8EF] p-4 flex flex-col items-center justify-center text-center min-h-[140px] relative overflow-hidden group shadow-inner">
-                {getFileIcon(activeDoc.type)}
-                <p className="text-xs font-extrabold text-[#1F3557] mt-2 max-w-[200px] truncate uppercase">{activeDoc.name}</p>
-                <p className="text-[9px] font-mono text-slate-400 mt-1 uppercase tracking-widest">{activeDoc.size} • {activeDoc.type}</p>
-                <div className="absolute inset-0 bg-[#315C9F]/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="bg-[#315C9F] text-white px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider">Simulated Preview</span>
-                </div>
-              </div>
-
-              {/* ESIGN EDITOR LAUNCH — managers/owners only */}
-              {hasManagePermission ? (
-                <button
-                  onClick={() => handleOpenPDFEditor(activeDoc)}
-                  className="w-full py-3 bg-gradient-to-r from-[#1F3557] to-[#315C9F] hover:from-[#315C9F] hover:to-[#1F3557] text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  <FileSignature className="w-4 h-4 text-amber-400 animate-pulse" />
-                  Open eSign Editor
-                </button>
-              ) : (
-                <div className="w-full py-3 bg-slate-100 text-slate-400 font-bold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed select-none">
-                  <FileSignature className="w-4 h-4" />
-                  eSign — Manager Access Only
-                </div>
-              )}
-
-              {/* Information Ledger */}
-              <div className="space-y-2 text-xs font-bold text-[#1F3557]">
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Customer</span>
-                  <span className="text-right">{activeDoc.customer !== "None" ? activeDoc.customer : <span className="text-slate-400 font-normal">—</span>}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Employee</span>
-                  <span className="text-right">{activeDoc.employee !== "None" ? activeDoc.employee : <span className="text-slate-400 font-normal">—</span>}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Vendor</span>
-                  <span className="text-right">{activeDoc.vendor !== "None" ? activeDoc.vendor : <span className="text-slate-400 font-normal">—</span>}</span>
-                </div>
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Job</span>
-                  <span className="text-right">{activeDoc.job !== "None" ? activeDoc.job : <span className="text-slate-400 font-normal">—</span>}</span>
-                </div>
-
-                {activeDoc.estimateId !== "None" && (
-                  <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                    <span className="text-[#5E7393] uppercase text-[9px]">Estimate ID</span>
-                    <span className="font-mono text-right">{activeDoc.estimateId}</span>
-                  </div>
-                )}
-
-                {activeDoc.invoiceId !== "None" && (
-                  <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                    <span className="text-[#5E7393] uppercase text-[9px]">Invoice ID</span>
-                    <span className="font-mono text-right">{activeDoc.invoiceId}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between border-b border-[#9EC8EF]/30 pb-1">
-                  <span className="text-[#5E7393] uppercase text-[9px]">Uploaded</span>
-                  <span className="font-mono text-[#5E7393]">{activeDoc.date} · {activeDoc.uploadedBy}</span>
-                </div>
-
-                <div className="space-y-1 pt-1">
-                  <span className="text-[#5E7393] uppercase text-[9px] block">Notes & Overview</span>
-                  <p className="text-[11px] font-sans font-medium text-slate-600 bg-[#EAF5FF] p-2.5 rounded-xl border border-[#9EC8EF]/60 leading-relaxed">
-                    {activeDoc.notes}
-                  </p>
-                </div>
-
-                {/* Tags chips */}
-                <div className="space-y-1.5 pt-1.5">
-                  <span className="text-[#5E7393] uppercase text-[9px] block">Document Tags</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeDoc.tags.map((tag) => (
-                      <span key={tag} className="px-2 py-0.5 bg-[#EAF5FF] border border-[#9EC8EF] text-[10px] text-[#315C9F] rounded-lg">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Customer Portal */}
-              <div className="space-y-1.5 pt-1.5">
-                <span className="text-[#5E7393] uppercase text-[9px] block">Customer Portal</span>
-                <CustomerPortalControls customer={resolveCustomerByIdOrName(customersList, undefined, activeDoc.customer !== "None" ? activeDoc.customer : undefined)} />
-              </div>
-
-              {/* ACTION BUTTONS (NO DEAD BUTTONS) */}
-              <div className="grid grid-cols-2 gap-1.5 pt-2">
-                <button
-                  onClick={() => {
-                    if (activeDoc.url) {
-                      const link = document.createElement('a');
-                      link.href = activeDoc.url;
-                      link.target = "_blank";
-                      link.rel = "noopener noreferrer";
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }
-                    triggerNotification(`📂 Opened document file: ${activeDoc.name}`);
-                  }}
-                  className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  Open File
-                </button>
-                <button
-                  onClick={() => {
-                    if (activeDoc.url) {
-                      const link = document.createElement('a');
-                      link.href = activeDoc.url;
-                      link.download = activeDoc.name;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
-                    } else {
-                      // Create simulated plain text file download for seed data
-                      const textContent = `OwnersLOCAL Document Meta: ${JSON.stringify(activeDoc, null, 2)}`;
-                      const blob = new Blob([textContent], { type: 'text/plain' });
-                      const blobUrl = URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = blobUrl;
-                      link.download = activeDoc.name.endsWith(".pdf") ? activeDoc.name.replace(".pdf", ".txt") : activeDoc.name + ".txt";
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      URL.revokeObjectURL(blobUrl);
-                      triggerNotification(`📥 Downloading document: ${activeDoc.name}`);
-                    }
-                  }}
-                  className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </button>
-                <button
-                  onClick={() => {
-                    setRenameName(activeDoc.name);
-                    setIsRenameModalOpen(true);
-                  }}
-                  className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  Rename
-                </button>
-                <button
-                  onClick={() => {
-                    setUploadName(activeDoc.name);
-                    setUploadFolder(activeDoc.folder || inferFolderForDoc(activeDoc));
-                    setUploadType(activeDoc.type);
-                    setUploadCustomer(activeDoc.customer);
-                    setUploadEmployee(activeDoc.employee);
-                    setUploadVendor(activeDoc.vendor);
-                    setUploadJob(activeDoc.job);
-                    setUploadNotes(activeDoc.notes);
-                    setUploadTags(activeDoc.tags.join(", "));
-                    setIsUploadModalOpen(true);
-                  }}
-                  className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Replace
-                </button>
-                <button
-                  onClick={() => setIsDeleteModalOpen(true)}
-                  className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-600 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </button>
-                <button
-                  onClick={() => handleToggleArchive(activeDoc)}
-                  className="px-2.5 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-xs font-bold text-[#1F3557] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  {activeDoc.isArchived ? "Restore" : "Archive"}
-                </button>
-              </div>
-
-              <div className="border-t border-[#9EC8EF]/40 my-2 pt-2" />
-
-              {/* QUICK CONNECTIONS CARD */}
-              <div className="space-y-1.5 text-left">
-                <span className="text-[#5E7393] uppercase text-[9.5px] font-extrabold block">Attach To</span>
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-[#5E7393] uppercase tracking-wider truncate">
+                Selected: <span className="text-[#1F3557]">{activeDoc.name}</span>
+              </p>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     onClick={() => {
@@ -1892,11 +1775,10 @@ export const DocumentsPage: React.FC = () => {
                     Employee
                   </button>
                 </div>
-              </div>
             </div>
           ) : (
             <div className="text-center py-12 text-[#5E7393] text-xs font-semibold">
-              Select a document to view its details and available actions.
+              Select a document to attach it to a customer, job, or employee.
             </div>
           )}
         </div>
@@ -2078,6 +1960,60 @@ export const DocumentsPage: React.FC = () => {
         </div>
       )}
 
+      {/* ROW DOCUMENT ACTION MENU */}
+      {actionMenuDoc && (
+        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" onClick={() => setActionMenuDoc(null)}>
+          <div className="bg-[#C7E3FA] text-[#1F3557] border border-[#9EC8EF] rounded-[24px] p-4 w-[92%] max-w-[360px] shadow-2xl animate-scale-up text-left" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[#9EC8EF]/45 pb-3 mb-3">
+              <div className="min-w-0">
+                <h3 className="text-xs font-black uppercase tracking-wider truncate">{actionMenuDoc.name}</h3>
+                <p className="text-[9px] font-bold text-[#5E7393] uppercase tracking-wider mt-0.5">Document actions</p>
+              </div>
+              <button onClick={() => setActionMenuDoc(null)} className="text-xs text-[#5E7393] hover:text-[#1F3557] font-bold">✕</button>
+            </div>
+
+            <div className="grid gap-2">
+              {hasManagePermission && (
+                <button
+                  onClick={() => {
+                    const doc = actionMenuDoc;
+                    setActionMenuDoc(null);
+                    handleOpenPDFEditor(doc);
+                  }}
+                  className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex items-center gap-2 text-left transition-all cursor-pointer shadow-sm"
+                >
+                  <Edit3 className="w-4 h-4 text-[#315C9F]" />
+                  <span className="text-xs font-black uppercase">Edit</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const doc = actionMenuDoc;
+                  setActionMenuDoc(null);
+                  void shareDocumentWithAttachment(doc, "share");
+                }}
+                className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex items-center gap-2 text-left transition-all cursor-pointer shadow-sm"
+              >
+                <Share2 className="w-4 h-4 text-sky-600" />
+                <span className="text-xs font-black uppercase">Share</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShareDocItem(actionMenuDoc);
+                  setShareRecipient("");
+                  setActionMenuDoc(null);
+                  setIsMainShareModalOpen(true);
+                }}
+                className="w-full p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex items-center gap-2 text-left transition-all cursor-pointer shadow-sm"
+              >
+                <Send className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-black uppercase">Send</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UNIVERSAL DOCUMENT SHARE FLOW MODAL */}
       {isMainShareModalOpen && shareDocItem && (
         <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -2117,11 +2053,14 @@ export const DocumentsPage: React.FC = () => {
               {/* Share Channels */}
               <div className="grid grid-cols-2 gap-2.5">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const [, name = "", email = ""] = shareRecipient.split("|");
                     if (!email) return triggerNotification("Choose a contact with an email address first.");
-                    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(shareDocItem.name)}&body=${encodeURIComponent(`Hi ${name},\n\nPlease review the attached OwnersLOCAL document: ${shareDocItem.name}`)}`;
-                    setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
+                    const shared = await shareDocumentWithAttachment(shareDocItem, "email");
+                    if (!shared) {
+                      window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(shareDocItem.name)}&body=${encodeURIComponent(`Hi ${name},\n\nPlease review the OwnersLOCAL document attached/downloaded from this device: ${shareDocItem.name}`)}`;
+                      markDocumentSent(shareDocItem);
+                    }
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2132,11 +2071,14 @@ export const DocumentsPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const [, name = "", , phone = ""] = shareRecipient.split("|");
                     if (!phone) return triggerNotification("Choose a contact with a mobile number first.");
-                    window.location.href = `sms:${phone}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from OwnersLOCAL.`)}`;
-                    setDocuments(prev => prev.map(d => d.id === shareDocItem.id ? { ...d, folder: "eSign", status: "Sent" } : d));
+                    const shared = await shareDocumentWithAttachment(shareDocItem, "text");
+                    if (!shared) {
+                      window.location.href = `sms:${phone}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from OwnersLOCAL. The document downloaded on this device so it can be attached.`)}`;
+                      markDocumentSent(shareDocItem);
+                    }
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
                   }}
@@ -2163,20 +2105,11 @@ export const DocumentsPage: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (shareDocItem.url) {
-                      const link = document.createElement("a");
-                      link.href = shareDocItem.url;
-                      link.download = shareDocItem.name;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      triggerNotification(`📥 Downloading: ${shareDocItem.name}`);
-                      if (logOperationalEvent) {
-                        logOperationalEvent("Document Downloaded", shareDocItem.name, "📥");
-                      }
-                    } else {
-                      triggerNotification("No file is attached to this document record yet.");
+                  onClick={async () => {
+                    await downloadDocumentFile(shareDocItem);
+                    triggerNotification(`📥 Downloading: ${shareDocItem.name}`);
+                    if (logOperationalEvent) {
+                      logOperationalEvent("Document Downloaded", shareDocItem.name, "📥");
                     }
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
@@ -2201,22 +2134,10 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={async () => {
-                    const docName = shareDocItem.name;
+                    const doc = shareDocItem;
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
-                    if (navigator.share) {
-                      try {
-                        await navigator.share({
-                          title: docName,
-                          text: `Document: ${docName}`,
-                          url: window.location.href
-                        });
-                      } catch {
-                        // User cancelled the native share sheet — no error to surface.
-                      }
-                    } else {
-                      triggerNotification("Native sharing isn't supported by this browser.");
-                    }
+                    await shareDocumentWithAttachment(doc, "share");
                   }}
                   className="p-3 bg-white hover:bg-[#EAF5FF] border border-[#9EC8EF] rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer shadow-sm"
                 >

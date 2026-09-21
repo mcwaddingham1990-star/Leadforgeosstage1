@@ -539,6 +539,8 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   // no intermediate screen to click through first.
   useEffect(()=>{
     if(!autoOpenPdfPicker)return;
+    setSplash(false);
+    setSetup(false);
     const t=setTimeout(()=>openPdfPicker(),splash?1450:50);
     return()=>clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
