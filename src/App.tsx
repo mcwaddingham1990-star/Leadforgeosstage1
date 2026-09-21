@@ -1719,6 +1719,11 @@ export default function App() {
     new URLSearchParams(window.location.search).has("joinCode") ? "customer" : "business"
   ));
   const [customerSession, setCustomerSession] = useState<CustomerSession | null>(null);
+  // Reuse the existing onboarding-shaped business-profile form for edits
+  // without treating an authenticated manager as a brand-new Owner. This
+  // flag changes the form's save/back behavior only; Firebase Auth remains
+  // signed in and the user's real role/tenant identity stays untouched.
+  const [isEditingBusinessProfile, setIsEditingBusinessProfile] = useState(false);
   // One shared, live Stripe Connect status (same check PaymentsPage itself
   // uses) so Dashboard/Revenue's "Integrate Stripe" prompt actually reflects
   // reality instead of showing unconditionally even for an already-connected
@@ -3820,17 +3825,29 @@ Access to full financial telemetry is restricted.`;
     }
   };
 
-  // Back to Login routine
+  // Back to Login routine. When the onboarding-shaped form is being reused
+  // as an in-app business-profile editor, "Back" returns to the existing app
+  // session instead of throwing the employee/manager at the login screen.
   const handleBackToLogin = () => {
+    if (isEditingBusinessProfile) {
+      setIsEditingBusinessProfile(false);
+      setIsLoggedIn(true);
+      setCurrentView("login");
+      return;
+    }
     setCurrentView("login");
   };
 
   const openBusinessProfileEditor = () => {
     setOnboardingErrors({});
     setShowOptionalProfileWarning(false);
+    setIsEditingBusinessProfile(true);
     setCurrentView("placeholder_password");
+    // The editor currently lives in the logged-out/onboarding card layout.
+    // Flip only the local shell state so that layout renders; do NOT change
+    // Firebase Auth, loggedInUser, role, or businessEmail.
     setIsLoggedIn(false);
-    triggerNotification("Business Setup opened. Update Steps 1–2 and save when finished.");
+    triggerNotification("Business Profile opened. Update the business details and save when finished.");
   };
 
   // Logout routine
@@ -3839,6 +3856,7 @@ Access to full financial telemetry is restricted.`;
       setIsLoggedIn(false);
       setLoggedInUser(null);
       setCustomerSession(null);
+      setIsEditingBusinessProfile(false);
       setCurrentView("login");
       setLoginMethod(null);
       setLoginError(null);
@@ -3891,9 +3909,12 @@ Access to full financial telemetry is restricted.`;
     }
   }, [currentView, email, businessId]);
 
-  const saveProfileToFirestore = async () => {
+  const saveProfileToFirestore = async (): Promise<boolean> => {
     const profileEmail = businessId || email;
-    if (!profileEmail) return;
+    if (!profileEmail) {
+      triggerNotification("Business profile could not be saved because the business email is missing.");
+      return false;
+    }
     try {
       const docRef = doc(db, "business_profiles", profileEmail);
       await setDoc(docRef, {
@@ -3908,9 +3929,11 @@ Access to full financial telemetry is restricted.`;
         updatedAt: new Date().toISOString()
       }, { merge: true });
       triggerNotification("Saved to cloud Firestore successfully!");
+      return true;
     } catch (err) {
       console.error("Error saving profile to Firestore:", err);
       triggerNotification("Cloud save failed. Please check connection.");
+      return false;
     }
   };
 
@@ -3918,8 +3941,22 @@ Access to full financial telemetry is restricted.`;
     setShowOptionalProfileWarning(false);
     setOnboardingErrors({});
     setIsSubmitting(true);
-    await saveProfileToFirestore();
+    const saved = await saveProfileToFirestore();
     setIsSubmitting(false);
+
+    // Editing an existing business profile is not onboarding. In particular,
+    // an Office Manager must never continue into Step 2, whose final action
+    // writes role:"Owner"/businessEmail to user_profiles and is correctly
+    // rejected by Firestore's privilege-escalation protections.
+    if (!saved) return;
+    if (isEditingBusinessProfile) {
+      setIsEditingBusinessProfile(false);
+      setIsLoggedIn(true);
+      setCurrentView("login");
+      triggerNotification("Business profile updated.");
+      return;
+    }
+
     setCurrentView("placeholder_team_setup");
   };
 
@@ -5116,10 +5153,10 @@ Access to full financial telemetry is restricted.`;
                           </div>
                           <div>
                             <h2 style={getFontSize(14.5)} className="font-sans font-bold text-slate-900 tracking-tight leading-tight uppercase">
-                              Create Your Business
+                              {isEditingBusinessProfile ? "Edit Business Profile" : "Create Your Business"}
                             </h2>
                             <p style={getFontSize(10.5)} className="font-sans text-slate-500 font-medium">
-                              Step 1 of 2: Tell us about your business
+                              {isEditingBusinessProfile ? "Update your shared business information" : "Step 1 of 2: Tell us about your business"}
                             </p>
                           </div>
                         </div>
@@ -5132,7 +5169,7 @@ Access to full financial telemetry is restricted.`;
                           }}
                           className="font-sans font-bold text-blue-700 bg-blue-50 border border-blue-200 uppercase tracking-wider select-none shrink-0"
                         >
-                          Onboarding
+                          {isEditingBusinessProfile ? "Business Profile" : "Onboarding"}
                         </span>
                       </div>
 
@@ -5203,7 +5240,7 @@ Access to full financial telemetry is restricted.`;
                           }}
                           className="flex-1 font-sans font-bold text-white bg-gradient-to-r from-[#00b0ff] to-[#0055ff] hover:brightness-105 active:scale-[0.98] shadow-md hover:shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <span>Continue</span>
+                          <span>{isEditingBusinessProfile ? "Save Changes" : "Continue"}</span>
                           <ChevronRight className="w-4 h-4" />
                         </button>
                       </div>
