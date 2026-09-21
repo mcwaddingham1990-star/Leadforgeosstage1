@@ -3836,7 +3836,7 @@ Access to full financial telemetry is restricted.`;
         companyLocations,
         selectedRoles: normalizeSelectedRoles(selectedRoles),
         updatedAt: new Date().toISOString()
-      });
+      }, { merge: true });
       triggerNotification("Saved to cloud Firestore successfully!");
     } catch (err) {
       console.error("Error saving profile to Firestore:", err);
