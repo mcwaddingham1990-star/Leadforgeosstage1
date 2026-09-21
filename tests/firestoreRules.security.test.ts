@@ -386,6 +386,11 @@ describe("Privilege escalation via user_profiles", () => {
     await assertSucceeds(updateDoc(doc(db, "user_profiles", EMP_A_UID), { role: "General Manager" }));
   });
 
+  test("an owner cannot move their employee profile into another business", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { businessEmail: BIZ_B }));
+  });
+
   test("an owner of Business B cannot edit an employee's profile in Business A", async () => {
     const db = ctxFor(OWNER_B_UID, BIZ_B).firestore();
     await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { role: "Owner" }));
