@@ -173,6 +173,7 @@ export const DocumentsPage: React.FC = () => {
   const [pdfEditorBase64, setPdfEditorBase64] = useState("");
   const [pdfEditorAutoOpenPicker, setPdfEditorAutoOpenPicker] = useState(false);
   const [pdfEditorSignatureOnly, setPdfEditorSignatureOnly] = useState(false);
+  const [pdfEditorContact, setPdfEditorContact] = useState<{ phone?: string; email?: string; customerName?: string } | null>(null);
   // SECURITY/CORRECTNESS: SelfieSaveEditor decides once, on mount, whether to
   // show its "Start with a blank document" setup screen (based on whether a
   // real document/draft was handed to it). Without a key that changes on
@@ -191,6 +192,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocName(generatedPdfDraft.filename);
     setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(false);
+    setPdfEditorContact({ phone: generatedPdfDraft.customerPhone, email: generatedPdfDraft.customerEmail, customerName: generatedPdfDraft.customerName });
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
   }, [generatedPdfDraft]);
@@ -205,6 +207,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorDocName("");
     setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(true);
+    setPdfEditorContact({ phone: pendingSignatureCapture.customerPhone, email: pendingSignatureCapture.customerEmail, customerName: pendingSignatureCapture.customerName });
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
   }, [pendingSignatureCapture]);
@@ -229,6 +232,7 @@ export const DocumentsPage: React.FC = () => {
   const closePDFEditor = () => {
     setIsPDFEditorOpen(false);
     setPdfEditorSignatureOnly(false);
+    setPdfEditorContact(null);
     setGeneratedPdfDraft(null);
     setPendingSignatureCapture(null);
     setPendingCreateTemplateFolder(null);
@@ -293,6 +297,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorBase64((doc as any)?.pdfBase64 || "");
     setPdfEditorAutoOpenPicker(autoOpenPdfPicker);
     setPdfEditorSignatureOnly(false);
+    setPdfEditorContact(doc ? getDocumentContact(doc) : null);
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
     if (doc) {
@@ -304,6 +309,11 @@ export const DocumentsPage: React.FC = () => {
     const customer = resolveCustomerByIdOrName(customersList, undefined, doc.customer !== "None" ? doc.customer : undefined);
     if (!customer) return "";
     return `customer|${customer.contact || customer.company || ""}|${customer.email || ""}|${customer.phone || ""}`;
+  };
+
+  const getDocumentContact = (doc: DocumentItem) => {
+    const customer = resolveCustomerByIdOrName(customersList, undefined, doc.customer !== "None" ? doc.customer : undefined);
+    return customer ? { phone: customer.phone, email: customer.email, customerName: customer.contact || customer.company } : null;
   };
 
   const openDocumentDropdown = (doc: DocumentItem, row: HTMLElement) => {
@@ -330,6 +340,7 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorBase64((doc as any)?.pdfBase64 || "");
     setPdfEditorAutoOpenPicker(!(doc as any)?.pdfBase64);
     setPdfEditorSignatureOnly(true);
+    setPdfEditorContact(getDocumentContact(doc));
     setActionMenuDoc(null);
     setActionMenuPosition(null);
     setPdfEditorSessionKey(k => k + 1);
@@ -1775,9 +1786,9 @@ export const DocumentsPage: React.FC = () => {
           initialPdfBase64={pdfEditorBase64 || generatedPdfDraft?.pdfBase64 || undefined}
           autoOpenPdfPicker={pdfEditorAutoOpenPicker}
           initialDraft={generatedPdfDraft?.pdfBase64 ? null : generatedPdfDraft}
-          signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : signatureCaptureHint}
-          customerPhone={generatedPdfDraft?.customerPhone || pendingSignatureCapture?.customerPhone}
-          customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail}
+          signerHint={generatedPdfDraft ? { customerName: generatedPdfDraft.customerName, representativeName: generatedPdfDraft.representativeName } : (pdfEditorContact?.customerName ? { customerName: pdfEditorContact.customerName } : signatureCaptureHint)}
+          customerPhone={generatedPdfDraft?.customerPhone || pendingSignatureCapture?.customerPhone || pdfEditorContact?.phone}
+          customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail || pdfEditorContact?.email}
           autoCaptureSignatures={Boolean(pendingSignatureCapture || generatedPdfDraft?.autoCaptureSignatures)}
           autoOpenSignSetup={generatedPdfDraft?.autoOpenSignSetup}
           signatureOnlyMode={pdfEditorSignatureOnly || Boolean(pendingSignatureCapture || (generatedPdfDraft?.autoCaptureSignatures && !generatedPdfDraft?.autoOpenSignSetup))}
