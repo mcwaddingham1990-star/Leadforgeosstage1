@@ -142,7 +142,6 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const zoomedPagesStyle={
     "--pdf-editor-zoom": zoom
   } as React.CSSProperties;
-  const [pdfSelection,setPdfSelection]=useState<{page:number;item:ImportedPdfText;value:string;left:number;top:number;boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number}|null>(null);
   const pdfInputRef=useRef<HTMLInputElement>(null);
   const textInputRef=useRef<HTMLInputElement>(null);
   const videoRef=useRef<HTMLVideoElement>(null);
@@ -192,6 +191,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   const initialDraftLoadedRef=useRef(false);
   const initialPdfLoadedRef=useRef(false);
   const autoCaptureTriggeredRef=useRef(false);
+  const pdfTextPointerRef=useRef<{id:string;x:number;y:number}|null>(null);
   const dragRef=useRef<{key:string;pointerId:number;offsetX:number;offsetY:number;w:number;h:number;start:{clientX:number;clientY:number;x:number;y:number;page:number}}|null>(null);
   const resizeRef=useRef<{key:string;pointerId:number;edge:string;startX:number;startY:number;x:number;y:number;w:number;h:number;scale:number}|null>(null);
 
@@ -246,36 +246,6 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     }
   },[autoCaptureSignatures,autoOpenSignSetup,pdfPages,signatureOnlyMode]);
   useEffect(()=>()=>streamRef.current?.getTracks().forEach(t=>t.stop()),[]);
-  useEffect(()=>{
-    const updatePdfSelection=()=>{
-      const selection=window.getSelection();
-      if(!selection||selection.isCollapsed||!selection.rangeCount){setPdfSelection(null);return}
-      const range=selection.getRangeAt(0);
-      const ancestor=range.commonAncestorContainer;
-      const node=ancestor.nodeType===Node.TEXT_NODE?ancestor.parentElement:ancestor as HTMLElement;
-      const target=node?.closest<HTMLElement>(".pdf-text-content");
-      if(!target){setPdfSelection(null);return}
-      const page=Number(target.dataset.page),index=Number(target.dataset.index);
-      const item=pdfPages[page-1]?.text[index];
-      const value=selection.toString().trim();
-      if(!item||!value)return;
-      const paper=target.closest<HTMLElement>(".paper");
-      if(!paper||!paper.offsetWidth||!paper.offsetHeight){setPdfSelection(null);return}
-      const rect=range.getBoundingClientRect();
-      // The PDF text run behind `target` can span far more than what's
-      // actually highlighted (a whole sentence as one run is common) --
-      // size the edit box to the real selection rect, not the whole run,
-      // so replacing a couple of words doesn't blank out the rest of the line.
-      const paperRect=paper.getBoundingClientRect();
-      const boxLeft=(rect.left-paperRect.left)/paperRect.width*100;
-      const boxTop=(rect.top-paperRect.top)/paperRect.height*100;
-      const boxWidth=rect.width/paperRect.width*100;
-      const boxHeight=rect.height/paperRect.height*100;
-      setPdfSelection({page,item,value,left:Math.max(10,Math.min(window.innerWidth-150,rect.left)),top:Math.max(76,rect.top-46),boxLeft,boxTop,boxWidth,boxHeight});
-    };
-    document.addEventListener("selectionchange",updatePdfSelection);
-    return()=>document.removeEventListener("selectionchange",updatePdfSelection);
-  },[pdfPages]);
   useEffect(()=>{
     const scale=()=>{const p=paperRef.current;return p&&p.offsetWidth?p.getBoundingClientRect().width/p.offsetWidth:1};
     const move=(e:PointerEvent)=>{
@@ -507,7 +477,33 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   // page), not the full PDF text run's rect -- a run can span a whole
   // sentence, so sizing to the run instead of the selection would blank out
   // neighboring words the user never touched.
-  const editImportedPdfText=(page:number,item:ImportedPdfText,value:string,box:{boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number})=>{
+  const focusEditableObject=(id:number,clientX?:number,clientY?:number)=>{
+    requestAnimationFrame(()=>{
+      const editable=window.document.querySelector<HTMLElement>(`[data-object-id="${id}"] .editable-object-content`);
+      if(!editable)return;
+      editable.focus();
+      const selection=window.getSelection();
+      selection?.removeAllRanges();
+      let range:Range|null=null;
+      if(typeof clientX==="number"&&typeof clientY==="number"){
+        const caret=document.caretPositionFromPoint?.(clientX,clientY);
+        if(caret){
+          range=window.document.createRange();
+          range.setStart(caret.offsetNode,caret.offset);
+        }else{
+          const legacyCaret=(window.document as Document & {caretRangeFromPoint?: (x:number,y:number)=>Range|null}).caretRangeFromPoint?.(clientX,clientY);
+          if(legacyCaret)range=legacyCaret;
+        }
+      }
+      if(!range||!editable.contains(range.startContainer)){
+        range=window.document.createRange();
+        range.selectNodeContents(editable);
+        range.collapse(false);
+      }
+      selection?.addRange(range);
+    });
+  };
+  const editImportedPdfText=(page:number,item:ImportedPdfText,value:string,box:{boxLeft:number;boxTop:number;boxWidth:number;boxHeight:number},clientX?:number,clientY?:number)=>{
     if(contentLocked)return;
     const paper=window.document.querySelectorAll<HTMLElement>(".document-pages .paper")[page-1];
     if(!paper)return;
@@ -517,15 +513,36 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     const w=Math.max(12,paper.offsetWidth*box.boxWidth/100+4);
     const h=Math.max(12,paper.offsetHeight*box.boxHeight/100+4);
     const fontSize=Math.max(1,Math.min(30,item.fontSize));
-    setObjects(current=>[...current,{id,kind:"text",page,x,y,w,h,value,scale:1,source:"pdf",fontSize,fontFamily:item.fontFamily,backgroundColor:item.backgroundColor||"rgb(255 255 255)"}]);
+    setObjects(current=>[...current,{id,kind:"text",page,x,y,w,h,value,scale:1,source:"pdf",fontSize,fontFamily:item.fontFamily,backgroundColor:item.backgroundColor||"rgb(255 255 255)",color:"#000000"}]);
     setSelected(`object:${id}`);
-    setPdfSelection(null);
-    requestAnimationFrame(()=>{
-      const editable=window.document.querySelector<HTMLElement>(`[data-object-id="${id}"] .editable-object-content`);
-      editable?.focus();
-      if(editable){const range=window.document.createRange();range.selectNodeContents(editable);const selection=window.getSelection();selection?.removeAllRanges();selection?.addRange(range)}
-    });
-    notify("Edit the selected PDF text");
+    window.getSelection()?.removeAllRanges();
+    focusEditableObject(id,clientX,clientY);
+  };
+  const editImportedPdfTextFromPointer=(event:React.PointerEvent<HTMLElement>,page:number,item:ImportedPdfText)=>{
+    if(contentLocked||event.pointerType==="mouse"&&event.button!==0)return;
+    const target=event.currentTarget;
+    const pointerId=`${event.pointerId}:${page}:${target.dataset.index||""}`;
+    const start=pdfTextPointerRef.current;
+    pdfTextPointerRef.current=null;
+    const paper=target.closest<HTMLElement>(".paper");
+    if(!paper)return;
+    const selection=window.getSelection();
+    let value=item.value;
+    let rect=target.getBoundingClientRect();
+    const selectedInside=selection&&!selection.isCollapsed&&selection.rangeCount>0&&target.contains(selection.getRangeAt(0).commonAncestorContainer);
+    if(selectedInside){
+      value=selection!.toString().trim()||item.value;
+      rect=selection!.getRangeAt(0).getBoundingClientRect();
+    }
+    const moved=start?.id===pointerId?Math.hypot(event.clientX-start.x,event.clientY-start.y):0;
+    if(!selectedInside&&moved>10)return;
+    const paperRect=paper.getBoundingClientRect();
+    editImportedPdfText(page,item,value,{
+      boxLeft:(rect.left-paperRect.left)/paperRect.width*100,
+      boxTop:(rect.top-paperRect.top)/paperRect.height*100,
+      boxWidth:rect.width/paperRect.width*100,
+      boxHeight:rect.height/paperRect.height*100
+    },event.clientX,event.clientY);
   };
   const openPdfPicker=()=>{
     const input=pdfInputRef.current;
@@ -855,11 +872,10 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
             scrollable area, which makes the document feel frozen/clipped on
             touch screens. Layout zoom keeps scroll and pinch zoom honest. */}
         <div className="document-pages" style={zoomedPagesStyle}>{Array.from({length:pageCount},(_,pageIndex)=>{const page=pageIndex+1,pdfPage=pdfPages[pageIndex];return <article ref={page===1?paperRef:undefined} key={page} className={`paper ${pdfPage?"imported-pdf-page":""} ${finalLocked?"paper-locked":""}`} style={pdfPage?{aspectRatio:`${pdfPage.width} / ${pdfPage.height}`}:{}} onPointerDown={e=>{if(!(e.target as HTMLElement).closest(".canvas-object"))setSelected(null)}} onDoubleClick={e=>openObjectMenu(e,page)}>
-          {pdfPage?<><img className="pdf-page-background" src={pdfPage.image} alt={`Imported PDF page ${page}`}/>{!contentLocked&&<div className="pdf-text-layer" aria-label={`Select text on PDF page ${page}`}>{pdfPage.text.map((item,index)=><span key={`${index}-${item.left}-${item.top}`} data-page={page} data-index={index} className="pdf-text-content" style={{left:`${item.left}%`,top:`${item.top}%`,width:`${Math.max(item.width,.8)}%`,height:`${Math.max(item.height,1)}%`,fontSize:`${item.height}cqh`,fontFamily:item.fontFamily}}>{item.value}</span>)}</div>}</>:<div className="paper-header"><input placeholder="Optional header" value={header} disabled={contentLocked} onChange={e=>setHeader(e.target.value)}/><span>{features.draftingDate?`Date document was drafted: ${draftDate}`:""}</span></div>}<div className="blank-page-hint">{page===1&&!pdfPage&&!contentLocked&&!clauses.length&&!objects.length&&<>Tap <b>Free text box</b>, or double-tap anywhere on this white page to add something.</>}</div>
+          {pdfPage?<><img className="pdf-page-background" src={pdfPage.image} alt={`Imported PDF page ${page}`}/>{!contentLocked&&<div className="pdf-text-layer" aria-label={`Tap text on PDF page ${page} to edit it`}>{pdfPage.text.map((item,index)=><span key={`${index}-${item.left}-${item.top}`} data-page={page} data-index={index} className="pdf-text-content" onPointerDown={event=>{pdfTextPointerRef.current={id:`${event.pointerId}:${page}:${index}`,x:event.clientX,y:event.clientY}}} onPointerUp={event=>editImportedPdfTextFromPointer(event,page,item)} style={{left:`${item.left}%`,top:`${item.top}%`,width:`${Math.max(item.width,.8)}%`,height:`${Math.max(item.height,1)}%`,fontSize:`${item.height}cqh`,fontFamily:item.fontFamily}}>{item.value}</span>)}</div>}</>:<div className="paper-header"><input placeholder="Optional header" value={header} disabled={contentLocked} onChange={e=>setHeader(e.target.value)}/><span>{features.draftingDate?`Date document was drafted: ${draftDate}`:""}</span></div>}<div className="blank-page-hint">{page===1&&!pdfPage&&!contentLocked&&!clauses.length&&!objects.length&&<>Tap <b>Free text box</b>, or double-tap anywhere on this white page to add something.</>}</div>
           {objects.filter(o=>(o.page||1)===page).map(o=>{const key=`object:${o.id}`;const scaleX=o.w/(o.kind==="text"?96:280),scaleY=o.h/(o.kind==="text"?40:160),contentScale=o.kind==="text"?1:Math.max(.55,Math.min(3,Math.max(scaleX,scaleY)));return <div key={o.id} data-object-id={o.id} className={`canvas-object ${o.kind==="text"?"text-object":""} ${o.source==="pdf"?"pdf-edit-object":""} ${selected===key?"selected":""}`} style={{left:o.x,top:o.y,width:o.w,height:o.h,fontSize:o.fontSize,fontFamily:o.fontFamily,color:o.color,backgroundColor:o.source==="pdf"?o.backgroundColor:undefined,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} onDoubleClick={e=>e.stopPropagation()}>{selected===key&&itemControls(key)}{o.kind==="image"&&/^(https?:|data:image\/)/.test(o.value)?<img src={o.value} alt="Document object"/>:o.kind==="video"&&/^https?:/.test(o.value)?<video src={o.value} controls/>:o.kind==="link"&&/^https?:/.test(o.value)?<a href={o.value} target="_blank" rel="noreferrer">{o.value}</a>:<div className="editable-object-content" contentEditable={!contentLocked} suppressContentEditableWarning onInput={e=>o.kind==="text"&&editTextObject(o.id,e.currentTarget,(e.nativeEvent as InputEvent).inputType||"insertText")} onBlur={e=>o.kind==="text"&&commitTextObject(o.id,e.currentTarget)}>{o.value}</div>}</div>})}
           <div className="paper-body">{clauses.map((c,i)=>{const key=`clause:${i}`,pos=placements[key]||{page:1,x:90,y:180+i*90,w:560,h:70};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(3,Math.max((pos.w||560)/560,(pos.h||70)/70)));return <label key={key} className={`canvas-object movable-clause ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||70,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)}>{selected===key&&itemControls(key)}<b>{i+1}.</b><textarea autoFocus={i===clauses.length-1} placeholder={`Contract Conditions Clause ${i+1}`} value={c} disabled={contentLocked} onChange={e=>setClauses(v=>v.map((x,j)=>j===i?e.target.value:x))}/></label>})}{fields.map(f=>{const key=`field:${f.id}`,pos=placements[key]||{page:1,x:90,y:320,w:560,h:110};if((pos.page||1)!==page)return null;const contentScale=Math.max(.55,Math.min(2,Math.max((pos.w||560)/560,(pos.h||110)/110)));const partyFields=fields.filter(x=>x.party===f.party),isLastPartyField=partyFields.at(-1)?.id===f.id,partyReady=partyFields.every(x=>x.signed),partyCommitted=partyFields.every(x=>x.committed);return <div className={`canvas-object movable-field sign-field ${f.signed?"is-signed":""} ${selected===key?"selected":""}`} style={{left:pos.x,top:pos.y,width:pos.w||560,height:pos.h||110,"--content-scale":contentScale} as React.CSSProperties} onPointerDown={e=>pointerDown(e,key)} key={f.id}>{selected===key&&itemControls(key)}<div className="sign-label"><span>{f.kind} · Party {f.party} · Line {f.line}</span><span>{f.committed?"✓ Committed & locked":f.signed?"Ready to commit":"Required"}</span></div>{f.signed?<><div className="evidence"><div><strong className="script">{f.name}</strong>{!f.committed&&<button onClick={()=>beginSign(f.id)}>Change before commit</button>}</div>{f.signatureImage&&<img src={f.signatureImage} alt={`Drawn signature for ${f.name}`} style={{background:"#fff",border:"1px solid #d7e3ee",borderRadius:6,maxHeight:70}}/>}{f.image&&<img src={f.image} alt={`Verification selfie for ${f.name}`}/>}<div>{features.timestamps&&<><small>Device: {f.stamp}</small><small>{f.centralStamp}</small></>}{features.displayLocation&&<small>{f.coords}</small>}</div></div>{isLastPartyField&&!partyCommitted&&<button className="commit-signer field-commit" disabled={!partyReady} onClick={()=>commitParty(f.party)}>Save signed document — Signer {f.party}</button>}</>:<button className="sign-button" onClick={()=>beginSign(f.id)}><Icon>◉</Icon> Complete {f.kind}{features.selfies?" & capture selfie":""}</button>}</div>})}</div>{!pdfPage&&<footer className="paper-footer"><input placeholder="Optional footer" value={footer} disabled={contentLocked} onChange={e=>setFooter(e.target.value)}/><b>Page {page}</b></footer>}
         </article>})}</div></section></section>
-    {pdfSelection&&<button type="button" className="pdf-selection-edit" style={{left:pdfSelection.left,top:pdfSelection.top}} onPointerDown={e=>e.preventDefault()} onClick={()=>editImportedPdfText(pdfSelection.page,pdfSelection.item,pdfSelection.value,pdfSelection)}>Edit selected text</button>}
     {menu&&<div className="object-menu-backdrop" onPointerDown={()=>setMenu(null)}><div className="floating" role="dialog" aria-modal="true" aria-label="Add object" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>addObject("text")}>T Custom text field</button><button onClick={addClause}>§ Contract clause</button><button onClick={()=>addField("signature")}>⌁ Signature line</button><button onClick={()=>addField("initials")}>Ab Initials line</button><button onClick={triggerImageUpload}>▧ Upload Image</button><button onClick={openPriceBook}>💲 Pricing Model</button><button onClick={()=>addObject("link")}>↗ Link</button><button onClick={()=>addObject("video")}>▶ Video</button></div></div>}
     <ESignChoiceModal
       isOpen={signSetup}
