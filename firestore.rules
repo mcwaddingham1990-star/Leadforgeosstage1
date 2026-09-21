@@ -114,9 +114,25 @@ service cloud.firestore {
         )
       );
       allow update: if isAuthenticated() && (
+        // Normal self-service profile edits may change ordinary fields, but
+        // the tenant root, role, and original invite proof stay pinned.
         (request.auth.uid == uid
           && request.resource.data.businessEmail == resource.data.businessEmail
-          && request.resource.data.role == resource.data.role)
+          && request.resource.data.role == resource.data.role
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode']))
+        // Recovery path for an older/malformed employee profile whose saved
+        // businessEmail points at the wrong tenant. The employee can repair
+        // ONLY businessEmail, and only to the exact business + role proven by
+        // the inviteCode that was ALREADY on their profile. They cannot first
+        // swap in a different public invite code and then tenant-hop.
+        || (request.auth.uid == uid
+          && resource.data.inviteCode is string
+          && request.resource.data.inviteCode == resource.data.inviteCode
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['businessEmail'])
+          && get(/databases/$(database)/documents/employee_invites/$(resource.data.inviteCode)).data.status in ['pending', 'completed']
+          && get(/databases/$(database)/documents/employee_invites/$(resource.data.inviteCode)).data.businessEmail == request.resource.data.businessEmail
+          && get(/databases/$(database)/documents/employee_invites/$(resource.data.inviteCode)).data.role == resource.data.role)
         || (request.auth.uid == uid
           && request.resource.data.businessEmail == request.auth.token.email
           && request.resource.data.role == "Owner"
@@ -126,7 +142,8 @@ service cloud.firestore {
             || (!resource.data.keys().hasAll(['role'])
               && resource.data.businessEmail == request.auth.token.email)
           ))
-        || resource.data.businessEmail == request.auth.token.email
+        || (resource.data.businessEmail == request.auth.token.email
+          && request.resource.data.businessEmail == resource.data.businessEmail)
       );
       allow delete: if isAuthenticated() && resource.data.businessEmail == request.auth.token.email;
     }
