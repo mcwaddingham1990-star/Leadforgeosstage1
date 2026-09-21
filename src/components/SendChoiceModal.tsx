@@ -15,6 +15,7 @@ export interface SendChoiceModalProps {
    * device app still opens with a blank recipient so the user can enter one. */
   subject?: string;
   body?: string;
+  attachment?: { filename: string; mimeType: string; base64: string };
   /** Fires after the device app is handed off to, so the caller can e.g.
    * mark the record "Sent". */
   onSent?: (channel: "email" | "sms") => void;
@@ -28,11 +29,33 @@ export interface SendChoiceModalProps {
  * across every Save/Generate PDF flow in the app -- Estimates, Invoices,
  * Jobs, the PDF Editor -- so each only needs to pass in a label + contact.
  */
-export default function SendChoiceModal({ isOpen, onClose, label, phone, email, subject, body, onSent }: SendChoiceModalProps) {
+function base64ToFile(attachment: { filename: string; mimeType: string; base64: string }) {
+  const clean = attachment.base64.includes(",") ? attachment.base64.split(",").pop() || "" : attachment.base64;
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], attachment.filename, { type: attachment.mimeType });
+}
+
+export default function SendChoiceModal({ isOpen, onClose, label, phone, email, subject, body, attachment, onSent }: SendChoiceModalProps) {
   if (!isOpen) return null;
   const hasPhone = !!phone?.trim();
   const hasEmail = !!email?.trim();
-  const send = (channel: "email" | "sms") => {
+  const send = async (channel: "email" | "sms") => {
+    if (attachment && navigator.share) {
+      const file = base64ToFile(attachment);
+      const sharePayload = { title: subject || label, text: body || "", files: [file] };
+      if (!navigator.canShare || navigator.canShare(sharePayload)) {
+        try {
+          await navigator.share(sharePayload);
+          onSent?.(channel);
+          onClose();
+          return;
+        } catch (error) {
+          if ((error as DOMException).name === "AbortError") return;
+        }
+      }
+    }
     if (channel === "email") composeEmail({ to: email, subject, body });
     else composeSms({ to: phone, body });
     onSent?.(channel);
@@ -47,7 +70,7 @@ export default function SendChoiceModal({ isOpen, onClose, label, phone, email, 
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-xs text-[#5E7393] font-semibold mb-4">Text or email it? This opens your phone's own messaging or mail app, ready to send.</p>
+        <p className="text-xs text-[#5E7393] font-semibold mb-4">{attachment ? "Text or email it? If your phone supports file sharing, the PDF is handed to your messaging or mail app with the message." : "Text or email it? This opens your phone's own messaging or mail app, ready to send."}</p>
         <div className="grid grid-cols-2 gap-2.5">
           <button
             type="button"
