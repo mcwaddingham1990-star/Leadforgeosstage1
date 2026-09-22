@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     private static final String CONSENT = "Do you want to monitor websites for URLs, emails, and phone numbers, all time stamped?";
     private static final String CHANNEL_ID = "protectmyphone";
     private static final int NOTIFICATION_ID = 722;
+    private static final int REQUEST_VPN = 723;
 
     private static final Pattern EMAIL = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$", Pattern.CASE_INSENSITIVE);
     private static final Pattern PHONE = Pattern.compile("^[+()0-9 .-]{7,28}$");
@@ -74,6 +75,7 @@ public class MainActivity extends Activity {
                         monitorEnabled = true;
                         prefs.edit().putBoolean("consent_answered", true).putBoolean("monitor_enabled", true).apply();
                         refreshModeBadge();
+                        ensureDeviceDomainMonitoring();
                         loadUrl("https://www.google.com");
                     })
                     .setNegativeButton("No", (d, w) -> {
@@ -84,6 +86,7 @@ public class MainActivity extends Activity {
                     })
                     .show();
         } else {
+            if (monitorEnabled) ensureDeviceDomainMonitoring();
             loadUrl("https://www.google.com");
         }
     }
@@ -252,6 +255,7 @@ public class MainActivity extends Activity {
                     monitorEnabled = true;
                     prefs.edit().putBoolean("monitor_enabled", true).putBoolean("consent_answered", true).apply();
                     refreshModeBadge();
+                    ensureDeviceDomainMonitoring();
                     String url = webView.getUrl();
                     if (url != null && url.startsWith("https://")) injectMonitor();
                     showPersistentNotice();
@@ -259,10 +263,50 @@ public class MainActivity extends Activity {
                 .setNegativeButton("No", (d, w) -> {
                     monitorEnabled = false;
                     prefs.edit().putBoolean("monitor_enabled", false).putBoolean("consent_answered", true).apply();
+                    stopDeviceDomainMonitoring();
                     refreshModeBadge();
                     showPersistentNotice();
                 })
+                .setNeutralButton("App labels", (d, w) -> {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS));
+                    } catch (Throwable ignored) {
+                    }
+                })
                 .show();
+    }
+
+    private void ensureDeviceDomainMonitoring() {
+        try {
+            Intent permission = android.net.VpnService.prepare(this);
+            if (permission != null) {
+                startActivityForResult(permission, REQUEST_VPN);
+            } else {
+                startDeviceDomainMonitoring();
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void startDeviceDomainMonitoring() {
+        Intent service = new Intent(this, DomainVpnService.class);
+        service.setAction(DomainVpnService.ACTION_START);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(service);
+        else startService(service);
+    }
+
+    private void stopDeviceDomainMonitoring() {
+        Intent service = new Intent(this, DomainVpnService.class);
+        service.setAction(DomainVpnService.ACTION_STOP);
+        startService(service);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_VPN && resultCode == RESULT_OK && monitorEnabled) {
+            startDeviceDomainMonitoring();
+        }
     }
 
     private void refreshModeBadge() {
@@ -440,6 +484,8 @@ public class MainActivity extends Activity {
 
             String top = r.optString("time") + (r.optBoolean("private") ? " • PRIVATE" : "");
             card.addView(label(top, 10, false));
+            String source = r.optString("source");
+            if (!source.isEmpty()) card.addView(label(source, 10, false));
             card.addView(label(r.optString("type") + " • " + r.optString("detection"), 11, true));
             card.addView(label(r.optString("value"), 14, true));
             card.addView(label(r.optString("domain"), 11, false));
