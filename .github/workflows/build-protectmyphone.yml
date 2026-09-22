@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build/login-inventory-android
+      - protectmyphone-modular-base
     paths:
       - "android/protectmyphone/**"
       - ".github/workflows/build-protectmyphone.yml"
