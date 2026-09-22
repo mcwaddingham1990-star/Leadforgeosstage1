@@ -66,6 +66,8 @@ public class MainActivity extends Activity {
         requestNotificationPermission();
         showPersistentNotice();
 
+        String incomingUrl = incomingWebUrl(getIntent());
+
         if (!prefs.contains("consent_answered")) {
             new AlertDialog.Builder(this)
                     .setTitle("protectmyphone")
@@ -76,7 +78,7 @@ public class MainActivity extends Activity {
                         prefs.edit().putBoolean("consent_answered", true).putBoolean("monitor_enabled", true).apply();
                         refreshModeBadge();
                         ensureDeviceDomainMonitoring();
-                        loadUrl("https://www.google.com");
+                        loadUrl(incomingUrl != null ? incomingUrl : "https://www.google.com");
                     })
                     .setNegativeButton("No", (d, w) -> {
                         monitorEnabled = false;
@@ -87,7 +89,30 @@ public class MainActivity extends Activity {
                     .show();
         } else {
             if (monitorEnabled) ensureDeviceDomainMonitoring();
-            loadUrl("https://www.google.com");
+            loadUrl(incomingUrl != null ? incomingUrl : "https://www.google.com");
+        }
+    }
+
+    private String incomingWebUrl(Intent intent) {
+        if (intent == null || intent.getData() == null) return null;
+        Uri data = intent.getData();
+        String scheme = data.getScheme();
+        if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+            String raw = data.toString();
+            if (raw.startsWith("http://")) return "https://" + raw.substring(7);
+            return raw;
+        }
+        return null;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String url = incomingWebUrl(intent);
+        if (url != null) {
+            navigationFromAddressBar = false;
+            loadUrl(url);
         }
     }
 
