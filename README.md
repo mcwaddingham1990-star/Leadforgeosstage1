@@ -9,6 +9,7 @@ Android memory-breadcrumb app designed to help reconstruct browsing activity lat
   **Do you want to monitor websites for URLs, emails, and phone numbers, all time stamped?**
 - Local timeline storage.
 - protectmyphone browser with Normal and Private modes.
+- Registers for HTTP/HTTPS links so Android can use it as the default browser.
 - Inside the protectmyphone browser:
   - full URL history,
   - visible email/phone detection,
