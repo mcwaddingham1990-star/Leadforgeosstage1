@@ -5,7 +5,7 @@ import { BillingPage } from "./BillingPage";
 interface PaywallGateProps {
   isEmployee: boolean;
   onLogout: () => void | Promise<void>;
-  onAccessGranted: () => void;
+  onAccessGranted: (bypassExpiresAt?: number) => void;
 }
 
 /**
