@@ -95,19 +95,19 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
     <div className="w-full min-h-[100dvh] flex items-center justify-center p-2 sm:p-4" style={{ background: "linear-gradient(135deg,#EAF5FF,#C7E3FA)" }}>
       <div className="w-full h-[calc(100vh-16px)] sm:h-[calc(100vh-32px)] min-h-[500px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative max-w-7xl mx-auto rounded-2xl">
         {/* LEFT NAV -- fixed, no role-based visibility, nothing editable */}
-        <div className="hidden sm:flex flex-col w-[240px] shrink-0 border-r border-[#9EC8EF] text-[#1F3557]" style={{ backgroundColor: "#C7E3FA" }}>
-          <div className="p-4 border-b border-[#9EC8EF]">
+        <div className="flex flex-col w-[146px] sm:w-[220px] lg:w-[240px] shrink-0 border-r border-[#9EC8EF] text-[#1F3557]" style={{ backgroundColor: "#C7E3FA" }}>
+          <div className="p-2.5 sm:p-4 border-b border-[#9EC8EF]">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-[#315C9F] flex items-center justify-center shrink-0">
                 <Building2 className="w-4 h-4 text-white" />
               </div>
-              <span className="font-sans font-black tracking-tight text-sm text-[#1F3557]">OwnersLOCAL</span>
+              <span className="font-sans font-black tracking-tight text-[10px] sm:text-sm text-[#1F3557]">OwnersLOCAL</span>
             </div>
-            <p className="mt-2.5 text-[10px] font-bold text-[#5E7393] truncate">{session.name || session.email}</p>
+            <p className="mt-2.5 text-[8px] sm:text-[10px] font-bold text-[#5E7393] truncate">{session.name || session.email}</p>
             <span className="mt-1 inline-block text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider">Customer Account</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+          <div className="flex-1 overflow-y-auto py-3 px-1.5 sm:px-2 space-y-1">
             {TABS.map(tab => {
               const isCurrent = activeTab === tab.id && !viewingBusinessId;
               const badgeCount = tab.id === "professionals" ? pending.length : 0;
@@ -120,7 +120,7 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
                   }`}
                 >
                   <span className={`shrink-0 ${isCurrent ? "text-white" : ""}`}>{tab.icon}</span>
-                  <span className="font-sans font-bold text-xs flex-1 text-left truncate">{tab.label}</span>
+                  <span className="font-sans font-bold text-[9px] sm:text-xs flex-1 text-left truncate">{tab.label}</span>
                   {tab.comingSoon && <span className="text-[7px] bg-[#1F3557]/10 px-1 py-0.5 rounded font-black uppercase">Soon</span>}
                   {badgeCount > 0 && <span className="flex h-2 w-2 rounded-full bg-red-500" />}
                 </button>
@@ -137,20 +137,11 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
 
         {/* Mobile top bar (menu becomes a horizontal scroller) */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="sm:hidden flex items-center justify-between gap-2 p-3 border-b border-[#9EC8EF] bg-[#C7E3FA]">
-            <span className="font-black text-sm text-[#1F3557]">OwnersLOCAL</span>
-            <button onClick={onSignOut} className="p-2 text-[#315C9F]"><LogOut className="w-4 h-4" /></button>
-          </div>
-          <div className="sm:hidden flex overflow-x-auto gap-1.5 p-2 border-b border-[#9EC8EF] bg-[#EAF5FF] scrollbar-none">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setViewingBusinessId(null); }}
-                className={`shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold whitespace-nowrap ${activeTab === tab.id && !viewingBusinessId ? "bg-[#315C9F] text-white" : "bg-white border border-[#9EC8EF] text-[#5E7393]"}`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-3 border-b border-[#9EC8EF] bg-[#1F3557] px-3 py-3 text-white sm:px-5">
+            <div className="min-w-0">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[#9EC8EF] sm:text-[10px]">Customer Account</p>
+              <p className="truncate text-sm font-black sm:text-base">Hi, {session.name || session.email}</p>
+            </div>
           </div>
 
           {/* Business filter bar */}

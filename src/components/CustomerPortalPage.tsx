@@ -85,41 +85,81 @@ export default function CustomerPortalPage({ token }: { token: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#EAF5FF] pb-10">
-      <div className="sticky top-0 z-10 bg-[#1F3557] text-white px-4 py-3">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#9EC8EF]">{data.businessName || "Your Service Provider"}</p>
-        <h1 className="text-lg font-black">Hi, {data.customer?.name}</h1>
-      </div>
+    <div className="min-h-[100dvh] w-full bg-[#EAF5FF] sm:p-3">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1600px] overflow-hidden border-[#9EC8EF] bg-[#EAF5FF] shadow-2xl sm:min-h-[calc(100dvh-24px)] sm:rounded-2xl sm:border">
+        {/* Same left-nav shell as the main Owner'sLOCAL app. It stays on the
+            left on phones too -- no separate horizontal mobile tab strip. */}
+        <aside className="flex w-[146px] shrink-0 flex-col border-r border-[#9EC8EF] bg-[#C7E3FA] text-[#1F3557] sm:w-[220px] lg:w-[240px]">
+          <div className="border-b border-[#9EC8EF] px-2.5 py-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#315C9F] text-[10px] font-black text-white sm:h-8 sm:w-8">
+                OL
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-black tracking-tight text-[#1F3557] sm:text-sm">Owner'sLOCAL</p>
+                <p className="truncate text-[7px] font-black uppercase tracking-wider text-[#5E7393] sm:text-[8px]">Customer Portal</p>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl border border-[#9EC8EF]/70 bg-white/45 px-2 py-2">
+              <p className="truncate text-[7px] font-black uppercase tracking-wider text-[#5E7393] sm:text-[8px]">{data.businessName || "Your Service Provider"}</p>
+              <p className="mt-0.5 truncate text-[10px] font-black text-[#1F3557] sm:text-xs">{data.customer?.name}</p>
+            </div>
+          </div>
 
-      <div className="sticky top-[52px] z-10 bg-[#C7E3FA] border-b border-[#9EC8EF] overflow-x-auto">
-        <div className="flex gap-1.5 px-3 py-2 min-w-max">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold whitespace-nowrap transition-colors ${tab === t.id ? "bg-[#315C9F] text-white" : "bg-white text-[#1F3557]"}`}
-            >
-              {t.icon}{t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+          <nav className="flex-1 space-y-1 overflow-y-auto px-1.5 py-3 sm:px-2">
+            {TABS.map(item => {
+              const active = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  className={`group relative flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-all sm:px-3 ${
+                    active
+                      ? "bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white shadow-[0_0_10px_rgba(20,133,244,0.45)]"
+                      : "text-[#5E7393] hover:bg-[#BDDDF8] hover:text-[#1F3557]"
+                  }`}
+                >
+                  <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5 sm:[&>svg]:h-[18px] sm:[&>svg]:w-[18px]">{item.icon}</span>
+                  <span className="min-w-0 flex-1 truncate text-[9px] font-bold sm:text-xs">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
 
-      {toast && (
-        <div className="mx-4 mt-3 rounded-xl bg-emerald-100 border border-emerald-300 px-4 py-2.5 text-sm font-bold text-emerald-800 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" /> {toast}
-        </div>
-      )}
+          <div className="border-t border-[#9EC8EF] p-2 sm:p-3">
+            <div className="rounded-xl border border-[#9EC8EF] bg-white/55 px-2 py-2 text-center">
+              <p className="text-[7px] font-black uppercase tracking-wider text-[#315C9F] sm:text-[8px]">Customer Access</p>
+              <p className="mt-0.5 text-[7px] font-semibold text-[#5E7393] sm:text-[9px]">Powered by Owner'sLOCAL</p>
+            </div>
+          </div>
+        </aside>
 
-      <div className="p-4 space-y-3 max-w-2xl mx-auto">
-        {tab === "jobs" && <JobsTab data={data} />}
-        {tab === "estimates" && <EstimatesTab data={data} token={token} onNotify={setToast} onReload={reload} />}
-        {tab === "appointments" && <AppointmentsTab data={data} />}
-        {tab === "invoices" && <InvoicesTab data={data} token={token} onNotify={setToast} />}
-        {tab === "documents" && <DocumentsTab data={data} token={token} />}
-        {tab === "memberships" && <MembershipsTab data={data} />}
-        {tab === "request" && <RequestServiceTab data={data} token={token} onNotify={setToast} />}
-        {tab === "messages" && <MessagesTab data={data} token={token} onReload={reload} />}
+        <main className="flex min-w-0 flex-1 flex-col bg-[#EAF5FF]">
+          <header className="border-b border-[#9EC8EF] bg-[#1F3557] px-3 py-3 text-white sm:px-5 sm:py-4">
+            <p className="truncate text-[8px] font-black uppercase tracking-[0.16em] text-[#9EC8EF] sm:text-[10px]">{data.businessName || "Your Service Provider"}</p>
+            <h1 className="mt-0.5 truncate text-sm font-black sm:text-lg">Hi, {data.customer?.name}</h1>
+          </header>
+
+          {toast && (
+            <div className="mx-2.5 mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-[10px] font-bold text-emerald-800 sm:mx-4 sm:mt-3 sm:px-4 sm:py-2.5 sm:text-sm">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> {toast}
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-5">
+            <div className="mx-auto w-full max-w-5xl space-y-3">
+              {tab === "jobs" && <JobsTab data={data} />}
+              {tab === "estimates" && <EstimatesTab data={data} token={token} onNotify={setToast} onReload={reload} />}
+              {tab === "appointments" && <AppointmentsTab data={data} />}
+              {tab === "invoices" && <InvoicesTab data={data} token={token} onNotify={setToast} />}
+              {tab === "documents" && <DocumentsTab data={data} token={token} />}
+              {tab === "memberships" && <MembershipsTab data={data} />}
+              {tab === "request" && <RequestServiceTab data={data} token={token} onNotify={setToast} />}
+              {tab === "messages" && <MessagesTab data={data} token={token} onReload={reload} />}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
