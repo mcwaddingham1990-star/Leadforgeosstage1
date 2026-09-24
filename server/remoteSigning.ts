@@ -1,6 +1,7 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { randomBytes } from "crypto";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 
@@ -41,6 +42,166 @@ async function findByToken(token: string) {
   const querySnap = await db.collection("documents").where("signingOptions.remoteToken", "==", token).limit(1).get();
   if (querySnap.empty) return { db, snap: null };
   return { db, snap: querySnap.docs[0] };
+}
+
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function customerInviteCode(length = 8): string {
+  const bytes = randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return out;
+}
+
+async function createCustomerAccountInvite(db: FirebaseFirestore.Firestore, businessId: string, businessCustomerId: string): Promise<string | undefined> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = customerInviteCode();
+    const clash = await db.collection("business_invite_codes").where("code", "==", code).limit(1).get();
+    if (!clash.empty) continue;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const id = `invite_signed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await db.collection("business_invite_codes").doc(id).set({
+      id,
+      code,
+      businessId,
+      businessCustomerId,
+      createdAt: now.toISOString(),
+      expiresAt,
+      usedAt: null,
+      usedByCustomerAccountId: null,
+      revoked: false,
+      source: "bid_accepted"
+    });
+    return code;
+  }
+  return undefined;
+}
+
+async function notifySignedEstimateReadyForJob(
+  db: FirebaseFirestore.Firestore,
+  businessId: string,
+  details: {
+    customerId?: string;
+    customerName: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    estimateId: string;
+    estimateNumber?: string;
+    amount?: number;
+    description?: string;
+    notes?: string;
+    sourceLeadId?: string;
+    source?: string;
+  }
+): Promise<void> {
+  const recipients = new Set<string>([businessId]);
+  try {
+    const employees = await db.collection("employees").where("businessEmail", "==", businessId).get();
+    employees.forEach(employeeDoc => {
+      const employee = employeeDoc.data();
+      const permission = employee?.granularPermissions?.jobs;
+      const granted = permission === "view" || permission === "edit" || permission === "delete"
+        || permission?.view === true || permission?.edit === true || permission?.delete === true;
+      if (granted && typeof employee?.email === "string" && employee.email) recipients.add(employee.email);
+    });
+  } catch (error) {
+    console.error("Could not resolve job-notification recipients after remote signing:", error);
+  }
+
+  const timestamp = new Date().toISOString();
+  const displayTime = timestamp.slice(0, 16).replace("T", " ");
+  const estimateLabel = details.estimateNumber || details.estimateId;
+  const description = `${details.customerName} signed estimate ${estimateLabel}${typeof details.amount === "number" ? ` for ${details.amount.toLocaleString()}` : ""}. Customer activated. Ready to create the job.`;
+
+  await Promise.all(Array.from(recipients).map(recipientEmail => {
+    const id = `notif_signed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return db.collection("notifications").doc(id).set({
+      id,
+      businessId,
+      category: "jobs",
+      screenId: "jobs",
+      type: "signed_estimate_ready_for_job",
+      actionable: true,
+      title: "Signed estimate — create job",
+      description,
+      time: displayTime,
+      isRead: false,
+      isArchived: false,
+      isPinned: false,
+      priority: "High",
+      assignedUser: "Owner",
+      recipientEmail,
+      createdBy: "Remote Signing",
+      relatedCustomerId: details.customerId || null,
+      relatedEstimateId: details.estimateId,
+      jobPrefill: {
+        customerId: details.customerId,
+        customerName: details.customerName,
+        customerPhone: details.customerPhone,
+        customerEmail: details.customerEmail,
+        customerAddress: details.customerAddress,
+        title: details.description || `Job from ${estimateLabel}`,
+        description: details.description || details.notes || "",
+        notes: details.notes || "",
+        budget: details.amount,
+        sourceEstimateId: details.estimateId,
+        sourceLeadId: details.sourceLeadId,
+        source: details.source
+      },
+      history: [`${displayTime}: ${description}`],
+      createdAt: timestamp
+    });
+  }));
+}
+
+async function resolveSignedEstimateCustomer(
+  db: FirebaseFirestore.Firestore,
+  document: any
+): Promise<{ estimate?: any; customer?: any; customerId?: string }> {
+  const businessId = String(document.businessId || "");
+  if (!businessId) return {};
+
+  let estimate: any;
+  const estimateId = document.estimateId && document.estimateId !== "None" ? String(document.estimateId) : "";
+  if (estimateId) {
+    const estimateSnap = await db.collection("estimates").doc(estimateId).get();
+    if (estimateSnap.exists && estimateSnap.data()?.businessId === businessId) {
+      estimate = { id: estimateSnap.id, ...estimateSnap.data() };
+    }
+  }
+
+  let customerId = String(estimate?.customerId || document.customerId || "");
+  let customer: any;
+  if (customerId) {
+    const customerSnap = await db.collection("customers").doc(customerId).get();
+    if (customerSnap.exists && customerSnap.data()?.businessId === businessId) {
+      customer = { id: customerSnap.id, ...customerSnap.data() };
+    } else {
+      customerId = "";
+    }
+  }
+
+  if (!customerId) {
+    const expected = [estimate?.customerName, estimate?.company, document.customer]
+      .filter(Boolean)
+      .map(value => String(value).trim().toLowerCase());
+    if (expected.length) {
+      const customers = await db.collection("customers").where("businessId", "==", businessId).get();
+      const matches = customers.docs.filter(customerDoc => {
+        const value = customerDoc.data();
+        return [value.contact, value.company]
+          .filter(Boolean)
+          .some(candidate => expected.includes(String(candidate).trim().toLowerCase()));
+      });
+      if (matches.length === 1) {
+        customerId = matches[0].id;
+        customer = { id: matches[0].id, ...matches[0].data() };
+      }
+    }
+  }
+
+  return { estimate, customer, customerId: customerId || undefined };
 }
 
 export interface RemoteSigningInfo {
@@ -95,6 +256,8 @@ export interface RemoteSignSubmission {
 export interface RemoteSignResult {
   ok: boolean;
   error?: string;
+  customerInviteCode?: string;
+  businessName?: string;
 }
 
 async function appendRemoteSigningCertificate(pdfBase64: string, details: { signerName: string; timestamp: string; signatureImage?: string }) {
@@ -181,6 +344,7 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
   }
   await snap.ref.update({
     status: "Signed",
+    customerVisible: true,
     ...(signedPdfBase64 ? { pdfBase64: signedPdfBase64 } : {}),
     "signingOptions.remoteTokenUsedAt": now.toISOString(),
     "signingOptions.remoteSignature": remoteSignature,
@@ -196,5 +360,81 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
     ],
     updatedAt: now.toISOString()
   });
-  return { ok: true };
+
+  let businessName = "";
+  try {
+    const businessSnap = await db.collection("business_profiles").doc(data.businessId).get();
+    businessName = businessSnap.data()?.name || "";
+  } catch {
+    // Cosmetic only.
+  }
+
+  // A signed Estimate is the acceptance event. Update the SAME Estimate and
+  // Customer records the owner app is subscribed to; do not create parallel
+  // customer/job copies. The owner still confirms the actual Job from the
+  // existing Build Job modal so scheduling/crew/material decisions stay in
+  // the business's hands.
+  let inviteCode: string | undefined;
+  try {
+    const resolved = await resolveSignedEstimateCustomer(db, data);
+    if (resolved.estimate?.id) {
+      await db.collection("estimates").doc(resolved.estimate.id).update({
+        status: "Accepted",
+        acceptedAt: now.toISOString(),
+        acceptedVia: "remote_signature",
+        updatedAt: now.toISOString()
+      });
+
+      if (resolved.customerId && resolved.customer) {
+        await db.collection("customers").doc(resolved.customerId).update({
+          status: "Active",
+          pendingConfirmation: false,
+          updatedAt: now.toISOString()
+        });
+        inviteCode = await createCustomerAccountInvite(db, data.businessId, resolved.customerId);
+      }
+
+      await notifySignedEstimateReadyForJob(db, data.businessId, {
+        customerId: resolved.customerId,
+        customerName: resolved.customer?.contact || resolved.estimate.customerName || data.customer || name,
+        customerPhone: resolved.customer?.phone || resolved.estimate.phone,
+        customerEmail: resolved.customer?.email,
+        customerAddress: resolved.customer?.address || resolved.estimate.address,
+        estimateId: resolved.estimate.id,
+        estimateNumber: resolved.estimate.number,
+        amount: typeof resolved.estimate.amount === "number" ? resolved.estimate.amount : undefined,
+        description: resolved.estimate.projectSpecifics,
+        notes: resolved.estimate.notes,
+        sourceLeadId: resolved.estimate.sourceLeadId,
+        source: resolved.estimate.source
+      });
+    } else {
+      // Non-estimate documents still create a normal document notification,
+      // but never invent a Job workflow.
+      const id = `notif_signed_doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await db.collection("notifications").doc(id).set({
+        id,
+        businessId: data.businessId,
+        category: "documents",
+        screenId: "documents",
+        title: "Document signed",
+        description: `${name} signed ${data.name || "a document"}.`,
+        time: now.toISOString().slice(0, 16).replace("T", " "),
+        isRead: false,
+        isArchived: false,
+        isPinned: false,
+        priority: "Normal",
+        assignedUser: "Owner",
+        recipientEmail: data.businessId,
+        createdBy: "Remote Signing",
+        createdAt: now.toISOString()
+      });
+    }
+  } catch (workflowError) {
+    // The legal signature save is authoritative. A downstream CRM workflow
+    // failure must not make the signer resubmit and risk duplicate signatures.
+    console.error("Post-sign workflow could not fully complete:", workflowError);
+  }
+
+  return { ok: true, customerInviteCode: inviteCode, businessName };
 }
