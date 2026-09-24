@@ -189,30 +189,13 @@ export const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     if (!generatedPdfDraft) return;
-
-    // Estimates/invoices/etc. are already stored in Documents before the
-    // editor opens. Reuse that exact record for signing so the signed PDF
-    // REPLACES the Draft instead of creating a second document row.
-    const sourceDoc = documents.find(doc => {
-      if (generatedPdfDraft.sourceType === "Estimate") return doc.estimateId === generatedPdfDraft.sourceId;
-      if (generatedPdfDraft.sourceType === "Invoice") return doc.invoiceId === generatedPdfDraft.sourceId;
-      if (generatedPdfDraft.sourceType === "Work Order") return (doc as any).workOrderId === generatedPdfDraft.sourceId;
-      if (generatedPdfDraft.sourceType === "Service Agreement") return (doc as any).membershipId === generatedPdfDraft.sourceId;
-      if (generatedPdfDraft.sourceType === "Purchase Order") return (doc as any).purchaseOrderId === generatedPdfDraft.sourceId;
-      return false;
-    });
-
-    setPdfEditorDocId(sourceDoc?.id || null);
-    setPdfEditorDocName(sourceDoc?.name || generatedPdfDraft.filename);
-    setPdfEditorBase64((sourceDoc as any)?.pdfBase64 || generatedPdfDraft.pdfBase64 || "");
+    setPdfEditorDocId(null);
+    setPdfEditorDocName(generatedPdfDraft.filename);
+    setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(false);
     setPdfEditorContact({ phone: generatedPdfDraft.customerPhone, email: generatedPdfDraft.customerEmail, customerName: generatedPdfDraft.customerName });
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
-    // Intentionally keyed only to the handoff. Document saves during the
-    // signing session update `documents`; rerunning this effect on each save
-    // would remount the editor and restart the same signing flow.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedPdfDraft]);
 
   // "Collect Signatures" from a customer card -- open the PDF Editor
@@ -457,18 +440,17 @@ export const DocumentsPage: React.FC = () => {
     try {
       const prepared = await prepareRemoteSigningLink(doc);
       if (!prepared) return false;
-      const text = `Please review and sign this OwnersLOCAL document: ${prepared.doc.name}`;
+      const text = `Please review and sign this OwnersLOCAL document: ${prepared.doc.name}\n\n${prepared.link}`;
       const shareData: ShareData = {
         title: `Sign ${prepared.doc.name}`,
-        text,
-        url: prepared.link
+        text
       };
       if (navigator.share) {
         await navigator.share(shareData);
         triggerNotification("Signing link ready — send it to the signer from the share sheet.");
         return true;
       }
-      await navigator.clipboard?.writeText(`${text}\n${prepared.link}`);
+      await navigator.clipboard?.writeText(text);
       triggerNotification("Signing link copied — paste it into a text or email to the signer.");
       return true;
     } catch (error) {
