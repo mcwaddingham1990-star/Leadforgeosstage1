@@ -9,7 +9,7 @@ import type { GeneratedPdfDraft } from "../types/generatedPdf";
 import { base64ToBytes, bytesToBase64, buildFreeformDocumentPdf, appendSignatureCertificate, mergePdfs, type BusinessProfile } from "../lib/pdfExport";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { PriceBookModal } from "./PriceBookModal";
-import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
+import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
 import SignaturePad from "./SignaturePad";
 import SendChoiceModal from "./SendChoiceModal";
 import ESignChoiceModal from "./ESignChoiceModal";
@@ -817,12 +817,15 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
         signingOptions:{features,header,footer,clauses,fields,placements,pageCount,hasImportedPdf:pdfPages.length>0,signMethod:"both",remoteToken:token,remoteTokenExpiresAt,remoteSignerName:signerHint?.customerName||""}
       });
       const link=buildRemoteSigningLink(token);
-      const name=signerHint?.customerName?` ${signerHint.customerName}`:"";
-      setSendBody(`Hi${name}, please review and sign this document: ${link}`);
-      setSendAttachment(tooLargeToSave?undefined:{filename:`${(filename.trim()||"document").replace(/\.pdf$/i,"")}.pdf`,mimeType:"application/pdf",base64:pdfBase64});
       setSignSetup(false);
-      setSendOpen(true);
-      notify(tooLargeToSave?"Signing link ready — the document itself was too large to attach, but the link still works.":"Signing link ready to send");
+      const result=await shareRemoteSigningPackage({
+        documentName:`${(filename.trim()||"document").replace(/\.pdf$/i,"")}.pdf`,
+        signingLink:link,
+        pdfBase64:tooLargeToSave?undefined:pdfBase64,
+        signerName:signerHint?.customerName
+      });
+      if(result==="copied")notify("Native sharing is unavailable here, so the live signing link was copied.");
+      else if(result==="shared")notify(tooLargeToSave?"Live signing link opened in your device share menu.":"Signing PDF and live signing link opened in your device share menu.");
     }catch(error){
       console.error(error);
       notify("Could not prepare the signing link. Try again.");

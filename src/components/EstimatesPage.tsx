@@ -48,6 +48,7 @@ import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { PriceBookModal } from "./PriceBookModal";
+import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -86,14 +87,11 @@ export const EstimatesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isConversionPickerOpen, setIsConversionPickerOpen] = useState(false);
-  // The front-door eSign choice ("Send for Remote eSign" / "Sign in Person"
-  // / "Skip" / "Remind Me Later") -- esignSendTarget backs the "Send"
-  // button, esignConvertTarget backs every "Convert to Job" entry point.
-  // Holding the target estimate (not just a boolean) means the choice modal
-  // always knows exactly which record to act on regardless of which button
-  // opened it.
-  const [esignSendTarget, setEsignSendTarget] = useState<Estimate | null>(null);
+  // Convert-to-job and draft-save still use the optional signing chooser.
+  // The explicit "Send for Signing" action does NOT: it goes straight to
+  // the device native share sheet with the PDF + live signing link.
   const [esignConvertTarget, setEsignConvertTarget] = useState<Estimate | null>(null);
+  const [sendingForSigningId, setSendingForSigningId] = useState<string | null>(null);
   // The proactive, skippable "set up e-signing on this estimate" prompt --
   // fires on a plain Save (not on the PDF/Collect Signatures/Convert
   // actions, which already are the e-sign path themselves), so every
@@ -194,8 +192,17 @@ export const EstimatesPage: React.FC = () => {
     const matchedCustomer = customers.find(c => c.contact === est.customerName || c.company === est.company);
     const bytes = await buildEstimatePdf(est, matchedCustomer, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
-    const docId = `doc_estimate_${est.id}_${Date.now()}`;
+
+    // Reuse an existing unsigned document for this estimate. Repeated
+    // Generate/Send actions should update one working record, not create
+    // another Draft every time.
+    const existingDoc = documents.find(doc =>
+      doc.estimateId === est.id &&
+      !["Signed", "Completed"].includes(String(doc.status || ""))
+    );
+    const docId = existingDoc?.id || `doc_estimate_${est.id}_${Date.now()}`;
     const newDoc: DocumentItem = {
+      ...(existingDoc || {}),
       id: docId,
       name: `${est.number}.pdf`,
       customer: est.customerName,
@@ -203,15 +210,15 @@ export const EstimatesPage: React.FC = () => {
       vendor: "None",
       job: "None",
       type: "Estimates",
-      folder: "Estimates",
+      folder: existingDoc?.folder || "Estimates",
       uploadedBy: loggedInUser?.name || "Staff Administrator",
-      date: new Date().toISOString().split("T")[0],
+      date: existingDoc?.date || new Date().toISOString().split("T")[0],
       size: `${Math.max(1, Math.ceil(bytes.length / 1024))} KB`,
-      status: "Draft",
-      isFavorite: false,
-      isArchived: false,
-      notes: "Generated from the Estimates PDF Editor.",
-      tags: ["Estimate", "Generated"],
+      status: existingDoc?.status || "Draft",
+      isFavorite: existingDoc?.isFavorite || false,
+      isArchived: existingDoc?.isArchived || false,
+      notes: existingDoc?.notes || "Generated from the Estimates PDF Editor.",
+      tags: existingDoc?.tags || ["Estimate", "Generated"],
       estimateId: est.id,
       invoiceId: "None",
       lastModified: new Date().toISOString().replace("T", " ").substring(0, 19)
@@ -225,8 +232,11 @@ export const EstimatesPage: React.FC = () => {
     } else {
       triggerNotification("This PDF is too large to store inline -- the Documents record was saved, but regenerate it for a fresh copy since the file itself wasn't attached.");
     }
-    setDocuments(prev => [...prev, newDoc]);
-    return { pdfBase64, matchedCustomer };
+    setDocuments(prev => {
+      const exists = prev.some(doc => doc.id === docId);
+      return exists ? prev.map(doc => doc.id === docId ? newDoc : doc) : [...prev, newDoc];
+    });
+    return { pdfBase64, matchedCustomer, document: newDoc };
   };
 
   // Builds + stores the PDF, then opens the PDF Editor so the owner can
@@ -258,6 +268,68 @@ export const EstimatesPage: React.FC = () => {
   const storeEstimatePdf = async (est: Estimate) => {
     await buildAndStoreEstimatePdf(est);
     if (logOperationalEvent) logOperationalEvent("Estimate PDF Stored", `${est.number} for ${est.customerName} saved to Documents`, "📄");
+  };
+
+  // Explicit "Send for Signing" is deliberately one step: create/update the
+  // PDF record, attach a live remote-signing token, then open Android/iOS's
+  // native share sheet with the PDF + signing link. No text/email chooser
+  // and no trip through the PDF editor.
+  const sendEstimateForSigning = async (est: Estimate) => {
+    if (sendingForSigningId) return;
+    setSendingForSigningId(est.id);
+    try {
+      const { pdfBase64, matchedCustomer, document } = await buildAndStoreEstimatePdf(est);
+      if (pdfBase64.length > MAX_INLINE_BASE64_LENGTH) {
+        triggerNotification("This estimate is too large for remote signing. Reduce embedded images, then try Send for Signing again.");
+        return;
+      }
+
+      const existingOptions = (document as any).signingOptions || {};
+      const existingToken = existingOptions.remoteToken && !existingOptions.remoteTokenUsedAt
+        ? String(existingOptions.remoteToken)
+        : "";
+      const token = existingToken || `sign_${crypto.randomUUID().replace(/-/g, "")}`;
+      const remoteTokenExpiresAt = existingOptions.remoteTokenExpiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      const signingDocument = {
+        ...document,
+        folder: "eSign",
+        status: "Awaiting Signature",
+        lastModified: new Date().toISOString().replace("T", " ").substring(0, 19),
+        pdfBase64,
+        signingOptions: {
+          ...existingOptions,
+          signMethod: "both",
+          remoteToken: token,
+          remoteTokenExpiresAt,
+          remoteSignerName: matchedCustomer?.contact || est.customerName
+        }
+      } as DocumentItem;
+
+      setDocuments(prev => prev.some(doc => doc.id === signingDocument.id)
+        ? prev.map(doc => doc.id === signingDocument.id ? signingDocument : doc)
+        : [...prev, signingDocument]);
+
+      const result = await shareRemoteSigningPackage({
+        documentName: signingDocument.name,
+        signingLink: buildRemoteSigningLink(token),
+        pdfBase64,
+        signerName: matchedCustomer?.contact || est.customerName
+      });
+
+      if (result === "shared") {
+        if (setEstimates) setEstimates(prev => prev.map(item => item.id === est.id ? { ...item, status: "Sent" } : item));
+        else setLocalEstimates(prev => prev.map(item => item.id === est.id ? { ...item, status: "Sent" } : item));
+        setSelectedEstimate(prev => prev?.id === est.id ? { ...prev, status: "Sent" } : prev);
+        triggerNotification("Signable PDF and live signing link opened in your device share menu.");
+      } else if (result === "copied") {
+        triggerNotification("Native sharing is unavailable here, so the live signing link was copied.");
+      }
+    } catch (error) {
+      console.error(error);
+      triggerNotification("Could not prepare this estimate for signing.");
+    } finally {
+      setSendingForSigningId(null);
+    }
   };
 
   const handleAddEstimate = (action: "save" | "pdf" | "pdf-store" | "signatures" | "convert" = "save") => {
@@ -1481,10 +1553,11 @@ export const EstimatesPage: React.FC = () => {
                         Open Customer
                       </button>
                       <button
-                        onClick={() => setEsignSendTarget(selectedEstimate)}
+                        onClick={() => void sendEstimateForSigning(selectedEstimate)}
+                        disabled={sendingForSigningId === selectedEstimate.id}
                         className="flex-1 min-w-[140px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 border border-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                       >
-                        Send for Signing
+                        {sendingForSigningId === selectedEstimate.id ? "Preparing…" : "Send for Signing"}
                       </button>
                     </>
                   );
@@ -1588,15 +1661,6 @@ export const EstimatesPage: React.FC = () => {
         </div>
       )}
 
-      <ESignChoiceModal
-        isOpen={!!esignSendTarget}
-        onClose={() => setEsignSendTarget(null)}
-        label={`Estimate ${esignSendTarget?.number || ""}`}
-        onSendRemote={() => esignSendTarget && void generateEstimatePdf(esignSendTarget, true, true)}
-        onSignInPerson={() => esignSendTarget && void generateEstimatePdf(esignSendTarget, true, true)}
-        onSkip={() => esignSendTarget && void storeEstimatePdf(esignSendTarget)}
-        skipLabel="Save as PDF & Skip Signing"
-      />
       <ESignChoiceModal
         isOpen={!!esignConvertTarget}
         onClose={() => setEsignConvertTarget(null)}
