@@ -20,13 +20,30 @@ export interface DetailedNotification {
   isRead: boolean;
   screenId?: string;
   relatedCustomerId?: string;
+  relatedEstimateId?: string;
+  type?: string;
+  actionable?: boolean;
+  jobPrefill?: {
+    customerId?: string;
+    customerName: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    title?: string;
+    description?: string;
+    notes?: string;
+    budget?: number;
+    sourceEstimateId?: string;
+    sourceLeadId?: string;
+    source?: any;
+  };
   recipientEmail?: string;
 }
 
 export const NotificationsPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { notifications, setNotifications } = useDomainData();
+  const { notifications, setNotifications, setBuildJobPrefill } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const notifList = notifications as DetailedNotification[];
   const setNotifList = setNotifications as React.Dispatch<React.SetStateAction<DetailedNotification[]>>;
@@ -72,6 +89,11 @@ export const NotificationsPage: React.FC = () => {
 
   const openNotification = (n: DetailedNotification) => {
     if (!n.isRead) markRead(n.id, true);
+    if (n.type === "signed_estimate_ready_for_job" && n.jobPrefill) {
+      setBuildJobPrefill(n.jobPrefill);
+      navigateToScreen("jobs");
+      return;
+    }
     const screen = n.screenId || (n.category && n.category !== "system" ? n.category : undefined);
     if (screen) navigateToScreen(screen, n.relatedCustomerId ? { customerId: n.relatedCustomerId } : undefined);
   };
@@ -127,6 +149,11 @@ export const NotificationsPage: React.FC = () => {
                     {n.description}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-mono mt-1">{n.time}</span>
+                  {n.type === "signed_estimate_ready_for_job" && n.jobPrefill && (
+                    <span className="mt-2 inline-flex rounded-lg bg-[#315C9F] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-white">
+                      Create Job →
+                    </span>
+                  )}
                 </span>
               </button>
 
