@@ -189,13 +189,30 @@ export const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     if (!generatedPdfDraft) return;
-    setPdfEditorDocId(null);
-    setPdfEditorDocName(generatedPdfDraft.filename);
-    setPdfEditorBase64("");
+
+    // Estimates/invoices/etc. are already stored in Documents before the
+    // editor opens. Reuse that exact record for signing so the signed PDF
+    // REPLACES the Draft instead of creating a second document row.
+    const sourceDoc = documents.find(doc => {
+      if (generatedPdfDraft.sourceType === "Estimate") return doc.estimateId === generatedPdfDraft.sourceId;
+      if (generatedPdfDraft.sourceType === "Invoice") return doc.invoiceId === generatedPdfDraft.sourceId;
+      if (generatedPdfDraft.sourceType === "Work Order") return (doc as any).workOrderId === generatedPdfDraft.sourceId;
+      if (generatedPdfDraft.sourceType === "Service Agreement") return (doc as any).membershipId === generatedPdfDraft.sourceId;
+      if (generatedPdfDraft.sourceType === "Purchase Order") return (doc as any).purchaseOrderId === generatedPdfDraft.sourceId;
+      return false;
+    });
+
+    setPdfEditorDocId(sourceDoc?.id || null);
+    setPdfEditorDocName(sourceDoc?.name || generatedPdfDraft.filename);
+    setPdfEditorBase64((sourceDoc as any)?.pdfBase64 || generatedPdfDraft.pdfBase64 || "");
     setPdfEditorAutoOpenPicker(false);
     setPdfEditorContact({ phone: generatedPdfDraft.customerPhone, email: generatedPdfDraft.customerEmail, customerName: generatedPdfDraft.customerName });
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
+    // Intentionally keyed only to the handoff. Document saves during the
+    // signing session update `documents`; rerunning this effect on each save
+    // would remount the editor and restart the same signing flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedPdfDraft]);
 
   // "Collect Signatures" from a customer card -- open the PDF Editor

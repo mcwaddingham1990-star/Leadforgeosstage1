@@ -90,6 +90,13 @@ export interface SelfieSaveEditorProps {
 }
 
 export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,customerPhone,customerEmail,businessProfile,autoCaptureSignatures,autoOpenSignSetup,signatureOnlyMode=false,onClose,onSave}:SelfieSaveEditorProps){
+  // One immutable document id per editor mount. In-person signing may save
+  // more than once (for example signature + initials). Using Date.now() at
+  // each save created multiple signed rows from one signing session.
+  const sessionDocumentIdRef=useRef<string>(
+    documentId || `doc_selfiesave_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+  );
+  const sessionDocumentId=sessionDocumentIdRef.current;
   const [splash,setSplash]=useState(!signatureOnlyMode);
   const [setup,setSetup]=useState(!signatureOnlyMode && !autoOpenPdfPicker && !initialPdfBase64 && !initialDraft && !documentId);
   const [features,setFeatures]=useState<Features>(()=>signatureOnlyMode?{...defaultFeatures,initials:false,location:true}:defaultFeatures);
@@ -666,7 +673,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     persist(allCommitted?"Signed":"Awaiting Signature",{keepEditorOpen:true});
   }}
   const persist=(status:"Draft"|"Signed"|"Awaiting Signature"|"Completed", extra:Record<string,unknown>={})=>{
-    const docId=documentId||`doc_selfiesave_${Date.now()}`;
+    const docId=sessionDocumentId;
     const finalName=(filename.trim()||"Untitled document")+".pdf";
     onSave(docId,finalName,{
       status,
@@ -699,7 +706,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       let bytes=await currentPdfBytes();
       bytes=await appendSignatureCertificate(bytes,nextFields.map(f=>({name:f.name||"",role:f.role||`Signer ${f.party}`,kind:f.kind,timestamp:f.stamp||"",centralTimestamp:f.centralStamp,signatureDataUrl:f.signatureImage,selfieDataUrl:f.image,coords:f.coords})),business);
       const pdfBase64=bytesToBase64(bytes);
-      const docId=documentId||`doc_selfiesave_${Date.now()}`;
+      const docId=sessionDocumentId;
       const finalName=(filename.trim()||"Signed document")+".pdf";
       onSave(docId,finalName,{
         status:"Signed",
