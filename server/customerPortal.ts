@@ -162,7 +162,8 @@ export async function getPortalData(token: string): Promise<PortalDataResult> {
   let businessName = "";
   try {
     const businessSnap = await db.collection("business_profiles").doc(businessId).get();
-    businessName = businessSnap.data()?.name || "";
+    const profile = businessSnap.data() || {};
+    businessName = profile.name || profile.businessNames?.[0] || "";
   } catch {
     // Cosmetic only.
   }
