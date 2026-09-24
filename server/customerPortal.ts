@@ -1,6 +1,7 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import type Stripe from "stripe";
+import { randomBytes } from "crypto";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { createInvoiceCheckoutSession, getConnectAccountStatus, retrieveCharge } from "./stripeConnect";
@@ -292,6 +293,51 @@ export async function getPortalDocumentPdf(token: string, documentId: string): P
   if (!belongs) return { ok: false, error: "Document not found." };
   if (!data.pdfBase64) return { ok: false, error: "No PDF is available for this document yet." };
   return { ok: true, pdfBase64: data.pdfBase64, name: data.name };
+}
+
+// ---------------------------------------------------------------------------
+// Upgrade a single-business portal link into the homeowner's global,
+// authenticated Customer Account. The token proves access to exactly this
+// business/customer pair; the returned invite code carries only that pair
+// into the existing multi-business relationship flow.
+// ---------------------------------------------------------------------------
+const CUSTOMER_ACCOUNT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generatePortalInviteCode(length = 8): string {
+  const bytes = randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += CUSTOMER_ACCOUNT_CODE_ALPHABET[bytes[i] % CUSTOMER_ACCOUNT_CODE_ALPHABET.length];
+  return out;
+}
+
+export async function createPortalAccountInvite(token: string): Promise<{ ok: boolean; error?: string; code?: string }> {
+  const resolved = await resolvePortalCustomer(token);
+  if (resolved.ok === false) return { ok: false, error: resolved.error };
+  const { db, businessId, customerId } = resolved.value;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generatePortalInviteCode();
+    const clash = await db.collection("business_invite_codes").where("code", "==", code).limit(1).get();
+    if (!clash.empty) continue;
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const id = uid("invite_portal");
+    await db.collection("business_invite_codes").doc(id).set({
+      id,
+      code,
+      businessId,
+      businessCustomerId: customerId,
+      createdAt: now.toISOString(),
+      expiresAt,
+      usedAt: null,
+      usedByCustomerAccountId: null,
+      revoked: false,
+      source: "invite_code"
+    });
+    return { ok: true, code };
+  }
+
+  return { ok: false, error: "Could not create your account connection. Try again." };
 }
 
 // ---------------------------------------------------------------------------
