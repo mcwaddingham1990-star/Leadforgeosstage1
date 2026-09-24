@@ -44,7 +44,7 @@ export async function submitRemoteSignature(token: string, submission: RemoteSig
 
 /** The link an owner texts/emails to a customer for remote signing. */
 export function buildRemoteSigningLink(token: string): string {
-  return `${window.location.origin}${window.location.pathname}?sign=${encodeURIComponent(token)}`;
+  return `${window.location.origin}/?sign=${encodeURIComponent(token)}`;
 }
 
 /** True when the current URL is a remote-signing link -- checked once at
