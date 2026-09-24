@@ -31,7 +31,7 @@ const STATUS_LABELS: Record<string, string> = {
 interface BillingPageProps {
   /** Called after the server has accepted an access code. PaywallGate uses
    * this to refresh the app-level subscription state and leave the gate. */
-  onAccessGranted?: () => void;
+  onAccessGranted?: (bypassExpiresAt?: number) => void;
 }
 
 export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => {
@@ -44,7 +44,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
   // Set immediately after the server accepts a free code so the paid
   // checkout controls disappear before any status-refresh round trip.
   const [accessGrantedNow, setAccessGrantedNow] = useState(false);
-  const freeAccessActive = freeAccessActive || accessGrantedNow;
+  const freeAccessActive = subscription.bypassActive || accessGrantedNow;
 
   const submitAccessCode = async () => {
     if (!accessCode.trim()) return;
@@ -58,7 +58,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
     }
     setAccessCode("");
     setAccessGrantedNow(true);
-    onAccessGranted?.();
+    onAccessGranted?.(result.bypassExpiresAt);
     subscription.refresh();
     triggerNotification("✅ Free access activated. Returning to onboarding…");
   };
