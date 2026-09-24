@@ -135,20 +135,7 @@ async function notifySignedEstimateReadyForJob(
       createdBy: "Remote Signing",
       relatedCustomerId: details.customerId || null,
       relatedEstimateId: details.estimateId,
-      jobPrefill: {
-        customerId: details.customerId,
-        customerName: details.customerName,
-        customerPhone: details.customerPhone,
-        customerEmail: details.customerEmail,
-        customerAddress: details.customerAddress,
-        title: details.description || `Job from ${estimateLabel}`,
-        description: details.description || details.notes || "",
-        notes: details.notes || "",
-        budget: details.amount,
-        sourceEstimateId: details.estimateId,
-        sourceLeadId: details.sourceLeadId,
-        source: details.source
-      },
+      jobPrefill,
       history: [`${displayTime}: ${description}`],
       createdAt: timestamp
     });
@@ -230,7 +217,8 @@ export async function getRemoteSigningInfo(token: string): Promise<RemoteSigning
   let businessName = "";
   try {
     const businessSnap = await db.collection("business_profiles").doc(data.businessId).get();
-    businessName = businessSnap.data()?.name || "";
+    const profile = businessSnap.data() || {};
+    businessName = profile.name || profile.businessNames?.[0] || "";
   } catch {
     // Business name is cosmetic only -- a lookup failure shouldn't block signing.
   }
@@ -380,6 +368,7 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
     if (resolved.estimate?.id) {
       await db.collection("estimates").doc(resolved.estimate.id).update({
         status: "Accepted",
+        ...(resolved.customerId ? { customerId: resolved.customerId } : {}),
         acceptedAt: now.toISOString(),
         acceptedVia: "remote_signature",
         updatedAt: now.toISOString()
