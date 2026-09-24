@@ -723,7 +723,10 @@ export const LeadsPage: React.FC = () => {
               onChange={(event) => {
                 const action = event.target.value;
                 if (action === "customer") onOpenPlaceholder("Convert Lead to Customer Profile", "👤");
-                if (action === "estimate") onOpenPlaceholder("Lead Estimate Creation Builder", "📝");
+                if (action === "estimate") {
+                  if (selectedLead) openEstimateFromLead(selectedLead);
+                  else triggerNotification?.("Select a lead before creating an estimate.");
+                }
                 if (action === "schedule") {
                   if (onNavigateToScreen) onNavigateToScreen("scheduling");
                   else onOpenPlaceholder("Lead Dispatch Calendar", "📅");
