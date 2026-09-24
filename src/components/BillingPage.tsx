@@ -55,7 +55,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
     setAccessCode("");
     subscription.refresh();
     onAccessGranted?.();
-    triggerNotification("✅ Access code accepted. Opening your dashboard…");
+    triggerNotification("✅ Free access activated. Returning to onboarding…");
   };
 
   // Stripe redirects back to success_url as soon as Checkout completes,
