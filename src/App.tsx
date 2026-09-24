@@ -4682,7 +4682,18 @@ Access to full financial telemetry is restricted.`;
     return (
       <AuthContext.Provider value={authContextValue}>
         <NavTelemetryContext.Provider value={navTelemetryContextValue}>
-          <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />
+          <PaywallGate
+            isEmployee={!!loggedInUser.isEmployee}
+            onLogout={handleLogout}
+            onAccessGranted={() => {
+              // BillingPage has its own status hook inside the gate. Refresh
+              // this top-level hook too, otherwise the inner card can say
+              // "Free access active" while App still renders the stale gate.
+              const dashboard = OS_SCREENS.find(screen => screen.id === "dashboard") || OS_SCREENS[0];
+              setActiveScreen(dashboard);
+              subscription.refresh();
+            }}
+          />
         </NavTelemetryContext.Provider>
       </AuthContext.Provider>
     );
