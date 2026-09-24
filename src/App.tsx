@@ -1715,9 +1715,10 @@ export default function App() {
   // visitor -- static at mount time, same reasoning as the pre-existing
   // remoteSignToken/customerPortalToken checks that read window.location
   // once rather than reactively.
-  const [loginMode, setLoginMode] = useState<"business" | "customer">(() => (
-    new URLSearchParams(window.location.search).has("joinCode") ? "customer" : "business"
-  ));
+  const [loginMode, setLoginMode] = useState<"business" | "customer">(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.has("joinCode") || params.has("customer") ? "customer" : "business";
+  });
   const [customerSession, setCustomerSession] = useState<CustomerSession | null>(null);
   // Reuse the existing onboarding-shaped business-profile form for edits
   // without treating an authenticated manager as a brand-new Owner. This
