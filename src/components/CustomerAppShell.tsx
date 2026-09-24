@@ -17,7 +17,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode; comingSoon?
   { id: "memberships", label: "Memberships", icon: <ShieldCheck className="w-[18px] h-[18px]" /> },
   { id: "request", label: "Request Service", icon: <ClipboardList className="w-[18px] h-[18px]" /> },
   { id: "messages", label: "Messages", icon: <MessageSquare className="w-[18px] h-[18px]" /> },
-  { id: "professionals", label: "Your Service Professionals", icon: <Users className="w-[18px] h-[18px]" /> },
+  { id: "professionals", label: "My Service Providers", icon: <Users className="w-[18px] h-[18px]" /> },
   { id: "find", label: "Find a Service Professional", icon: <Search className="w-[18px] h-[18px]" />, comingSoon: true }
 ];
 
@@ -47,6 +47,7 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
   const [businessFilter, setBusinessFilter] = useState<string>(""); // "" == All Businesses
   const [viewingBusinessId, setViewingBusinessId] = useState<string | null>(null);
   const [toast, setToast] = useState<string>("");
+  const [liveRefreshVersion, setLiveRefreshVersion] = useState(0);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -63,6 +64,25 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
   }, []);
 
   useEffect(() => { refreshProfessionals(); }, [refreshProfessionals]);
+
+  // Keep the customer account close to realtime without weakening Firestore
+  // rules or duplicating business data. All reads still come from the same
+  // business collections; this only re-queries the authenticated API.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      setLiveRefreshVersion(v => v + 1);
+      void refreshProfessionals();
+    };
+    const timer = window.setInterval(refresh, 4000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refreshProfessionals]);
 
   // A business's invite link (?joinCode=CODE) can land here for someone who
   // already has an account and is just now signing back in -- redeem it
@@ -167,14 +187,14 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
               <ViewBusinessPanel businessId={viewingBusinessId} onBack={() => setViewingBusinessId(null)} />
             ) : (
               <>
-                {activeTab === "jobs" && <JobsTab businessFilter={businessFilter} />}
-                {activeTab === "estimates" && <EstimatesTab businessFilter={businessFilter} onToast={showToast} />}
-                {activeTab === "appointments" && <AppointmentsTab businessFilter={businessFilter} />}
-                {activeTab === "invoices" && <InvoicesTab businessFilter={businessFilter} onToast={showToast} />}
-                {activeTab === "documents" && <DocumentsTab businessFilter={businessFilter} />}
-                {activeTab === "memberships" && <MembershipsTab businessFilter={businessFilter} />}
+                {activeTab === "jobs" && <JobsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "estimates" && <EstimatesTab businessFilter={businessFilter} onToast={showToast} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "appointments" && <AppointmentsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "invoices" && <InvoicesTab businessFilter={businessFilter} onToast={showToast} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "documents" && <DocumentsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "memberships" && <MembershipsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
                 {activeTab === "request" && <RequestServiceTab businesses={activeBusinesses} onToast={showToast} />}
-                {activeTab === "messages" && <MessagesTab businesses={activeBusinesses} />}
+                {activeTab === "messages" && <MessagesTab businesses={activeBusinesses} refreshVersion={liveRefreshVersion} />}
                 {activeTab === "professionals" && (
                   <ServiceProfessionalsTab
                     professionals={professionals}
@@ -225,14 +245,13 @@ const BusinessTag: React.FC<{ name: string }> = ({ name }) => (
 // My Jobs
 // ---------------------------------------------------------------------------
 
-const JobsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) => {
+const JobsTab: React.FC<{ businessFilter: string; refreshVersion: number }> = ({ businessFilter, refreshVersion }) => {
   const [jobs, setJobs] = useState<api.TaggedJob[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setJobs(null);
     api.getJobs(businessFilter || undefined).then(r => r.ok ? setJobs(r.jobs || []) : setError(r.error || "Could not load your jobs."));
-  }, [businessFilter]);
+  }, [businessFilter, refreshVersion]);
 
   if (error) return <ErrorState error={error} />;
   if (!jobs) return <Loading />;
@@ -272,7 +291,7 @@ const JobsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) => {
 // Estimates
 // ---------------------------------------------------------------------------
 
-const EstimatesTab: React.FC<{ businessFilter: string; onToast: (m: string) => void }> = ({ businessFilter, onToast }) => {
+const EstimatesTab: React.FC<{ businessFilter: string; onToast: (m: string) => void; refreshVersion: number }> = ({ businessFilter, onToast, refreshVersion }) => {
   const [estimates, setEstimates] = useState<api.TaggedEstimate[] | null>(null);
   const [error, setError] = useState("");
   const [decliningId, setDecliningId] = useState<string | null>(null);
@@ -280,11 +299,10 @@ const EstimatesTab: React.FC<{ businessFilter: string; onToast: (m: string) => v
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    setEstimates(null);
     api.getEstimates(businessFilter || undefined).then(r => r.ok ? setEstimates(r.estimates || []) : setError(r.error || "Could not load your estimates."));
   }, [businessFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshVersion]);
 
   const decide = async (estimate: api.TaggedEstimate, decision: "Accepted" | "Declined", reason?: string) => {
     setBusyId(estimate.id);
@@ -353,14 +371,13 @@ const EstimatesTab: React.FC<{ businessFilter: string; onToast: (m: string) => v
 // Appointments
 // ---------------------------------------------------------------------------
 
-const AppointmentsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) => {
+const AppointmentsTab: React.FC<{ businessFilter: string; refreshVersion: number }> = ({ businessFilter, refreshVersion }) => {
   const [appointments, setAppointments] = useState<api.TaggedAppointment[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setAppointments(null);
     api.getAppointments(businessFilter || undefined).then(r => r.ok ? setAppointments(r.appointments || []) : setError(r.error || "Could not load your appointments."));
-  }, [businessFilter]);
+  }, [businessFilter, refreshVersion]);
 
   if (error) return <ErrorState error={error} />;
   if (!appointments) return <Loading />;
@@ -386,15 +403,14 @@ const AppointmentsTab: React.FC<{ businessFilter: string }> = ({ businessFilter 
 // Invoices
 // ---------------------------------------------------------------------------
 
-const InvoicesTab: React.FC<{ businessFilter: string; onToast: (m: string) => void }> = ({ businessFilter, onToast }) => {
+const InvoicesTab: React.FC<{ businessFilter: string; onToast: (m: string) => void; refreshVersion: number }> = ({ businessFilter, onToast, refreshVersion }) => {
   const [invoices, setInvoices] = useState<api.TaggedInvoice[] | null>(null);
   const [error, setError] = useState("");
   const [payingId, setPayingId] = useState<string | null>(null);
 
   useEffect(() => {
-    setInvoices(null);
     api.getInvoices(businessFilter || undefined).then(r => r.ok ? setInvoices(r.invoices || []) : setError(r.error || "Could not load your invoices."));
-  }, [businessFilter]);
+  }, [businessFilter, refreshVersion]);
 
   const pay = async (inv: api.TaggedInvoice) => {
     setPayingId(inv.id);
@@ -438,15 +454,14 @@ const InvoicesTab: React.FC<{ businessFilter: string; onToast: (m: string) => vo
 // Documents
 // ---------------------------------------------------------------------------
 
-const DocumentsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) => {
+const DocumentsTab: React.FC<{ businessFilter: string; refreshVersion: number }> = ({ businessFilter, refreshVersion }) => {
   const [documents, setDocuments] = useState<api.TaggedDocument[] | null>(null);
   const [error, setError] = useState("");
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
-    setDocuments(null);
     api.getDocuments(businessFilter || undefined).then(r => r.ok ? setDocuments(r.documents || []) : setError(r.error || "Could not load your documents."));
-  }, [businessFilter]);
+  }, [businessFilter, refreshVersion]);
 
   const open = async (doc: api.TaggedDocument) => {
     setOpeningId(doc.id);
@@ -482,14 +497,13 @@ const DocumentsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) 
 // Memberships
 // ---------------------------------------------------------------------------
 
-const MembershipsTab: React.FC<{ businessFilter: string }> = ({ businessFilter }) => {
+const MembershipsTab: React.FC<{ businessFilter: string; refreshVersion: number }> = ({ businessFilter, refreshVersion }) => {
   const [memberships, setMemberships] = useState<api.TaggedMembership[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setMemberships(null);
     api.getMemberships(businessFilter || undefined).then(r => r.ok ? setMemberships(r.memberships || []) : setError(r.error || "Could not load your memberships."));
-  }, [businessFilter]);
+  }, [businessFilter, refreshVersion]);
 
   if (error) return <ErrorState error={error} />;
   if (!memberships) return <Loading />;
@@ -541,7 +555,7 @@ const RequestServiceTab: React.FC<{ businesses: Array<{ id: string; name: string
     }
   };
 
-  if (!businesses.length) return <EmptyState label="Connect with a service professional first (see Your Service Professionals) to request service." />;
+  if (!businesses.length) return <EmptyState label="Connect with a service provider first (see My Service Providers) to request service." />;
 
   return (
     <div className="max-w-lg space-y-3">
@@ -580,7 +594,7 @@ const RequestServiceTab: React.FC<{ businesses: Array<{ id: string; name: string
 // Messages
 // ---------------------------------------------------------------------------
 
-const MessagesTab: React.FC<{ businesses: Array<{ id: string; name: string }> }> = ({ businesses }) => {
+const MessagesTab: React.FC<{ businesses: Array<{ id: string; name: string }>; refreshVersion: number }> = ({ businesses, refreshVersion }) => {
   const [businessId, setBusinessId] = useState("");
   const [messages, setMessages] = useState<api.TaggedMessage[]>([]);
   const [content, setContent] = useState("");
@@ -591,13 +605,13 @@ const MessagesTab: React.FC<{ businesses: Array<{ id: string; name: string }> }>
 
   const load = useCallback(async () => {
     if (!businessId) return;
-    setLoading(true);
+    if (messages.length === 0) setLoading(true);
     const result = await api.getMessages(businessId);
     setLoading(false);
     if (result.ok) setMessages(result.messages || []);
-  }, [businessId]);
+  }, [businessId, messages.length]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshVersion]);
 
   const send = async () => {
     if (!content.trim() || !businessId) return;
