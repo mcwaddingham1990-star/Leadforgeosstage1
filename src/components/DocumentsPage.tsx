@@ -14,7 +14,7 @@ import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
 import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
-import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
+import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
 import type { WorkOrder } from "../types/domain";
 import type { Membership } from "../types/membership";
 import type { PurchaseOrder } from "../types/purchaseOrder";
@@ -440,21 +440,22 @@ export const DocumentsPage: React.FC = () => {
     try {
       const prepared = await prepareRemoteSigningLink(doc);
       if (!prepared) return false;
-      const text = `Please review and sign this OwnersLOCAL document: ${prepared.doc.name}\n\n${prepared.link}`;
-      const shareData: ShareData = {
-        title: `Sign ${prepared.doc.name}`,
-        text
-      };
-      if (navigator.share) {
-        await navigator.share(shareData);
-        triggerNotification("Signing link ready — send it to the signer from the share sheet.");
-        return true;
+
+      const customer = getDocumentContact(prepared.doc);
+      const result = await shareRemoteSigningPackage({
+        documentName: prepared.doc.name,
+        signingLink: prepared.link,
+        pdfBase64: String((prepared.doc as any).pdfBase64 || ""),
+        signerName: customer?.customerName
+      });
+
+      if (result === "copied") {
+        triggerNotification("Native sharing is unavailable here, so the live signing link was copied.");
+      } else if (result === "shared") {
+        triggerNotification("Signing PDF and live signing link opened in your device share menu.");
       }
-      await navigator.clipboard?.writeText(text);
-      triggerNotification("Signing link copied — paste it into a text or email to the signer.");
       return true;
     } catch (error) {
-      if ((error as DOMException).name === "AbortError") return true;
       console.error(error);
       triggerNotification("Unable to prepare the signing link.");
       return false;
