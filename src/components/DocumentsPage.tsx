@@ -14,6 +14,7 @@ import { CreatePurchaseOrderPicker } from "./CreatePurchaseOrderPicker";
 import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
+import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import type { WorkOrder } from "../types/domain";
 import type { Membership } from "../types/membership";
 import type { PurchaseOrder } from "../types/purchaseOrder";
@@ -355,6 +356,13 @@ export const DocumentsPage: React.FC = () => {
     return new Blob([bytes], { type: mimeType });
   };
 
+  const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",").pop() || "");
+    reader.onerror = () => reject(reader.error || new Error("Could not read file"));
+    reader.readAsDataURL(blob);
+  });
+
   const safePdfFileName = (name: string) => name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
 
   const getDocumentShareFile = async (doc: DocumentItem) => {
@@ -386,6 +394,72 @@ export const DocumentsPage: React.FC = () => {
 
   const markDocumentSent = (doc: DocumentItem) => {
     setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, folder: "eSign", status: "Sent" } : d));
+  };
+
+  const prepareRemoteSigningLink = async (doc: DocumentItem) => {
+    const existingOptions = (doc as any).signingOptions || {};
+    const existingToken = existingOptions.remoteToken && !existingOptions.remoteTokenUsedAt ? String(existingOptions.remoteToken) : "";
+    const token = existingToken || `sign_${crypto.randomUUID().replace(/-/g, "")}`;
+    const remoteTokenExpiresAt = existingOptions.remoteTokenExpiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    let pdfBase64 = String((doc as any).pdfBase64 || "");
+    let actualSizeBytes = (doc as any).actualSizeBytes;
+
+    if (!pdfBase64 && doc.url) {
+      const response = await fetch(doc.url);
+      const blob = await response.blob();
+      pdfBase64 = await blobToBase64(blob);
+      actualSizeBytes = blob.size;
+    }
+
+    if (!pdfBase64) {
+      triggerNotification("Open this document in the PDF Editor first so a signable PDF copy can be prepared.");
+      return null;
+    }
+
+    const nextDoc: DocumentItem = {
+      ...doc,
+      folder: "eSign",
+      status: "Awaiting Signature",
+      lastModified: new Date().toISOString().replace("T", " ").substring(0, 19),
+      signingOptions: {
+        ...existingOptions,
+        signMethod: existingOptions.signMethod || "both",
+        remoteToken: token,
+        remoteTokenExpiresAt,
+        remoteSignerName: existingOptions.remoteSignerName || doc.customer || ""
+      },
+      pdfBase64,
+      size: actualSizeBytes ? `${Math.max(1, Math.ceil(Number(actualSizeBytes) / 1024))} KB` : doc.size
+    } as DocumentItem;
+
+    setDocuments(prev => prev.map(d => d.id === doc.id ? nextDoc : d));
+    return { link: buildRemoteSigningLink(token), doc: nextDoc };
+  };
+
+  const shareDocumentSigningLink = async (doc: DocumentItem) => {
+    try {
+      const prepared = await prepareRemoteSigningLink(doc);
+      if (!prepared) return false;
+      const text = `Please review and sign this OwnersLOCAL document: ${prepared.doc.name}`;
+      const shareData: ShareData = {
+        title: `Sign ${prepared.doc.name}`,
+        text,
+        url: prepared.link
+      };
+      if (navigator.share) {
+        await navigator.share(shareData);
+        triggerNotification("Signing link ready — send it to the signer from the share sheet.");
+        return true;
+      }
+      await navigator.clipboard?.writeText(`${text}\n${prepared.link}`);
+      triggerNotification("Signing link copied — paste it into a text or email to the signer.");
+      return true;
+    } catch (error) {
+      if ((error as DOMException).name === "AbortError") return true;
+      console.error(error);
+      triggerNotification("Unable to prepare the signing link.");
+      return false;
+    }
   };
 
   const shareDocumentWithAttachment = async (doc: DocumentItem, channel: "share" | "email" | "text" = "share") => {
@@ -1990,15 +2064,13 @@ export const DocumentsPage: React.FC = () => {
             </button>
             <button
               onClick={async () => {
-                const doc = { ...actionMenuDoc, status: "Awaiting Signature", folder: "eSign" } as DocumentItem;
-                setDocuments(prev => prev.map(d => d.id === doc.id ? doc : d));
+                const doc = actionMenuDoc;
                 setActionMenuDoc(null);
                 setActionMenuPosition(null);
-                // "Send for Signing" is a direct action: prepare the real
-                // document and immediately open the device's native share
-                // sheet. The larger export-channel menu remains available
-                // from the ordinary "Send" action above.
-                await shareDocumentWithAttachment(doc, "share");
+                // "Send for Signing" sends the live signer URL, not just a
+                // PDF attachment. A plain attachment has no way to submit a
+                // signature back into OwnersLOCAL.
+                await shareDocumentSigningLink(doc);
               }}
               className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
             >
