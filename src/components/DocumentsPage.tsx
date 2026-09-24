@@ -209,7 +209,11 @@ export const DocumentsPage: React.FC = () => {
     setPdfEditorContact({ phone: generatedPdfDraft.customerPhone, email: generatedPdfDraft.customerEmail, customerName: generatedPdfDraft.customerName });
     setPdfEditorSessionKey(k => k + 1);
     setIsPDFEditorOpen(true);
-  }, [generatedPdfDraft, documents]);
+    // Intentionally keyed only to the handoff. Document saves during the
+    // signing session update `documents`; rerunning this effect on each save
+    // would remount the editor and restart the same signing flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generatedPdfDraft]);
 
   // "Collect Signatures" from a customer card -- open the PDF Editor
   // straight to its file picker so the owner can choose the real document
