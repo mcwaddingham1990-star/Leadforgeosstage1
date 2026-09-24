@@ -28,6 +28,10 @@ export interface GeneratedPdfDraft {
    * Send/Convert to Job, Invoice Send) so picking "Send for Remote eSign" or
    * "Sign in Person" there goes straight into the actual signing setup. */
   autoOpenSignSetup?: boolean;
+  /** Force the PDF Editor into the focused in-person signing flow. This is
+   * intentionally separate from autoOpenSignSetup so a caller can say
+   * "Collect Signatures" and never fall into the remote Text/Email chooser. */
+  signatureOnlyMode?: boolean;
 }
 
 /** Handoff for opening the Estimate form pre-filled from another page (e.g.
