@@ -6495,7 +6495,7 @@ Access to full financial telemetry is restricted.`;
                 backgroundPosition: "center"
               } : {})
             }}
-            className={`w-full h-[calc(100vh-100px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
+            className={`w-full h-[calc(100dvh-24px)] sm:h-[calc(100dvh-100px)] min-h-0 bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
           >
 
             {/* COLLAPSIBLE LEFT NAV MENU */}
@@ -6811,7 +6811,7 @@ Access to full financial telemetry is restricted.`;
             </div>
 
             {/* MAIN APP BODY CONTENT AREA */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-[640px] overflow-hidden relative bg-[#EAF5FF]">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative bg-[#EAF5FF]">
               
               {/* Workspace Top Toolbar Header */}
               {activeScreen.id !== "dashboard" && (
@@ -6854,7 +6854,7 @@ Access to full financial telemetry is restricted.`;
               {(
 
                 /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-28 md:p-6 md:pb-10 space-y-6 scrollbar-thin">
 
                   {simulatedRole && (
                     <div className="sticky top-0 z-40 bg-amber-500 text-amber-950 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 font-bold text-xs">
