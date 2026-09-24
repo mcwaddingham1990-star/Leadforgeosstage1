@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import Stripe from "stripe";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 
@@ -27,6 +28,7 @@ const BYPASS_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // existing access code
 const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000; // separate trial code
 const CONFIG_DOC_PATH = ["app_config", "paywall_bypass"] as const;
 const SCRYPT_KEYLEN = 64;
+const STRIPE_API_VERSION = "2026-08-26.dahlia";
 const BUILT_IN_STANDARD_CODE_HASH =
   "b7844d1d4bbd65f154a11e7d0ac4f809:8a5b0a59c9b9698397fa6d815012d8112c50cbbf9c892a4dc7d5a538a2d326095a67fb764ac481f755e7439d54eda6611ece8e1eb932953ef78fde4d243687dd";
 const BUILT_IN_TRIAL_CODE_HASH =
@@ -125,11 +127,53 @@ export async function handleRedeemBypassCode(req: Request, res: Response) {
 
     const durationMs = isTrialCode ? TRIAL_DURATION_MS : BYPASS_DURATION_MS;
     const expiresAt = Date.now() + durationMs;
-    await db.collection("business_profiles").doc(businessId).set(
+    const profileRef = db.collection("business_profiles").doc(businessId);
+    const profileSnap = await profileRef.get();
+    const profileData = profileSnap.data() || {};
+
+    // Turn on free access first. From this point forward the subscription
+    // checkout endpoint also refuses to create any NEW paid Checkout session.
+    await profileRef.set(
       { bypassActive: true, bypassExpiresAt: expiresAt },
       { merge: true }
     );
-    res.json({ success: true, bypassExpiresAt: expiresAt, accessDays: isTrialCode ? 3 : 30 });
+
+    // A Checkout Session created before the access-code request is an
+    // independent Stripe object and stays payable until it expires. Kill any
+    // still-open sessions for this business so a stale browser tab cannot
+    // continue showing/accepting the $49.50 subscription after free access
+    // has been granted.
+    let expiredCheckoutSessions = 0;
+    const customerId = typeof profileData.stripeSubscriptionCustomerId === "string"
+      ? profileData.stripeSubscriptionCustomerId
+      : "";
+    const stripeSecret = process.env.STRIPE_SECRET_KEY;
+    if (customerId && stripeSecret) {
+      try {
+        const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
+        const sessions = await stripe.checkout.sessions.list({ customer: customerId, limit: 100 });
+        for (const session of sessions.data) {
+          if (session.status !== "open") continue;
+          try {
+            await stripe.checkout.sessions.expire(session.id);
+            expiredCheckoutSessions += 1;
+          } catch (expireErr) {
+            console.warn("Could not expire an old Stripe Checkout session after access-code redemption:", session.id, expireErr);
+          }
+        }
+      } catch (stripeErr) {
+        // Free access itself is authoritative and must not fail just because
+        // Stripe is temporarily unavailable while cleaning up stale sessions.
+        console.warn("Could not clean up old Stripe Checkout sessions after access-code redemption:", stripeErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      bypassExpiresAt: expiresAt,
+      accessDays: isTrialCode ? 3 : 30,
+      expiredCheckoutSessions,
+    });
   } catch (err) {
     console.error("Error redeeming paywall bypass code:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Could not redeem that code." });
