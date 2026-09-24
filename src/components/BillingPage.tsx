@@ -28,7 +28,13 @@ const STATUS_LABELS: Record<string, string> = {
  * (PaymentsPage.tsx), which is a business collecting payment from ITS OWN
  * customers. See server/subscriptionRoutes.ts.
  */
-export const BillingPage: React.FC = () => {
+interface BillingPageProps {
+  /** Called after the server has accepted an access code. PaywallGate uses
+   * this to refresh the app-level subscription state and leave the gate. */
+  onAccessGranted?: () => void;
+}
+
+export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => {
   const { triggerNotification } = useNavTelemetry();
   const subscription = useSubscriptionStatus();
   const [isRedirecting, setIsRedirecting] = useState<"checkout" | "portal" | null>(null);
@@ -48,7 +54,8 @@ export const BillingPage: React.FC = () => {
     }
     setAccessCode("");
     subscription.refresh();
-    triggerNotification("✅ Access code accepted.");
+    onAccessGranted?.();
+    triggerNotification("✅ Access code accepted. Opening your dashboard…");
   };
 
   // Stripe redirects back to success_url as soon as Checkout completes,
