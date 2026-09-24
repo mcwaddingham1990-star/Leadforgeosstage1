@@ -1013,8 +1013,8 @@ export const EstimatesPage: React.FC = () => {
 
       {/* Add Estimate Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-[#1F3557]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
             <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-white" />
@@ -1028,7 +1028,7 @@ export const EstimatesPage: React.FC = () => {
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto space-y-4">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 min-h-0">
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-[#5E7393]">Select Customer</label>
                 <select
@@ -1460,12 +1460,12 @@ export const EstimatesPage: React.FC = () => {
               )}
             </div>
 
-            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-6 py-4 flex justify-between shrink-0">
-              <div className="flex gap-2">
+            <div className="bg-slate-50 border-t border-[#9EC8EF]/40 px-4 sm:px-6 py-4 shrink-0 max-h-[42vh] overflow-y-auto">
+              <div className="flex flex-wrap gap-2">
                 {!isEditMode && (
                   <button
                     onClick={() => setIsEditMode(true)}
-                    className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    className="flex-1 min-w-[120px] px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                   >
                     Edit Proposal
                   </button>
@@ -1476,49 +1476,24 @@ export const EstimatesPage: React.FC = () => {
                     <>
                       <button
                         onClick={() => match ? onNavigateToScreen("customers", { customerId: match.id }) : triggerNotification("No matching customer record found.")}
-                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                        className="flex-1 min-w-[120px] px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                       >
                         Open Customer
                       </button>
                       <button
                         onClick={() => setEsignSendTarget(selectedEstimate)}
-                        className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                        className="flex-1 min-w-[140px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 border border-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                       >
-                        Send
+                        Send for Signing
                       </button>
                     </>
                   );
                 })()}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedEstimate(null)}
-                  className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                {isEditMode && (
-                  <button
-                    type="button"
-                    disabled={!formCustomerName.trim()}
-                    onClick={() => handleSaveEdit("save")}
-                    className={`px-4 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                      formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
-                    }`}
-                  >
-                    Save Changes
-                  </button>
-                )}
-                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf-store")} className="px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300">Save (and Store as PDF)</button>}
-                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf")} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Save &amp; Generate PDF</button>}
-                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void storeEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider">Store as PDF</button>}
-                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
-                {isEditMode && canCollectSignatures && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("signatures")} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Collect Signatures</button>}
-                {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true)} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}
-                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("convert")} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 disabled:text-slate-500">Convert to Job</button>}
+                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void storeEstimatePdf(selectedEstimate)} className="flex-1 min-w-[120px] px-3 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider">Store as PDF</button>}
+                {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="flex-1 min-w-[120px] px-3 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
+                {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true)} className="flex-1 min-w-[140px] px-3 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}
                 {!isEditMode && selectedEstimate && !schedulingEvents.some(event => event.sourceEstimateId === selectedEstimate.id) && (
-                  <button type="button" onClick={() => setEsignConvertTarget(selectedEstimate)} className="px-4 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
+                  <button type="button" onClick={() => setEsignConvertTarget(selectedEstimate)} className="flex-1 min-w-[120px] px-3 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
                 )}
                 {!isEditMode && selectedEstimate && (
                   <button
@@ -1537,9 +1512,9 @@ export const EstimatesPage: React.FC = () => {
                       });
                       setIsWorkOrderBuilderOpen(true);
                     }}
-                    className="px-4 py-2 bg-white border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider"
+                    className="flex-1 min-w-[140px] px-3 py-2 bg-white border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider"
                   >
-                    🧰 Create Work Order
+                    Create Work Order
                   </button>
                 )}
                 {!isEditMode && selectedEstimate && (
@@ -1554,11 +1529,34 @@ export const EstimatesPage: React.FC = () => {
                       });
                       setIsMembershipPickerOpen(true);
                     }}
-                    className="px-4 py-2 bg-white border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider"
+                    className="flex-1 min-w-[140px] px-3 py-2 bg-white border border-[#9EC8EF] text-[#315C9F] font-bold rounded-xl text-xs uppercase tracking-wider"
                   >
-                    📜 Add Membership
+                    Add Membership
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedEstimate(null)}
+                  className="flex-1 min-w-[100px] px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-[#5E7393] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                {isEditMode && (
+                  <button
+                    type="button"
+                    disabled={!formCustomerName.trim()}
+                    onClick={() => handleSaveEdit("save")}
+                    className={`flex-1 min-w-[130px] px-3 py-2 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                      formCustomerName.trim() ? "bg-[#315C9F] hover:bg-[#1F3557]" : "bg-slate-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Save Changes
+                  </button>
+                )}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf-store")} className="flex-1 min-w-[150px] px-3 py-2 bg-white border border-emerald-600 text-emerald-700 font-bold rounded-xl text-xs uppercase tracking-wider disabled:border-slate-300 disabled:text-slate-300">Save & Store PDF</button>}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("pdf")} className="flex-1 min-w-[150px] px-3 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Save & Generate PDF</button>}
+                {isEditMode && canCollectSignatures && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("signatures")} className="flex-1 min-w-[140px] px-3 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300">Collect Signatures</button>}
+                {isEditMode && <button type="button" disabled={!formCustomerName.trim()} onClick={()=>handleSaveEdit("convert")} className="flex-1 min-w-[120px] px-3 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider disabled:bg-slate-300 disabled:text-slate-500">Convert to Job</button>}
               </div>
               {!isEditMode && selectedEstimate && (
                 <div className="mt-3 border-t border-[#9EC8EF] pt-3">
