@@ -391,18 +391,30 @@ export const DocumentsPage: React.FC = () => {
   const shareDocumentWithAttachment = async (doc: DocumentItem, channel: "share" | "email" | "text" = "share") => {
     try {
       const file = await getDocumentShareFile(doc);
-      const shareData = {
+      const shareData: ShareData = {
         title: doc.name,
         text: channel === "text" ? `Please review ${doc.name} from OwnersLOCAL.` : `Please review the attached OwnersLOCAL document: ${doc.name}`,
         files: [file]
       };
-      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
-        await navigator.share(shareData);
-        if (channel !== "share") markDocumentSent(doc);
-        return true;
+      if (navigator.share) {
+        // Some Android share targets reject a payload that combines text and a
+        // PDF even though they accept the PDF itself. Prefer the richer payload,
+        // then retry with the real file only so Messages receives an MMS
+        // attachment instead of a body-only sms: link.
+        const payloads: ShareData[] = [shareData, { title: doc.name, files: [file] }];
+        for (const payload of payloads) {
+          if (navigator.canShare && !navigator.canShare(payload)) continue;
+          try {
+            await navigator.share(payload);
+            if (channel !== "share") markDocumentSent(doc);
+            return true;
+          } catch (error) {
+            if ((error as DOMException).name === "AbortError") return true;
+          }
+        }
       }
       await downloadDocumentFile(doc);
-      triggerNotification("This browser cannot attach files directly here, so the document was downloaded for attachment.");
+      triggerNotification("This browser cannot open the native file-share sheet. The PDF was downloaded; attach it from Downloads.");
       return false;
     } catch (error) {
       console.error(error);
@@ -1977,9 +1989,16 @@ export const DocumentsPage: React.FC = () => {
               Send
             </button>
             <button
-              onClick={() => {
-                setDocuments(prev => prev.map(d => d.id === actionMenuDoc.id ? { ...d, status: "Awaiting Signature", folder: "eSign" } : d));
-                openSendModal({ ...actionMenuDoc, status: "Awaiting Signature", folder: "eSign" });
+              onClick={async () => {
+                const doc = { ...actionMenuDoc, status: "Awaiting Signature", folder: "eSign" } as DocumentItem;
+                setDocuments(prev => prev.map(d => d.id === doc.id ? doc : d));
+                setActionMenuDoc(null);
+                setActionMenuPosition(null);
+                // "Send for Signing" is a direct action: prepare the real
+                // document and immediately open the device's native share
+                // sheet. The larger export-channel menu remains available
+                // from the ordinary "Send" action above.
+                await shareDocumentWithAttachment(doc, "share");
               }}
               className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
             >
@@ -2120,11 +2139,13 @@ export const DocumentsPage: React.FC = () => {
 
                 <button
                   onClick={async () => {
-                    const [, name = "", , phone = ""] = shareRecipient.split("|");
                     const shared = await shareDocumentWithAttachment(shareDocItem, "text");
                     if (!shared) {
-                      window.location.href = `sms:${encodeURIComponent(phone)}?body=${encodeURIComponent(`Hi ${name}, please review ${shareDocItem.name} from OwnersLOCAL. The document downloaded on this device so it can be attached.`)}`;
-                      markDocumentSent(shareDocItem);
+                      // Do not launch a body-only sms: URI here. Android cannot
+                      // attach a downloaded file to that URI, which previously
+                      // made the message claim an attachment existed when it did
+                      // not. The user can attach the downloaded fallback from
+                      // Downloads if native file sharing is unavailable.
                     }
                     setIsMainShareModalOpen(false);
                     setShareDocItem(null);
