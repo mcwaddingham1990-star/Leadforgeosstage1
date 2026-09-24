@@ -1815,17 +1815,6 @@ export default function App() {
   // than the point where auth state has actually resolved, but every hook
   // above it still has to run on every render regardless).
   const subscription = useSubscriptionStatus();
-  // Set only after /api/paywall/redeem returns success. This lets a newly
-  // comped owner leave the paywall immediately instead of waiting for a
-  // second status round trip. The authoritative server refresh replaces it.
-  const [recentAccessExpiresAt, setRecentAccessExpiresAt] = useState<number | null>(null);
-  const recentlyGrantedAccess = !!recentAccessExpiresAt && recentAccessExpiresAt > Date.now();
-
-  useEffect(() => {
-    if (subscription.bypassActive || subscription.subscriptionActive || subscription.isAdminBusiness) {
-      setRecentAccessExpiresAt(null);
-    }
-  }, [subscription.bypassActive, subscription.subscriptionActive, subscription.isAdminBusiness]);
 
   // Applies a theme choice immediately -- local state, localStorage, AND a
   // direct partial Firestore write (merge: true only touches
@@ -4674,7 +4663,7 @@ Access to full financial telemetry is restricted.`;
   const subscriptionGateApplies = !!loggedInUser && !!auth.currentUser &&
     (isLoggedIn || (!loggedInUser.isEmployee && currentView === "placeholder_password"));
 
-  if (subscriptionGateApplies && subscription.loading && !recentlyGrantedAccess) {
+  if (subscriptionGateApplies && subscription.loading) {
     return (
       <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl px-8 py-7 text-center">
@@ -4687,28 +4676,13 @@ Access to full financial telemetry is restricted.`;
   }
 
   if (
-    subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness && !recentlyGrantedAccess &&
+    subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness &&
     (!subscription.configured || (!subscription.subscriptionActive && !subscription.bypassActive))
   ) {
     return (
       <AuthContext.Provider value={authContextValue}>
         <NavTelemetryContext.Provider value={navTelemetryContextValue}>
-          <PaywallGate
-            isEmployee={!!loggedInUser.isEmployee}
-            onLogout={handleLogout}
-            onAccessGranted={(bypassExpiresAt) => {
-              // The redeem endpoint has already validated the code and written
-              // bypassActive server-side, so unlock the UI immediately while
-              // the top-level status hook catches up.
-              setRecentAccessExpiresAt(
-                typeof bypassExpiresAt === "number" ? bypassExpiresAt : Date.now() + 60_000
-              );
-              setIsLoggedIn(false);
-              setCurrentView("placeholder_password");
-              window.history.replaceState({}, "", "/app");
-              subscription.refresh();
-            }}
-          />
+          <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />
         </NavTelemetryContext.Provider>
       </AuthContext.Provider>
     );
@@ -6521,7 +6495,7 @@ Access to full financial telemetry is restricted.`;
                 backgroundPosition: "center"
               } : {})
             }}
-            className={`w-full h-[calc(100dvh-24px)] sm:h-[calc(100dvh-100px)] min-h-0 bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
+            className={`w-full min-h-[calc(100vh-100px)] bg-[#EAF5FF] border border-[#9EC8EF] overflow-visible flex flex-row shadow-2xl relative animate-scale-up select-none max-w-7xl mx-auto workspace-theme theme-${workspaceTheme}`}
           >
 
             {/* COLLAPSIBLE LEFT NAV MENU */}
@@ -6837,7 +6811,7 @@ Access to full financial telemetry is restricted.`;
             </div>
 
             {/* MAIN APP BODY CONTENT AREA */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative bg-[#EAF5FF]">
+            <div className="flex-1 flex flex-col min-w-0 relative bg-[#EAF5FF]">
               
               {/* Workspace Top Toolbar Header */}
               {activeScreen.id !== "dashboard" && (
@@ -6880,7 +6854,7 @@ Access to full financial telemetry is restricted.`;
               {(
 
                 /* LIVE RESPONSIVE OPERATIONAL WORKSPACE (Custom implementation of all views!) */
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-28 md:p-6 md:pb-10 space-y-6 scrollbar-thin">
+                <div className="flex-1 p-4 pb-28 md:p-6 md:pb-10 space-y-6">
 
                   {simulatedRole && (
                     <div className="sticky top-0 z-40 bg-amber-500 text-amber-950 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3 font-bold text-xs">
