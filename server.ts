@@ -16,7 +16,7 @@ import { handleStripeConnectWebhook } from './server/stripeConnectWebhook';
 import { handleGetOrCreateAccount, handleCreateAccountSession, handleGetAccountStatus } from './server/stripeConnectRoutes';
 import { handleGetSubscriptionStatus, handleGetSubscriptionInvoices, handleCreateSubscriptionCheckout, handleCreateBillingPortalSession } from './server/subscriptionRoutes';
 import { handleRedeemBypassCode, handleSetBypassCode } from './server/paywallBypass';
-import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, ServiceRequestSubmission } from './server/customerPortal';
+import { getPortalData, getPortalDocumentPdf, submitEstimateDecision, submitServiceRequest, submitPortalMessage, createInvoiceCheckout, createPortalAccountInvite, ServiceRequestSubmission } from './server/customerPortal';
 import {
   getServiceProfessionals, redeemInviteCode, acceptRelationship, declineRelationship, removeRelationship,
   getJobs as getCustomerJobs, getAppointments as getCustomerAppointments, getEstimates as getCustomerEstimates,
@@ -264,6 +264,15 @@ app.get('/api/portal/:token', rateLimit('portal-get', 60_000, 30), async (req, r
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not load your portal' });
   }
 });
+app.post('/api/portal/:token/customer-account-invite', rateLimit('portal-account-invite', 60_000, 6), async (req, res) => {
+  try {
+    const result = await createPortalAccountInvite(req.params.token);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not create your customer-account connection' });
+  }
+});
+
 app.get('/api/portal/:token/documents/:documentId', rateLimit('portal-doc', 60_000, 30), async (req, res) => {
   try {
     const result = await getPortalDocumentPdf(req.params.token, req.params.documentId);
