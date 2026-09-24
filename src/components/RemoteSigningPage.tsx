@@ -99,7 +99,7 @@ export default function RemoteSigningPage({ token }: { token: string }) {
                 </p>
                 <button
                   type="button"
-                  onClick={() => { window.location.href = `/?joinCode=${encodeURIComponent(customerInviteCode)}`; }}
+                  onClick={() => { window.location.href = `/?joinCode=${encodeURIComponent(customerInviteCode)}&customer=signup`; }}
                   className="mt-3 w-full rounded-xl bg-[#315C9F] px-4 py-3 text-xs font-black uppercase tracking-wide text-white hover:bg-[#1F3557]"
                 >
                   Create My Free Account
