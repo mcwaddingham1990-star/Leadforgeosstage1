@@ -236,7 +236,7 @@ export const BillingPage: React.FC = () => {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {subscription.configured && !subscription.subscriptionActive && (
+        {subscription.configured && !subscription.subscriptionActive && !subscription.bypassActive && !subscription.isAdminBusiness && (
           <button
             onClick={startCheckout}
             disabled={isRedirecting !== null}
