@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   fetchPortalData, fetchPortalDocumentPdf, submitPortalEstimateDecision, submitPortalServiceRequest,
-  submitPortalMessage, startInvoiceCheckout, getCustomerPortalTokenFromUrl,
+  submitPortalMessage, startInvoiceCheckout, createPortalAccountInvite, getCustomerPortalTokenFromUrl,
   type PortalData
 } from "../lib/customerPortalClient";
 import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
@@ -176,7 +176,7 @@ export default function CustomerPortalPage({ token }: { token: string }) {
 
           <div className="flex-1 overflow-y-auto p-2.5 sm:p-5">
             <div className="mx-auto w-full max-w-5xl space-y-3">
-              {tab === "providers" && <ServiceProvidersTab data={data} />}
+              {tab === "providers" && <ServiceProvidersTab data={data} token={token} onNotify={setToast} />}
               {tab === "jobs" && <JobsTab data={data} />}
               {tab === "estimates" && <EstimatesTab data={data} token={token} onNotify={setToast} onReload={reload} />}
               {tab === "appointments" && <AppointmentsTab data={data} />}
@@ -193,7 +193,21 @@ export default function CustomerPortalPage({ token }: { token: string }) {
   );
 }
 
-function ServiceProvidersTab({ data }: { data: PortalData }) {
+function ServiceProvidersTab({ data, token, onNotify }: { data: PortalData; token: string; onNotify: (message: string) => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const createAccount = async () => {
+    if (busy) return;
+    setBusy(true);
+    const result = await createPortalAccountInvite(token);
+    setBusy(false);
+    if (!result.ok || !result.code) {
+      onNotify(result.error || "Could not prepare your free customer account. Try again.");
+      return;
+    }
+    window.location.href = `/?joinCode=${encodeURIComponent(result.code)}&customer=signup`;
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -216,10 +230,11 @@ function ServiceProvidersTab({ data }: { data: PortalData }) {
         </p>
         <button
           type="button"
-          onClick={() => { window.location.href = "/?customer=signup"; }}
-          className="mt-3 rounded-xl bg-[#315C9F] px-4 py-2.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#1F3557]"
+          onClick={() => void createAccount()}
+          disabled={busy}
+          className="mt-3 rounded-xl bg-[#315C9F] px-4 py-2.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#1F3557] disabled:opacity-50"
         >
-          Create My Free Account
+          {busy ? "Preparing…" : "Create My Free Account"}
         </button>
       </div>
     </div>
