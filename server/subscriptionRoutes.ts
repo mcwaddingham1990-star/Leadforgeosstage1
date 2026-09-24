@@ -229,7 +229,23 @@ export async function handleCreateSubscriptionCheckout(req: Request, res: Respon
     const stripe = getStripeClient();
     const profileRef = db.collection("business_profiles").doc(businessId);
     const profileSnap = await profileRef.get();
-    let customerId = profileSnap.data()?.stripeSubscriptionCustomerId;
+    const profileData = profileSnap.data() || {};
+    const bypassExpiresAt = typeof profileData.bypassExpiresAt === "number" ? profileData.bypassExpiresAt : null;
+    const bypassActive = !!profileData.bypassActive && !!bypassExpiresAt && bypassExpiresAt > Date.now();
+
+    // An active access code is free access, not a checkout discount. Keep a
+    // stale or double-clicked client from creating a paid Stripe session while
+    // the 3/30-day access window is active.
+    if (bypassActive || isAdminBusinessId(businessId)) {
+      res.status(409).json({
+        error: bypassActive
+          ? "Your free access code is active. No payment is due until it expires."
+          : "The platform admin account does not require a subscription.",
+      });
+      return;
+    }
+
+    let customerId = profileData.stripeSubscriptionCustomerId;
     if (typeof customerId !== "string" || !customerId) {
       const customer = await stripe.customers.create({
         email: businessId,
