@@ -15,7 +15,9 @@ import { auth, db } from "../firebase";
  * that decides who's logged in as what.
  */
 export const CustomerLoginPanel: React.FC<{ onSwitchToBusiness: () => void }> = ({ onSwitchToBusiness }) => {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(() => (
+    new URLSearchParams(window.location.search).get("customer") === "signup" ? "signup" : "signin"
+  ));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

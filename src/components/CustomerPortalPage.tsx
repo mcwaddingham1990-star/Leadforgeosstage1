@@ -1,20 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Briefcase, FileText, Calendar, CreditCard, FolderOpen, ShieldCheck, PlusCircle, MessageSquare,
-  Loader2, AlertTriangle, CheckCircle2, Camera, X, Send, Download, FileSignature
+  Loader2, AlertTriangle, CheckCircle2, Camera, X, Send, Download, FileSignature, Building2
 } from "lucide-react";
 import {
   fetchPortalData, fetchPortalDocumentPdf, submitPortalEstimateDecision, submitPortalServiceRequest,
-  submitPortalMessage, startInvoiceCheckout, getCustomerPortalTokenFromUrl,
+  submitPortalMessage, startInvoiceCheckout, createPortalAccountInvite, getCustomerPortalTokenFromUrl,
   type PortalData
 } from "../lib/customerPortalClient";
 import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { base64ToBytes } from "../lib/pdfExport";
 
-type Tab = "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "request" | "messages";
+type Tab = "providers" | "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "request" | "messages";
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
+  { id: "providers", label: "My Service Providers", icon: <Building2 className="w-4 h-4" /> },
   { id: "jobs", label: "My Jobs", icon: <Briefcase className="w-4 h-4" /> },
   { id: "estimates", label: "Estimates", icon: <FileText className="w-4 h-4" /> },
   { id: "appointments", label: "Appointments", icon: <Calendar className="w-4 h-4" /> },
@@ -48,12 +49,35 @@ export default function CustomerPortalPage({ token }: { token: string }) {
   const [tab, setTab] = useState<Tab>("jobs");
   const [toast, setToast] = useState("");
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     const result = await fetchPortalData(token);
     setData(result);
     setLoading(false);
-  };
-  useEffect(() => { void reload(); const paid = new URLSearchParams(window.location.search).get("paid"); if (paid) setToast("Payment received -- thank you!"); }, [token]);
+  }, [token]);
+
+  useEffect(() => {
+    void reload();
+    const paid = new URLSearchParams(window.location.search).get("paid");
+    if (paid) setToast("Payment received -- thank you!");
+  }, [reload]);
+
+  // This public token portal cannot safely subscribe to Firestore directly
+  // without weakening security rules. Instead it live-refreshes from the
+  // SAME Firestore records the business app uses every four seconds and
+  // immediately whenever the homeowner returns to the tab/window.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void reload();
+    };
+    const timer = window.setInterval(refreshIfVisible, 4000);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [reload]);
 
   useEffect(() => {
     if (!toast) return;
@@ -138,7 +162,10 @@ export default function CustomerPortalPage({ token }: { token: string }) {
         <main className="flex min-w-0 flex-1 flex-col bg-[#EAF5FF]">
           <header className="border-b border-[#9EC8EF] bg-[#1F3557] px-3 py-3 text-white sm:px-5 sm:py-4">
             <p className="truncate text-[8px] font-black uppercase tracking-[0.16em] text-[#9EC8EF] sm:text-[10px]">{data.businessName || "Your Service Provider"}</p>
-            <h1 className="mt-0.5 truncate text-sm font-black sm:text-lg">Hi, {data.customer?.name}</h1>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="mt-0.5 truncate text-sm font-black sm:text-lg">Hi, {data.customer?.name}</h1>
+              <span className="shrink-0 rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-emerald-200 sm:text-[9px]">● Live sync</span>
+            </div>
           </header>
 
           {toast && (
@@ -149,6 +176,7 @@ export default function CustomerPortalPage({ token }: { token: string }) {
 
           <div className="flex-1 overflow-y-auto p-2.5 sm:p-5">
             <div className="mx-auto w-full max-w-5xl space-y-3">
+              {tab === "providers" && <ServiceProvidersTab data={data} token={token} onNotify={setToast} />}
               {tab === "jobs" && <JobsTab data={data} />}
               {tab === "estimates" && <EstimatesTab data={data} token={token} onNotify={setToast} onReload={reload} />}
               {tab === "appointments" && <AppointmentsTab data={data} />}
@@ -160,6 +188,54 @@ export default function CustomerPortalPage({ token }: { token: string }) {
             </div>
           </div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function ServiceProvidersTab({ data, token, onNotify }: { data: PortalData; token: string; onNotify: (message: string) => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const createAccount = async () => {
+    if (busy) return;
+    setBusy(true);
+    const result = await createPortalAccountInvite(token);
+    setBusy(false);
+    if (!result.ok || !result.code) {
+      onNotify(result.error || "Could not prepare your free customer account. Try again.");
+      return;
+    }
+    window.location.href = `/?joinCode=${encodeURIComponent(result.code)}&customer=signup`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF5FF] text-[#315C9F]">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-wider text-[#5E7393]">Connected through this portal</p>
+            <p className="truncate text-sm font-black text-[#1F3557]">{data.businessName || "Your Service Provider"}</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#5E7393]">Jobs, estimates, appointments, invoices, documents and messages on this link stay synced with this provider.</p>
+          </div>
+        </div>
+      </Card>
+
+      <div className="rounded-2xl border border-[#9EC8EF] bg-gradient-to-br from-white to-[#EAF5FF] p-4 shadow-sm">
+        <p className="text-sm font-black text-[#1F3557]">One account. Every service provider.</p>
+        <p className="mt-1 text-xs font-semibold leading-relaxed text-[#5E7393]">
+          Create your free Owner'sLOCAL customer account to keep every connected service provider — and all of your jobs, appointments, estimates, invoices, documents and messages — together in one place.
+        </p>
+        <button
+          type="button"
+          onClick={() => void createAccount()}
+          disabled={busy}
+          className="mt-3 rounded-xl bg-[#315C9F] px-4 py-2.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#1F3557] disabled:opacity-50"
+        >
+          {busy ? "Preparing…" : "Create My Free Account"}
+        </button>
       </div>
     </div>
   );

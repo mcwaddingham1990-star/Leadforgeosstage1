@@ -29,7 +29,7 @@ export interface RemoteSignSubmission {
   consent: boolean;
 }
 
-export async function submitRemoteSignature(token: string, submission: RemoteSignSubmission): Promise<{ ok: boolean; error?: string }> {
+export async function submitRemoteSignature(token: string, submission: RemoteSignSubmission): Promise<{ ok: boolean; error?: string; customerInviteCode?: string; businessName?: string }> {
   try {
     const res = await fetch(`/api/sign/${encodeURIComponent(token)}`, {
       method: "POST",
