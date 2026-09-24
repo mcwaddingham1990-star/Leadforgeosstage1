@@ -41,6 +41,10 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
   const [accessCode, setAccessCode] = useState("");
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
+  // Set immediately after the server accepts a free code so the paid
+  // checkout controls disappear before any status-refresh round trip.
+  const [accessGrantedNow, setAccessGrantedNow] = useState(false);
+  const freeAccessActive = freeAccessActive || accessGrantedNow;
 
   const submitAccessCode = async () => {
     if (!accessCode.trim()) return;
@@ -53,8 +57,9 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
       return;
     }
     setAccessCode("");
-    subscription.refresh();
+    setAccessGrantedNow(true);
     onAccessGranted?.();
+    subscription.refresh();
     triggerNotification("✅ Free access activated. Returning to onboarding…");
   };
 
@@ -95,6 +100,13 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
   }, [justCheckedOut, subscription.loading, subscription.subscriptionActive, subscription.refresh]);
 
   const startCheckout = async () => {
+    // Never allow a checkout click after this page has already received a
+    // successful free-access response, even while subscription.refresh() is
+    // still catching up.
+    if (freeAccessActive) {
+      onAccessGranted?.();
+      return;
+    }
     setIsRedirecting("checkout");
     try {
       const res = await authedFetch("/api/subscription/checkout", { method: "POST" });
@@ -169,7 +181,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
             )}
           </div>
         </div>
-      ) : subscription.bypassActive ? (
+      ) : freeAccessActive ? (
         <div className="bg-[#E7F7EE] border border-[#A9E0C0] rounded-2xl p-4 flex items-start gap-3">
           <KeyRound className="w-4 h-4 text-[#1F7A46] shrink-0 mt-0.5" />
           <div className="text-xs text-[#1F5C36] space-y-1">
@@ -190,7 +202,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
         </div>
       )}
 
-      {!subscription.loading && !subscription.subscriptionActive && !subscription.bypassActive && (
+      {!subscription.loading && !subscription.subscriptionActive && !freeAccessActive && (
         <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F3557]">
             <KeyRound className="w-3.5 h-3.5 text-[#315C9F]" />
@@ -218,7 +230,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
         </div>
       )}
 
-      {subscription.configured && !subscription.subscriptionActive && !subscription.bypassActive && !subscription.loading && (
+      {subscription.configured && !subscription.subscriptionActive && !freeAccessActive && !subscription.loading && (
         <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 flex items-baseline gap-2">
           <span className="text-2xl font-black text-[#1F3557]">{FIRST_MONTH_PRICE}</span>
           <span className="text-xs text-slate-500">first month, then {REGULAR_PRICE}/month. Cancel anytime.</span>
@@ -243,7 +255,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
       )}
 
       <div className="flex flex-wrap gap-2">
-        {subscription.configured && !subscription.subscriptionActive && !subscription.bypassActive && !subscription.isAdminBusiness && (
+        {subscription.configured && !subscription.subscriptionActive && !freeAccessActive && !subscription.isAdminBusiness && (
           <button
             onClick={startCheckout}
             disabled={isRedirecting !== null}
