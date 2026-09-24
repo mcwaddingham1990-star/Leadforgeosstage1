@@ -1815,6 +1815,17 @@ export default function App() {
   // than the point where auth state has actually resolved, but every hook
   // above it still has to run on every render regardless).
   const subscription = useSubscriptionStatus();
+  // Set only after /api/paywall/redeem returns success. This lets a newly
+  // comped owner leave the paywall immediately instead of waiting for a
+  // second status round trip. The authoritative server refresh replaces it.
+  const [recentAccessExpiresAt, setRecentAccessExpiresAt] = useState<number | null>(null);
+  const recentlyGrantedAccess = !!recentAccessExpiresAt && recentAccessExpiresAt > Date.now();
+
+  useEffect(() => {
+    if (subscription.bypassActive || subscription.subscriptionActive || subscription.isAdminBusiness) {
+      setRecentAccessExpiresAt(null);
+    }
+  }, [subscription.bypassActive, subscription.subscriptionActive, subscription.isAdminBusiness]);
 
   // Applies a theme choice immediately -- local state, localStorage, AND a
   // direct partial Firestore write (merge: true only touches
@@ -4663,7 +4674,7 @@ Access to full financial telemetry is restricted.`;
   const subscriptionGateApplies = !!loggedInUser && !!auth.currentUser &&
     (isLoggedIn || (!loggedInUser.isEmployee && currentView === "placeholder_password"));
 
-  if (subscriptionGateApplies && subscription.loading) {
+  if (subscriptionGateApplies && subscription.loading && !recentlyGrantedAccess) {
     return (
       <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl px-8 py-7 text-center">
@@ -4676,7 +4687,7 @@ Access to full financial telemetry is restricted.`;
   }
 
   if (
-    subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness &&
+    subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness && !recentlyGrantedAccess &&
     (!subscription.configured || (!subscription.subscriptionActive && !subscription.bypassActive))
   ) {
     return (
@@ -4685,17 +4696,16 @@ Access to full financial telemetry is restricted.`;
           <PaywallGate
             isEmployee={!!loggedInUser.isEmployee}
             onLogout={handleLogout}
-            onAccessGranted={() => {
-              // BillingPage has its own status hook inside the gate. Refresh
-              // this top-level hook too, otherwise the inner card can say
-              // "Free access active" while App still renders the stale gate.
-              //
-              // A new owner who redeems free access has NOT finished setup yet:
-              // restore the onboarding shell, not Dashboard. Once the refreshed
-              // server state confirms bypassActive, the gate disappears and
-              // placeholder_password resumes the existing business onboarding.
+            onAccessGranted={(bypassExpiresAt) => {
+              // The redeem endpoint has already validated the code and written
+              // bypassActive server-side, so unlock the UI immediately while
+              // the top-level status hook catches up.
+              setRecentAccessExpiresAt(
+                typeof bypassExpiresAt === "number" ? bypassExpiresAt : Date.now() + 60_000
+              );
               setIsLoggedIn(false);
               setCurrentView("placeholder_password");
+              window.history.replaceState({}, "", "/app");
               subscription.refresh();
             }}
           />
