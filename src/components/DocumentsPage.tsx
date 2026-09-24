@@ -1877,7 +1877,7 @@ export const DocumentsPage: React.FC = () => {
           customerEmail={generatedPdfDraft?.customerEmail || pendingSignatureCapture?.customerEmail || pdfEditorContact?.email}
           autoCaptureSignatures={Boolean(pendingSignatureCapture || generatedPdfDraft?.autoCaptureSignatures)}
           autoOpenSignSetup={generatedPdfDraft?.autoOpenSignSetup}
-          signatureOnlyMode={pdfEditorSignatureOnly || Boolean(pendingSignatureCapture || (generatedPdfDraft?.autoCaptureSignatures && !generatedPdfDraft?.autoOpenSignSetup))}
+          signatureOnlyMode={pdfEditorSignatureOnly || Boolean(generatedPdfDraft?.signatureOnlyMode || pendingSignatureCapture || (generatedPdfDraft?.autoCaptureSignatures && !generatedPdfDraft?.autoOpenSignSetup))}
           businessProfile={businessProfile}
           onClose={closePDFEditor}
           onSave={handleSavePDFEditor}
