@@ -113,6 +113,20 @@ async function notifySignedEstimateReadyForJob(
   const displayTime = timestamp.slice(0, 16).replace("T", " ");
   const estimateLabel = details.estimateNumber || details.estimateId;
   const description = `${details.customerName} signed estimate ${estimateLabel}${typeof details.amount === "number" ? ` for ${details.amount.toLocaleString()}` : ""}. Customer activated. Ready to create the job.`;
+  const jobPrefill = Object.fromEntries(Object.entries({
+    customerId: details.customerId,
+    customerName: details.customerName,
+    customerPhone: details.customerPhone,
+    customerEmail: details.customerEmail,
+    customerAddress: details.customerAddress,
+    title: details.description || `Job from ${estimateLabel}`,
+    description: details.description || details.notes || "",
+    notes: details.notes || "",
+    budget: details.amount,
+    sourceEstimateId: details.estimateId,
+    sourceLeadId: details.sourceLeadId,
+    source: details.source
+  }).filter(([, value]) => value !== undefined));
 
   await Promise.all(Array.from(recipients).map(recipientEmail => {
     const id = `notif_signed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
