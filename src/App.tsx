@@ -4689,8 +4689,13 @@ Access to full financial telemetry is restricted.`;
               // BillingPage has its own status hook inside the gate. Refresh
               // this top-level hook too, otherwise the inner card can say
               // "Free access active" while App still renders the stale gate.
-              const dashboard = OS_SCREENS.find(screen => screen.id === "dashboard") || OS_SCREENS[0];
-              setActiveScreen(dashboard);
+              //
+              // A new owner who redeems free access has NOT finished setup yet:
+              // restore the onboarding shell, not Dashboard. Once the refreshed
+              // server state confirms bypassActive, the gate disappears and
+              // placeholder_password resumes the existing business onboarding.
+              setIsLoggedIn(false);
+              setCurrentView("placeholder_password");
               subscription.refresh();
             }}
           />
