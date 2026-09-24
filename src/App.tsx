@@ -6662,6 +6662,14 @@ Access to full financial telemetry is restricted.`;
                             onClick={() => {
                               // Mark as read
                               setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
+                              if (notif.type === "signed_estimate_ready_for_job" && notif.jobPrefill) {
+                                setBuildJobPrefill(notif.jobPrefill);
+                                const jobsScreen = OS_SCREENS.find(s => s.id === "jobs");
+                                if (jobsScreen) setActiveScreen(jobsScreen);
+                                setShowNotificationPanel(false);
+                                triggerNotification("Signed estimate loaded into Create Job.");
+                                return;
+                              }
                               if (notif.screenId) {
                                 const matched = OS_SCREENS.find(s => s.id === notif.screenId);
                                 if (matched) setActiveScreen(matched);
@@ -6679,6 +6687,11 @@ Access to full financial telemetry is restricted.`;
                               <span className="text-[8px] text-[#5E7393] font-mono">{notif.time}</span>
                             </div>
                             <p className="text-[10px] mt-0.5 leading-normal truncate">{notif.description}</p>
+                            {notif.type === "signed_estimate_ready_for_job" && notif.jobPrefill && (
+                              <div className="mt-1.5">
+                                <span className="inline-flex rounded-lg bg-[#315C9F] px-2 py-1 text-[8px] font-black uppercase tracking-wide text-white">Create Job →</span>
+                              </div>
+                            )}
                             {notif.type === "time_clock_approval" && notif.actionable && !notif.actionedAt && (
                               <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
                                 <button
