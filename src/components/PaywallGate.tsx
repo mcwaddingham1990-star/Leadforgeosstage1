@@ -5,6 +5,7 @@ import { BillingPage } from "./BillingPage";
 interface PaywallGateProps {
   isEmployee: boolean;
   onLogout: () => void | Promise<void>;
+  onAccessGranted: () => void;
 }
 
 /**
@@ -18,7 +19,7 @@ interface PaywallGateProps {
  * out (log into a different account) rather than duplicating any of that
  * logic here.
  */
-export const PaywallGate: React.FC<PaywallGateProps> = ({ isEmployee, onLogout }) => {
+export const PaywallGate: React.FC<PaywallGateProps> = ({ isEmployee, onLogout, onAccessGranted }) => {
   return (
     <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
       <div className="max-w-lg w-full space-y-5">
@@ -36,7 +37,7 @@ export const PaywallGate: React.FC<PaywallGateProps> = ({ isEmployee, onLogout }
               </p>
             </div>
           </div>
-          <BillingPage />
+          <BillingPage onAccessGranted={onAccessGranted} />
         </div>
         <button
           onClick={() => void onLogout()}
