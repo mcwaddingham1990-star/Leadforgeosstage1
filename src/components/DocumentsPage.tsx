@@ -1989,9 +1989,16 @@ export const DocumentsPage: React.FC = () => {
               Send
             </button>
             <button
-              onClick={() => {
-                setDocuments(prev => prev.map(d => d.id === actionMenuDoc.id ? { ...d, status: "Awaiting Signature", folder: "eSign" } : d));
-                openSendModal({ ...actionMenuDoc, status: "Awaiting Signature", folder: "eSign" });
+              onClick={async () => {
+                const doc = { ...actionMenuDoc, status: "Awaiting Signature", folder: "eSign" } as DocumentItem;
+                setDocuments(prev => prev.map(d => d.id === doc.id ? doc : d));
+                setActionMenuDoc(null);
+                setActionMenuPosition(null);
+                // "Send for Signing" is a direct action: prepare the real
+                // document and immediately open the device's native share
+                // sheet. The larger export-channel menu remains available
+                // from the ordinary "Send" action above.
+                await shareDocumentWithAttachment(doc, "share");
               }}
               className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
             >
