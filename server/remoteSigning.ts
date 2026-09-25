@@ -381,12 +381,23 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
     const resolved = await resolveSignedEstimateCustomer(db, data);
     if (resolved.estimate?.id) {
       await db.collection("estimates").doc(resolved.estimate.id).update({
-        status: "Accepted",
+        status: "Signed",
         ...(resolved.customerId ? { customerId: resolved.customerId } : {}),
         acceptedAt: now.toISOString(),
         acceptedVia: "remote_signature",
         updatedAt: now.toISOString()
       });
+
+      if (resolved.estimate.sourceLeadId) {
+        const leadRef = db.collection("leads").doc(String(resolved.estimate.sourceLeadId));
+        const leadSnap = await leadRef.get();
+        if (leadSnap.exists && leadSnap.data()?.businessId === data.businessId) {
+          await leadRef.update({
+            status: "Won",
+            updatedAt: now.toISOString()
+          });
+        }
+      }
 
       if (resolved.customerId && resolved.customer) {
         await db.collection("customers").doc(resolved.customerId).update({

@@ -124,7 +124,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, estimates, setEstimates, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, memberships, purchaseOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
+  const { documents, setDocuments, estimates, setEstimates, customers: customersList, setCustomers, leads, setLeads, notifications, setNotifications, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, memberships, purchaseOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
@@ -499,6 +499,7 @@ export const DocumentsPage: React.FC = () => {
 
   // Handler to save PDF Editor modifications
   const handleSavePDFEditor = (docId: string, updatedName: string, metaProperties?: any) => {
+    const linkedDocument = documents.find(d => d.id === docId);
     setDocuments(prev => {
       const exists = prev.some(d => d.id === docId);
       if (exists) {
@@ -570,11 +571,91 @@ export const DocumentsPage: React.FC = () => {
       }
     });
 
-    if (metaProperties?.status === "Signed" && generatedPdfDraft?.sourceType === "Estimate") {
-      const sourceEstimateId = generatedPdfDraft.sourceId;
-      setEstimates(prev => prev.map(estimate =>
-        estimate.id === sourceEstimateId ? { ...estimate, status: "Signed" } : estimate
-      ));
+    const sourceEstimateId =
+      linkedDocument?.estimateId && linkedDocument.estimateId !== "None"
+        ? linkedDocument.estimateId
+        : generatedPdfDraft?.sourceType === "Estimate"
+          ? generatedPdfDraft.sourceId
+          : undefined;
+
+    if (metaProperties?.status === "Signed" && sourceEstimateId) {
+      const sourceEstimate = estimates.find(estimate => estimate.id === sourceEstimateId);
+
+      // Update the one existing estimate in place. The Map also collapses any
+      // accidental same-ID copies so signing can never add another table row.
+      setEstimates(prev => prev
+        .filter((estimate, index, all) => all.findIndex(item => item.id === estimate.id) === index)
+        .map(estimate => estimate.id === sourceEstimateId ? { ...estimate, status: "Signed" as const } : estimate));
+
+      if (sourceEstimate) {
+        const matchedCustomer = customersList.find(customer =>
+          customer.id === sourceEstimate.customerId ||
+          customer.contact === sourceEstimate.customerName ||
+          customer.company === sourceEstimate.company
+        );
+
+        if (matchedCustomer) {
+          setCustomers(prev => prev.map(customer =>
+            customer.id === matchedCustomer.id
+              ? { ...customer, status: "Active", pendingConfirmation: false }
+              : customer
+          ));
+        }
+
+        if (sourceEstimate.sourceLeadId) {
+          setLeads(prev => prev.map(lead =>
+            lead.id === sourceEstimate.sourceLeadId ? { ...lead, status: "Won" } : lead
+          ));
+        }
+
+        const recipientEmail = loggedInUser?.email;
+        const alreadyQueued = notifications.some(notification =>
+          notification.type === "signed_estimate_ready_for_job" &&
+          notification.relatedEstimateId === sourceEstimateId
+        );
+
+        if (recipientEmail && !alreadyQueued) {
+          const now = new Date();
+          const time = now.toISOString().slice(0, 16).replace("T", " ");
+          const customerName = matchedCustomer?.contact || sourceEstimate.customerName;
+          const jobPrefill = {
+            customerId: matchedCustomer?.id || sourceEstimate.customerId,
+            customerName,
+            customerPhone: sourceEstimate.phone || matchedCustomer?.phone,
+            customerEmail: matchedCustomer?.email,
+            customerAddress: sourceEstimate.address || matchedCustomer?.address,
+            title: sourceEstimate.projectSpecifics || `Job from ${sourceEstimate.number}`,
+            description: sourceEstimate.projectSpecifics || sourceEstimate.notes || "",
+            notes: sourceEstimate.notes || "",
+            budget: sourceEstimate.amount,
+            sourceEstimateId,
+            sourceLeadId: sourceEstimate.sourceLeadId,
+            source: sourceEstimate.source
+          };
+
+          setNotifications(prev => [{
+            id: `notif_signed_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
+            category: "jobs",
+            screenId: "jobs",
+            type: "signed_estimate_ready_for_job",
+            actionable: true,
+            title: "Signed estimate — create job",
+            description: `${customerName} signed estimate ${sourceEstimate.number}. Ready to create the job.`,
+            time,
+            isRead: false,
+            isArchived: false,
+            isPinned: false,
+            priority: "High",
+            assignedUser: loggedInUser?.name || loggedInUser?.role || "Owner",
+            recipientEmail,
+            createdBy: "In-Person Signing",
+            relatedCustomerId: matchedCustomer?.id,
+            relatedEstimateId: sourceEstimateId,
+            jobPrefill,
+            history: [`${time}: Estimate signed in person and moved to the job handoff.`]
+          }, ...prev]);
+        }
+      }
     }
 
     // A signer committing their portion mid-session needs the Documents list
