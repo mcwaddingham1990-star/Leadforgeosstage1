@@ -256,16 +256,21 @@ function GoalCard({goal,index,canManage,canRespond,actor,inventory,onChange,onSa
   const responseState=canRespond ? response : goal;
   const finished=canRespond ? (response.completed || response.status==="Completed") : (goal.completed || goal.status==="Completed");
 
-  return <section className="overflow-hidden rounded-2xl border border-[#9EC8EF] bg-white">
-    <button type="button" onClick={()=>setOpen(v=>!v)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left">
+  return <section className="border-b border-[#C8DDEE] last:border-b-0">
+    <button
+      type="button"
+      onClick={()=>setOpen(v=>!v)}
+      className="flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left text-[#1F3557] hover:bg-blue-50/50"
+      style={{ background: "transparent", boxShadow: "none", border: "0", borderRadius: 0 }}
+    >
       <div className="min-w-0">
-        <p className="truncate text-sm font-black text-[#1F3557]">{title}</p>
-        <p className="mt-1 text-[10px] font-semibold text-[#5E7393]">{submitted ? `Employee response: ${goal.completed || goal.status==="Completed" ? "Completed" : "Still in progress"}` : "Awaiting employee response"}</p>
+        <p className="truncate text-xs font-bold">{finished ? "✓ " : ""}{title}</p>
+        <p className="mt-0.5 text-[9px] font-medium text-[#6F819A]">{submitted ? `Employee response: ${goal.completed || goal.status==="Completed" ? "Completed" : "Still in progress"}` : "Awaiting employee response"}</p>
       </div>
-      {open?<ChevronDown className="h-5 w-5 shrink-0 text-[#315C9F]"/>:<ChevronRight className="h-5 w-5 shrink-0 text-[#315C9F]"/>}
+      {open?<ChevronDown className="h-4 w-4 shrink-0 text-[#5E7393]"/>:<ChevronRight className="h-4 w-4 shrink-0 text-[#5E7393]"/>}
     </button>
 
-    {open&&<div className="space-y-4 border-t border-blue-100 p-4">
+    {open&&<div className="space-y-4 border-t border-blue-100 px-1 py-3">
       <section className="rounded-xl bg-blue-50/60 p-3">
         <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase text-[#315C9F]">Goal Setup</p>{canManage&&<button onClick={onDelete} className="text-rose-600" aria-label="Delete goal"><Trash2 className="h-4 w-4"/></button>}</div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
