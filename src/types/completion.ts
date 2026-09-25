@@ -30,6 +30,9 @@ export interface CompletionGoal {
   issuesDuringCompletion: string;
   lastEmployeeName?: string;
   lastUpdatedAt?: string;
+  /** Stamped only when the assigned employee explicitly saves their goal response. Management should not treat unsaved/blank worker fields as a response. */
+  employeeResponseSubmittedAt?: string;
+  employeeResponseSubmittedBy?: string;
   materials: CompletionMaterial[];
   attachments: CompletionAttachment[];
   // Per-goal manager sign-off -- distinct from the whole-plan
