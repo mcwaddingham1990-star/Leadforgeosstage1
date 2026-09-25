@@ -274,12 +274,13 @@ export const EstimatesPage: React.FC = () => {
   // "Save & Generate PDF" action everywhere it appears (create form, review
   // screen).
   const generateEstimatePdf = async (est: Estimate, autoCaptureSignatures = false, autoOpenSignSetup = false, signatureOnlyMode = false) => {
-    const { pdfBase64, matchedCustomer } = await buildAndStoreEstimatePdf(est);
+    const { pdfBase64, matchedCustomer, document } = await buildAndStoreEstimatePdf(est);
     setGeneratedPdfDraft({
       filename: `${est.number}.pdf`,
       title: `Estimate ${est.number}`,
       sourceType: "Estimate",
       sourceId: est.id,
+      documentId: document.id,
       customerName: est.customerName,
       customerPhone: matchedCustomer?.phone,
       customerEmail: matchedCustomer?.email,

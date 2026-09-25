@@ -189,7 +189,7 @@ export const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     if (!generatedPdfDraft) return;
-    setPdfEditorDocId(null);
+    setPdfEditorDocId(generatedPdfDraft.documentId || null);
     setPdfEditorDocName(generatedPdfDraft.filename);
     setPdfEditorBase64("");
     setPdfEditorAutoOpenPicker(false);
