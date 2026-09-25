@@ -35,9 +35,9 @@ type InviteMode = "" | "select" | "custom";
 
 export const ONBOARDING_ROLE_TEMPLATES: Array<[string, string, string[]]> = [
   ["owner", "Owner", MODULE_CATALOG.map(m => m.id)],
-  ["general_manager", "General Manager", ["customers","leads","estimates","jobs","scheduling","dispatch","routes","employee_locations","inventory","documents","messages","timeclock","ai_assistant","settings"]],
-  ["office_manager", "Office Manager", ["dashboard","revenue","accounting","customers","leads","estimates","invoices","scheduling","dispatch","routes","employee_locations","jobs","timeclock","inventory","documents","pdf_editor","esign","messages","roster","training","reports","settings"]],
-  ["operations_manager", "Operations Manager", ["scheduling","dispatch","routes","employee_locations","jobs","inventory","documents","messages"]],
+  ["general_manager", "General Manager", ["customers","leads","estimates","jobs","scheduling","dispatch","routes","employee_locations","inventory","documents","messages","timeclock","timeclock_team_punches","ai_assistant","settings"]],
+  ["office_manager", "Office Manager", ["dashboard","revenue","accounting","customers","leads","estimates","invoices","scheduling","dispatch","routes","employee_locations","jobs","timeclock","timeclock_team_punches","inventory","documents","pdf_editor","esign","messages","roster","training","reports","settings"]],
+  ["operations_manager", "Operations Manager", ["scheduling","dispatch","routes","employee_locations","jobs","timeclock","timeclock_team_punches","inventory","documents","messages"]],
   ["dispatcher", "Dispatcher", ["dispatch","routes","employee_locations","scheduling","jobs","customers"]],
   ["scheduler", "Scheduler", ["scheduling","customers","jobs","messages"]],
   ["sales_manager", "Sales Manager", ["customers","leads","estimates","messages","ai_assistant"]],
@@ -110,7 +110,16 @@ export const RosterPage: React.FC = () => {
       if (!saved?.length) return;
       const merged = [...DEFAULT_INVITE_ROLES];
       for (const role of saved) {
-        const normalized = { ...role, modulePermissions: role.modulePermissions || defaultGranularFromModuleList(role.permissions || [], "edit") };
+        const defaults = DEFAULT_INVITE_ROLES.find(item => item.id === role.id);
+        const permissions = [...new Set([...(defaults?.permissions || []), ...(role.permissions || [])])];
+        const normalized = {
+          ...role,
+          permissions,
+          modulePermissions: {
+            ...(defaults?.modulePermissions || defaultGranularFromModuleList(permissions, "edit")),
+            ...(role.modulePermissions || {})
+          }
+        };
         const index = merged.findIndex(r => r.id === normalized.id);
         if (index >= 0) merged[index] = normalized; else merged.push(normalized);
       }
@@ -483,12 +492,19 @@ export const RosterPage: React.FC = () => {
                   const flags = getPermissionFlags(editingEmployee.granularPermissions, mod.id);
                   return <div key={mod.id} className="rounded-lg border border-slate-100 p-2">
                     <div className="font-bold text-[10px] text-[#1F3557] mb-1.5">{mod.label}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
-                        <input type="checkbox" checked={flags[action]} onChange={() => toggleEmployeePermission(mod.id, action)} />
-                        {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
-                      </label>)}
-                    </div>
+                    {mod.singleAction ? (
+                      <label className="flex items-center gap-1 text-[9px] font-bold text-slate-600">
+                        <input type="checkbox" checked={flags[mod.singleAction]} onChange={() => toggleEmployeePermission(mod.id, mod.singleAction!)} />
+                        Allowed
+                      </label>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
+                          <input type="checkbox" checked={flags[action]} onChange={() => toggleEmployeePermission(mod.id, action)} />
+                          {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
+                        </label>)}
+                      </div>
+                    )}
                   </div>;
                 })}
               </div>
@@ -564,12 +580,19 @@ export const RosterPage: React.FC = () => {
                       const flags = getPermissionFlags(invitePermissions, mod.id);
                       return <div key={mod.id} className="rounded-lg border border-slate-100 p-2">
                         <div className="font-bold text-[10px] text-[#1F3557] mb-1.5">{mod.label}</div>
-                        <div className="flex flex-wrap gap-2">
-                          {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
-                            <input type="checkbox" checked={flags[action]} onChange={() => togglePermission(mod.id, action)} />
-                            {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
-                          </label>)}
-                        </div>
+                        {mod.singleAction ? (
+                          <label className="flex items-center gap-1 text-[9px] font-bold text-slate-600">
+                            <input type="checkbox" checked={flags[mod.singleAction]} onChange={() => togglePermission(mod.id, mod.singleAction!)} />
+                            Allowed
+                          </label>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {(["view","edit","delete"] as PermissionAction[]).map(action => <label key={action} className="flex items-center gap-1 text-[9px] text-slate-600">
+                              <input type="checkbox" checked={flags[action]} onChange={() => togglePermission(mod.id, action)} />
+                              {action === "edit" ? "Create & Edit" : action[0].toUpperCase() + action.slice(1)}
+                            </label>)}
+                          </div>
+                        )}
                       </div>;
                     })}
                   </div>
