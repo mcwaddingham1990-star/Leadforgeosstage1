@@ -124,7 +124,7 @@ const STOCK_TEMPLATES = [
 export const DocumentsPage: React.FC = () => {
   const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const { documents, setDocuments, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, memberships, purchaseOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
+  const { documents, setDocuments, estimates, setEstimates, customers: customersList, recentRoster, schedulingEvents, employees, setEmployees, generatedPdfDraft, setGeneratedPdfDraft, pendingSignatureCapture, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, workOrders, memberships, purchaseOrders, pendingCreateTemplateFolder, setPendingCreateTemplateFolder } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [editingWorkOrder, setEditingWorkOrder] = useState<WorkOrder | null>(null);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
@@ -569,6 +569,22 @@ export const DocumentsPage: React.FC = () => {
         return [...prev, newDoc];
       }
     });
+
+    // When Collect Signatures was launched directly from a newly built
+    // Estimate, the PDF editor owns the final signature save. Mirror that
+    // completed signing state back to the source estimate so its row no
+    // longer remains Draft after the customer signs in person.
+    if (
+      metaProperties?.status === "Signed" &&
+      generatedPdfDraft?.sourceType === "Estimate" &&
+      generatedPdfDraft.sourceId
+    ) {
+      setEstimates(prev => prev.map(estimate =>
+        estimate.id === generatedPdfDraft.sourceId
+          ? { ...estimate, status: "Signed" }
+          : estimate
+      ));
+    }
 
     // A signer committing their portion mid-session needs the Documents list
     // to pick up the new lock/status right away without booting the drafter
