@@ -458,6 +458,83 @@ describe("isAssignedToJob hardening: cross-business job-id coincidence", () => {
   });
 });
 
+describe("Team clock permission", () => {
+  const OTHER_EMPLOYEE = "employee-c@example.com";
+
+  test("a regular employee can create their own punch but cannot clock in another employee", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "time_clock_logs", "own_punch"), {
+      businessId: BIZ_A,
+      employeeEmail: EMP_A_EMAIL,
+      employeeName: "Employee A",
+      type: "Clock In",
+      timestamp: new Date().toISOString(),
+    }));
+    await assertFails(setDoc(doc(db, "time_clock_logs", "other_punch_denied"), {
+      businessId: BIZ_A,
+      employeeEmail: OTHER_EMPLOYEE,
+      employeeName: "Employee C",
+      type: "Clock In",
+      timestamp: new Date().toISOString(),
+    }));
+  });
+
+  test("an employee explicitly granted Clock Employees In/Out can create another employee's punch and active shift", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          timeclock_team_punches: { view: false, edit: true, delete: false },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "time_clock_logs", "other_punch_allowed"), {
+      businessId: BIZ_A,
+      employeeEmail: OTHER_EMPLOYEE,
+      employeeName: "Employee C",
+      type: "Clock In",
+      timestamp: new Date().toISOString(),
+    }));
+    await assertSucceeds(setDoc(doc(db, "active_shifts", "team_active"), {
+      businessId: BIZ_A,
+      employeeEmail: OTHER_EMPLOYEE,
+      employeeName: "Employee C",
+      clockInLogId: "other_punch_allowed",
+      updatedAt: new Date().toISOString(),
+    }));
+  });
+
+  test("an explicit deny overrides the legacy built-in manager default", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        role: "General Manager",
+        granularPermissions: {
+          timeclock_team_punches: { view: false, edit: false, delete: false },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "time_clock_logs", "manager_explicit_deny"), {
+      businessId: BIZ_A,
+      employeeEmail: OTHER_EMPLOYEE,
+      employeeName: "Employee C",
+      type: "Clock In",
+      timestamp: new Date().toISOString(),
+    }));
+  });
+
+  test("owners can clock in another employee", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(setDoc(doc(db, "time_clock_logs", "owner_team_punch"), {
+      businessId: BIZ_A,
+      employeeEmail: OTHER_EMPLOYEE,
+      employeeName: "Employee C",
+      type: "Clock In",
+      timestamp: new Date().toISOString(),
+    }));
+  });
+});
+
 describe("Employee invites cannot be minted for a business you don't belong to", () => {
   test("a Business A member cannot create an invite for Business B", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
