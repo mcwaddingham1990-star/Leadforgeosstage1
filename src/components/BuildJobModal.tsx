@@ -358,7 +358,7 @@ export function BuildJobModal({
     {isTrackingOpen && savedJob && businessId && <ProjectCompletionTracking
       job={savedJob} plan={completionPlans.find(plan => plan.jobId === savedJob.id)}
       businessId={businessId} actor={actor} canManage={canManageCompletion}
-      canCreate={canManageCompletion || isAssignedWorker(savedJob)} inventory={inventoryList}
+      canCreate={canManageCompletion} canRespond={isAssignedWorker(savedJob)} inventory={inventoryList}
       setPlans={setCompletionPlans} setDocuments={setDocuments} onClose={closeTracking} notify={triggerNotification}
       onSkip={handleSkipTracking} onRemindLater={handleRemindLaterTracking}
     />}
