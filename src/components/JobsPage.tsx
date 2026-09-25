@@ -68,7 +68,6 @@ export const JobsPage: React.FC = () => {
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [isPurchaseOrderBuilderOpen, setIsPurchaseOrderBuilderOpen] = useState(false);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
-  const [isChecklistPriceBookOpen, setIsChecklistPriceBookOpen] = useState(false);
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
@@ -106,12 +105,14 @@ export const JobsPage: React.FC = () => {
     setModal("create");
     setBuildJobPrefill(null);
   }, [buildJobPrefill, setBuildJobPrefill]);
-  const [newTask, setNewTask] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [materialQty, setMaterialQty] = useState(1);
   const [completionJobId, setCompletionJobId] = useState<string | null>(null);
 
   const selected = jobs.find(j => j.id === selectedId) || null;
+  const selectedCompletionPlan = selected ? completionPlans.find(plan => plan.jobId === selected.id) : undefined;
+  const selectedCompletedGoals = selectedCompletionPlan?.goals.filter(goal => goal.completed || goal.status === "Completed").length || 0;
+  const selectedGoalProgress = selectedCompletionPlan?.goals.length ? Math.round((selectedCompletedGoals / selectedCompletionPlan.goals.length) * 100) : 0;
   const jobCosting = useMemo(
     () => selected ? computeJobCosting(selected, estimates, timeClockLogs, employees, transactions, payrollWorkweekStart) : null,
     [selected, estimates, timeClockLogs, employees, transactions, payrollWorkweekStart]
@@ -176,17 +177,6 @@ export const JobsPage: React.FC = () => {
     });
   };
 
-  const addTask = () => {
-    if (!selected || !newTask.trim()) return;
-    writeJob(selected.id, { checklist: [...(selected.checklist || []), { id: uid("task"), label: newTask.trim(), completed: false }] }, `Checklist item added: ${newTask.trim()}`);
-    setNewTask("");
-  };
-  const toggleTask = (taskId: string) => {
-    if (!selected) return;
-    const checklist = (selected.checklist || []).map(t => t.id === taskId ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : undefined, completedBy: !t.completed ? actor : undefined } : t);
-    const done = checklist.filter(t => t.completed).length;
-    writeJob(selected.id, { checklist, progress: checklist.length ? Math.round(done / checklist.length * 100) : 0 }, "Checklist progress updated");
-  };
   const allocateMaterial = () => {
     if (!selected || !materialId || materialQty <= 0) return;
     const item = inventoryList.find(i => i.id === materialId);
@@ -279,16 +269,37 @@ export const JobsPage: React.FC = () => {
     </div>
 
     {visibleJobs.length===0 ? <div className="rounded-3xl border-2 border-dashed border-[#9EC8EF] bg-[#EAF5FF] p-12 text-center"><Briefcase className="mx-auto h-10 w-10 text-[#9EC8EF]"/><p className="mt-3 text-sm font-black text-[#1F3557]">No jobs found.</p><p className="text-xs text-[#5E7393]">Clear your filters or select New Job.</p></div> : viewMode==="board" ?
-      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} onOpen={()=>setSelectedId(job.id)} onTracking={()=>openCompletion(job)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
+      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} plan={completionPlans.find(plan=>plan.jobId===job.id)} onOpen={()=>setSelectedId(job.id)} onTracking={()=>openCompletion(job)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
       <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Job Tracking</button></div></td></tr>)}</tbody></table></div>}
 
     {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
       <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>void storeJobPdf(selected)} className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700"><FileText className="mr-1 inline h-3.5 w-3.5"/>Store as PDF</button><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
       <div className="space-y-5 p-5">
-        <button onClick={()=>openCompletion(selected)} className="inline-flex items-center gap-1 text-xs font-black text-[#315C9F] underline decoration-2 underline-offset-4"><ClipboardCheck className="h-4 w-4"/>Edit/View Job Tracking <ChevronRight className="h-4 w-4"/></button>
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}<div className="mt-3 border-t border-blue-100 pt-3"><CustomerPortalControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} /></div><div className="mt-3 border-t border-blue-100 pt-3"><ReviewRequestControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} jobId={selected.id} jobDescription={selected.title || selected.description} /></div></section>
-        <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><div className="flex justify-between"><h4 className="text-xs font-black uppercase text-[#1F3557]"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Work Checklist</h4><b className="text-xs text-[#315C9F]">{selected.progress||0}%</b></div><div className="mt-3 h-2 overflow-hidden rounded bg-blue-100"><div className="h-full bg-emerald-500" style={{width:`${selected.progress||0}%`}}/></div><div className="mt-3 space-y-2">{(selected.checklist||[]).map(t=><label key={t.id} className="flex items-center gap-2 rounded-lg bg-blue-50 p-2 text-xs"><input type="checkbox" checked={t.completed} onChange={()=>toggleTask(t.id)} disabled={!canEdit}/><span className={t.completed?"line-through text-slate-400":"font-semibold text-slate-700"}>{t.label}</span></label>)}{!(selected.checklist||[]).length&&<p className="text-xs text-slate-400">No checklist items yet.</p>}</div>{canEdit&&<div className="mt-3 flex gap-2"><input value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} placeholder="Add work step or inspection item" className="flex-1 rounded-lg border border-[#9EC8EF] px-3 py-2 text-xs"/><button onClick={addTask} className="rounded-lg bg-[#315C9F] px-3 text-white"><Plus className="h-4 w-4"/></button></div>}{canEdit&&<button onClick={()=>setIsChecklistPriceBookOpen(true)} className="mt-2 w-full rounded-lg border border-dashed border-[#315C9F] py-1.5 text-[10px] font-black text-[#315C9F]">💲 Add Flat Rate Pricing Model</button>}</section>
+        <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="text-xs font-black uppercase text-[#1F3557]"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Job Tracking</h4>
+            <b className="text-xs text-[#315C9F]">{selectedGoalProgress}%</b>
+          </div>
+          <div className="mt-3">
+            {businessId ? <ProjectCompletionTracking
+              inline
+              job={selected}
+              plan={selectedCompletionPlan}
+              businessId={businessId}
+              actor={actor}
+              canManage={canManageCompletion}
+              canCreate={canManageCompletion}
+              canRespond={isAssignedWorker(selected)}
+              inventory={inventoryList}
+              setPlans={setCompletionPlans}
+              setDocuments={setDocuments}
+              onClose={()=>{}}
+              notify={triggerNotification}
+            /> : <p className="text-xs text-slate-500">Job Tracking will be available once the business account is loaded.</p>}
+          </div>
+        </section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]"><Package className="mr-1 inline h-4 w-4"/>Materials & Inventory</h4><div className="mt-3 space-y-2">{(selected.materials||[]).map((m,i)=><div key={`${m.inventoryId}-${i}`} className="flex justify-between rounded-lg bg-blue-50 p-2 text-xs"><span>{m.quantity} × {m.name}</span><b>${(m.quantity*m.unitCost).toFixed(2)}</b></div>)}{!(selected.materials||[]).length&&<p className="text-xs text-slate-400">No material allocated.</p>}</div>{canEdit&&<div className="mt-3 grid grid-cols-[1fr_70px_auto] gap-2"><select value={materialId} onChange={e=>setMaterialId(e.target.value)} className="rounded-lg border border-[#9EC8EF] px-2 text-xs"><option value="">Select inventory item</option>{inventoryList.map(i=><option key={i.id} value={i.id}>{i.name} ({i.quantity} {i.unit})</option>)}</select><input type="number" min="1" value={materialQty} onChange={e=>setMaterialQty(Number(e.target.value))} className="rounded-lg border border-[#9EC8EF] px-2 text-xs"/><button onClick={allocateMaterial} className="rounded-lg bg-[#315C9F] px-3 py-2 text-xs font-bold text-white">Allocate</button></div>}</section>
         {jobCosting && <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4">
           <div className="flex items-center justify-between">
@@ -376,18 +387,13 @@ export const JobsPage: React.FC = () => {
     <CreatePurchaseOrderPicker isOpen={isPurchaseOrderPickerOpen} onClose={()=>setIsPurchaseOrderPickerOpen(false)} prefillBase={purchaseOrderPrefillBase} />
     <PurchaseOrderBuilder isOpen={isPurchaseOrderBuilderOpen} onClose={()=>setIsPurchaseOrderBuilderOpen(false)} editingPurchaseOrder={editingPurchaseOrder} onSaved={()=>setEditingPurchaseOrder(null)} />
     <PriceBookModal isOpen={isPriceBookOpen} onClose={()=>setIsPriceBookOpen(false)} />
-    <PriceBookModal
-      isOpen={isChecklistPriceBookOpen}
-      onClose={()=>setIsChecklistPriceBookOpen(false)}
-      pickerMode={{onPick:(item)=>{if(selected)writeJob(selected.id,{checklist:[...(selected.checklist||[]),{id:uid("chk"),label:item.description,completed:false}]},`${item.description} added from Price Book`);setIsChecklistPriceBookOpen(false);}}}
-    />
   </div>;
 };
 
 const StatusBadge = ({status}:{status:JobStatus}) => <span className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${statusStyle[status]||statusStyle.Scheduled}`}>{status}</span>;
 
-const JobCard = ({job,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;onOpen:()=>void;onTracking:()=>void;estimatedAmount:number}) => {
-  const tasks=job.checklist||[], done=tasks.filter(t=>t.completed).length;
-  return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{tasks.length} tasks · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Edit/View Job Tracking</button></div></div>;
+const JobCard = ({job,plan,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;plan?:ProjectCompletionPlan;onOpen:()=>void;onTracking:()=>void;estimatedAmount:number}) => {
+  const goals=plan?.goals||[], done=goals.filter(goal=>goal.completed||goal.status==="Completed").length;
+  return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{goals.length} goals · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Edit/View Job Tracking</button></div></div>;
 };
 
