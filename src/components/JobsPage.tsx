@@ -314,6 +314,13 @@ export const JobsPage: React.FC = () => {
           </div>
         </section>}
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["scheduling","Schedule",Calendar],["dispatch","Dispatch",Truck],["documents","Documents",FileText],["messages","Messages",MessageSquare]].map(([id,label,I]:any)=><button key={id} onClick={()=>navigateToScreen(id)} className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"><I className="mx-auto mb-1 h-4 w-4"/>{label}{id==="documents"&&<span className="ml-1">({documents.filter(d=>d.job===selected.id||d.job===displayNumber(selected)).length})</span>}</button>)}
+          <button
+            onClick={() => openCompletion(selected)}
+            className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs font-bold text-[#315C9F]"
+          >
+            <ClipboardCheck className="mx-auto mb-1 h-4 w-4" />
+            Job Tracking
+          </button>
           {(() => {
             const linkedWorkOrders = workOrders.filter(w => w.sourceJobId === selected.id);
             return <button
