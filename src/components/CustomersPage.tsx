@@ -84,7 +84,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [];
 export const CustomersPage: React.FC<CustomersPageProps> = ({
   onOpenPlaceholder
 }) => {
-  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads, setBuildJobPrefill, timeClockLogs, employees, transactions, payrollWorkweekStart } = useDomainData();
+  const { customers: propCustomers, setCustomers: propSetCustomers, estimates, invoices, schedulingEvents, documents, setDocuments, setGeneratedPdfDraft, setPendingSignatureCapture, preSelectedCustomerId, setPreSelectedCustomerId, businessProfile, memberships, setMemberships, leads, setEstimatePrefill, setBuildJobPrefill, timeClockLogs, employees, transactions, payrollWorkweekStart } = useDomainData();
   const [isWorkOrderBuilderOpen, setIsWorkOrderBuilderOpen] = useState(false);
   const [workOrderPrefill, setWorkOrderPrefill] = useState<Partial<WorkOrder> | undefined>(undefined);
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
@@ -273,6 +273,17 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     if (match) setSelectedCustomer(match);
     setPreSelectedCustomerId(undefined);
   }, [preSelectedCustomerId, customers, setPreSelectedCustomerId]);
+
+  const openBuildEstimateForCustomer = (customer: Customer) => {
+    setEstimatePrefill({
+      customerName: customer.contact || customer.company,
+      company: customer.company,
+      phone: customer.phone,
+      address: customer.address,
+      sourceLeadId: customer.sourceLeadId
+    });
+    onNavigateToScreen("estimates");
+  };
 
   const openCollectSignatures = (customer: Customer) => {
     setPendingSignatureCapture({ customerName: customer.contact || customer.company, customerPhone: customer.phone, customerEmail: customer.email });
@@ -961,7 +972,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5">
               <button
-                onClick={() => onNavigateToScreen("estimates", { customerId: selectedCustomer?.id })}
+                onClick={() => selectedCustomer ? openBuildEstimateForCustomer(selectedCustomer) : onNavigateToScreen("estimates")}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <FileText className="w-3.5 h-3.5 text-[#1F3557]" />
@@ -2027,7 +2038,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          onNavigateToScreen("estimates", { customerId: selectedCustomer.id });
+                          openBuildEstimateForCustomer(selectedCustomer);
                           setSelectedCustomer(null);
                         }}
                         className="p-2.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-left text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-colors"

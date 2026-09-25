@@ -185,7 +185,7 @@ export const EstimatesPage: React.FC = () => {
         number: "EST-2026-" + Math.floor(100 + Math.random() * 900),
         customerName: r[iCustomer]?.trim() || "",
         company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || `${r[iCustomer]?.trim()} Inc`,
-        status: (iStatus >= 0 && (["Draft","Pending","Sent","Viewed","Accepted","Declined","Expired","Completed"] as string[]).includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Estimate["status"] : "Draft",
+        status: (iStatus >= 0 && (["Draft","Pending","Sent","Viewed","Signed","Accepted","Declined","Expired","Completed"] as string[]).includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Estimate["status"] : "Draft",
         salesRep: (iRep >= 0 ? r[iRep]?.trim() : "") || "Self",
         amount: (iAmount >= 0 ? Number(r[iAmount]) : 0) || 0,
         notes: iNotes >= 0 ? r[iNotes]?.trim() : "",
@@ -675,6 +675,7 @@ export const EstimatesPage: React.FC = () => {
     "Pending",
     "Sent",
     "Viewed",
+    "Signed",
     "Accepted",
     "Declined",
     "Expired",
@@ -690,6 +691,7 @@ export const EstimatesPage: React.FC = () => {
     Pending: "⏳",
     Sent: "📨",
     Viewed: "👁️",
+    Signed: "✍️",
     Accepted: "✅",
     Declined: "❌",
     Expired: "⌛",
@@ -958,7 +960,7 @@ export const EstimatesPage: React.FC = () => {
                 filteredEstimates.map((est) => {
                   // Style badge depending on status
                   let badgeStyle = "bg-slate-100 text-slate-700 border-slate-300";
-                  if (est.status === "Accepted" || est.status === "Completed") {
+                  if (est.status === "Signed" || est.status === "Accepted" || est.status === "Completed") {
                     badgeStyle = "bg-emerald-50 border-emerald-200 text-emerald-700";
                   } else if (est.status === "Pending" || est.status === "Sent" || est.status === "Viewed") {
                     badgeStyle = "bg-amber-50 border-amber-200 text-amber-700";
@@ -1518,6 +1520,7 @@ export const EstimatesPage: React.FC = () => {
                     <option value="Pending">Pending</option>
                     <option value="Sent">Sent</option>
                     <option value="Viewed">Viewed</option>
+                    <option value="Signed">Signed</option>
                     <option value="Accepted">Accepted</option>
                     <option value="Declined">Declined</option>
                     <option value="Expired">Expired</option>
@@ -1729,6 +1732,7 @@ export const EstimatesPage: React.FC = () => {
                         <option value="Pending">Pending</option>
                         <option value="Sent">Sent</option>
                         <option value="Viewed">Viewed</option>
+                        <option value="Signed">Signed</option>
                         <option value="Accepted">Accepted</option>
                         <option value="Declined">Declined</option>
                         <option value="Expired">Expired</option>

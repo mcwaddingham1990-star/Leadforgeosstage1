@@ -150,7 +150,7 @@ export interface Estimate {
    * securely scope "this customer's own estimates" should prefer this over
    * name-matching when it's present. */
   customerId?: string;
-  status: "Draft" | "Pending" | "Sent" | "Viewed" | "Accepted" | "Declined" | "Expired" | "Completed";
+  status: "Draft" | "Pending" | "Sent" | "Viewed" | "Signed" | "Accepted" | "Declined" | "Expired" | "Completed";
   salesRep: string;
   amount: number;
   createdDate: string;
