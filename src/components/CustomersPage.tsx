@@ -972,7 +972,14 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5">
               <button
-                onClick={() => selectedCustomer ? openBuildEstimateForCustomer(selectedCustomer) : onNavigateToScreen("estimates")}
+                onClick={() => {
+                  if (selectedCustomer) {
+                    openBuildEstimateForCustomer(selectedCustomer);
+                    return;
+                  }
+                  setEstimatePrefill({ customerName: "" });
+                  onNavigateToScreen("estimates");
+                }}
                 className="px-3 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] rounded-xl text-[11px] font-bold text-[#1F3557] text-left transition-colors cursor-pointer flex items-center gap-2"
               >
                 <FileText className="w-3.5 h-3.5 text-[#1F3557]" />
