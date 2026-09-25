@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { SchedulingEvent } from "./SchedulingPage";
 import { TimeClockLog } from "../types/domain";
+import { hasPermission } from "../types/permissions";
 import { clockInTransaction, clockOutTransaction } from "../lib/timeClockService";
 import { GpsPrivacyNotice } from "./GpsPrivacyNotice";
 import { RecentRoutesSection } from "./RecentRoutesSection";
@@ -148,6 +149,7 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
   const [manualJobId, setManualJobId] = useState("");
   const [manualRoute, setManualRoute] = useState("");
   const [manualVehicle, setManualVehicle] = useState("");
+  const [teamPunchEmpId, setTeamPunchEmpId] = useState("");
 
   // Edit Time fields
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -195,6 +197,14 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
     const rolesWithPermission = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Payroll", "Accountant / Bookkeeper", "Accountant"];
     return rolesWithPermission.includes(activeRole);
   }, [activeRole]);
+  const hasExplicitTeamPunchSetting = !!loggedInUser?.granularPermissions &&
+    Object.prototype.hasOwnProperty.call(loggedInUser.granularPermissions, "timeclock_team_punches");
+  const legacyManagerTeamPunchDefault = ["General Manager", "Office Manager", "Operations Manager"].includes(activeRole) && !hasExplicitTeamPunchSetting;
+  const canClockOtherEmployees =
+    (!simulatedRole && !loggedInUser?.isEmployee) ||
+    activeRole === "Owner" ||
+    hasPermission(loggedInUser?.granularPermissions, "timeclock_team_punches", "edit") ||
+    legacyManagerTeamPunchDefault;
   const canEditAllRecords = isManagementRole;
   const canViewAllRecords = isManagementRole;
 
@@ -304,6 +314,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
     return roster;
   }, [employeeRecords, timeClockLogs, loggedInUser, activeRole, clockInDuration]);
+  const teamPunchEmployee = employees.find(employee => employee.id === teamPunchEmpId) || null;
+
 
   // Reset Filters helper
   const handleResetFilters = () => {
@@ -574,6 +586,73 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
 
   const handleClockOut = async () => {
     await performClockOut();
+  };
+
+  // Authorized team punch: Owner or a role with the explicit
+  // "Clock Employees In/Out" capability can create a real active shift for
+  // another employee or close that employee's current shift. We deliberately
+  // do NOT capture the manager's GPS and pretend it belongs to the employee.
+  const handleTeamPunch = async () => {
+    if (!canClockOtherEmployees || !teamPunchEmployee || !businessId || !loggedInUser?.email || punchPending) return;
+
+    const targetLogs = timeClockLogs
+      .filter(log => log.employeeEmail === teamPunchEmployee.id)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const lastTargetLog = targetLogs[targetLogs.length - 1];
+    const targetLooksActive = !!lastTargetLog && lastTargetLog.type !== "Clock Out";
+    const clockingOut = teamPunchEmployee.status !== "Off Duty" || targetLooksActive;
+    const { timeStr, dateStr, iso } = nowStamp();
+    const performedBy = loggedInUser.name || loggedInUser.email;
+
+    const log: TimeClockLog = {
+      id: `log_team_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      employeeEmail: teamPunchEmployee.id,
+      employeeName: teamPunchEmployee.name,
+      type: clockingOut ? "Clock Out" : "Clock In",
+      date: dateStr,
+      time: timeStr,
+      timestamp: iso,
+      gps: `Remote punch by ${performedBy} (${activeRole}); employee device location not captured`,
+      approved: true,
+      approvalStatus: "approved",
+      approvedBy: loggedInUser.email,
+      approvedAt: iso,
+      enteredManually: true,
+      verifiedBy: performedBy,
+      verifierRole: activeRole
+    };
+
+    setPunchPending(true);
+    try {
+      if (clockingOut) {
+        await clockOutTransaction(businessId, log, targetLooksActive);
+      } else {
+        await clockInTransaction(businessId, log);
+      }
+
+      setTimeClockLogs(previous => previous.some(entry => entry.id === log.id) ? previous : [...previous, log]);
+
+      if (teamPunchEmployee.id === loggedInUser.email) {
+        setIsClockedIn(!clockingOut);
+        setClockInTime(clockingOut ? null : timeStr);
+        if (clockingOut) setClockInDuration(0);
+      }
+
+      logOperationalEvent?.(
+        clockingOut ? "Employee Clocked Out by Management" : "Employee Clocked In by Management",
+        `${performedBy} ${clockingOut ? "clocked out" : "clocked in"} ${teamPunchEmployee.name} at ${timeStr}.`,
+        clockingOut ? "🚪" : "⏱️"
+      );
+      triggerLocalNotification(`${teamPunchEmployee.name} ${clockingOut ? "clocked out" : "clocked in"} at ${timeStr}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Employee punch could not be saved.";
+      triggerLocalNotification(message);
+      if (message.toLowerCase().includes("already clocked in")) {
+        await refreshTimeClockLogs().catch(() => undefined);
+      }
+    } finally {
+      setPunchPending(false);
+    }
   };
 
   // Action: Start Break
@@ -891,6 +970,43 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
           </div>
         )}
       </div>
+
+      {canClockOtherEmployees && (
+        <div className="rounded-2xl border border-[#A9CDEE] bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="flex-1">
+              <span className="mb-1 block text-[9.5px] font-black uppercase tracking-wider text-[#5E7393]">Team Clock</span>
+              <select
+                value={teamPunchEmpId}
+                onChange={e => setTeamPunchEmpId(e.target.value)}
+                className="w-full rounded-xl border border-[#A9CDEE] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]"
+              >
+                <option value="">Select employee…</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name} — {employee.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleTeamPunch()}
+              disabled={!teamPunchEmployee || punchPending}
+              className={`rounded-xl px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40 ${teamPunchEmployee && teamPunchEmployee.status !== "Off Duty" ? "bg-rose-500" : "bg-emerald-600"}`}
+            >
+              {punchPending
+                ? "Saving…"
+                : teamPunchEmployee && teamPunchEmployee.status !== "Off Duty"
+                  ? "Clock Employee Out"
+                  : "Clock Employee In"}
+            </button>
+          </div>
+          <p className="mt-1.5 text-[9px] text-[#5E7393]">
+            Authorized management punch. The action is saved to that employee’s real time card with the manager recorded as verifier.
+          </p>
+        </div>
+      )}
 
       {/* SUMMARY STATS METRIC CARDS -- company-wide, management only */}
       {canViewAllRecords && (

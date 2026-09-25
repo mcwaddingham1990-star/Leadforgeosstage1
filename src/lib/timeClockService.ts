@@ -1,5 +1,5 @@
 import { arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, query, runTransaction, setDoc, updateDoc, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
 import { TimeClockLog } from "../types/domain";
 
 export interface LiveLocationFix {
@@ -40,6 +40,10 @@ const persistedLog = (businessId: string, log: TimeClockLog) =>
       .filter(([, value]) => value !== undefined)
   );
 
+const isOwnPunch = (employeeEmail: string) =>
+  !!auth.currentUser?.email &&
+  auth.currentUser.email.trim().toLowerCase() === employeeEmail.trim().toLowerCase();
+
 export async function clockInTransaction(businessId: string, log: TimeClockLog): Promise<void> {
   const activeRef = doc(db, "active_shifts", activeShiftId(businessId, log.employeeEmail));
   const logRef = doc(db, "time_clock_logs", log.id);
@@ -60,7 +64,7 @@ export async function clockInTransaction(businessId: string, log: TimeClockLog):
       transaction.set(logRef, persistedLog(businessId, log));
     });
   } catch (error) {
-    if (!isPermissionError(error)) throw error;
+    if (!isPermissionError(error) || !isOwnPunch(log.employeeEmail)) throw error;
     await clockInViaBusinessProfile(businessId, log);
   }
 }
@@ -96,7 +100,7 @@ export async function clockOutTransaction(
         }
       });
     } catch (error) {
-      if (!isPermissionError(error)) throw error;
+      if (!isPermissionError(error) || !isOwnPunch(log.employeeEmail)) throw error;
       await clockOutViaBusinessProfile(businessId, log, legacyLogsShowActive);
       return;
     }
@@ -112,7 +116,7 @@ export async function clockOutTransaction(
       transaction.delete(activeRef);
     });
   } catch (error) {
-    if (!isPermissionError(error)) throw error;
+    if (!isPermissionError(error) || !isOwnPunch(log.employeeEmail)) throw error;
     await clockOutViaBusinessProfile(businessId, log, legacyLogsShowActive);
   }
 }

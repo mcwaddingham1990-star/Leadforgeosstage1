@@ -48,6 +48,28 @@ service cloud.firestore {
       ];
     }
 
+    // Owner or a role explicitly granted the Time Clock "Clock Employees
+    // In/Out" capability may punch another employee. Existing built-in
+    // manager profiles created before this capability existed retain the
+    // intended default only while they have no explicit setting; once an
+    // owner toggles it in Roles/Permissions, that explicit allow/deny wins.
+    function canClockOtherEmployees(businessId) {
+      let profile = getUserProfile();
+      let granular = profile.granularPermissions;
+      let hasExplicit = granular is map &&
+        granular.keys().hasAny(['timeclock_team_punches']);
+      let permission = hasExplicit ? granular.timeclock_team_punches : null;
+      let explicitlyAllowed = hasExplicit && (
+        (permission is map && permission.edit == true) ||
+        (permission is string && permission in ['edit', 'delete'])
+      );
+      let legacyManagerDefault = !hasExplicit && profile.role in [
+        'General Manager', 'Office Manager', 'Operations Manager'
+      ];
+      return isBusinessMember(businessId) &&
+        (request.auth.token.email == businessId || explicitlyAllowed || legacyManagerDefault);
+    }
+
     // SECURITY: businessId is required and checked against the job's own
     // record -- without it, a jobId belonging to a DIFFERENT business whose
     // assignedEmployee/assignedCrew text happens to match this caller's own
@@ -431,7 +453,11 @@ service cloud.firestore {
 
     // Time clock collections
     match /time_clock_logs/{docId} {
-      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && (
+          request.resource.data.employeeEmail == request.auth.token.email
+          || canClockOtherEmployees(request.resource.data.businessId)
+        );
       // Approval fields (who reviewed a punch, and the outcome) may only be
       // set by a manager -- an employee's own client can create their own
       // pending punch, but cannot self-approve it.
@@ -444,17 +470,21 @@ service cloud.firestore {
       allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
     }
     match /active_shifts/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && (
+          request.resource.data.employeeEmail == request.auth.token.email
+          || canClockOtherEmployees(request.resource.data.businessId)
+        );
       // clockInTransaction/clockOutTransaction (timeClockService.ts) always
       // read this doc inside a transaction before creating/deleting it, to
-      // guard against a double clock-in. Without the `resource == null`
-      // branch, that very first read -- on a doc that doesn't exist yet --
-      // can't evaluate resource.data at all and is denied outright, so the
-      // whole feature silently fell back to the legacy business_profiles
-      // compatibility store on every business's very first clock-in, every
-      // time, and active_shifts (and therefore live GPS tracking, which
-      // only reads from this collection) never actually got populated.
-      allow read, delete: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
+      // guard against a double clock-in. Missing-doc reads must stay allowed
+      // so the transaction can determine that no active shift exists yet.
+      allow read: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
+        && (
+          resource.data.employeeEmail == request.auth.token.email
+          || canClockOtherEmployees(resource.data.businessId)
+        );
     }
     // One employee's real GPS breadcrumb trail for one shift (doc id ==
     // that shift's clock-in log id) -- survives clock-out for historical
