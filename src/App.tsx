@@ -728,7 +728,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   owner: {
     name: "Owner",
     description: "Everything",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "timeclock_team_punches", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
   },
   general_manager: {
     name: "General Manager",
@@ -738,12 +738,12 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   office_manager: {
     name: "Office Manager",
     description: "Day-to-day office and field operations",
-    permissions: ["dashboard", "revenue", "accounting", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "inventory", "documents", "messages", "roster", "training", "settings"]
+    permissions: ["dashboard", "revenue", "accounting", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "timeclock_team_punches", "inventory", "documents", "messages", "roster", "training", "settings"]
   },
   operations_manager: {
     name: "Operations Manager",
     description: "Dashboard, Scheduling, Dispatch, Routes, Jobs, Inventory, etc.",
-    permissions: ["dashboard", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "inventory", "documents", "messages", "training", "settings"]
+    permissions: ["dashboard", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "timeclock_team_punches", "inventory", "documents", "messages", "training", "settings"]
   },
   dispatcher: {
     name: "Dispatcher",
@@ -3515,7 +3515,7 @@ Access to full financial telemetry is restricted.`;
       const user = userCredential.user;
 
       // 2. Create owner user profile document
-      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
+      const ownerPermissions = ["dashboard", "customers", "leads", "estimates", "scheduling", "dispatch", "routes", "employee_locations", "jobs", "timeclock", "timeclock_team_punches", "inventory", "documents", "messages", "training", "ai_assistant", "settings", "integrations", "roster"];
       const userProfile = {
         uid: user.uid,
         email: cleanEmail,
