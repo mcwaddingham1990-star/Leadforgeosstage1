@@ -454,6 +454,57 @@ select option {
 }
 .input:focus { border-color: #ffffff; box-shadow: 0 0 0 3px rgba(56,189,248,.16), 0 0 15px rgba(56,189,248,.38), inset 0 0 9px rgba(255,255,255,.90); }
 
+/* Job Tracking goal rows are navigation/accordion text, not primary CTA buttons.
+   Keep this after the workspace button theme so the global blue-button rule
+   cannot repaint these rows or force their labels white. */
+.workspace-theme button.job-goal-menu-button,
+.workspace-theme button.job-goal-menu-button:hover,
+.workspace-theme button.job-goal-menu-button:focus,
+.workspace-theme button.job-goal-menu-button:active {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #1F3557 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.workspace-theme button.job-goal-menu-button .job-goal-menu-title {
+  color: #1F3557 !important;
+}
+
+.workspace-theme button.job-goal-menu-button .job-goal-menu-status,
+.workspace-theme button.job-goal-menu-button .job-goal-menu-chevron {
+  color: #5E7393 !important;
+}
+
+.workspace-theme button.job-goal-menu-button:hover .job-goal-menu-title,
+.workspace-theme button.job-goal-menu-button:focus-visible .job-goal-menu-title {
+  color: #07599A !important;
+}
+
+.workspace-theme.theme-dark-basic button.job-goal-menu-button,
+.workspace-theme.theme-dark-basic button.job-goal-menu-button:hover,
+.workspace-theme.theme-dark-basic button.job-goal-menu-button:focus,
+.workspace-theme.theme-dark-basic button.job-goal-menu-button:active {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--dark-text) !important;
+}
+
+.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-title {
+  color: var(--dark-text) !important;
+}
+
+.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-status,
+.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-chevron {
+  color: var(--dark-muted) !important;
+}
+
 /* ==========================================================================
    DARK MODE BASIC
    Light Mode Basic is intentionally the untouched stylesheet above. This
