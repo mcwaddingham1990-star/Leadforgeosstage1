@@ -733,7 +733,7 @@ export const DEFAULT_ROLES_DATA: Record<string, { name: string; description: str
   general_manager: {
     name: "General Manager",
     description: "Everything except ownership and account deletion",
-    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
+    permissions: ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "timeclock_team_punches", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"]
   },
   office_manager: {
     name: "Office Manager",
