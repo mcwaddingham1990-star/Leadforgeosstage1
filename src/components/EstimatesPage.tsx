@@ -55,6 +55,7 @@ import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { PriceBookModal } from "./PriceBookModal";
 import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
+import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -150,7 +151,7 @@ export const EstimatesPage: React.FC = () => {
     if (!estimatePrefill) return;
     setFormCustomerName(estimatePrefill.customerName);
     setFormCompany(estimatePrefill.company || "");
-    setFormPhone(estimatePrefill.phone || "");
+    setFormPhone(normalizeContactPhone(estimatePrefill.phone || ""));
     setFormAddress(estimatePrefill.address || "");
     setFormAmount(0);
     setFormStatus("Draft");
@@ -184,7 +185,7 @@ export const EstimatesPage: React.FC = () => {
         id: "est_" + Math.random().toString(36).substring(2, 9),
         number: "EST-2026-" + Math.floor(100 + Math.random() * 900),
         customerName: r[iCustomer]?.trim() || "",
-        company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || `${r[iCustomer]?.trim()} Inc`,
+        company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || "",
         status: (iStatus >= 0 && (["Draft","Pending","Sent","Viewed","Signed","Accepted","Declined","Expired","Completed"] as string[]).includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Estimate["status"] : "Draft",
         salesRep: (iRep >= 0 ? r[iRep]?.trim() : "") || "Self",
         amount: (iAmount >= 0 ? Number(r[iAmount]) : 0) || 0,
@@ -214,12 +215,19 @@ export const EstimatesPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
+  const resolveEstimateCustomer = (est: Pick<Estimate, "customerId" | "customerName" | "company">) => {
+    const byPrimaryName = resolveCustomerByIdOrName(customers, est.customerId, est.customerName);
+    if (byPrimaryName) return byPrimaryName;
+    const company = normalizeEstimateCompany(est.customerName, est.company);
+    return company ? resolveCustomerByIdOrName(customers, undefined, company) || undefined : undefined;
+  };
+
   // Builds a real PDF from the actual estimate data right now (no signing
   // required) and saves it to the Documents Hub immediately. Shared by
   // "Save (and Store as PDF)" (stops here) and "Save & Generate PDF" (goes
   // on to open the PDF Editor) -- see generateEstimatePdf below.
   const buildAndStoreEstimatePdf = async (est: Estimate) => {
-    const matchedCustomer = customers.find(c => c.contact === est.customerName || c.company === est.company);
+    const matchedCustomer = resolveEstimateCustomer(est);
     const bytes = await buildEstimatePdf(est, matchedCustomer, businessProfile);
     const pdfBase64 = bytesToBase64(bytes);
 
@@ -282,7 +290,7 @@ export const EstimatesPage: React.FC = () => {
       sourceId: est.id,
       documentId: document.id,
       customerName: est.customerName,
-      customerPhone: matchedCustomer?.phone,
+      customerPhone: normalizeContactPhone(est.phone || matchedCustomer?.phone),
       customerEmail: matchedCustomer?.email,
       representativeName: est.salesRep || loggedInUser?.name || "Company Representative",
       lines: [],
@@ -379,21 +387,26 @@ export const EstimatesPage: React.FC = () => {
     // under their original Lead source); a brand-new name typed straight
     // into this form has no Lead behind it at all, so "Manual Entry" is
     // the honest attribution rather than leaving it blank.
-    const matchedCustomer = customers.find(c => c.contact === formCustomerName.trim() || c.company === (formCompany.trim() || formCustomerName.trim() + " Inc"));
+    const cleanCustomerName = formCustomerName.trim();
+    const cleanCompany = formCompany.trim();
+    const matchedCustomer =
+      resolveCustomerByIdOrName(customers, undefined, cleanCustomerName) ||
+      (cleanCompany ? resolveCustomerByIdOrName(customers, undefined, cleanCompany) : null);
     const source = matchedCustomer?.source || "Manual Entry";
     const sourceLeadId = matchedCustomer?.sourceLeadId;
     const newEst: Estimate = {
       id: session.id,
       number: session.number,
-      customerName: formCustomerName.trim(),
-      company: formCompany.trim() || formCustomerName.trim() + " Inc",
+      customerId: matchedCustomer?.id,
+      customerName: cleanCustomerName,
+      company: cleanCompany,
       status: formStatus,
       salesRep: formSalesRep.trim() || "Self",
       amount: Number(formAmount) || 0,
       notes: formNotes.trim(),
       projectSpecifics: formProjectSpecifics.trim() || undefined,
       address: formAddress.trim() || undefined,
-      phone: formPhone.trim() || undefined,
+      phone: normalizeContactPhone(formPhone) || undefined,
       createdDate: formatEstimateDate(new Date()),
       expirationDate: estimateExpirationDate(),
       source,
@@ -432,8 +445,8 @@ export const EstimatesPage: React.FC = () => {
   const openViewModal = (est: Estimate) => {
     setSelectedEstimate(est);
     setFormCustomerName(est.customerName);
-    setFormCompany(est.company || "");
-    setFormPhone(est.phone || "");
+    setFormCompany(normalizeEstimateCompany(est.customerName, est.company));
+    setFormPhone(normalizeContactPhone(est.phone || ""));
     setFormAddress(est.address || "");
     setFormAmount(est.amount);
     setFormStatus(est.status);
@@ -458,22 +471,16 @@ export const EstimatesPage: React.FC = () => {
   };
 
   const openEstimateSend = (est: Estimate) => {
-    const match =
-      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
-      customers.find(customer => customer.company === est.company) ||
-      null;
+    const match = resolveEstimateCustomer(est) || null;
     setSendTargetEstimate(est);
-    setSendMatch(match ? { email: match.email, phone: match.phone } : { phone: est.phone });
+    setSendMatch(match ? { email: match.email, phone: normalizeContactPhone(est.phone || match.phone) } : { phone: normalizeContactPhone(est.phone) });
     closeEstimateActionMenu();
     setIsSendOpen(true);
   };
 
   const openEstimateAttach = (est: Estimate, targetType: "Customer" | "Job" | "Employee") => {
     const linkedDoc = documents.find(doc => doc.estimateId === est.id);
-    const matchedCustomer =
-      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
-      customers.find(customer => customer.company === est.company) ||
-      null;
+    const matchedCustomer = resolveEstimateCustomer(est) || null;
     const linkedJob = schedulingEvents.find(event => event.sourceEstimateId === est.id);
 
     let initialValue = "";
@@ -538,7 +545,7 @@ export const EstimatesPage: React.FC = () => {
       ...selectedEstimate,
       customerName: formCustomerName.trim(),
       company: formCompany.trim(),
-      phone: formPhone.trim() || undefined,
+      phone: normalizeContactPhone(formPhone) || undefined,
       address: formAddress.trim() || undefined,
       amount: Number(formAmount) || 0,
       status: formStatus,
@@ -576,11 +583,11 @@ export const EstimatesPage: React.FC = () => {
   // createJob's idempotency check work, so reopening an already-converted
   // estimate here can never create a duplicate job.
   const openBuildJobFromEstimate = (estimate: Estimate) => {
-    const matchedCustomer = customers.find(c => c.contact === estimate.customerName || c.company === estimate.company);
+    const matchedCustomer = resolveEstimateCustomer(estimate);
     setBuildJobPrefill({
       customerId: matchedCustomer?.id,
       customerName: estimate.customerName,
-      customerPhone: estimate.phone || matchedCustomer?.phone,
+      customerPhone: normalizeContactPhone(estimate.phone || matchedCustomer?.phone),
       customerEmail: matchedCustomer?.email,
       customerAddress: estimate.address || matchedCustomer?.address,
       description: estimate.projectSpecifics || undefined,
@@ -1428,7 +1435,7 @@ export const EstimatesPage: React.FC = () => {
                     if (!customer) return;
                     setFormCustomerName(customer.contact || customer.company);
                     setFormCompany(customer.company);
-                    setFormPhone(customer.phone || "");
+                    setFormPhone(normalizeContactPhone(customer.phone || ""));
                     setFormAddress(customer.address || "");
                   }}
                   className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
@@ -1480,7 +1487,7 @@ export const EstimatesPage: React.FC = () => {
                   <input
                     type="tel"
                     value={formPhone}
-                    onChange={e => setFormPhone(e.target.value)}
+                    onChange={e => setFormPhone(normalizeContactPhone(e.currentTarget.value))}
                     placeholder="e.g. (555) 123-4567"
                     className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                   />
@@ -1638,7 +1645,7 @@ export const EstimatesPage: React.FC = () => {
           onSelect={(c) => {
             setFormCustomerName(c.contact || c.company);
             setFormCompany(c.company);
-            setFormPhone(c.phone || "");
+            setFormPhone(normalizeContactPhone(c.phone || ""));
             setFormAddress(c.address || "");
             setIsCustomerPickerOpen(false);
           }}
@@ -1696,7 +1703,7 @@ export const EstimatesPage: React.FC = () => {
                       <input
                         type="tel"
                         value={formPhone}
-                        onChange={e => setFormPhone(e.target.value)}
+                        onChange={e => setFormPhone(normalizeContactPhone(e.currentTarget.value))}
                         className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                       />
                     </div>
@@ -1780,7 +1787,7 @@ export const EstimatesPage: React.FC = () => {
                     <div className="flex justify-between items-start border-b border-[#9EC8EF]/40 pb-2.5">
                       <div>
                         <h4 className="text-sm font-bold text-[#1F3557]">{selectedEstimate.customerName}</h4>
-                        <p className="text-xs text-[#5E7393] font-semibold">{selectedEstimate.company || "No Company"}</p>
+                        <p className="text-xs text-[#5E7393] font-semibold">{normalizeEstimateCompany(selectedEstimate.customerName, selectedEstimate.company) || "No Company"}</p>
                       </div>
                       <span className="px-2.5 py-0.5 bg-[#315C9F] text-white font-extrabold uppercase text-[9px] rounded-lg border border-[#9EC8EF]/40">
                         {selectedEstimate.status}
@@ -1873,7 +1880,7 @@ export const EstimatesPage: React.FC = () => {
                   </button>
                 )}
                 {!isEditMode && (() => {
-                  const match = customers.find(c => c.contact === selectedEstimate.customerName || c.company === selectedEstimate.company);
+                  const match = resolveEstimateCustomer(selectedEstimate);
                   return (
                     <>
                       <button
@@ -1908,8 +1915,8 @@ export const EstimatesPage: React.FC = () => {
                         sourceJobId: linkedJob?.id,
                         customerName: selectedEstimate.customerName,
                         address: selectedEstimate.address,
-                        customerPhone: selectedEstimate.phone,
-                        jobDescription: selectedEstimate.projectSpecifics || selectedEstimate.notes || `${selectedEstimate.company || selectedEstimate.customerName} project`,
+                        customerPhone: normalizeContactPhone(selectedEstimate.phone),
+                        jobDescription: selectedEstimate.projectSpecifics || selectedEstimate.notes || `${normalizeEstimateCompany(selectedEstimate.customerName, selectedEstimate.company) || selectedEstimate.customerName} project`,
                         estimatedValue: selectedEstimate.amount,
                         date: new Date().toISOString().slice(0, 10)
                       });
@@ -1928,7 +1935,7 @@ export const EstimatesPage: React.FC = () => {
                         sourceEstimateId: selectedEstimate.id,
                         customerName: selectedEstimate.customerName,
                         address: selectedEstimate.address,
-                        customerPhone: selectedEstimate.phone
+                        customerPhone: normalizeContactPhone(selectedEstimate.phone)
                       });
                       setIsMembershipPickerOpen(true);
                     }}
