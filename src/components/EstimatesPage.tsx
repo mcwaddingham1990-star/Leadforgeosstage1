@@ -32,6 +32,11 @@ import {
   Trash2,
   Lock,
   ChevronRight,
+  ChevronDown,
+  Edit3,
+  Send,
+  FileSignature,
+  Link,
   AlertCircle,
   X,
   Users
@@ -40,6 +45,7 @@ import { CustomerPickerModal } from "./CustomerPickerModal";
 import { buildEstimatePdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import ESignChoiceModal from "./ESignChoiceModal";
+import SendChoiceModal from "./SendChoiceModal";
 import { downloadCsv, parseCsv } from "../lib/csv";
 import type { DocumentItem, WorkOrder } from "../types/domain";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
@@ -69,7 +75,7 @@ export const EstimatesPage: React.FC = () => {
   // the actual granular check.
   const isRealOwnerAccount = !simulatedRole && !loggedInUser?.isEmployee;
   const canCollectSignatures = isRealOwnerAccount || hasPermission(loggedInUser?.granularPermissions, "collect_signatures", "edit");
-  const { estimates: propsEstimates, setEstimates, schedulingEvents, customers, setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimatePrefill, setEstimatePrefill, setBuildJobPrefill } = useDomainData();
+  const { estimates: propsEstimates, setEstimates, schedulingEvents, customers, recentRoster, setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimatePrefill, setEstimatePrefill, setBuildJobPrefill } = useDomainData();
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
   const {
     openPlaceholderPage: onOpenPlaceholder,
@@ -84,6 +90,15 @@ export const EstimatesPage: React.FC = () => {
   const [localEstimates, setLocalEstimates] = useState<Estimate[]>(INITIAL_ESTIMATES);
 
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [actionMenuEstimate, setActionMenuEstimate] = useState<Estimate | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [isSendOpen, setIsSendOpen] = useState(false);
+  const [sendTargetEstimate, setSendTargetEstimate] = useState<Estimate | null>(null);
+  const [sendMatch, setSendMatch] = useState<{ email?: string; phone?: string } | null>(null);
+  const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const [attachEstimate, setAttachEstimate] = useState<Estimate | null>(null);
+  const [attachTargetType, setAttachTargetType] = useState<"Customer" | "Job" | "Employee">("Customer");
+  const [attachValue, setAttachValue] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isConversionPickerOpen, setIsConversionPickerOpen] = useState(false);
@@ -425,6 +440,95 @@ export const EstimatesPage: React.FC = () => {
     setFormNotes(est.notes || "");
     setFormProjectSpecifics(est.projectSpecifics || "");
     setIsEditMode(false);
+  };
+
+  const closeEstimateActionMenu = () => {
+    setActionMenuEstimate(null);
+    setActionMenuPosition(null);
+  };
+
+  const openEstimateDropdown = (est: Estimate, row: HTMLElement) => {
+    const rect = row.getBoundingClientRect();
+    setActionMenuEstimate(est);
+    setActionMenuPosition({
+      top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 360)),
+      left: Math.max(8, Math.min(rect.left + 24, window.innerWidth - 260))
+    });
+  };
+
+  const openEstimateSend = (est: Estimate) => {
+    const match =
+      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
+      customers.find(customer => customer.company === est.company) ||
+      null;
+    setSendTargetEstimate(est);
+    setSendMatch(match ? { email: match.email, phone: match.phone } : { phone: est.phone });
+    closeEstimateActionMenu();
+    setIsSendOpen(true);
+  };
+
+  const openEstimateAttach = (est: Estimate, targetType: "Customer" | "Job" | "Employee") => {
+    const linkedDoc = documents.find(doc => doc.estimateId === est.id);
+    const matchedCustomer =
+      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
+      customers.find(customer => customer.company === est.company) ||
+      null;
+    const linkedJob = schedulingEvents.find(event => event.sourceEstimateId === est.id);
+
+    let initialValue = "";
+    if (targetType === "Customer") {
+      initialValue = linkedDoc?.customer && linkedDoc.customer !== "None"
+        ? linkedDoc.customer
+        : matchedCustomer?.company || "";
+    } else if (targetType === "Job") {
+      initialValue = linkedDoc?.job && linkedDoc.job !== "None"
+        ? linkedDoc.job
+        : linkedJob?.id || "";
+    } else {
+      initialValue = linkedDoc?.employee && linkedDoc.employee !== "None"
+        ? linkedDoc.employee
+        : recentRoster.some(person => person.name === est.salesRep) ? est.salesRep : "";
+    }
+
+    setAttachEstimate(est);
+    setAttachTargetType(targetType);
+    setAttachValue(initialValue);
+    closeEstimateActionMenu();
+    setIsAttachModalOpen(true);
+  };
+
+  const handleEstimateAttachSubmit = async () => {
+    if (!attachEstimate || !attachValue.trim()) return;
+    const { document } = await buildAndStoreEstimatePdf(attachEstimate);
+    setDocuments(prev => prev.map(doc => doc.id === document.id ? {
+      ...doc,
+      customer: attachTargetType === "Customer" ? attachValue : doc.customer,
+      job: attachTargetType === "Job" ? attachValue : doc.job,
+      employee: attachTargetType === "Employee" ? attachValue : doc.employee,
+      lastModified: "Just now"
+    } : doc));
+    if (logOperationalEvent) {
+      logOperationalEvent("Estimate Connected", `${attachEstimate.number} connected to ${attachTargetType}: ${attachValue}`, "🔗");
+    }
+    triggerNotification(`🔗 Attached ${attachEstimate.number} to ${attachTargetType}: ${attachValue}`);
+    setIsAttachModalOpen(false);
+    setAttachEstimate(null);
+    setAttachValue("");
+  };
+
+  const handleDeleteEstimate = (est: Estimate) => {
+    closeEstimateActionMenu();
+    if (!window.confirm(`Delete estimate ${est.number}? This removes the estimate record only.`)) return;
+    if (setEstimates) {
+      setEstimates(prev => prev.filter(item => item.id !== est.id));
+    } else {
+      setLocalEstimates(prev => prev.filter(item => item.id !== est.id));
+    }
+    if (selectedEstimate?.id === est.id) setSelectedEstimate(null);
+    if (logOperationalEvent) {
+      logOperationalEvent("Estimate Deleted", `${est.number} for ${est.customerName}`, "🗑️");
+    }
+    triggerNotification(`🗑️ Deleted estimate ${est.number}`);
   };
 
   const handleSaveEdit = (action: "save" | "pdf" | "pdf-store" | "signatures" | "convert" = "save") => {
@@ -867,7 +971,7 @@ export const EstimatesPage: React.FC = () => {
                   return (
                     <tr
                       key={est.id}
-                      onClick={() => openViewModal(est)}
+                      onClick={(event) => openEstimateDropdown(est, event.currentTarget)}
                       className="hover:bg-[#EAF5FF] transition-all cursor-pointer group bg-white"
                     >
                       <td className="py-3.5 px-4 font-mono font-black text-[#315C9F] group-hover:underline">
@@ -905,6 +1009,181 @@ export const EstimatesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ESTIMATE ROW ACTION MENU */}
+      {actionMenuEstimate && actionMenuPosition && (
+        <div className="fixed inset-0 z-50" onClick={closeEstimateActionMenu}>
+          <div
+            className="absolute w-[250px] bg-white text-[#1F3557] border border-[#9EC8EF] rounded-xl shadow-xl p-1.5 text-left"
+            style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="px-2.5 py-2 border-b border-[#9EC8EF]/50">
+              <p className="text-[10px] font-black uppercase tracking-wider truncate">{actionMenuEstimate.number}</p>
+            </div>
+            <button
+              onClick={() => {
+                const estimate = actionMenuEstimate;
+                closeEstimateActionMenu();
+                openViewModal(estimate);
+                setIsEditMode(true);
+              }}
+              className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#315C9F]" />
+              Edit
+            </button>
+            <button
+              onClick={() => openEstimateSend(actionMenuEstimate)}
+              className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
+            >
+              <Send className="w-3.5 h-3.5 text-emerald-600" />
+              Send
+            </button>
+            <button
+              disabled={sendingForSigningId !== null}
+              onClick={() => {
+                const estimate = actionMenuEstimate;
+                closeEstimateActionMenu();
+                void sendEstimateForSigning(estimate);
+              }}
+              className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase disabled:opacity-50"
+            >
+              <FileSignature className="w-3.5 h-3.5 text-amber-600" />
+              Send for Signing
+            </button>
+            {canCollectSignatures && (
+              <button
+                onClick={() => {
+                  const estimate = actionMenuEstimate;
+                  closeEstimateActionMenu();
+                  void generateEstimatePdf(estimate, true, false, true);
+                }}
+                className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#315C9F]" />
+                Collect Signatures
+              </button>
+            )}
+            <details className="group">
+              <summary className="list-none w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center justify-between gap-2 text-[11px] font-black uppercase cursor-pointer">
+                <span className="flex items-center gap-2">
+                  <Link className="w-3.5 h-3.5 text-[#315C9F]" />
+                  Attach To
+                </span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </summary>
+              <div className="pl-4 pr-1 pb-1 grid gap-1">
+                <button
+                  onClick={() => openEstimateAttach(actionMenuEstimate, "Customer")}
+                  className="w-full px-2.5 py-1.5 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[10px] font-bold uppercase"
+                >
+                  <User className="w-3 h-3" />
+                  Customer
+                </button>
+                <button
+                  onClick={() => openEstimateAttach(actionMenuEstimate, "Job")}
+                  className="w-full px-2.5 py-1.5 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[10px] font-bold uppercase"
+                >
+                  <Briefcase className="w-3 h-3" />
+                  Job
+                </button>
+                <button
+                  onClick={() => openEstimateAttach(actionMenuEstimate, "Employee")}
+                  className="w-full px-2.5 py-1.5 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[10px] font-bold uppercase"
+                >
+                  <Users className="w-3 h-3" />
+                  Employee
+                </button>
+              </div>
+            </details>
+            <button
+              onClick={() => handleDeleteEstimate(actionMenuEstimate)}
+              className="w-full px-2.5 py-2 hover:bg-rose-50 text-rose-600 rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isAttachModalOpen && attachEstimate && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#C7E3FA] text-[#1F3557] rounded-[28px] p-6 w-[95%] max-w-[400px] shadow-2xl border border-[#9EC8EF] text-left animate-scale-up">
+            <div className="flex items-center justify-between border-b border-[#9EC8EF] pb-3 mb-4">
+              <h3 className="text-sm font-black uppercase text-[#1F3557] tracking-wider">Attach Estimate</h3>
+              <button
+                onClick={() => {
+                  setIsAttachModalOpen(false);
+                  setAttachEstimate(null);
+                  setAttachValue("");
+                }}
+                className="text-xs font-bold text-[#5E7393]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 text-xs font-bold text-[#1F3557]">
+              <div className="space-y-1">
+                <label className="text-[#5E7393]">Link Record Name / ID</label>
+                {attachTargetType === "Customer" ? (
+                  <select
+                    value={attachValue}
+                    onChange={(event) => setAttachValue(event.target.value)}
+                    className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
+                  >
+                    <option value="">-- Choose Customer --</option>
+                    {customers.map(customer => (
+                      <option key={customer.id} value={customer.company}>{customer.company}</option>
+                    ))}
+                  </select>
+                ) : attachTargetType === "Job" ? (
+                  <select
+                    value={attachValue}
+                    onChange={(event) => setAttachValue(event.target.value)}
+                    className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
+                  >
+                    <option value="">-- Choose Job --</option>
+                    {schedulingEvents.filter(event => event.eventType === "Job").map(event => (
+                      <option key={event.id} value={event.id}>{event.customer} - {event.date}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    value={attachValue}
+                    onChange={(event) => setAttachValue(event.target.value)}
+                    className="w-full bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none text-[#1F3557]"
+                  >
+                    <option value="">-- Choose Employee --</option>
+                    {recentRoster.map(person => (
+                      <option key={person.id || person.name} value={person.name}>{person.name} ({person.role})</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => {
+                    setIsAttachModalOpen(false);
+                    setAttachEstimate(null);
+                    setAttachValue("");
+                  }}
+                  className="flex-1 py-2 bg-blue-100 hover:bg-blue-200 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!attachValue.trim()}
+                  onClick={() => void handleEstimateAttachSubmit()}
+                  className="flex-1 py-2 bg-[#315C9F] hover:bg-[#1F3557] text-white rounded-xl cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  Apply Connection
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 6. QUICK ACTIONS & AI ESTIMATE ASSISTANT */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1695,6 +1974,18 @@ export const EstimatesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <SendChoiceModal
+        isOpen={isSendOpen}
+        onClose={() => {
+          setIsSendOpen(false);
+          setSendTargetEstimate(null);
+          setSendMatch(null);
+        }}
+        label={`Estimate ${sendTargetEstimate?.number || ""}`}
+        phone={sendMatch?.phone}
+        email={sendMatch?.email}
+      />
 
       <ESignChoiceModal
         isOpen={!!esignConvertTarget}
