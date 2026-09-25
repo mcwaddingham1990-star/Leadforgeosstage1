@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { waitForPendingWrites } from "firebase/firestore";
+import { db } from "../firebase";
 import { Check, ChevronDown, ClipboardCheck, FileText, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -161,7 +163,7 @@ export function BuildJobModal({
     setDocuments(prev => [...prev, newDoc]);
   };
 
-  const doSave = (): SchedulingEvent | null => {
+  const doSave = async (): Promise<SchedulingEvent | null> => {
     if (!canEdit) { triggerNotification("Your role cannot create or edit jobs."); return null; }
     const customer = customerOptions.find(c => c.id === form.customerId);
     const customerName = form.customerName.trim();
@@ -203,7 +205,20 @@ export function BuildJobModal({
         priority: form.priority, status: form.assignedEmployee && form.status === "Unassigned" ? "Assigned" : form.status, department: form.department,
         description: form.description, notes: form.notes, purchaseOrder: form.purchaseOrder, budget, laborRate: Number(form.laborRate) || 0
       }, "Job details edited");
-      if (updated) { setSavedJob(updated); triggerNotification(`${displayNumber(updated)} updated.`); }
+      if (updated) {
+        try {
+          // Do not tell the user a Job is saved until Firestore has actually
+          // acknowledged the write. This prevents a fast logout/account switch
+          // from dropping an optimistic local-only Job.
+          await waitForPendingWrites(db);
+        } catch (error) {
+          console.error("Job update was not durably saved:", error);
+          triggerNotification("Job update could not be confirmed saved. Please try Save again before leaving this account.");
+          return null;
+        }
+        setSavedJob(updated);
+        triggerNotification(`${displayNumber(updated)} updated.`);
+      }
       return updated;
     }
 
@@ -215,6 +230,16 @@ export function BuildJobModal({
       description: form.description, notes: form.notes, purchaseOrder: form.purchaseOrder, budget, laborRate: Number(form.laborRate) || 0,
       status: form.status, sourceEstimateId: form.sourceEstimateId, sourceLeadId: form.sourceLeadId, source: form.source
     });
+    try {
+      // createJob updates UI state optimistically; wait for the corresponding
+      // Firestore write to reach the server before the modal can close or the
+      // user can move on assuming the Job is durable.
+      await waitForPendingWrites(db);
+    } catch (error) {
+      console.error("Job creation was not durably saved:", error);
+      triggerNotification("Job could not be confirmed saved. Please try Save again before leaving this account.");
+      return null;
+    }
     setSavedJob(created);
     triggerNotification(`${displayNumber(created)} created and published to Scheduling, Dispatch, Map, Time Clock, Messages, and the Event Engine.`);
     return created;
@@ -229,22 +254,22 @@ export function BuildJobModal({
     setAfterTracking(() => runAfter);
     setIsTrackingOpen(true);
   };
-  const handleSaveJob = () => {
-    const job = doSave();
+  const handleSaveJob = async () => {
+    const job = await doSave();
     if (!job) return;
     // Plain Save closes the form right away -- Job Tracking stays reachable
     // afterward from the Jobs list's own "Update Job Progress" button, so
     // nothing is lost by not funneling through it here.
     onClose();
   };
-  const handleSaveAndPdf = () => {
-    const job = doSave();
+  const handleSaveAndPdf = async () => {
+    const job = await doSave();
     if (!job) return;
     void storeJobPdf(job).then(() => openTrackingThen(job, onClose));
   };
   const finishScheduleNav = (job: SchedulingEvent) => { onClose(); navigateToScreen("scheduling", { customerId: job.customerId }); };
-  const handleScheduleJob = () => {
-    const job = doSave();
+  const handleScheduleJob = async () => {
+    const job = await doSave();
     if (!job) return;
     openTrackingThen(job, () => setEsignScheduleTarget(job));
   };
