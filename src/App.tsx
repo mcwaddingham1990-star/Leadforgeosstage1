@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
-import { doc, setDoc, getDoc, getDocFromServer, writeBatch } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocFromServer, writeBatch, waitForPendingWrites } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
 import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
@@ -3871,6 +3871,11 @@ Access to full financial telemetry is restricted.`;
     };
 
     try {
+      // Collection setters are optimistic. Flush every Firestore write queued
+      // by the current account before revoking its auth permissions, otherwise
+      // a quick Save -> Logout can leave data visible locally but never
+      // persisted on the server.
+      await waitForPendingWrites(db);
       await signOut(auth);
       clearSessionUi();
       triggerNotification("Logged out of OwnersLOCAL.");
@@ -4411,6 +4416,11 @@ Access to full financial telemetry is restricted.`;
     }
 
     try {
+      // Creating a Firebase Auth user switches auth.currentUser immediately.
+      // Finish any writes from the current account first so account creation
+      // cannot interrupt a just-saved Job (or any other business record).
+      await waitForPendingWrites(db);
+
       // 1. Create real Auth User
       const authResult = await createUserWithEmailAndPassword(auth, cleanEmail, empPassword);
       const user = authResult.user;
