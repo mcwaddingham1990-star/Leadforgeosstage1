@@ -6,6 +6,8 @@ export interface GeneratedPdfDraft {
   representativeName: string;
   sourceType: "Estimate" | "Invoice" | "Job" | "Work Order" | "Service Agreement" | "Purchase Order" | "Customer" | "Lead" | "Report";
   sourceId: string;
+  /** Existing Documents record for this generated PDF, when one was already created before opening the editor. */
+  documentId?: string;
   /** Customer contact info, when known, so the PDF Editor's "Send" button
    * and remote-signing link can go straight to them without another lookup. */
   customerPhone?: string;
