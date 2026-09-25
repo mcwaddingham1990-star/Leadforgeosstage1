@@ -260,14 +260,14 @@ function GoalCard({goal,index,canManage,canRespond,actor,inventory,onChange,onSa
     <button
       type="button"
       onClick={()=>setOpen(v=>!v)}
-      className="flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left text-[#1F3557] hover:bg-blue-50/50"
-      style={{ background: "transparent", boxShadow: "none", border: "0", borderRadius: 0 }}
+      className="job-goal-menu-button bg-transparent flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left"
+
     >
       <div className="min-w-0">
-        <p className="truncate text-xs font-bold">{finished ? "✓ " : ""}{title}</p>
-        <p className="mt-0.5 text-[9px] font-medium text-[#6F819A]">{submitted ? `Employee response: ${goal.completed || goal.status==="Completed" ? "Completed" : "Still in progress"}` : "Awaiting employee response"}</p>
+        <p className="job-goal-menu-title truncate text-xs font-bold">{finished ? "✓ " : ""}{title}</p>
+        <p className="job-goal-menu-status mt-0.5 text-[9px] font-medium">{submitted ? `Employee response: ${goal.completed || goal.status==="Completed" ? "Completed" : "Still in progress"}` : "Awaiting employee response"}</p>
       </div>
-      {open?<ChevronDown className="h-4 w-4 shrink-0 text-[#5E7393]"/>:<ChevronRight className="h-4 w-4 shrink-0 text-[#5E7393]"/>}
+      {open?<ChevronDown className="job-goal-menu-chevron h-4 w-4 shrink-0"/>:<ChevronRight className="job-goal-menu-chevron h-4 w-4 shrink-0"/>}
     </button>
 
     {open&&<div className="space-y-4 border-t border-blue-100 px-1 py-3">
