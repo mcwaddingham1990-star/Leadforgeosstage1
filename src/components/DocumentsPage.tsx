@@ -583,12 +583,9 @@ export const DocumentsPage: React.FC = () => {
 
       // Update the one existing estimate in place. The Map also collapses any
       // accidental same-ID copies so signing can never add another table row.
-      setEstimates(prev => {
-        const byId = new Map(prev.map(estimate => [estimate.id, estimate] as const));
-        const current = byId.get(sourceEstimateId);
-        if (current) byId.set(sourceEstimateId, { ...current, status: "Signed" });
-        return [...byId.values()];
-      });
+      setEstimates(prev => prev
+        .filter((estimate, index, all) => all.findIndex(item => item.id === estimate.id) === index)
+        .map(estimate => estimate.id === sourceEstimateId ? { ...estimate, status: "Signed" as const } : estimate));
 
       if (sourceEstimate) {
         const matchedCustomer = customersList.find(customer =>
