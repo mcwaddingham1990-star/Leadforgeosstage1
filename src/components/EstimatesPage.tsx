@@ -113,6 +113,19 @@ export const EstimatesPage: React.FC = () => {
   const [formSalesRep, setFormSalesRep] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formProjectSpecifics, setFormProjectSpecifics] = useState("");
+  // One Create Estimate popup session must produce exactly one estimate.
+  // Refs change synchronously, so a rapid double tap cannot race a second
+  // record creation before React has time to re-render.
+  const createEstimateLockedRef = useRef(false);
+  const createEstimateSessionRef = useRef<{ id: string; number: string } | null>(null);
+
+  const beginCreateEstimateSession = () => {
+    createEstimateLockedRef.current = false;
+    createEstimateSessionRef.current = {
+      id: `est_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      number: generateEstimateNumber()
+    };
+  };
 
   // Opens the Add Estimate modal pre-filled when another page (e.g. a
   // Lead's "Build Estimate" button) queues a prefill via the shared
@@ -129,6 +142,7 @@ export const EstimatesPage: React.FC = () => {
     setFormSalesRep("Self");
     setFormNotes(estimatePrefill.notes || "");
     setFormProjectSpecifics("");
+    beginCreateEstimateSession();
     setIsAddModalOpen(true);
     setEstimatePrefill(null);
   }, [estimatePrefill, setEstimatePrefill]);
@@ -181,6 +195,7 @@ export const EstimatesPage: React.FC = () => {
     setFormStatus("Draft");
     setFormSalesRep("Self");
     setFormNotes("");
+    beginCreateEstimateSession();
     setIsAddModalOpen(true);
   };
 
@@ -335,6 +350,14 @@ export const EstimatesPage: React.FC = () => {
 
   const handleAddEstimate = (action: "save" | "pdf" | "pdf-store" | "signatures" | "send-signing" | "convert" = "save") => {
     if (!formCustomerName.trim()) return;
+    if (createEstimateLockedRef.current) return;
+    createEstimateLockedRef.current = true;
+
+    const session = createEstimateSessionRef.current || {
+      id: `est_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      number: generateEstimateNumber()
+    };
+    createEstimateSessionRef.current = session;
     // Inherit the real source from an existing customer record when one
     // already matches (so a repeat customer's estimates keep rolling up
     // under their original Lead source); a brand-new name typed straight
@@ -344,8 +367,8 @@ export const EstimatesPage: React.FC = () => {
     const source = matchedCustomer?.source || "Manual Entry";
     const sourceLeadId = matchedCustomer?.sourceLeadId;
     const newEst: Estimate = {
-      id: "est_" + Math.random().toString(36).substring(2, 9),
-      number: generateEstimateNumber(),
+      id: session.id,
+      number: session.number,
       customerName: formCustomerName.trim(),
       company: formCompany.trim() || formCustomerName.trim() + " Inc",
       status: formStatus,
@@ -362,9 +385,9 @@ export const EstimatesPage: React.FC = () => {
     };
 
     if (setEstimates) {
-      setEstimates(prev => [newEst, ...prev]);
+      setEstimates(prev => prev.some(existing => existing.id === newEst.id) ? prev : [newEst, ...prev]);
     } else {
-      setLocalEstimates(prev => [newEst, ...prev]);
+      setLocalEstimates(prev => prev.some(existing => existing.id === newEst.id) ? prev : [newEst, ...prev]);
     }
     // Auto-create a "Potential" customer in the CRM if this person isn't
     // already in the system, carrying over whatever phone/address was
