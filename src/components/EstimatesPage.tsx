@@ -471,22 +471,16 @@ export const EstimatesPage: React.FC = () => {
   };
 
   const openEstimateSend = (est: Estimate) => {
-    const match =
-      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
-      customers.find(customer => customer.company === est.company) ||
-      null;
+    const match = resolveEstimateCustomer(est) || null;
     setSendTargetEstimate(est);
-    setSendMatch(match ? { email: match.email, phone: match.phone } : { phone: est.phone });
+    setSendMatch(match ? { email: match.email, phone: normalizeContactPhone(est.phone || match.phone) } : { phone: normalizeContactPhone(est.phone) });
     closeEstimateActionMenu();
     setIsSendOpen(true);
   };
 
   const openEstimateAttach = (est: Estimate, targetType: "Customer" | "Job" | "Employee") => {
     const linkedDoc = documents.find(doc => doc.estimateId === est.id);
-    const matchedCustomer =
-      resolveCustomerByIdOrName(customers, est.customerId, est.customerName) ||
-      customers.find(customer => customer.company === est.company) ||
-      null;
+    const matchedCustomer = resolveEstimateCustomer(est) || null;
     const linkedJob = schedulingEvents.find(event => event.sourceEstimateId === est.id);
 
     let initialValue = "";
@@ -1941,7 +1935,7 @@ export const EstimatesPage: React.FC = () => {
                         sourceEstimateId: selectedEstimate.id,
                         customerName: selectedEstimate.customerName,
                         address: selectedEstimate.address,
-                        customerPhone: selectedEstimate.phone
+                        customerPhone: normalizeContactPhone(selectedEstimate.phone)
                       });
                       setIsMembershipPickerOpen(true);
                     }}
