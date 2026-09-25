@@ -4301,7 +4301,50 @@ Access to full financial telemetry is restricted.`;
     logOperationalEvent("Payroll Export", `Printed payroll summary for ${period.start} through ${period.end}`, "👥");
   };
 
-  // Launch Local OS: generates invites, saves to db, triggers invites modal
+  const completeOwnerOnboardingAndOpenDashboard = async () => {
+    if (!auth.currentUser) {
+      triggerNotification("Your session expired -- please sign in again.");
+      return false;
+    }
+
+    const ownerEmail = auth.currentUser.email?.trim().toLowerCase();
+    if (!ownerEmail) {
+      triggerNotification("Your account email is missing -- please sign in again.");
+      return false;
+    }
+
+    try {
+      await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
+        businessEmail: ownerEmail,
+        role: "Owner",
+        isEmployee: false,
+        isOnboarded: true
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error setting onboarded flag:", err);
+      triggerNotification("Couldn't finish setup -- check your connection and try again.");
+      return false;
+    }
+
+    const ownerDashboardPerms = DEFAULT_ROLES_DATA.owner.permissions;
+    setLoggedInUser({
+      email: ownerEmail,
+      role: "Owner",
+      permissions: ownerDashboardPerms,
+      granularPermissions: fullAccessGranular(ownerDashboardPerms),
+      isEmployee: false,
+      businessEmail: ownerEmail
+    });
+    setCurrentView("login");
+    setIsLoggedIn(true);
+    setActiveScreen(OS_SCREENS[0]);
+    setShowInvitesModal(false);
+    return true;
+  };
+
+  // Launch Local OS: save setup + team invites, then open the dashboard
+  // immediately. Staff invite codes are setup data, not a second onboarding
+  // gate, so they must never require another "Proceed" click.
   const handleLaunchOS = async () => {
     if (!email) {
       triggerNotification("Missing your business email — please sign in again.");
@@ -4309,28 +4352,27 @@ Access to full financial telemetry is restricted.`;
     }
     setIsSubmitting(true);
     try {
-      // 1. Save owner business profile
-      await saveProfileToFirestore();
-      
-      // 2. Generate invite codes for all staff
+      // 1. Save owner business profile. The dashboard should never open on a
+      // half-finished owner profile, so this write remains the critical gate.
+      const profileSaved = await saveProfileToFirestore();
+      if (!profileSaved) return;
+
+      // 2. Prepare invite codes for configured staff seats. These are useful
+      // setup artifacts, but they are not an onboarding step the owner must
+      // acknowledge before entering the product.
       const generated: Array<{ code: string; role: string; permissions: string[]; granularPermissions: GranularPermissions }> = [];
       for (const r of normalizeSelectedRoles(selectedRoles)) {
-        // Skip main owner seat (count = 1) since owner is already logged in
         const startIndex = r.id === "owner" ? 1 : 0;
         const granularPermissions = r.id === "owner"
           ? fullAccessGranular(r.permissions)
-          // Only keep entries for currently-authorized modules — a module
-          // toggled off after being configured shouldn't leave a stale
-          // permission entry behind.
           : Object.fromEntries(
               Object.entries(r.modulePermissions).filter(([moduleId]) => r.permissions.includes(moduleId))
             ) as GranularPermissions;
         for (let i = startIndex; i < r.count; i++) {
           const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
           const cleanRolePrefix = r.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8);
-          const code = `${cleanRolePrefix}-${randomStr}`;
           generated.push({
-            code,
+            code: `${cleanRolePrefix}-${randomStr}`,
             role: r.name,
             permissions: r.permissions,
             granularPermissions
@@ -4338,25 +4380,43 @@ Access to full financial telemetry is restricted.`;
         }
       }
 
-      // 3. Save codes to Firestore
+      // 3. Persist invite codes best-effort. An invite service/network failure
+      // should not trap the owner in onboarding after their business profile
+      // has already been successfully created.
+      const savedInvites: typeof generated = [];
       for (const inv of generated) {
-        await setDoc(doc(db, "employee_invites", inv.code), {
-          code: inv.code,
-          role: inv.role,
-          businessEmail: email,
-          permissions: inv.permissions,
-          granularPermissions: inv.granularPermissions,
-          status: "pending",
-          createdAt: new Date().toISOString()
-        });
+        try {
+          await setDoc(doc(db, "employee_invites", inv.code), {
+            code: inv.code,
+            role: inv.role,
+            businessEmail: email,
+            permissions: inv.permissions,
+            granularPermissions: inv.granularPermissions,
+            status: "pending",
+            createdAt: new Date().toISOString()
+          });
+          savedInvites.push(inv);
+        } catch (inviteErr) {
+          console.error(`Couldn't save onboarding invite ${inv.code}:`, inviteErr);
+        }
       }
-      
-      setGeneratedInvites(generated);
-      setShowInvitesModal(true);
-      triggerNotification("Generated secure team invite codes!");
+      setGeneratedInvites(savedInvites);
+
+      // 4. The button says "Open Owner'sLOCAL", so this action now finishes
+      // onboarding and opens the dashboard in this same click.
+      const opened = await completeOwnerOnboardingAndOpenDashboard();
+      if (!opened) return;
+
+      if (generated.length && savedInvites.length !== generated.length) {
+        triggerNotification(`Welcome to OwnersLOCAL Dashboard. ${savedInvites.length} of ${generated.length} staff invite codes were saved; create any missing invites later from Roster.`);
+      } else if (savedInvites.length) {
+        triggerNotification(`Welcome to OwnersLOCAL Dashboard! ${savedInvites.length} staff invite code${savedInvites.length === 1 ? "" : "s"} saved.`);
+      } else {
+        triggerNotification("Welcome to OwnersLOCAL Dashboard!");
+      }
     } catch (err) {
       console.error("Error launching OS:", err);
-      triggerNotification("Couldn't generate invite codes — check your connection and try again.");
+      triggerNotification("Couldn't finish setup -- check your connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -6110,47 +6170,8 @@ Access to full financial telemetry is restricted.`;
                           <button
                             type="button"
                             onClick={async () => {
-                              // This flag is what onAuthStateChanged checks on every reload
-                              // to decide "onboarded" vs. "send back to Create Your
-                              // Business" -- silently continuing into the dashboard when
-                              // this write fails leaves the local session working for this
-                              // tab while Firestore still says not-onboarded, so the very
-                              // next reload bounces the signed-in Owner back to onboarding.
-                              // Require the write to actually succeed before letting the
-                              // Owner in, and let them retry on failure instead of masking it.
-                              if (!auth.currentUser) {
-                                triggerNotification("Your session expired -- please sign in again.");
-                                return;
-                              }
-                              const ownerEmail = auth.currentUser.email?.trim().toLowerCase();
-                              if (!ownerEmail) {
-                                triggerNotification("Your account email is missing -- please sign in again.");
-                                return;
-                              }
-                              try {
-                                await setDoc(doc(db, "user_profiles", auth.currentUser.uid), {
-                                  businessEmail: ownerEmail,
-                                  role: "Owner",
-                                  isOnboarded: true
-                                }, { merge: true });
-                              } catch (err) {
-                                console.error("Error setting onboarded flag:", err);
-                                triggerNotification("Couldn't finish setup -- check your connection and try again.");
-                                return;
-                              }
-                              const ownerDashboardPerms = ["dashboard", "leads", "jobs", "customers", "messages", "scheduling", "dispatch", "timeclock", "routes", "employee_locations", "estimates", "documents", "ai_assistant", "inventory", "settings", "training"];
-                              setLoggedInUser({
-                                email: ownerEmail,
-                                role: "Owner",
-                                permissions: ownerDashboardPerms,
-                                granularPermissions: fullAccessGranular(ownerDashboardPerms),
-                                isEmployee: false,
-                                businessEmail: ownerEmail
-                              });
-                              setIsLoggedIn(true);
-                              setActiveScreen(OS_SCREENS[0]); // Go to dashboard
-                              setShowInvitesModal(false);
-                              triggerNotification("Welcome to OwnersLOCAL Dashboard!");
+                              const opened = await completeOwnerOnboardingAndOpenDashboard();
+                              if (opened) triggerNotification("Welcome to OwnersLOCAL Dashboard!");
                             }}
                             className="w-full py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:brightness-105 active:scale-[0.98] rounded-xl shadow-md transition-all cursor-pointer text-center block font-sans uppercase tracking-wider"
                           >
