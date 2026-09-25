@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Customer, Estimate, SchedulingEvent } from "../types/domain";
 import { generateEstimateNumber, formatEstimateDate, estimateExpirationDate } from "../lib/estimateDefaults";
 import { buildNewCustomerRecord } from "../lib/customerDefaults";
+import { normalizeContactPhone } from "../lib/contactNormalization";
 
 /**
  * Single home for the cross-domain writes that today happen ad hoc inside
@@ -27,8 +28,8 @@ export function useDomainActions() {
     // the Customer record so it survives past this conversion.
     const newCustomer = buildNewCustomerRecord({
       name: lead.name,
-      company: lead.company || lead.name + " Inc",
-      phone: lead.phone,
+      company: lead.company || "",
+      phone: normalizeContactPhone(lead.phone),
       email: lead.email,
       address: lead.address,
       lifetimeValue: lead.estimatedValue,
@@ -49,7 +50,7 @@ export function useDomainActions() {
     const newEstimate: Estimate = {
       id: "est_" + Math.random().toString(36).substring(2, 9),
       number: generateEstimateNumber(),
-      company: lead.company || lead.name + " Inc",
+      company: lead.company || "",
       customerName: lead.name,
       salesRep: lead.salesRep || "Unassigned",
       amount: lead.estimatedValue || 0,
@@ -57,7 +58,7 @@ export function useDomainActions() {
       // Carry over what was already captured on the lead so the estimate
       // doesn't start blank -- the sales rep already wrote this down once.
       notes: lead.notes || "",
-      phone: lead.phone || undefined,
+      phone: normalizeContactPhone(lead.phone) || undefined,
       address: lead.address || undefined,
       createdDate: formatEstimateDate(new Date()),
       expirationDate: estimateExpirationDate(),
@@ -240,8 +241,9 @@ export function useDomainActions() {
   const upsertPotentialCustomer = (customerName: string, company?: string, phone?: string, address?: string, source?: Customer["source"], sourceLeadId?: string) => {
     const trimmedName = customerName.trim();
     if (!trimmedName) return;
+    const trimmedCompany = company?.trim() || "";
     const alreadyExists = customers.some(
-      c => c.contact === trimmedName || c.company === (company?.trim() || trimmedName + " Inc")
+      c => c.contact === trimmedName || (!!trimmedCompany && c.company === trimmedCompany)
     );
     if (alreadyExists) return;
 
@@ -250,8 +252,8 @@ export function useDomainActions() {
     // (e.g. an estimate that itself carries a real Lead source).
     const newCustomer = buildNewCustomerRecord({
       name: trimmedName,
-      company: company?.trim() || trimmedName + " Inc",
-      phone,
+      company: trimmedCompany,
+      phone: normalizeContactPhone(phone),
       address,
       status: "Potential",
       source: source || "Manual Entry",
