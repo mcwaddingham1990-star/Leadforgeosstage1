@@ -454,36 +454,100 @@ select option {
 }
 .input:focus { border-color: #ffffff; box-shadow: 0 0 0 3px rgba(56,189,248,.16), 0 0 15px rgba(56,189,248,.38), inset 0 0 9px rgba(255,255,255,.90); }
 
-/* Job Tracking goal rows are navigation/accordion text, not primary CTA buttons.
-   Keep this after the workspace button theme so the global blue-button rule
-   cannot repaint these rows or force their labels white. */
+/* Job Tracking compact controls.
+   These dimensions intentionally match the user's marked-up compact target:
+   goal triggers are narrow left-aligned controls, never full-width rows, and
+   the surrounding card has no fixed/minimum height. */
+.workspace-theme .job-tracking-inline {
+  min-height: 0 !important;
+}
+
+.workspace-theme .job-goal-list {
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+
+.workspace-theme .job-goal-item {
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 .workspace-theme button.job-goal-menu-button,
 .workspace-theme button.job-goal-menu-button:hover,
 .workspace-theme button.job-goal-menu-button:focus,
 .workspace-theme button.job-goal-menu-button:active {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 10.75rem !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 1.875rem !important;
+  height: 1.875rem !important;
+  margin: 0 !important;
+  padding: 0.25rem 0.5rem !important;
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
   border: 0 !important;
-  border-radius: 0 !important;
+  border-radius: 0.3rem !important;
   box-shadow: none !important;
   color: #1F3557 !important;
+  font-size: 0.7rem !important;
+  line-height: 1rem !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
 .workspace-theme button.job-goal-menu-button .job-goal-menu-title {
   color: #1F3557 !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  line-height: 1rem !important;
 }
 
-.workspace-theme button.job-goal-menu-button .job-goal-menu-status,
 .workspace-theme button.job-goal-menu-button .job-goal-menu-chevron {
   color: #5E7393 !important;
+}
+
+.workspace-theme .job-goal-menu-status {
+  color: #5E7393 !important;
+}
+
+.workspace-theme button.job-goal-menu-button:hover,
+.workspace-theme button.job-goal-menu-button:focus-visible {
+  background-color: rgba(199, 227, 250, 0.42) !important;
 }
 
 .workspace-theme button.job-goal-menu-button:hover .job-goal-menu-title,
 .workspace-theme button.job-goal-menu-button:focus-visible .job-goal-menu-title {
   color: #07599A !important;
+}
+
+/* Edit/Create is also intentionally a compact control instead of a banner. */
+.workspace-theme button.job-tracking-edit-button,
+.workspace-theme button.job-tracking-edit-button:hover,
+.workspace-theme button.job-tracking-edit-button:focus,
+.workspace-theme button.job-tracking-edit-button:active {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  max-width: 11.75rem !important;
+  min-height: 1.9rem !important;
+  height: 1.9rem !important;
+  margin: 0 !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 0.45rem !important;
+  background-color: #158CEB !important;
+  background-image: linear-gradient(135deg, #29B7F6 0%, #1485F4 58%, #3977EE 100%) !important;
+  border: 1px solid rgba(255,255,255,.9) !important;
+  box-shadow: 0 0 8px rgba(14,165,233,.28), inset 0 0 5px rgba(255,255,255,.28) !important;
+  color: #fff !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  line-height: 1rem !important;
 }
 
 .workspace-theme.theme-dark-basic button.job-goal-menu-button,
@@ -500,8 +564,8 @@ select option {
   color: var(--dark-text) !important;
 }
 
-.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-status,
-.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-chevron {
+.workspace-theme.theme-dark-basic button.job-goal-menu-button .job-goal-menu-chevron,
+.workspace-theme.theme-dark-basic .job-goal-menu-status {
   color: var(--dark-muted) !important;
 }
 
