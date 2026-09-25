@@ -604,13 +604,30 @@ export const EstimatesPage: React.FC = () => {
   const selectedEstimateJob = selectedEstimate
     ? schedulingEvents.find(event => event.sourceEstimateId === selectedEstimate.id)
     : undefined;
-  const convertibleEstimates = estimates.filter(est =>
-    est.status === "Accepted" && !schedulingEvents.some(event => event.sourceEstimateId === est.id)
-  );
+
+  const isEstimateReadyForJob = (estimate: Estimate) =>
+    (estimate.status === "Signed" || estimate.status === "Accepted") &&
+    !schedulingEvents.some(event => event.sourceEstimateId === estimate.id);
+
+  const convertibleEstimates = estimates.filter(isEstimateReadyForJob);
+
+  const persistEstimateAccepted = (estimate: Estimate): Estimate => {
+    if (estimate.status === "Accepted") return estimate;
+    const accepted: Estimate = { ...estimate, status: "Accepted" };
+    if (setEstimates) {
+      setEstimates(prev => prev.map(item => item.id === accepted.id ? accepted : item));
+    } else {
+      setLocalEstimates(prev => prev.map(item => item.id === accepted.id ? accepted : item));
+    }
+    setSelectedEstimate(prev => prev?.id === accepted.id ? accepted : prev);
+    logOperationalEvent?.("Estimate Accepted", `${accepted.number} accepted for job conversion`, "✅", { screen: "estimates" });
+    return accepted;
+  };
 
   const chooseEstimateForConversion = (estimate: Estimate) => {
     setIsConversionPickerOpen(false);
-    setEsignConvertTarget(estimate);
+    const accepted = persistEstimateAccepted(estimate);
+    openBuildJobFromEstimate(accepted);
   };
 
   // The Convert to Job eSign prompt's three real choices -- whichever one is
@@ -622,13 +639,14 @@ export const EstimatesPage: React.FC = () => {
   // navigation this action always ends on.
   const handleEsignThenConvert = async (estimate: Estimate | null, savePdfFirst: boolean, remindNote?: string) => {
     if (!estimate) return;
+    const accepted = persistEstimateAccepted(estimate);
     if (savePdfFirst) {
-      await buildAndStoreEstimatePdf(estimate);
-      triggerNotification(`${estimate.number} saved to Documents -- open it anytime to send it for signing.`);
+      await buildAndStoreEstimatePdf(accepted);
+      triggerNotification(`${accepted.number} saved to Documents -- open it anytime to send it for signing.`);
     } else if (remindNote) {
       triggerNotification(remindNote);
     }
-    openBuildJobFromEstimate(estimate);
+    openBuildJobFromEstimate(accepted);
   };
 
   // Filtered estimates list
@@ -1078,7 +1096,7 @@ export const EstimatesPage: React.FC = () => {
               onClick={() => {
                 const estimate = actionMenuEstimate;
                 closeEstimateActionMenu();
-                openBuildJobFromEstimate(estimate);
+                chooseEstimateForConversion(estimate);
               }}
               className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
             >
@@ -1243,8 +1261,7 @@ export const EstimatesPage: React.FC = () => {
                     else triggerNotification("Create or select an estimate first.");
                   } else if (btn.label === "Convert to Job") {
                     if (convertibleEstimates.length === 0) {
-                      triggerNotification("No accepted estimates are waiting to be converted.");
-                      setActiveStatusFilter("Accepted");
+                      triggerNotification("No signed or accepted estimates are waiting to be converted.");
                     } else if (convertibleEstimates.length === 1) {
                       chooseEstimateForConversion(convertibleEstimates[0]);
                     } else {
@@ -1843,14 +1860,24 @@ export const EstimatesPage: React.FC = () => {
                   {selectedEstimate.status !== "Completed" && !selectedEstimateJob && (
                     <div className="pt-3 border-t border-[#9EC8EF]/40">
                       <p className="text-[10px] uppercase font-bold text-[#5E7393] mb-2">
-                        {selectedEstimate.status === "Accepted" ? "Accepted — ready to schedule" : "Confirm customer acceptance"}
+                        {selectedEstimate.status === "Accepted"
+                          ? "Accepted — ready to schedule"
+                          : selectedEstimate.status === "Signed"
+                            ? "Signed — ready to convert"
+                            : "Confirm customer acceptance"}
                       </p>
                       <button
-                        onClick={() => setEsignConvertTarget(selectedEstimate.status === "Accepted" ? selectedEstimate : { ...selectedEstimate, status: "Accepted" })}
+                        onClick={() => {
+                          if (selectedEstimate.status === "Signed" || selectedEstimate.status === "Accepted") {
+                            chooseEstimateForConversion(selectedEstimate);
+                          } else {
+                            setEsignConvertTarget({ ...selectedEstimate, status: "Accepted" });
+                          }
+                        }}
                         className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 border border-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                       >
                         <CheckCircle className="w-4 h-4" />
-                        {selectedEstimate.status === "Accepted" ? "Confirm & Schedule Job" : "Accept & Schedule Job"}
+                        {selectedEstimate.status === "Signed" || selectedEstimate.status === "Accepted" ? "Convert to Job" : "Accept & Schedule Job"}
                       </button>
                     </div>
                   )}
@@ -1903,7 +1930,10 @@ export const EstimatesPage: React.FC = () => {
                 {!isEditMode && selectedEstimate && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate)} className="flex-1 min-w-[120px] px-3 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Generate PDF</button>}
                 {!isEditMode && selectedEstimate && canCollectSignatures && <button type="button" onClick={()=>void generateEstimatePdf(selectedEstimate, true, false, true)} className="flex-1 min-w-[140px] px-3 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider">Collect Signatures</button>}
                 {!isEditMode && selectedEstimate && !schedulingEvents.some(event => event.sourceEstimateId === selectedEstimate.id) && (
-                  <button type="button" onClick={() => setEsignConvertTarget(selectedEstimate)} className="flex-1 min-w-[120px] px-3 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
+                  <button type="button" onClick={() => {
+                    if (selectedEstimate.status === "Signed" || selectedEstimate.status === "Accepted") chooseEstimateForConversion(selectedEstimate);
+                    else setEsignConvertTarget({ ...selectedEstimate, status: "Accepted" });
+                  }} className="flex-1 min-w-[120px] px-3 py-2 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider">Convert to Job</button>
                 )}
                 {!isEditMode && selectedEstimate && (
                   <button
@@ -1983,13 +2013,13 @@ export const EstimatesPage: React.FC = () => {
         <div className="fixed inset-0 z-[75] flex items-center justify-center bg-[#1F3557]/75 p-3 backdrop-blur-sm">
           <div className="max-h-[85vh] w-full max-w-xl overflow-hidden rounded-3xl border-2 border-[#9EC8EF] bg-[#F5FAFF] shadow-2xl">
             <div className="flex items-start justify-between border-b border-[#9EC8EF] bg-white px-5 py-4">
-              <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#4A86F7]">Convert to job</p><h3 className="mt-1 text-lg font-black text-[#1F3557]">Choose an accepted estimate</h3></div>
+              <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#4A86F7]">Convert to job</p><h3 className="mt-1 text-lg font-black text-[#1F3557]">Choose a signed or accepted estimate</h3></div>
               <button aria-label="Close estimate chooser" onClick={() => setIsConversionPickerOpen(false)} className="rounded-lg p-2 text-[#5E7393] hover:bg-[#EAF5FF]"><X className="h-4 w-4" /></button>
             </div>
             <div className="max-h-[65vh] space-y-2 overflow-y-auto p-4">
               {convertibleEstimates.map(estimate => (
                 <button key={estimate.id} onClick={() => chooseEstimateForConversion(estimate)} className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left hover:bg-[#EAF5FF]">
-                  <span><span className="block text-sm font-black text-[#1F3557]">{estimate.customerName}</span><span className="text-[10px] font-bold text-[#5E7393]">{estimate.number} · {estimate.company}</span></span>
+                  <span><span className="block text-sm font-black text-[#1F3557]">{estimate.customerName}</span><span className="text-[10px] font-bold text-[#5E7393]">{estimate.number} · {estimate.status}{estimate.company ? ` · ${estimate.company}` : ""}</span></span>
                   <span className="shrink-0 text-sm font-black text-emerald-600">${estimate.amount.toLocaleString()}</span>
                 </button>
               ))}
