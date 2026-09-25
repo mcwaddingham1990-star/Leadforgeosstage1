@@ -28,6 +28,7 @@ import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { BuildJobModal } from "./BuildJobModal";
+import { AssignEmployeeField } from "./AssignEmployeeField";
 import type { BuildJobPrefill } from "../types/generatedPdf";
 
 type JobStatus = SchedulingEvent["status"];
@@ -108,6 +109,7 @@ export const JobsPage: React.FC = () => {
   const [materialId, setMaterialId] = useState("");
   const [materialQty, setMaterialQty] = useState(1);
   const [completionJobId, setCompletionJobId] = useState<string | null>(null);
+  const [showAssignMenu, setShowAssignMenu] = useState(false);
 
   const selected = jobs.find(j => j.id === selectedId) || null;
   const selectedCompletionPlan = selected ? completionPlans.find(plan => plan.jobId === selected.id) : undefined;
@@ -161,6 +163,16 @@ export const JobsPage: React.FC = () => {
 
   const openCreate = () => { setCreatePrefill(null); setModal("create"); };
   const openEdit = (job: SchedulingEvent) => { setSelectedId(job.id); setModal("edit"); };
+  const assignSelectedJob = (assignee: string) => {
+    if (!selected) return;
+    const cleanAssignee = assignee.trim();
+    writeJob(
+      selected.id,
+      { assignedEmployee: cleanAssignee, status: cleanAssignee ? "Assigned" : "Unassigned" },
+      cleanAssignee ? `Assigned to ${cleanAssignee}` : "Job unassigned"
+    );
+    setShowAssignMenu(false);
+  };
 
   // Native window.confirm() blocks the JS main thread until dismissed -- in
   // some embedded/automated contexts it never gets dismissed, which reads as
@@ -273,7 +285,31 @@ export const JobsPage: React.FC = () => {
       <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Job Tracking</button></div></td></tr>)}</tbody></table></div>}
 
     {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
-      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5"><div className="flex items-start justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div><button onClick={()=>setSelectedId(null)} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button></div><div className="mt-4 flex flex-wrap gap-2"><StatusBadge status={normalizedStatus(selected)}/><button onClick={()=>void storeJobPdf(selected)} className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700"><FileText className="mr-1 inline h-3.5 w-3.5"/>Store as PDF</button><button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button><button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button><button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>{canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}{canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}</div></div>
+      <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5">
+        <div className="flex items-start justify-between">
+          <div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div>
+          <button onClick={()=>{setShowAssignMenu(false);setSelectedId(null)}} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <StatusBadge status={normalizedStatus(selected)}/>
+          {canEdit&&<button onClick={()=>setShowAssignMenu(value=>!value)} className="rounded-lg bg-[#315C9F] px-3 py-1.5 text-xs font-bold text-white"><Users className="mr-1 inline h-3.5 w-3.5"/>Assign To</button>}
+          <button onClick={()=>void storeJobPdf(selected)} className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700"><FileText className="mr-1 inline h-3.5 w-3.5"/>Store as PDF</button>
+          <button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button>
+          <button onClick={()=>{setEditingWorkOrder(null);setWorkOrderPrefill({sourceJobId:selected.id,customerId:selected.customerId,customerName:selected.customer,customerPhone:selected.customerPhone,customerEmail:selected.customerEmail,address:selected.location||selected.customerAddress,jobDescription:selected.description||selected.title||"",estimatedValue:jobCosting?.estimatedRevenue,date:new Date().toISOString().slice(0,10)});setIsWorkOrderBuilderOpen(true);}} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]">🧰 Create Work Order</button>
+          <button disabled={!selected.customerPhone&&!selected.customerEmail} onClick={()=>setIsSendOpen(true)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F] disabled:opacity-40 disabled:cursor-not-allowed"><Send className="mr-1 inline h-3.5 w-3.5"/>Send</button>
+          {canEdit&&<button onClick={()=>openEdit(selected)} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#315C9F]"><Edit3 className="mr-1 inline h-3.5 w-3.5"/>Edit</button>}
+          {canDelete&&<button onClick={()=>deleteJob(selected)} className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600"><Trash2 className="mr-1 inline h-3.5 w-3.5"/>Delete</button>}
+        </div>
+        {canEdit&&showAssignMenu&&<div className="mt-2 flex items-center gap-2 rounded-xl border border-[#9EC8EF] bg-white p-2 shadow-sm">
+          <span className="shrink-0 text-[10px] font-black uppercase text-[#5E7393]">Assign to</span>
+          <AssignEmployeeField
+            value={selected.assignedEmployee||""}
+            onChange={assignSelectedJob}
+            className="min-w-0 flex-1 rounded-lg border border-[#9EC8EF] bg-white px-3 py-2 text-xs font-bold text-[#1F3557]"
+          />
+          <button onClick={()=>setShowAssignMenu(false)} className="rounded-lg px-2 py-2 text-[10px] font-bold text-slate-500">Cancel</button>
+        </div>}
+      </div>
       <div className="space-y-5 p-5">
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}<div className="mt-3 border-t border-blue-100 pt-3"><CustomerPortalControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} /></div><div className="mt-3 border-t border-blue-100 pt-3"><ReviewRequestControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} jobId={selected.id} jobDescription={selected.title || selected.description} /></div></section>
