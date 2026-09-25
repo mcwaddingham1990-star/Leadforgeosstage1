@@ -5,6 +5,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib";
 import type { Estimate, Customer, DocumentItem, Lead, MissedCallEvent, TextMessage } from "../types/domain";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
+import { normalizeContactPhone, normalizeEstimateCompany } from "./contactNormalization";
 
 export interface BusinessProfile {
   name: string;
@@ -195,9 +196,11 @@ export async function buildEstimatePdf(estimate: Estimate, customer: Customer | 
 
   writer.heading("Prepared for");
   writer.text(estimate.customerName, { font: bold, gap: 1 });
-  if (estimate.company) writer.text(estimate.company, { gap: 1 });
+  const company = normalizeEstimateCompany(estimate.customerName, estimate.company);
+  if (company) writer.text(company, { gap: 1 });
   if (estimate.address || customer?.address) writer.text(estimate.address || customer?.address || "", { gap: 1 });
-  if (customer?.phone) writer.text(customer.phone, { gap: 1 });
+  const phone = normalizeContactPhone(estimate.phone || customer?.phone);
+  if (phone) writer.text(phone, { gap: 1 });
   if (customer?.email) writer.text(customer.email, { gap: 1 });
   writer.spacer(10);
 
