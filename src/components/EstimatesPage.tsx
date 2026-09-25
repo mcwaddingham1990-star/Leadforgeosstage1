@@ -1064,6 +1064,17 @@ export const EstimatesPage: React.FC = () => {
                 Collect Signatures
               </button>
             )}
+            <button
+              onClick={() => {
+                const estimate = actionMenuEstimate;
+                closeEstimateActionMenu();
+                openBuildJobFromEstimate(estimate);
+              }}
+              className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
+            >
+              <Wrench className="w-3.5 h-3.5 text-[#315C9F]" />
+              Convert to Job
+            </button>
             <details className="group">
               <summary className="list-none w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center justify-between gap-2 text-[11px] font-black uppercase cursor-pointer">
                 <span className="flex items-center gap-2">
