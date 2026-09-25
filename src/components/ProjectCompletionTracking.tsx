@@ -16,7 +16,7 @@ const blankGoal = (): CompletionGoal => ({ id: id("goal"), title: "", estimatedS
 const activity = (action: string, by: string, detail?: string) => ({ id: id("act"), action, detail, by, at: now() });
 
 export function ProjectCompletionTracking(props: {
-  job: SchedulingEvent; plan?: ProjectCompletionPlan; businessId: string; actor: string; canManage: boolean; canCreate?: boolean; canRespond?: boolean;
+  job: SchedulingEvent; plan?: ProjectCompletionPlan; businessId: string; actor: string; canManage: boolean; canCreate?: boolean; canRespond?: boolean; inline?: boolean;
   inventory: InventoryItem[]; setPlans: React.Dispatch<React.SetStateAction<ProjectCompletionPlan[]>>;
   setDocuments: React.Dispatch<React.SetStateAction<DocumentItem[]>>; onClose: () => void; notify: (message: string) => void;
   /** Only set when this popup was opened automatically right after a job
@@ -28,11 +28,12 @@ export function ProjectCompletionTracking(props: {
   onSkip?: () => void;
   onRemindLater?: () => void;
 }) {
-  const { job, plan, businessId, actor, canManage, canCreate = canManage, canRespond = false, inventory, setPlans, setDocuments, onClose, notify, onSkip, onRemindLater } = props;
+  const { job, plan, businessId, actor, canManage, canCreate = canManage, canRespond = false, inline = false, inventory, setPlans, setDocuments, onClose, notify, onSkip, onRemindLater } = props;
   const { loggedInUser } = useAuth();
   const { customers, setSchedulingEvents } = useDomainData();
   const [draft, setDraft] = useState<ProjectCompletionPlan | null>(plan || null);
   const [busy, setBusy] = useState(false);
+  const [showInlineSetup, setShowInlineSetup] = useState(false);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   useEffect(() => setDraft(plan || null), [plan]);
 
@@ -146,7 +147,59 @@ export function ProjectCompletionTracking(props: {
     reader.readAsDataURL(file);
   };
 
-  if (!draft) return <Modal onClose={onClose}><div className="p-8 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-[#4A86F7]"/><h3 className="mt-3 text-lg font-black text-[#1F3557]">Job Tracking</h3><p className="mt-2 text-xs text-slate-500">Job Tracking has not been set up for this job yet.</p>{canCreate && <button onClick={createPlan} className="mt-5 rounded-xl bg-[#315C9F] px-5 py-3 text-xs font-black text-white">Create Job Tracking</button>}{!canCreate && <p className="mt-4 text-[11px] font-semibold text-slate-500">Management needs to create the completion goals before the assigned employee can respond.</p>}{(onSkip || onRemindLater) && <div className="mt-3 flex justify-center gap-2">{onRemindLater && <button onClick={onRemindLater} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold text-[#315C9F]">Remind Me Later</button>}{onSkip && <button onClick={onSkip} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Skip for now</button>}</div>}</div></Modal>;
+  if (!draft) {
+    if (inline) {
+      return <div className="space-y-3">
+        <div className="rounded-xl border border-dashed border-[#9EC8EF] bg-blue-50/50 p-4 text-center">
+          <p className="text-xs font-black text-[#1F3557]">No job completion goals yet.</p>
+          <p className="mt-1 text-[10px] text-[#5E7393]">{canCreate ? "Create Job Tracking to add the completion goals that replace the old checklist." : "Management needs to create Job Tracking before the assigned employee can respond."}</p>
+        </div>
+        {canCreate && <button onClick={createPlan} className="w-full rounded-xl bg-[#315C9F] px-4 py-3 text-xs font-black text-white"><Plus className="mr-1 inline h-4 w-4"/>Edit/Create Job Tracking</button>}
+      </div>;
+    }
+    return <Modal onClose={onClose}><div className="p-8 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-[#4A86F7]"/><h3 className="mt-3 text-lg font-black text-[#1F3557]">Job Tracking</h3><p className="mt-2 text-xs text-slate-500">Job Tracking has not been set up for this job yet.</p>{canCreate && <button onClick={createPlan} className="mt-5 rounded-xl bg-[#315C9F] px-5 py-3 text-xs font-black text-white">Create Job Tracking</button>}{!canCreate && <p className="mt-4 text-[11px] font-semibold text-slate-500">Management needs to create the completion goals before the assigned employee can respond.</p>}{(onSkip || onRemindLater) && <div className="mt-3 flex justify-center gap-2">{onRemindLater && <button onClick={onRemindLater} className="rounded-xl border border-[#9EC8EF] bg-white px-4 py-2 text-xs font-bold text-[#315C9F]">Remind Me Later</button>}{onSkip && <button onClick={onSkip} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Skip for now</button>}</div>}</div></Modal>;
+  }
+
+  if (inline) {
+    const completedGoals = draft.goals.filter(goal => goal.completed || goal.status === "Completed").length;
+    const goalProgress = draft.goals.length ? Math.round((completedGoals / draft.goals.length) * 100) : 0;
+    return <>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between text-[10px] font-bold text-[#5E7393]">
+              <span>{completedGoals}/{draft.goals.length} completion goals</span>
+              <span>{goalProgress}%</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-emerald-500" style={{width:`${goalProgress}%`}}/></div>
+          </div>
+        </div>
+
+        {canManage && <button type="button" onClick={()=>setShowInlineSetup(value=>!value)} className="w-full rounded-xl bg-[#315C9F] px-4 py-3 text-xs font-black text-white">
+          <Plus className="mr-1 inline h-4 w-4"/>{showInlineSetup ? "Done Editing Job Tracking" : "Edit/Create Job Tracking"}
+        </button>}
+
+        {showInlineSetup && canManage && <section className="rounded-xl border border-[#9EC8EF] bg-blue-50/50 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Overall completion summary"><textarea rows={2} value={draft.summary} onChange={e=>setDraft({...draft,summary:e.target.value})} className="input"/></Field>
+            <Field label="Overall project completion goal"><textarea rows={2} value={draft.overallGoal} onChange={e=>setDraft({...draft,overallGoal:e.target.value})} className="input"/></Field>
+            <Field label="Project start date"><input type="date" value={draft.projectStartDate} onChange={e=>setDraft({...draft,projectStartDate:e.target.value})} className="input"/></Field>
+            <Field label="Estimated completion date"><input type="date" value={draft.estimatedCompletionDate} onChange={e=>setDraft({...draft,estimatedCompletionDate:e.target.value})} className="input"/></Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={()=>persist(draft,"Completion plan edited")} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Save Plan Details</button>
+            <button onClick={()=>persist({...draft,goals:[...draft.goals,blankGoal()]},"Goal created")} className="rounded-xl border border-[#315C9F] bg-white px-4 py-2 text-xs font-black text-[#315C9F]"><Plus className="mr-1 inline h-4 w-4"/>Add Completion Goal</button>
+          </div>
+        </section>}
+
+        <div className="space-y-2">
+          {draft.goals.length === 0 && <div className="rounded-xl border border-dashed border-[#9EC8EF] bg-white p-4 text-center text-xs font-semibold text-slate-500">{canManage ? "No completion goals yet. Tap Edit/Create Job Tracking, then add the first goal." : "Management has not added any completion goals yet."}</div>}
+          {draft.goals.map((goal,index)=><GoalCard key={goal.id} goal={goal} index={index} canManage={canManage} canRespond={canRespond} actor={actor} inventory={inventory} onChange={(changes,actionName)=>updateGoal(goal.id,changes,actionName)} onSaveResponse={(response)=>saveEmployeeResponse(goal.id,response)} onDelete={()=>requestConfirm("Delete this project goal?",()=>persist({...draft,goals:draft.goals.filter(item=>item.id!==goal.id)},"Goal deleted",goal.title))} onMaterial={(itemId,qty,notes)=>addMaterial(goal,itemId,qty,notes)} onAttach={file=>attach(goal,file)} onApprove={material=>requestConfirm(`Deduct ${material.quantity} × ${material.inventoryItemName} from Inventory? This can only happen once.`,async()=>{setBusy(true);try{const savedPlan=await approveCompletionMaterial({businessId,plan:draft,goalId:goal.id,materialId:material.id,actor});setDraft(savedPlan);setPlans(prev=>prev.map(item=>item.id===savedPlan.id?savedPlan:item));notify("Inventory deduction approved.");}catch(error){notify(error instanceof Error?error.message:"Inventory deduction failed.");}finally{setBusy(false)}})} busy={busy}/>)}
+        </div>
+      </div>
+      {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
+    </>;
+  }
 
   return <>
   <Modal onClose={onClose}>
