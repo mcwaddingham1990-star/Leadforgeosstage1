@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, FileUp, Plus, Save, Trash2, X } from "lucide-react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, waitForPendingWrites } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import type { InventoryItem, DocumentItem, SchedulingEvent } from "../types/domain";
@@ -114,6 +114,7 @@ export function ProjectCompletionTracking(props: {
     persist({ ...draft, goals }, label, savedGoal?.title);
     if (!savedGoal) return;
     try {
+      await waitForPendingWrites(db);
       await notifyEmployerOfResponse(savedGoal, finished);
       notify(finished ? "Employee update saved. Employer notified that this goal is complete." : "Employee update saved. Employer notified that this goal is still in progress.");
     } catch (error) {
@@ -155,7 +156,7 @@ export function ProjectCompletionTracking(props: {
       <section className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <h4 className="text-xs font-black uppercase tracking-wide text-[#1F3557]">Completion Goals</h4>
-          <span className="text-[10px] font-bold text-[#5E7393]">${draft.goals.length} goal${draft.goals.length === 1 ? "" : "s"}</span>
+          <span className="text-[10px] font-bold text-[#5E7393]">{draft.goals.length} goal{draft.goals.length === 1 ? "" : "s"}</span>
         </div>
         {draft.goals.length === 0 && <div className="rounded-2xl border border-dashed border-[#9EC8EF] bg-white p-5 text-center text-xs font-semibold text-slate-500">{canManage ? "No completion goals yet. Add the first goal below." : "Management has not added any completion goals yet."}</div>}
         {draft.goals.map((goal,index)=><GoalCard key={goal.id} goal={goal} index={index} canManage={canManage} canRespond={canRespond} actor={actor} inventory={inventory} onChange={(changes,actionName)=>updateGoal(goal.id,changes,actionName)} onSaveResponse={(response)=>saveEmployeeResponse(goal.id,response)} onDelete={()=>requestConfirm("Delete this project goal?",()=>persist({...draft,goals:draft.goals.filter(item=>item.id!==goal.id)},"Goal deleted",goal.title))} onMaterial={(itemId,qty,notes)=>addMaterial(goal,itemId,qty,notes)} onAttach={file=>attach(goal,file)} onApprove={material=>requestConfirm(`Deduct ${material.quantity} × ${material.inventoryItemName} from Inventory? This can only happen once.`,async()=>{setBusy(true);try{const savedPlan=await approveCompletionMaterial({businessId,plan:draft,goalId:goal.id,materialId:material.id,actor});setDraft(savedPlan);setPlans(prev=>prev.map(item=>item.id===savedPlan.id?savedPlan:item));notify("Inventory deduction approved.");}catch(error){notify(error instanceof Error?error.message:"Inventory deduction failed.");}finally{setBusy(false)}})} busy={busy}/>)}
