@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { downloadCsv, parseCsv } from "../lib/csv";
 import { parseAddress } from "./StructuredAddressFields";
 import { useDomainActions } from "../hooks/useDomainActions";
@@ -48,6 +48,25 @@ import type { Lead } from "../types/domain";
 // 10 high-quality realistic OwnersLOCAL leads
 export const INITIAL_LEADS: Lead[] = [];
 
+const LEAD_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Mobile autofill/input-method replay can occasionally append an email to
+ * itself (for example jane@example.comjane@example.com). Never persist that
+ * exact duplicated value. This intentionally repairs only an exact repeated
+ * valid email so legitimate unusual addresses are otherwise left alone.
+ */
+function normalizeLeadEmail(value: string): string {
+  const cleaned = String(value || "").trim().replace(/\s+/g, "");
+  let current = cleaned;
+  while (current.length > 1 && current.length % 2 === 0) {
+    const half = current.slice(0, current.length / 2);
+    if (half !== current.slice(current.length / 2) || !LEAD_EMAIL_RE.test(half)) break;
+    current = half;
+  }
+  return current;
+}
+
 export const LeadsPage: React.FC = () => {
   const { convertLeadToCustomer } = useDomainActions();
   const { leads: propsLeads, setLeads, setDocuments, businessProfile, setGeneratedPdfDraft, setEstimatePrefill, setBuildJobPrefill } = useDomainData();
@@ -80,6 +99,21 @@ export const LeadsPage: React.FC = () => {
   const [formStatus, setFormStatus] = useState<Lead["status"]>("New");
   const [formEstimatedValue, setFormEstimatedValue] = useState<number>(0);
   const [formNotes, setFormNotes] = useState("");
+  const repairedLeadEmailsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!setLeads || !propsLeads?.length) return;
+    const repairs = new Map<string, string>();
+    for (const lead of propsLeads) {
+      const normalized = normalizeLeadEmail(lead.email || "");
+      if (normalized !== (lead.email || "") && !repairedLeadEmailsRef.current.has(lead.id)) {
+        repairedLeadEmailsRef.current.add(lead.id);
+        repairs.set(lead.id, normalized);
+      }
+    }
+    if (!repairs.size) return;
+    setLeads(prev => prev.map(lead => repairs.has(lead.id) ? { ...lead, email: repairs.get(lead.id)! } : lead));
+  }, [propsLeads, setLeads]);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const LEAD_SOURCES = ["Google Business Profile", "Website", "Facebook", "Instagram", "Referral", "Phone Call", "Walk-In", "Manual Entry", "Other"];
@@ -107,7 +141,7 @@ export const LeadsPage: React.FC = () => {
         name: r[iName]?.trim() || "",
         company: (iCompany >= 0 ? r[iCompany]?.trim() : "") || "",
         phone: iPhone >= 0 ? r[iPhone]?.trim() : "",
-        email: iEmail >= 0 ? r[iEmail]?.trim() : "",
+        email: normalizeLeadEmail(iEmail >= 0 ? r[iEmail]?.trim() || "" : ""),
         source: (iSource >= 0 && LEAD_SOURCES.includes(r[iSource]?.trim())) ? r[iSource].trim() as Lead["source"] : "Manual Entry",
         salesRep: (iRep >= 0 ? r[iRep]?.trim() : "") || "Unassigned",
         status: (iStatus >= 0 && LEAD_STATUSES.includes(r[iStatus]?.trim())) ? r[iStatus].trim() as Lead["status"] : "New",
@@ -249,7 +283,7 @@ export const LeadsPage: React.FC = () => {
       name: formName.trim(),
       company: formCompany.trim(),
       phone: phoneStr,
-      email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, "")}@example.com`,
+      email: normalizeLeadEmail(formEmail),
       source: formSource,
       salesRep: "Self",
       status: formStatus,
@@ -286,7 +320,7 @@ export const LeadsPage: React.FC = () => {
     const phones = (ld.phone || "").split(",").map(p => p.trim()).filter(Boolean);
     setFormPhones(phones.length > 0 ? phones : [""]);
     
-    setFormEmail(ld.email);
+    setFormEmail(normalizeLeadEmail(ld.email || ""));
     
     // Parse address
     const parts = (ld.address || "").split(",").map(s => s.trim());
@@ -327,7 +361,7 @@ export const LeadsPage: React.FC = () => {
       name: formName.trim(),
       company: formCompany.trim(),
       phone: phoneStr,
-      email: formEmail.trim(),
+      email: normalizeLeadEmail(formEmail),
       address: combinedAddress,
       source: formSource,
       status: formStatus,
@@ -781,7 +815,7 @@ export const LeadsPage: React.FC = () => {
                       <td className="py-3 px-4 font-bold text-[#1F3557]">{ld.name}</td>
                       <td className="py-3 px-4 text-[#5E7393] font-semibold">{ld.company || "—"}</td>
                       <td className="py-3 px-4 font-mono text-[#5E7393]">{ld.phone}</td>
-                      <td className="py-3 px-4 text-[#5E7393] truncate max-w-[120px]">{ld.email}</td>
+                      <td className="py-3 px-4 text-[#5E7393] truncate max-w-[120px]">{normalizeLeadEmail(ld.email || "")}</td>
                       <td className="py-3 px-4">
                         <span className="px-2 py-0.5 bg-[#EAF5FF] text-[#1F3557] font-sans font-bold text-[10px] rounded-lg border border-[#9EC8EF]/40">
                           {ld.source}
@@ -1036,10 +1070,16 @@ export const LeadsPage: React.FC = () => {
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
                 <input 
-                  type="email" 
+                  type="email"
+                  name="leadEmail"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={formEmail}
-                  onChange={e => setFormEmail(e.target.value)}
+                  onChange={e => setFormEmail(normalizeLeadEmail(e.currentTarget.value))}
                   placeholder="e.g. john@resistance.com"
+                  style={{ color: "#1F3557", WebkitTextFillColor: "#1F3557", caretColor: "#1F3557" }}
                   className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                 />
               </div>
@@ -1279,9 +1319,15 @@ export const LeadsPage: React.FC = () => {
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-[#5E7393]">Email Address</label>
                     <input 
-                      type="email" 
+                      type="email"
+                      name="leadEmailEdit"
+                      inputMode="email"
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       value={formEmail}
-                      onChange={e => setFormEmail(e.target.value)}
+                      onChange={e => setFormEmail(normalizeLeadEmail(e.currentTarget.value))}
+                      style={{ color: "#1F3557", WebkitTextFillColor: "#1F3557", caretColor: "#1F3557" }}
                       className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
                     />
                   </div>
@@ -1403,7 +1449,7 @@ export const LeadsPage: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-[10px] uppercase font-bold text-[#5E7393]">Email</p>
-                        <p className="text-[#1F3557] font-bold mt-0.5">{selectedLead.email}</p>
+                        <p className="text-[#1F3557] font-bold mt-0.5">{normalizeLeadEmail(selectedLead.email || "")}</p>
                       </div>
                       {(() => {
                         const addrParts = parseAddress(selectedLead.address || "");
