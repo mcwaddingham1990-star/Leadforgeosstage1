@@ -46,6 +46,7 @@ import type { BuildJobPrefill } from "../types/generatedPdf";
 import { buildNewCustomerRecord } from "../lib/customerDefaults";
 import { AssignEmployeeField } from "./AssignEmployeeField";
 import { useAssignableEmployeeNames } from "../hooks/useAssignableEmployees";
+import { hasEffectivePermission } from "../types/permissions";
 
 type JobImportKey = "customer" | "eventType" | "date" | "startTime" | "endTime" | "assignedEmployee" | "address" | "notes" | "status";
 const JOB_IMPORT_FIELDS: ImportFieldSpec<JobImportKey>[] = [
@@ -387,12 +388,29 @@ export const SchedulingPage: React.FC = () => {
   // a real number instead of one code path leaving it blank.
   const [formBudget, setFormBudget] = useState("");
 
-  // Check if role has create/edit permissions
-  // Schedulers, Dispatchers, Owners, Managers can do everything.
-  const isHighPrivilege = useMemo(() => {
+  // Real sessions use the Owner-configured Scheduling permission matrix.
+  // Workspace Simulator has no employee permission payload, so preserve its
+  // existing role-template preview behavior without using it for real auth.
+  const isOwner = activeRole.trim().toLowerCase() === "owner";
+  const previewSchedulingManager = useMemo(() => {
     const editRoles = ["Owner", "General Manager", "Office Manager", "Operations Manager", "Scheduler", "Dispatcher", "Admin"];
     return editRoles.includes(activeRole);
   }, [activeRole]);
+  const canViewAllScheduling = simulatedRole
+    ? previewSchedulingManager
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "scheduling", "view");
+  const canEditScheduling = simulatedRole
+    ? previewSchedulingManager
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "scheduling", "edit");
+  const canDeleteScheduling = simulatedRole
+    ? previewSchedulingManager
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "scheduling", "delete");
+  const canEditAssignedSharedEvent = simulatedRole
+    ? previewSchedulingManager
+    : isOwner
+      || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "scheduling", "edit")
+      || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "jobs", "edit")
+      || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "dispatch", "edit");
 
   // Handle pre-populated customer from Customers/Leads
   useEffect(() => {
@@ -578,13 +596,13 @@ export const SchedulingPage: React.FC = () => {
       // Real fix: compare against the actual logged-in user's name, not their role title
       // (the old heuristic compared assignedEmployee to activeRole, which are different
       // concepts — a job title isn't a person's name).
-      if (!isHighPrivilege && !isAssignedToCurrentUser(evt)) {
+      if (!canViewAllScheduling && !isAssignedToCurrentUser(evt)) {
         return false;
       }
 
       return true;
     });
-  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, isHighPrivilege, activeRole, loggedInUser]);
+  }, [events, searchQuery, filterEmployee, filterCrew, filterCustomer, filterEventType, filterPriority, filterStatus, filterCompleted, filterDateStart, filterDateEnd, canViewAllScheduling, activeRole, loggedInUser]);
 
   // Month View Days Generation
   const monthDays = useMemo(() => {
@@ -659,8 +677,8 @@ export const SchedulingPage: React.FC = () => {
     e.preventDefault();
 
     // Permission Guard
-    if (!isHighPrivilege) {
-      triggerNotification(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can create or edit events. Your current role is '${activeRole}'.`);
+    if (!canEditScheduling) {
+      triggerNotification("You do not have Add/Edit permission for Scheduling.");
       return;
     }
 
@@ -803,8 +821,8 @@ export const SchedulingPage: React.FC = () => {
   // Open Edit Form for Event
   const handleOpenEditForm = (evt: SchedulingEvent) => {
     // Check permission
-    if (!isHighPrivilege) {
-      triggerNotification(`Role Restricted: Only Owners, Managers, Schedulers, and Dispatchers can edit event times/dates.`);
+    if (!canEditScheduling) {
+      triggerNotification("You do not have Add/Edit permission for Scheduling.");
       return;
     }
 
@@ -885,8 +903,8 @@ export const SchedulingPage: React.FC = () => {
     const eventToUpdate = events.find(e => e.id === evtId);
     if (!eventToUpdate) return;
 
-    if (!isHighPrivilege && !isAssignedToCurrentUser(eventToUpdate)) {
-      triggerNotification("Role Permission Error: You can only update the status of events assigned directly to you.");
+    if (!canEditScheduling && !(canEditAssignedSharedEvent && isAssignedToCurrentUser(eventToUpdate))) {
+      triggerNotification("You can only update assigned events when your permissions allow it.");
       return;
     }
 
@@ -901,8 +919,8 @@ export const SchedulingPage: React.FC = () => {
   };
 
   const handleDuplicateEvent = (evt: SchedulingEvent) => {
-    if (!isHighPrivilege) {
-      triggerNotification("Permission Restricted: Duplicate is only available to coordinators.");
+    if (!canEditScheduling) {
+      triggerNotification("You do not have Add/Edit permission for Scheduling.");
       return;
     }
     const dup: SchedulingEvent = {
@@ -925,8 +943,8 @@ export const SchedulingPage: React.FC = () => {
   };
 
   const handleDeleteEvent = (evtId: string) => {
-    if (!isHighPrivilege) {
-      triggerNotification("Permission Restricted: Deletion is only available to managers/schedulers.");
+    if (!canDeleteScheduling) {
+      triggerNotification("You do not have Delete permission for Scheduling.");
       return;
     }
     const match = events.find(e => e.id === evtId);
@@ -1127,7 +1145,7 @@ export const SchedulingPage: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
-            {isHighPrivilege ? (
+            {canEditScheduling ? (
               <>
                 <button
                   onClick={() => { resetForm(); setIsNewEventOpen(true); }}
@@ -2185,7 +2203,7 @@ export const SchedulingPage: React.FC = () => {
               {/* Management Action buttons */}
               <div className="flex flex-wrap justify-between items-center gap-2 border-t border-slate-50 pt-4 mt-6">
                 <div className="flex gap-2">
-                  {isHighPrivilege ? (
+                  {canEditScheduling ? (
                     <>
                       <button
                         onClick={() => handleOpenEditForm(selectedEvent)}
@@ -2206,7 +2224,7 @@ export const SchedulingPage: React.FC = () => {
                   ) : null}
                 </div>
 
-                {isHighPrivilege && (
+                {canDeleteScheduling && (
                   <button
                     onClick={() => handleDeleteEvent(selectedEvent.id)}
                     className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold rounded-xl transition-colors flex items-center gap-1.5"
