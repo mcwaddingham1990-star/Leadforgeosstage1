@@ -1450,8 +1450,9 @@ export const EstimatesPage: React.FC = () => {
                   onChange={(event) => {
                     const customer = customers.find(item => item.id === event.target.value);
                     if (!customer) return;
-                    setFormCustomerName(customer.contact || customer.company);
-                    setFormCompany(customer.company);
+                    const customerName = customer.contact || customer.company;
+                    setFormCustomerName(customerName);
+                    setFormCompany(customer.contact ? normalizeEstimateCompany(customer.contact, customer.company) : customer.company);
                     setFormPhone(normalizeContactPhone(customer.phone || ""));
                     setFormAddress(customer.address || "");
                   }}
@@ -1660,8 +1661,9 @@ export const EstimatesPage: React.FC = () => {
           customers={customers}
           onClose={() => setIsCustomerPickerOpen(false)}
           onSelect={(c) => {
-            setFormCustomerName(c.contact || c.company);
-            setFormCompany(c.company);
+            const customerName = c.contact || c.company;
+            setFormCustomerName(customerName);
+            setFormCompany(c.contact ? normalizeEstimateCompany(c.contact, c.company) : c.company);
             setFormPhone(normalizeContactPhone(c.phone || ""));
             setFormAddress(c.address || "");
             setIsCustomerPickerOpen(false);
