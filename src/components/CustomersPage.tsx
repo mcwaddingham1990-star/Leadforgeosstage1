@@ -56,6 +56,7 @@ import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { BulkImportModal } from "./BulkImportModal";
 import { MarketingAttributionView } from "./MarketingAttributionView";
 import { normalizePhoneForMatch, normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
+import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
 
 type CustomerImportKey = "company" | "contact" | "phone" | "email" | "address" | "type" | "status" | "vip";
 const CUSTOMER_IMPORT_FIELDS: ImportFieldSpec<CustomerImportKey>[] = [
@@ -374,9 +375,9 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         const vipStr = (row.vip || "").toLowerCase();
         const customer: Customer = {
           id: "cust_import_" + Math.random().toString(36).substring(2, 9),
-          company: company || contact,
+          company,
           contact: contact || company,
-          phone: row.phone?.trim() || "",
+          phone: normalizeContactPhone(row.phone?.trim() || ""),
           email: row.email?.trim() || "",
           address: row.address?.trim() || "No address supplied",
           openJobs: 0,
@@ -437,11 +438,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const openEditModal = (cust: Customer) => {
     setSelectedCustomer(cust);
-    setFormCompany(cust.company);
+    setFormCompany(normalizeEstimateCompany(cust.contact, cust.company));
     setFormContact(cust.contact);
     
-    // Parse phones
-    const phones = (cust.phone || "").split(",").map(p => p.trim()).filter(Boolean);
+    // Parse phones after removing duplicate/corrupted copies.
+    const phones = normalizeContactPhone(cust.phone || "").split(",").map(p => p.trim()).filter(Boolean);
     setFormPhones(phones.length > 0 ? phones : [""]);
     
     setFormEmail(cust.email);
@@ -629,12 +630,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       triggerNotification("You don't have permission to add customers.");
       return;
     }
-    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const phoneStr = normalizeContactPhone(formPhones.map(p => p.trim()).filter(Boolean).join(", "));
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
 
     const newCust: Customer = {
       id: "cust_" + Math.random().toString(36).substring(2, 9),
-      company: formCompany.trim() || formContact.trim() + " Inc",
+      company: formCompany.trim(),
       contact: formContact.trim(),
       phone: phoneStr,
       email: formEmail.trim(),
@@ -662,11 +663,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleEditCustomer = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!selectedCustomer) return;
-    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const phoneStr = normalizeContactPhone(formPhones.map(p => p.trim()).filter(Boolean).join(", "));
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
     const updated: Customer = {
       ...selectedCustomer,
-      company: formCompany.trim() || formContact.trim() + " Inc",
+      company: formCompany.trim(),
       contact: formContact.trim(),
       phone: phoneStr,
       email: formEmail.trim(),

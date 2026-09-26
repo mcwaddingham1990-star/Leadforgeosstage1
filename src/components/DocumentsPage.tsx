@@ -15,6 +15,7 @@ import { PurchaseOrderBuilder } from "./PurchaseOrderBuilder";
 import { CustomerPortalControls } from "./CustomerPortalControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
+import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
 import type { WorkOrder } from "../types/domain";
 import type { Membership } from "../types/membership";
 import type { PurchaseOrder } from "../types/purchaseOrder";
@@ -588,11 +589,10 @@ export const DocumentsPage: React.FC = () => {
         .map(estimate => estimate.id === sourceEstimateId ? { ...estimate, status: "Signed" as const } : estimate));
 
       if (sourceEstimate) {
-        const matchedCustomer = customersList.find(customer =>
-          customer.id === sourceEstimate.customerId ||
-          customer.contact === sourceEstimate.customerName ||
-          customer.company === sourceEstimate.company
-        );
+        const normalizedCompany = normalizeEstimateCompany(sourceEstimate.customerName, sourceEstimate.company);
+        const matchedCustomer =
+          resolveCustomerByIdOrName(customersList, sourceEstimate.customerId, sourceEstimate.customerName) ||
+          (normalizedCompany ? resolveCustomerByIdOrName(customersList, undefined, normalizedCompany) : null);
 
         if (matchedCustomer) {
           setCustomers(prev => prev.map(customer =>
@@ -621,7 +621,7 @@ export const DocumentsPage: React.FC = () => {
           const jobPrefill = {
             customerId: matchedCustomer?.id || sourceEstimate.customerId,
             customerName,
-            customerPhone: sourceEstimate.phone || matchedCustomer?.phone,
+            customerPhone: normalizeContactPhone(sourceEstimate.phone || matchedCustomer?.phone),
             customerEmail: matchedCustomer?.email,
             customerAddress: sourceEstimate.address || matchedCustomer?.address,
             title: sourceEstimate.projectSpecifics || `Job from ${sourceEstimate.number}`,
