@@ -1716,35 +1716,24 @@ export const EstimatesPage: React.FC = () => {
               </div>
               <p className="text-[9.5px] text-slate-400 -mt-1">Carries through automatically if this estimate is later converted to a job.</p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount ($) *</label>
-                  <input
-                    type="number"
-                    value={formAmount || ""}
-                    onChange={e => setFormAmount(Number(e.target.value))}
-                    placeholder="e.g. 12500"
-                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
-                  />
-                </div>
+              {renderEstimatePricingEditor()}
 
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
-                  <select
-                    value={formStatus}
-                    onChange={e => setFormStatus(e.target.value as any)}
-                    className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
-                  >
-                    <option value="Draft">Draft</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Sent">Sent</option>
-                    <option value="Viewed">Viewed</option>
-                    <option value="Signed">Signed</option>
-                    <option value="Accepted">Accepted</option>
-                    <option value="Declined">Declined</option>
-                    <option value="Expired">Expired</option>
-                  </select>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-[#5E7393]">Initial Status</label>
+                <select
+                  value={formStatus}
+                  onChange={e => setFormStatus(e.target.value as Estimate["status"])}
+                  className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Sent">Sent</option>
+                  <option value="Viewed">Viewed</option>
+                  <option value="Signed">Signed</option>
+                  <option value="Accepted">Accepted</option>
+                  <option value="Declined">Declined</option>
+                  <option value="Expired">Expired</option>
+                </select>
               </div>
 
               <div className="space-y-1">
@@ -1930,34 +1919,24 @@ export const EstimatesPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quoted Amount ($) *</label>
-                      <input 
-                        type="number" 
-                        value={formAmount}
-                        onChange={e => setFormAmount(Number(e.target.value))}
-                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
-                      />
-                    </div>
+                  {renderEstimatePricingEditor()}
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quotation Status</label>
-                      <select
-                        value={formStatus}
-                        onChange={e => setFormStatus(e.target.value as any)}
-                        className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
-                      >
-                        <option value="Draft">Draft</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Sent">Sent</option>
-                        <option value="Viewed">Viewed</option>
-                        <option value="Signed">Signed</option>
-                        <option value="Accepted">Accepted</option>
-                        <option value="Declined">Declined</option>
-                        <option value="Expired">Expired</option>
-                      </select>
-                    </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-[#5E7393]">Quotation Status</label>
+                    <select
+                      value={formStatus}
+                      onChange={e => setFormStatus(e.target.value as Estimate["status"])}
+                      className="w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-bold text-[#1F3557] cursor-pointer"
+                    >
+                      <option value="Draft">Draft</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Sent">Sent</option>
+                      <option value="Viewed">Viewed</option>
+                      <option value="Signed">Signed</option>
+                      <option value="Accepted">Accepted</option>
+                      <option value="Declined">Declined</option>
+                      <option value="Expired">Expired</option>
+                    </select>
                   </div>
 
                   <div className="space-y-1">
@@ -2257,7 +2236,13 @@ export const EstimatesPage: React.FC = () => {
       />
       <WorkOrderBuilder isOpen={isWorkOrderBuilderOpen} onClose={() => setIsWorkOrderBuilderOpen(false)} prefill={workOrderPrefill} />
       <CreateMembershipPicker isOpen={isMembershipPickerOpen} onClose={() => setIsMembershipPickerOpen(false)} prefillBase={membershipPrefillBase} />
-      <PriceBookModal isOpen={isPriceBookOpen} onClose={() => setIsPriceBookOpen(false)} />
+      <PriceBookModal
+        isOpen={isPriceBookOpen}
+        onClose={() => { setIsPriceBookOpen(false); setPriceBookPickerMode(false); }}
+        pickerMode={priceBookPickerMode ? {
+          onPick: item => addEstimateLine(item)
+        } : undefined}
+      />
     </div>
   );
 };
