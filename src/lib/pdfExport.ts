@@ -158,10 +158,8 @@ function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate
   writer.page.drawText("Unit Price", { x: colPrice, y: writer.y, size: 8.5, font: writer.bold, color: NAVY });
   writer.page.drawText("Total", { x: colTotal, y: writer.y, size: 8.5, font: writer.bold, color: NAVY });
   writer.y -= 22;
-  let subtotal = 0;
   for (const item of items) {
     const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-    subtotal += lineTotal;
     const descLines = writer.wrapLine(item.description || "—", writer.font, 9.5, colQty - colDesc - 12);
     writer.ensureRoom(descLines.length * 12 + 6);
     descLines.forEach((line, i) => {
@@ -174,8 +172,6 @@ function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate
   }
   writer.rule();
   const pricing = calculateEstimatePricing(items, discountPercent, taxRate);
-  const tax = pricing.taxAmount;
-  const total = pricing.total;
   const summaryX = colPrice;
   const row = (label: string, value: string, bold = false) => {
     writer.ensureRoom(16);
