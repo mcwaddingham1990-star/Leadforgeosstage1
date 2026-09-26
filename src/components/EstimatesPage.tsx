@@ -56,6 +56,7 @@ import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { PriceBookModal } from "./PriceBookModal";
 import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
 import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
+import { calculateEstimatePricing, clampPercent } from "../lib/estimatePricing";
 
 export type { Estimate } from "../types/domain";
 import type { Estimate } from "../types/domain";
@@ -118,6 +119,7 @@ export const EstimatesPage: React.FC = () => {
   const [isMembershipPickerOpen, setIsMembershipPickerOpen] = useState(false);
   const [membershipPrefillBase, setMembershipPrefillBase] = useState<Partial<Membership> | undefined>(undefined);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
+  const [priceBookPickerMode, setPriceBookPickerMode] = useState(false);
 
   // Form states
   const [formCustomerName, setFormCustomerName] = useState("");
@@ -129,6 +131,13 @@ export const EstimatesPage: React.FC = () => {
   const [formSalesRep, setFormSalesRep] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formProjectSpecifics, setFormProjectSpecifics] = useState("");
+  const [formLineItems, setFormLineItems] = useState<NonNullable<Estimate["lineItems"]>>([]);
+  const [formDiscountPercent, setFormDiscountPercent] = useState(0);
+  const [formTaxRate, setFormTaxRate] = useState(0);
+  const formPricing = useMemo(
+    () => calculateEstimatePricing(formLineItems, formDiscountPercent, formTaxRate),
+    [formLineItems, formDiscountPercent, formTaxRate]
+  );
   // One Create Estimate popup session must produce exactly one estimate.
   // Refs change synchronously, so a rapid double tap cannot race a second
   // record creation before React has time to re-render.
@@ -158,6 +167,9 @@ export const EstimatesPage: React.FC = () => {
     setFormSalesRep("Self");
     setFormNotes(estimatePrefill.notes || "");
     setFormProjectSpecifics("");
+    setFormLineItems([]);
+    setFormDiscountPercent(0);
+    setFormTaxRate(0);
     beginCreateEstimateSession();
     setIsAddModalOpen(true);
     setEstimatePrefill(null);
@@ -211,9 +223,39 @@ export const EstimatesPage: React.FC = () => {
     setFormStatus("Draft");
     setFormSalesRep("Self");
     setFormNotes("");
+    setFormProjectSpecifics("");
+    setFormLineItems([]);
+    setFormDiscountPercent(0);
+    setFormTaxRate(0);
     beginCreateEstimateSession();
     setIsAddModalOpen(true);
   };
+
+  const addEstimateLine = (line?: Partial<NonNullable<Estimate["lineItems"]>[number]>) => {
+    setFormLineItems(prev => [...prev, {
+      id: line?.id || `eli_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+      description: line?.description || "",
+      quantity: Math.max(0, Number(line?.quantity ?? 1) || 0),
+      unitPrice: Math.max(0, Number(line?.unitPrice ?? 0) || 0),
+      ...(line?.priceBookModelId ? { priceBookModelId: line.priceBookModelId } : {})
+    }]);
+  };
+
+  const updateEstimateLine = (
+    id: string,
+    patch: Partial<NonNullable<Estimate["lineItems"]>[number]>
+  ) => {
+    setFormLineItems(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line));
+  };
+
+  const cleanEstimateLines = () => formLineItems
+    .map(line => ({
+      ...line,
+      description: line.description.trim(),
+      quantity: Math.max(0, Number(line.quantity) || 0),
+      unitPrice: Math.max(0, Number(line.unitPrice) || 0)
+    }))
+    .filter(line => line.description || line.unitPrice > 0);
 
   const resolveEstimateCustomer = (est: Pick<Estimate, "customerId" | "customerName" | "company">) => {
     const byPrimaryName = resolveCustomerByIdOrName(customers, est.customerId, est.customerName);
@@ -394,6 +436,8 @@ export const EstimatesPage: React.FC = () => {
       (cleanCompany ? resolveCustomerByIdOrName(customers, undefined, cleanCompany) : null);
     const source = matchedCustomer?.source || "Manual Entry";
     const sourceLeadId = matchedCustomer?.sourceLeadId;
+    const cleanLineItems = cleanEstimateLines();
+    const pricing = calculateEstimatePricing(cleanLineItems, formDiscountPercent, formTaxRate);
     const newEst: Estimate = {
       id: session.id,
       number: session.number,
@@ -402,7 +446,10 @@ export const EstimatesPage: React.FC = () => {
       company: cleanCompany,
       status: formStatus,
       salesRep: formSalesRep.trim() || "Self",
-      amount: Number(formAmount) || 0,
+      amount: cleanLineItems.length ? pricing.total : Math.max(0, Number(formAmount) || 0),
+      ...(cleanLineItems.length ? { lineItems: cleanLineItems } : {}),
+      ...(cleanLineItems.length && pricing.discountPercent > 0 ? { discountPercent: pricing.discountPercent } : {}),
+      ...(cleanLineItems.length && pricing.taxRate > 0 ? { taxRate: pricing.taxRate } : {}),
       notes: formNotes.trim(),
       projectSpecifics: formProjectSpecifics.trim() || undefined,
       address: formAddress.trim() || undefined,
@@ -453,6 +500,9 @@ export const EstimatesPage: React.FC = () => {
     setFormSalesRep(est.salesRep);
     setFormNotes(est.notes || "");
     setFormProjectSpecifics(est.projectSpecifics || "");
+    setFormLineItems(est.lineItems || []);
+    setFormDiscountPercent(clampPercent(est.discountPercent));
+    setFormTaxRate(clampPercent(est.taxRate));
     setIsEditMode(false);
   };
 
@@ -541,13 +591,18 @@ export const EstimatesPage: React.FC = () => {
 
   const handleSaveEdit = (action: "save" | "pdf" | "pdf-store" | "signatures" | "convert" = "save") => {
     if (!selectedEstimate) return;
-    const updated = {
+    const cleanLineItems = cleanEstimateLines();
+    const pricing = calculateEstimatePricing(cleanLineItems, formDiscountPercent, formTaxRate);
+    const updated: Estimate = {
       ...selectedEstimate,
       customerName: formCustomerName.trim(),
       company: formCompany.trim(),
       phone: normalizeContactPhone(formPhone) || undefined,
       address: formAddress.trim() || undefined,
-      amount: Number(formAmount) || 0,
+      amount: cleanLineItems.length ? pricing.total : Math.max(0, Number(formAmount) || 0),
+      lineItems: cleanLineItems.length ? cleanLineItems : undefined,
+      discountPercent: cleanLineItems.length && pricing.discountPercent > 0 ? pricing.discountPercent : undefined,
+      taxRate: cleanLineItems.length && pricing.taxRate > 0 ? pricing.taxRate : undefined,
       status: formStatus,
       salesRep: formSalesRep.trim(),
       notes: formNotes.trim(),
@@ -743,6 +798,144 @@ export const EstimatesPage: React.FC = () => {
     }
   };
 
+  const renderEstimatePricingEditor = () => (
+    <div className="rounded-2xl border border-[#9EC8EF] bg-[#F8FCFF] p-3 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-wider text-[#1F3557]">Itemized Pricing</p>
+          <p className="text-[9px] text-[#5E7393]">Add labor, materials, services, tax, and discount. Total updates automatically.</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => addEstimateLine()}
+            className="rounded-lg border border-[#9EC8EF] bg-white px-2.5 py-1.5 text-[10px] font-black text-[#315C9F]"
+          >
+            <Plus className="mr-1 inline h-3 w-3" />Add Line Item
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPriceBookPickerMode(true); setIsPriceBookOpen(true); }}
+            className="rounded-lg bg-[#315C9F] px-2.5 py-1.5 text-[10px] font-black text-white"
+          >
+            💲 Add from Price Book
+          </button>
+        </div>
+      </div>
+
+      {formLineItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#9EC8EF] bg-white px-3 py-2 text-[10px] text-[#5E7393]">
+          No line items yet. You can still use a single quoted amount below, or add itemized pricing here.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {formLineItems.map((line, index) => (
+            <div key={line.id} className="rounded-xl border border-[#C8DDEE] bg-white p-2">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase text-[#5E7393]">Line {index + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => setFormLineItems(prev => prev.filter(item => item.id !== line.id))}
+                  className="rounded-md bg-transparent p-1 text-rose-600"
+                  aria-label={`Remove line ${index + 1}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={line.description}
+                onChange={e => updateEstimateLine(line.id, { description: e.target.value })}
+                placeholder="Description — e.g. Replace 2-ton condenser"
+                className="mb-2 w-full rounded-lg border border-[#9EC8EF] bg-[#F5FAFF] px-2.5 py-2 text-xs font-semibold text-[#1F3557]"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <label className="text-[9px] font-bold text-[#5E7393]">
+                  Qty
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={line.quantity}
+                    onChange={e => updateEstimateLine(line.id, { quantity: Math.max(0, Number(e.target.value) || 0) })}
+                    className="mt-1 w-full rounded-lg border border-[#9EC8EF] bg-[#F5FAFF] px-2 py-1.5 text-xs text-[#1F3557]"
+                  />
+                </label>
+                <label className="text-[9px] font-bold text-[#5E7393]">
+                  Unit Price
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={line.unitPrice}
+                    onChange={e => updateEstimateLine(line.id, { unitPrice: Math.max(0, Number(e.target.value) || 0) })}
+                    className="mt-1 w-full rounded-lg border border-[#9EC8EF] bg-[#F5FAFF] px-2 py-1.5 text-xs text-[#1F3557]"
+                  />
+                </label>
+                <div className="text-[9px] font-bold text-[#5E7393]">
+                  Line Total
+                  <div className="mt-1 rounded-lg border border-[#9EC8EF] bg-slate-50 px-2 py-1.5 text-xs font-black text-[#1F3557]">
+                    ${(Math.max(0, Number(line.quantity) || 0) * Math.max(0, Number(line.unitPrice) || 0)).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {formLineItems.length > 0 ? (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[9px] font-black uppercase text-[#5E7393]">
+              Discount %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={formDiscountPercent}
+                onChange={e => setFormDiscountPercent(clampPercent(Number(e.target.value)))}
+                className="mt-1 w-full rounded-lg border border-[#9EC8EF] bg-white px-2.5 py-2 text-xs font-bold text-[#1F3557]"
+              />
+            </label>
+            <label className="text-[9px] font-black uppercase text-[#5E7393]">
+              Tax %
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={formTaxRate}
+                onChange={e => setFormTaxRate(clampPercent(Number(e.target.value)))}
+                className="mt-1 w-full rounded-lg border border-[#9EC8EF] bg-white px-2.5 py-2 text-xs font-bold text-[#1F3557]"
+              />
+            </label>
+          </div>
+          <div className="rounded-xl bg-[#EAF5FF] p-3 text-xs text-[#1F3557]">
+            <div className="flex justify-between"><span>Subtotal</span><b>${formPricing.subtotal.toFixed(2)}</b></div>
+            {formPricing.discountAmount > 0 && <div className="mt-1 flex justify-between"><span>Discount ({formPricing.discountPercent}%)</span><b>−${formPricing.discountAmount.toFixed(2)}</b></div>}
+            {formPricing.taxAmount > 0 && <div className="mt-1 flex justify-between"><span>Tax ({formPricing.taxRate}%)</span><b>${formPricing.taxAmount.toFixed(2)}</b></div>}
+            <div className="mt-2 flex justify-between border-t border-[#9EC8EF] pt-2 text-sm font-black"><span>Total</span><span>${formPricing.total.toFixed(2)}</span></div>
+          </div>
+        </>
+      ) : (
+        <label className="block text-[10px] uppercase font-bold text-[#5E7393]">
+          Quoted Amount ($)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={formAmount || ""}
+            onChange={e => setFormAmount(Math.max(0, Number(e.target.value) || 0))}
+            placeholder="e.g. 12500"
+            className="mt-1 w-full text-xs bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#4A86F7] font-semibold text-[#1F3557]"
+          />
+        </label>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in text-left">
       
@@ -766,7 +959,7 @@ export const EstimatesPage: React.FC = () => {
               New Estimate
             </button>
             <button
-              onClick={() => setIsPriceBookOpen(true)}
+              onClick={() => { setPriceBookPickerMode(false); setIsPriceBookOpen(true); }}
               className="px-4 py-2 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF] text-[#1F3557] font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
             >
               💲 Price Book
