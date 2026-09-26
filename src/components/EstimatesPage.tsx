@@ -2011,17 +2011,33 @@ export const EstimatesPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {!!selectedEstimate.lineItems?.length && (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] uppercase font-bold text-[#5E7393]">Line Items</p>
-                      {selectedEstimate.lineItems.map(li => (
-                        <div key={li.id} className="flex justify-between rounded-lg bg-[#EAF5FF]/50 border border-[#9EC8EF]/30 p-2 text-xs">
-                          <span>{li.quantity} × {li.description}</span>
-                          <b>${(li.quantity * li.unitPrice).toLocaleString()}</b>
+                  {!!selectedEstimate.lineItems?.length && (() => {
+                    const pricing = calculateEstimatePricing(
+                      selectedEstimate.lineItems,
+                      selectedEstimate.discountPercent,
+                      selectedEstimate.taxRate
+                    );
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase font-bold text-[#5E7393]">Itemized Pricing</p>
+                        {selectedEstimate.lineItems.map(li => (
+                          <div key={li.id} className="rounded-lg bg-[#EAF5FF]/50 border border-[#9EC8EF]/30 p-2 text-xs">
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="font-bold text-[#1F3557]">{li.description}</span>
+                              <b className="shrink-0 text-[#1F3557]">${(li.quantity * li.unitPrice).toFixed(2)}</b>
+                            </div>
+                            <div className="mt-0.5 text-[9.5px] text-[#5E7393]">{li.quantity} × ${li.unitPrice.toFixed(2)}</div>
+                          </div>
+                        ))}
+                        <div className="rounded-xl border border-[#9EC8EF] bg-white p-3 text-xs text-[#1F3557]">
+                          <div className="flex justify-between"><span>Subtotal</span><b>${pricing.subtotal.toFixed(2)}</b></div>
+                          {pricing.discountAmount > 0 && <div className="mt-1 flex justify-between"><span>Discount ({pricing.discountPercent}%)</span><b>−${pricing.discountAmount.toFixed(2)}</b></div>}
+                          {pricing.taxAmount > 0 && <div className="mt-1 flex justify-between"><span>Tax ({pricing.taxRate}%)</span><b>${pricing.taxAmount.toFixed(2)}</b></div>}
+                          <div className="mt-2 flex justify-between border-t border-[#9EC8EF] pt-2 font-black"><span>Total</span><span>${pricing.total.toFixed(2)}</span></div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-[#5E7393]">Scope notes / exclusions</p>
