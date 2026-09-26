@@ -24,6 +24,8 @@ jobs:
       - run: npm ci
       - name: TypeScript check
         run: npm run lint
+      - name: Contact data regression tests
+        run: npx vitest run tests/contactNormalization.test.ts
       - name: Production build
         run: npm run build
 
