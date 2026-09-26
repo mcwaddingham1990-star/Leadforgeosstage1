@@ -32,6 +32,67 @@ service cloud.firestore {
         (request.auth.token.email == businessId || getBusinessEmail() == businessId);
     }
 
+    // Backend authorization for the Owner-configured module permission matrix.
+    // Owners always bypass module checks for their own tenant. Employees use
+    // granularPermissions when present. Older employee profiles that only have
+    // the legacy permissions[] list keep View + Create/Edit compatibility, but
+    // never inherit Delete from that old list.
+    function permissionAllows(permission, action) {
+      return (permission is map && permission.get(action, false) == true)
+        || (permission is string && (
+          (action == "view" && permission in ["view", "edit", "delete"]) ||
+          (action == "edit" && permission in ["edit", "delete"]) ||
+          (action == "delete" && permission == "delete")
+        ));
+    }
+
+    function employeeHasModulePermission(moduleId, action) {
+      let profile = getUserProfile();
+      let granular = profile.get("granularPermissions", {});
+      let legacyModules = profile.get("permissions", []);
+      let hasExplicit = granular is map && granular.keys().hasAny([moduleId]);
+      let explicitPermission = hasExplicit ? granular.get(moduleId, null) : null;
+      let legacyAllowed = !hasExplicit
+        && legacyModules is list
+        && moduleId in legacyModules
+        && action in ["view", "edit"];
+      return permissionAllows(explicitPermission, action) || legacyAllowed;
+    }
+
+    function hasModulePermission(businessId, moduleId, action) {
+      return isBusinessMember(businessId) && (
+        request.auth.token.email == businessId ||
+        employeeHasModulePermission(moduleId, action)
+      );
+    }
+
+    function hasSchedulingDataPermission(businessId, action) {
+      return hasModulePermission(businessId, "scheduling", action)
+        || hasModulePermission(businessId, "dispatch", action)
+        || hasModulePermission(businessId, "jobs", action);
+    }
+
+    function hasGeneralDocumentPermission(businessId, action) {
+      return hasModulePermission(businessId, "documents", action)
+        || hasModulePermission(businessId, "pdf_editor", action);
+    }
+
+    function hasDocumentReadPermission(businessId) {
+      return hasGeneralDocumentPermission(businessId, "view")
+        || hasModulePermission(businessId, "esign", "view");
+    }
+
+    function hasESignWritePermission(businessId, action) {
+      return hasModulePermission(businessId, "esign", action)
+        || (action == "edit" && hasModulePermission(businessId, "collect_signatures", "edit"));
+    }
+
+    function hasMessagingPermission(businessId, action) {
+      return hasModulePermission(businessId, "messages", action)
+        || hasModulePermission(businessId, "missed_call_textback", action)
+        || (action == "view" && hasModulePermission(businessId, "view_lead_messages", "view"));
+    }
+
     // Only owners and managers may create or modify eSign / PDF documents.
     function isManager() {
       return getUserProfile().role in [
@@ -99,14 +160,17 @@ service cloud.firestore {
     // instantly gain full read/write over that business's data in every
     // other collection below -- a complete tenant-isolation and
     // privilege-escalation bypass. Self-writes may still touch every other
-    // field (name, goals, permissions, etc., same as before); only
-    // businessEmail/role are pinned once a profile exists. The other-member
+    // fields such as goals, but authorization and identity fields are pinned.
+    // Owner/roster-admin changes use a separate guarded branch below. The other-member
     // branch (in practice: the business owner, whose auth token email
     // equals businessEmail -- see isBusinessMember's comment above) keeps
     // its original, unrestricted ability to edit an employee's profile
     // (e.g. RosterPage's role editor), unchanged from before.
     match /user_profiles/{uid} {
-      allow read: if isAuthenticated() && (request.auth.uid == uid || (resource != null && resource.data.businessEmail == request.auth.token.email));
+      allow read: if isAuthenticated() && (
+        request.auth.uid == uid ||
+        (resource != null && hasModulePermission(resource.data.businessEmail, "roster", "view"))
+      );
       // SECURITY: the update rule below already pins businessEmail/role once
       // a profile exists, but that comparison needs a `resource` to compare
       // against -- on CREATE there isn't one yet, so without a check here a
@@ -141,7 +205,11 @@ service cloud.firestore {
         (request.auth.uid == uid
           && request.resource.data.businessEmail == resource.data.businessEmail
           && request.resource.data.role == resource.data.role
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['inviteCode']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'businessEmail', 'role', 'inviteCode', 'permissions', 'granularPermissions',
+            'isEmployee', 'requireTimeClockVerification', 'email',
+            'name', 'firstName', 'lastName'
+          ]))
         // Recovery path for an older/malformed employee profile whose saved
         // businessEmail points at the wrong tenant. The employee can repair
         // ONLY businessEmail, and only to the exact business + role proven by
@@ -164,6 +232,13 @@ service cloud.firestore {
             || (!resource.data.keys().hasAll(['role'])
               && resource.data.businessEmail == request.auth.token.email)
           ))
+        || (request.auth.uid != uid
+          && resource.data.businessEmail is string
+          && hasModulePermission(resource.data.businessEmail, "roster", "edit")
+          && request.resource.data.businessEmail == resource.data.businessEmail
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'role', 'permissions', 'granularPermissions', 'requireTimeClockVerification'
+          ]))
         || (resource.data.businessEmail == request.auth.token.email
           && request.resource.data.businessEmail == resource.data.businessEmail)
       );
@@ -188,19 +263,19 @@ service cloud.firestore {
     // doesn't touch any real field those callers actually set.
     match /business_profiles/{email} {
       allow read: if isAuthenticated() && isBusinessMember(email);
-      allow create: if isAuthenticated() && isBusinessMember(email) &&
+      allow create: if isAuthenticated() && hasModulePermission(email, "settings", "edit") &&
         !request.resource.data.keys().hasAny([
           'subscriptionActive', 'subscriptionStatus', 'subscriptionCurrentPeriodEnd',
           'subscriptionCancelAtPeriodEnd', 'stripeSubscriptionCustomerId',
           'bypassActive', 'bypassExpiresAt'
         ]);
-      allow update: if isAuthenticated() && isBusinessMember(email) &&
+      allow update: if isAuthenticated() && hasModulePermission(email, "settings", "edit") &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'subscriptionActive', 'subscriptionStatus', 'subscriptionCurrentPeriodEnd',
           'subscriptionCancelAtPeriodEnd', 'stripeSubscriptionCustomerId',
           'bypassActive', 'bypassExpiresAt'
         ]);
-      allow delete: if isAuthenticated() && isBusinessMember(email);
+      allow delete: if isAuthenticated() && hasModulePermission(email, "settings", "delete");
     }
 
     // Employee invites: the code must stay readable pre-signup (an
@@ -224,9 +299,39 @@ service cloud.firestore {
 
     // Employees collection
     match /employees/{email} {
-      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessEmail);
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
+
+      allow create: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessEmail, "roster", "edit")
+        || (
+          request.auth.token.email == email
+          && request.resource.data.userUid == request.auth.uid
+          && request.resource.data.businessEmail == getBusinessEmail()
+          && request.resource.data.businessId == getBusinessEmail()
+          && request.resource.data.role == getUserProfile().role
+          && request.resource.data.permissions == getUserProfile().get("permissions", [])
+          && request.resource.data.granularPermissions == getUserProfile().get("granularPermissions", {})
+        )
+      );
+
+      allow update: if isAuthenticated()
+        && request.resource.data.businessEmail == resource.data.businessEmail
+        && (
+          hasModulePermission(resource.data.businessEmail, "roster", "edit")
+          || (
+            request.auth.token.email == email
+            && isBusinessMember(resource.data.businessEmail)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'address', 'phone', 'photo', 'goals', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAuthenticated()
+        && hasModulePermission(resource.data.businessEmail, "roster", "delete");
     }
+
+    // Standard business collections
 
     // Standard business collections — all scoped to businessId
     // (owner's email is the tenant key; employees have businessEmail in their
@@ -243,45 +348,50 @@ service cloud.firestore {
     // (`resource.data`, not `request.resource.data`) instead of skipping it.
 
     match /customers/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "customers", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "customers", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "customers", "view");
     }
+
     match /leads/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "leads", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "leads", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "leads", "view");
     }
+
     match /estimates/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "estimates", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "estimates", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "estimates", "view");
     }
+
     match /scheduling_events/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasSchedulingDataPermission(request.resource.data.businessId, "edit");
+      allow delete: if isAuthenticated() && hasSchedulingDataPermission(resource.data.businessId, "delete");
+      allow read: if isAuthenticated() && hasSchedulingDataPermission(resource.data.businessId, "view");
     }
+
     match /inventory/{docId} {
-      // SECURITY: same request.resource-is-null-on-delete fix as the
-      // standard business collections above -- delete now checks the
-      // EXISTING item's own businessId instead of skipping the check.
-      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      // Stock reductions are approval actions. All other inventory edits retain
-      // the existing tenant permission behavior.
-      allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+      allow create: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "inventory", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "inventory", "delete");
+      allow update: if isAuthenticated()
+        && hasModulePermission(request.resource.data.businessId, "inventory", "edit")
         && (request.resource.data.quantity >= resource.data.quantity || canManageProjectCompletion(request.resource.data.businessId));
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "inventory", "view");
     }
+
     match /project_completion_plans/{jobId} {
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+      allow read: if isAuthenticated()
+        && hasModulePermission(resource.data.businessId, "jobs", "view");
+      allow create: if isAuthenticated()
+        && hasModulePermission(request.resource.data.businessId, "jobs", "edit")
         && request.resource.data.jobId == jobId
         && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId, request.resource.data.businessId));
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
+      allow delete: if isAuthenticated()
+        && hasModulePermission(resource.data.businessId, "jobs", "delete")
         && canManageProjectCompletion(resource.data.businessId);
-      allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+      allow update: if isAuthenticated()
+        && hasModulePermission(request.resource.data.businessId, "jobs", "edit")
         && request.resource.data.businessId == resource.data.businessId
         && request.resource.data.jobId == resource.data.jobId
         && (
@@ -290,37 +400,47 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['goals', 'activity', 'updatedAt']))
         );
     }
+
     match /documents/{docId} {
-      // eSign / PDF documents (folder == "eSign") can only be written by managers.
-      // All other document types (uploads, receipts, photos, etc.) are open to any business member.
-      allow write: if isAuthenticated() && (
-        request.resource == null
-          ? isBusinessMember(resource.data.businessId)
-          : (isBusinessMember(request.resource.data.businessId) &&
-             (request.resource.data.folder != "eSign" || isManager()))
-      );
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated()
+        && (
+          request.resource.data.folder == "eSign"
+            ? hasESignWritePermission(request.resource.data.businessId, "edit")
+            : hasGeneralDocumentPermission(request.resource.data.businessId, "edit")
+        );
+      allow delete: if isAuthenticated()
+        && (
+          resource.data.folder == "eSign"
+            ? hasESignWritePermission(resource.data.businessId, "delete")
+            : hasGeneralDocumentPermission(resource.data.businessId, "delete")
+        );
+      allow read: if isAuthenticated() && hasDocumentReadPermission(resource.data.businessId);
     }
+
     match /document_folders/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "documents", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "documents", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "documents", "view");
     }
+
     match /roster/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "roster", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "roster", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "roster", "view");
     }
+
     match /courses/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "training", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "training", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "training", "view");
     }
+
     match /training_profiles/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "training", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "training", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "training", "view");
     }
+
     match /bulletins/{docId} {
       allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
@@ -336,10 +456,11 @@ service cloud.firestore {
         && resource.data.recipientEmail == request.auth.token.email;
     }
     match /recent_ai_actions/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "ai_assistant", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "ai_assistant", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "ai_assistant", "view");
     }
+
     match /snapshots/{docId} {
       allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
       allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
@@ -354,145 +475,214 @@ service cloud.firestore {
     // silently denied by Firestore's default-deny -- same isBusinessMember
     // scoping as every other standard business collection above.
     match /work_orders/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "work_orders", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "work_orders", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "work_orders", "view");
     }
+
     match /price_book_folders/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "price_book", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "price_book", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "price_book", "view");
     }
+
     match /price_book_models/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "price_book", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "price_book", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "price_book", "view");
     }
+
     match /memberships/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "memberships", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "memberships", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "memberships", "view");
     }
+
     match /purchase_orders/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "purchase_orders", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "purchase_orders", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "purchase_orders", "view");
     }
+
     match /review_requests/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "marketing", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "marketing", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "marketing", "view");
     }
 
     // Financial / accounting collections
     match /transactions/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "accounting", "edit")
+        || hasModulePermission(request.resource.data.businessId, "payments", "edit")
+      );
+      allow delete: if isAuthenticated() && (
+        hasModulePermission(resource.data.businessId, "accounting", "delete")
+        || hasModulePermission(resource.data.businessId, "payments", "delete")
+      );
+      allow read: if isAuthenticated() && (
+        hasModulePermission(resource.data.businessId, "accounting", "view")
+        || hasModulePermission(resource.data.businessId, "payments", "view")
+        || hasModulePermission(resource.data.businessId, "revenue", "view")
+      );
     }
+
     match /journal_entries/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /revenue_events/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "revenue", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "revenue", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "revenue", "view");
     }
+
     match /chart_of_accounts/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /invoices/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "invoices", "edit")
+        || hasModulePermission(request.resource.data.businessId, "accounting", "edit")
+      );
+      allow delete: if isAuthenticated() && (
+        hasModulePermission(resource.data.businessId, "invoices", "delete")
+        || hasModulePermission(resource.data.businessId, "accounting", "delete")
+      );
+      allow read: if isAuthenticated() && (
+        hasModulePermission(resource.data.businessId, "invoices", "view")
+        || hasModulePermission(resource.data.businessId, "accounting", "view")
+        || hasModulePermission(resource.data.businessId, "revenue", "view")
+      );
     }
+
     match /bills/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /vendors/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /bank_accounts/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /recurring_transactions/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /mileage_logs/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /budgets/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /sales_tax_rates/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
+
     match /conversations/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "messages", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "messages", "delete");
+      allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "messages", "view");
     }
 
     // Time clock collections
     match /time_clock_logs/{docId} {
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
         && (
-          request.resource.data.employeeEmail == request.auth.token.email
+          (request.resource.data.employeeEmail == request.auth.token.email
+            && hasModulePermission(request.resource.data.businessId, "timeclock", "edit"))
           || canClockOtherEmployees(request.resource.data.businessId)
         );
-      // Approval fields (who reviewed a punch, and the outcome) may only be
-      // set by a manager -- an employee's own client can create their own
-      // pending punch, but cannot self-approve it.
-      allow update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId) && (
-        isManager() ||
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-          ['approved', 'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt', 'rejectionReason']
-        )
-      );
-      allow read, delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-    }
-    match /active_shifts/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+
+      allow update: if isAuthenticated()
+        && request.resource.data.businessId == resource.data.businessId
         && (
-          request.resource.data.employeeEmail == request.auth.token.email
-          || canClockOtherEmployees(request.resource.data.businessId)
+          (resource.data.employeeEmail == request.auth.token.email
+            && hasModulePermission(resource.data.businessId, "timeclock", "edit")
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+              ['approved', 'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt', 'rejectionReason']
+            ))
+          || canClockOtherEmployees(resource.data.businessId)
         );
-      // clockInTransaction/clockOutTransaction (timeClockService.ts) always
-      // read this doc inside a transaction before creating/deleting it, to
-      // guard against a double clock-in. Missing-doc reads must stay allowed
-      // so the transaction can determine that no active shift exists yet.
-      allow read: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
+
+      allow read: if isAuthenticated()
+        && hasModulePermission(resource.data.businessId, "timeclock", "view");
+
+      allow delete: if isAuthenticated()
+        && hasModulePermission(resource.data.businessId, "timeclock", "delete")
         && (
           resource.data.employeeEmail == request.auth.token.email
           || canClockOtherEmployees(resource.data.businessId)
         );
     }
+
+    match /active_shifts/{docId} {
+      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
+        && (
+          (request.resource.data.employeeEmail == request.auth.token.email
+            && hasModulePermission(request.resource.data.businessId, "timeclock", "edit"))
+          || canClockOtherEmployees(request.resource.data.businessId)
+        );
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        hasModulePermission(resource.data.businessId, "timeclock", "view") ||
+        canClockOtherEmployees(resource.data.businessId)
+      );
+      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId)
+        && (
+          (resource.data.employeeEmail == request.auth.token.email
+            && hasModulePermission(resource.data.businessId, "timeclock", "edit"))
+          || canClockOtherEmployees(resource.data.businessId)
+        );
+    }
+
+    // One employee's real GPS breadcrumb trail
+
     // One employee's real GPS breadcrumb trail for one shift (doc id ==
     // that shift's clock-in log id) -- survives clock-out for historical
     // review, unlike active_shifts' live-only position.
     match /shift_routes/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow read, delete: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
+      allow create, update: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "routes", "edit")
+        || hasModulePermission(request.resource.data.businessId, "employee_locations", "edit")
+        || hasModulePermission(request.resource.data.businessId, "timeclock", "edit")
+      );
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        hasModulePermission(resource.data.businessId, "routes", "view")
+        || hasModulePermission(resource.data.businessId, "employee_locations", "view")
+        || hasModulePermission(resource.data.businessId, "timeclock", "view")
+      );
+      allow delete: if isAuthenticated() && (
+        hasModulePermission(resource.data.businessId, "routes", "delete")
+        || hasModulePermission(resource.data.businessId, "employee_locations", "delete")
+      );
     }
+
     match /timeclock_states/{docId} {
       allow read, write: if isAuthenticated() && request.auth.token.email == docId;
     }
@@ -525,8 +715,15 @@ service cloud.firestore {
     // everywhere else). Written from the OwnersLocal web app, read by the
     // separate Android companion app signed into this same Firebase project.
     match /missed_call_settings/{businessId} {
-      allow read, write: if isAuthenticated() && isBusinessMember(businessId);
+      allow read: if isAuthenticated() && (
+        hasModulePermission(businessId, "missed_call_textback", "view")
+        || hasModulePermission(businessId, "messages", "view")
+      );
+      allow create, update: if isAuthenticated() && hasModulePermission(businessId, "missed_call_textback", "edit");
+      allow delete: if isAuthenticated() && hasModulePermission(businessId, "missed_call_textback", "delete");
     }
+
+    // One doc per missed call
 
     // One doc per missed call the companion Android app detected and
     // auto-replied to -- written by that app (signed in as the same owner
@@ -535,10 +732,12 @@ service cloud.firestore {
     // Missed Call Text-Back log and the per-customer Call & Text History
     // panel.
     match /missed_call_events/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasMessagingPermission(request.resource.data.businessId, "edit");
+      allow delete: if isAuthenticated() && hasMessagingPermission(resource.data.businessId, "delete");
+      allow read: if isAuthenticated() && hasMessagingPermission(resource.data.businessId, "view");
     }
+
+    // One doc per real SMS
 
     // One doc per real SMS (either direction) the companion Android app
     // has seen -- an incoming customer reply (SmsReceiver.kt) or an
@@ -548,10 +747,12 @@ service cloud.firestore {
     // as missed_call_events; read by the web app's business-wide Inbox and
     // the per-customer Call & Text History panel.
     match /text_messages/{docId} {
-      allow create, update: if isAuthenticated() && isBusinessMember(request.resource.data.businessId);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessId);
-      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create, update: if isAuthenticated() && hasMessagingPermission(request.resource.data.businessId, "edit");
+      allow delete: if isAuthenticated() && hasMessagingPermission(resource.data.businessId, "delete");
+      allow read: if isAuthenticated() && hasMessagingPermission(resource.data.businessId, "view");
     }
+
+    // app_config/paywall_bypass
 
     // app_config/paywall_bypass holds the hashed (never plaintext) platform
     // admin access code for the OwnersLOCAL paywall -- see

@@ -76,6 +76,14 @@ beforeEach(async () => {
       name: "Employee A",
       firstName: "Employee",
       lastName: "A",
+      permissions: ["customers", "jobs", "timeclock", "scheduling", "messages"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+        scheduling: { view: true, edit: false, delete: false },
+        timeclock: { view: true, edit: true, delete: false },
+        messages: { view: true, edit: true, delete: false },
+      },
     });
     await setDoc(doc(db, "user_profiles", EMP_B_UID), {
       businessEmail: BIZ_B,
@@ -84,6 +92,10 @@ beforeEach(async () => {
       name: "Employee B",
       firstName: "Employee",
       lastName: "B",
+      permissions: ["customers"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+      },
     });
 
     // One customer document per business, seeded directly (as if already
@@ -180,6 +192,145 @@ describe("Tenant isolation: create/update cannot claim another business", () => 
   test("owner cannot update another business's existing customer", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
     await assertFails(updateDoc(doc(db, "customers", "cust_b1"), { company: "Hijacked" }));
+  });
+});
+
+describe("Owner-configured module permissions are enforced by Firestore", () => {
+  test("a Customers view-only employee can read but cannot create, update, or delete customers", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(getDoc(doc(db, "customers", "cust_a1")));
+    await assertFails(setDoc(doc(db, "customers", "cust_emp_create"), {
+      businessId: BIZ_A,
+      company: "Unauthorized Create",
+    }));
+    await assertFails(updateDoc(doc(db, "customers", "cust_a1"), { company: "Unauthorized Update" }));
+    await assertFails(deleteDoc(doc(db, "customers", "cust_a1")));
+  });
+
+  test("Customers edit grants create/update but still does not grant delete", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          customers: { view: true, edit: true, delete: false },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "customers", "cust_emp_create"), {
+      businessId: BIZ_A,
+      company: "Permitted Create",
+    }));
+    await assertSucceeds(updateDoc(doc(db, "customers", "cust_a1"), { company: "Permitted Update" }));
+    await assertFails(deleteDoc(doc(db, "customers", "cust_a1")));
+  });
+
+  test("Customers delete is independent and must be explicitly granted", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          customers: { view: true, edit: false, delete: true },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(deleteDoc(doc(db, "customers", "cust_a1")));
+  });
+
+  test("an employee with no Leads view permission cannot read same-business leads", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(getDoc(doc(db, "leads", "lead_a")));
+  });
+
+  test("granting Leads view permits the read without granting edit", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          leads: { view: true, edit: false, delete: false },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(getDoc(doc(db, "leads", "lead_a")));
+    await assertFails(updateDoc(doc(db, "leads", "lead_a"), { status: "Won" }));
+  });
+
+  test("a same-business employee without Accounting or Invoices permission cannot read financial records", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(getDoc(doc(db, "invoices", "inv_a")));
+    await assertFails(getDoc(doc(db, "journal_entries", "je_a")));
+  });
+
+  test("a same-business employee without Settings edit cannot modify the business profile", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), {
+      businessNames: ["Employee Hijack"],
+    }));
+  });
+
+  test("Jobs edit permits the shared scheduling job record even without Scheduling edit", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(updateDoc(doc(db, "scheduling_events", "evt_a"), {
+      status: "In Progress",
+    }));
+  });
+});
+
+describe("Employee record tampering is blocked", () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "employees", EMP_A_EMAIL), {
+        id: EMP_A_EMAIL,
+        userUid: EMP_A_UID,
+        email: EMP_A_EMAIL,
+        firstName: "Employee",
+        lastName: "A",
+        phone: "111",
+        hourlyRate: 20,
+        role: "Technician",
+        permissions: ["customers"],
+        granularPermissions: { customers: { view: true, edit: false, delete: false } },
+        businessEmail: BIZ_A,
+        businessId: BIZ_A,
+      });
+      await setDoc(doc(db, "employees", "coworker@example.com"), {
+        id: "coworker@example.com",
+        userUid: "coworker-uid",
+        email: "coworker@example.com",
+        firstName: "Co",
+        lastName: "Worker",
+        hourlyRate: 25,
+        role: "Technician",
+        permissions: ["jobs"],
+        granularPermissions: { jobs: { view: true, edit: true, delete: false } },
+        businessEmail: BIZ_A,
+        businessId: BIZ_A,
+      });
+    });
+  });
+
+  test("an employee can update safe fields on their own employee record", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(updateDoc(doc(db, "employees", EMP_A_EMAIL), { phone: "222" }));
+  });
+
+  test("an employee cannot change their own pay, role, or permission payload", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "employees", EMP_A_EMAIL), { hourlyRate: 999 }));
+    await assertFails(updateDoc(doc(db, "employees", EMP_A_EMAIL), { role: "Owner" }));
+    await assertFails(updateDoc(doc(db, "employees", EMP_A_EMAIL), {
+      granularPermissions: { roster: { view: true, edit: true, delete: true } },
+    }));
+  });
+
+  test("an employee cannot edit another employee in the same business", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "employees", "coworker@example.com"), { hourlyRate: 1 }));
+  });
+
+  test("the owner can still administer employee records", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(updateDoc(doc(db, "employees", EMP_A_EMAIL), { hourlyRate: 30 }));
   });
 });
 
@@ -304,6 +455,10 @@ describe("Privilege escalation via user_profiles", () => {
         email: brokenEmail,
         isEmployee: false,
         inviteCode: "RECOVER_OFFICE",
+        // This regression is about tenant-root repair, not permission
+        // migration. Preserve the employee's legacy module grant so the
+        // repaired profile can still read its own business's Customers.
+        permissions: ["customers"],
       });
     });
 
@@ -376,9 +531,28 @@ describe("Privilege escalation via user_profiles", () => {
     );
   });
 
-  test("an existing employee CAN update other fields of their own profile", async () => {
+  test("an existing employee CAN update harmless fields of their own profile", async () => {
     const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
-    await assertSucceeds(updateDoc(doc(db, "user_profiles", EMP_A_UID), { name: "Employee A Updated" }));
+    await assertSucceeds(updateDoc(doc(db, "user_profiles", EMP_A_UID), { goals: "Finish assigned work safely." }));
+  });
+
+  test("an employee cannot self-edit permissions or granularPermissions", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), {
+      permissions: ["customers", "roster", "accounting", "settings"],
+    }));
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), {
+      granularPermissions: {
+        customers: { view: true, edit: true, delete: true },
+        roster: { view: true, edit: true, delete: true },
+      },
+    }));
+  });
+
+  test("an employee cannot self-change identity fields used by authorization", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { name: "Owner A" }));
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), { isEmployee: false }));
   });
 
   test("an owner CAN edit an employee's role within their own business (legitimate admin action)", async () => {
