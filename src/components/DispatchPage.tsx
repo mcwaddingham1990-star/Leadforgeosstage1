@@ -5,6 +5,7 @@ import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 import { AssignEmployeeField } from "./AssignEmployeeField";
 import { useAssignableEmployeeNames } from "../hooks/useAssignableEmployees";
+import { hasEffectivePermission } from "../types/permissions";
 import {
   Search,
   Filter,
@@ -129,10 +130,10 @@ export const DispatchPage: React.FC = () => {
   const [tempVehicle, setTempVehicle] = useState("");
   const [tempStatus, setTempStatus] = useState<DispatchEvent["status"]>("Assigned");
 
-  // Determine if active user role has WRITE PERMISSIONS for dispatch
-  // Owners, Managers, Schedulers, Dispatchers can assign and modify.
-  // Technicians, Drivers, Installers can only view dispatches assigned to them.
-  const hasWriteAccess = useMemo(() => {
+  // Real sessions obey the Owner-configured Dispatch permission matrix.
+  // Workspace Simulator keeps its existing role-template preview behavior.
+  const isOwner = activeRole.trim().toLowerCase() === "owner";
+  const previewDispatchWrite = useMemo(() => {
     const roleLower = activeRole.toLowerCase();
     return (
       roleLower.includes("owner") ||
@@ -142,6 +143,18 @@ export const DispatchPage: React.FC = () => {
       activeRole === "Office Manager"
     );
   }, [activeRole]);
+  const hasWriteAccess = simulatedRole
+    ? previewDispatchWrite
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "dispatch", "edit");
+  const hasFullViewAccess = simulatedRole
+    ? previewDispatchWrite
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "dispatch", "view");
+  const currentUserIdentity = useMemo(
+    () => [loggedInUser?.name, loggedInUser?.email]
+      .filter(Boolean)
+      .map(value => String(value).trim().toLowerCase()),
+    [loggedInUser?.name, loggedInUser?.email]
+  );
 
   // Handle setting status / assigning dispatch
   const handleUpdateDispatch = (
@@ -259,17 +272,11 @@ export const DispatchPage: React.FC = () => {
   const filteredEvents = useMemo(() => {
     let result = [...normalizedEvents];
 
-    // 1. Role Restrictions -- compare against the real logged-in user's
-    // real name, not a hardcoded fake name or their role title (a job
-    // title like "technician" isn't a person's name, so that comparison
-    // never matched either — restricted roles would have seen almost
-    // nothing, not even their own real assigned jobs).
-    const roleLower = activeRole.toLowerCase();
-    const isRestrictedRole = roleLower.includes("technician") || roleLower.includes("driver") || roleLower.includes("installer");
-    if (isRestrictedRole) {
-      const myName = (loggedInUser?.name || "").trim().toLowerCase();
-      result = result.filter(
-        (e) => !!myName && e.assignedEmployee.trim().toLowerCase() === myName
+    // Without Dispatch View permission, keep the existing narrow worker
+    // fallback: only an event assigned to this signed-in identity is visible.
+    if (!hasFullViewAccess) {
+      result = result.filter((e) =>
+        currentUserIdentity.includes((e.assignedEmployee || "").trim().toLowerCase())
       );
     }
 
@@ -327,6 +334,8 @@ export const DispatchPage: React.FC = () => {
   }, [
     normalizedEvents,
     activeRole,
+    hasFullViewAccess,
+    currentUserIdentity,
     selectedDate,
     searchQuery,
     filterEmployee,
