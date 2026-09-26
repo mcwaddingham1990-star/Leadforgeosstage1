@@ -244,7 +244,12 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({ isOpen, onClose,
       } else {
         setEstimates(prev => prev.map(est => {
           if (est.id !== addToTargetId) return est;
-          const nextLineItems = [...(est.lineItems || []), estimateLine];
+          const existingLines = est.lineItems?.length
+            ? est.lineItems
+            : est.amount > 0
+              ? [{ id: uid("li"), description: "Existing quoted amount", quantity: 1, unitPrice: est.amount }]
+              : [];
+          const nextLineItems = [...existingLines, estimateLine];
           const pricing = calculateEstimatePricing(nextLineItems, est.discountPercent, est.taxRate);
           return { ...est, lineItems: nextLineItems, amount: pricing.total };
         }));
