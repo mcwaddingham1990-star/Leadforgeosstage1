@@ -103,10 +103,7 @@ service cloud.firestore {
     }
 
     function canManageProjectCompletion(businessId) {
-      return request.auth.token.email == businessId || getUserProfile().role in [
-        "Owner", "Manager", "General Manager", "Office Manager",
-        "Operations Manager", "Scheduler", "Dispatch", "Dispatcher"
-      ];
+      return hasModulePermission(businessId, "jobs", "edit");
     }
 
     // Owner or a role explicitly granted the Time Clock "Clock Employees
