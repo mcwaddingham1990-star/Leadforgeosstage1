@@ -714,6 +714,26 @@ describe("isAssignedToJob hardening: cross-business job-id coincidence", () => {
       })
     );
   });
+
+  test("Jobs Delete remains independent from Jobs Edit for completion-plan deletion", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await updateDoc(doc(db, "user_profiles", EMP_A_UID), {
+        role: "Custom Cleanup Role",
+        granularPermissions: {
+          jobs: { view: true, edit: false, delete: true },
+        },
+      });
+      await setDoc(doc(db, "project_completion_plans", "evt_a_delete_only"), {
+        businessId: BIZ_A,
+        jobId: "evt_a_delete_only",
+        goals: [],
+        activity: [],
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(deleteDoc(doc(db, "project_completion_plans", "evt_a_delete_only")));
+  });
 });
 
 describe("Team clock permission", () => {
