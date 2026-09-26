@@ -56,7 +56,7 @@ import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
 import { BulkImportModal } from "./BulkImportModal";
 import { MarketingAttributionView } from "./MarketingAttributionView";
 import { normalizePhoneForMatch, normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
-import { normalizeContactPhone } from "../lib/contactNormalization";
+import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
 
 type CustomerImportKey = "company" | "contact" | "phone" | "email" | "address" | "type" | "status" | "vip";
 const CUSTOMER_IMPORT_FIELDS: ImportFieldSpec<CustomerImportKey>[] = [
@@ -438,11 +438,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const openEditModal = (cust: Customer) => {
     setSelectedCustomer(cust);
-    setFormCompany(cust.company);
+    setFormCompany(normalizeEstimateCompany(cust.contact, cust.company));
     setFormContact(cust.contact);
     
-    // Parse phones
-    const phones = (cust.phone || "").split(",").map(p => p.trim()).filter(Boolean);
+    // Parse phones after removing duplicate/corrupted copies.
+    const phones = normalizeContactPhone(cust.phone || "").split(",").map(p => p.trim()).filter(Boolean);
     setFormPhones(phones.length > 0 ? phones : [""]);
     
     setFormEmail(cust.email);
@@ -663,7 +663,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
   const handleEditCustomer = (action: "save" | "pdf" | "pdf-store" = "save") => {
     if (!selectedCustomer) return;
-    const phoneStr = formPhones.map(p => p.trim()).filter(Boolean).join(", ");
+    const phoneStr = normalizeContactPhone(formPhones.map(p => p.trim()).filter(Boolean).join(", "));
     const combinedAddress = [formAddress.trim(), formCityState.trim(), formZip.trim()].filter(Boolean).join(", ");
     const updated: Customer = {
       ...selectedCustomer,
