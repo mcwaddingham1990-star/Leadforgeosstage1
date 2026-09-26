@@ -13,7 +13,7 @@ import { buildTextDocumentPdf, bytesToBase64 } from "../lib/pdfExport";
 import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 import type { ProjectCompletionPlan } from "../types/completion";
 import { useFirestoreCollection } from "../hooks/useFirestoreCollection";
-import { hasPermission } from "../types/permissions";
+import { hasEffectivePermission } from "../types/permissions";
 import { ProjectCompletionTracking } from "./ProjectCompletionTracking";
 import { computeJobCosting } from "../lib/jobCostingEngine";
 import { WorkOrderBuilder } from "./WorkOrderBuilder";
@@ -72,10 +72,19 @@ export const JobsPage: React.FC = () => {
   const { navigateToScreen, logOperationalEvent, triggerNotification } = useNavTelemetry();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
   const actor = loggedInUser?.name || loggedInUser?.email || activeRole;
-  const canEdit = /owner|manager|admin|dispatch|scheduler|supervisor/i.test(activeRole);
-  const canDelete = /owner|general manager|admin/i.test(activeRole);
-  const managementRole = /^(owner|manager|scheduler|dispatch)$/i.test(activeRole) || /manager/i.test(activeRole);
-  const canManageCompletion = managementRole && (/^owner$/i.test(activeRole) || hasPermission(loggedInUser?.granularPermissions, "jobs", "edit") || !loggedInUser?.granularPermissions);
+  const isOwner = activeRole.trim().toLowerCase() === "owner";
+  // Real sessions obey the Owner-configured Jobs permission matrix. Keep the
+  // existing role-name behavior only for Workspace Simulator previews, which
+  // do not carry a real employee permission payload.
+  const previewCanEdit = /owner|manager|admin|dispatch|scheduler|supervisor/i.test(activeRole);
+  const previewCanDelete = /owner|general manager|admin/i.test(activeRole);
+  const canEdit = simulatedRole
+    ? previewCanEdit
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "jobs", "edit");
+  const canDelete = simulatedRole
+    ? previewCanDelete
+    : isOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "jobs", "delete");
+  const canManageCompletion = canEdit;
   const [completionPlans, setCompletionPlans] = useFirestoreCollection<ProjectCompletionPlan>("project_completion_plans", businessId);
   const jobs = useMemo(() => schedulingEvents.filter(e => e.eventType === "Job"), [schedulingEvents]);
   const [search, setSearch] = useState("");
@@ -181,7 +190,7 @@ export const JobsPage: React.FC = () => {
   const requestConfirm = (message: string, onConfirm: () => void) => setConfirmState({ message, onConfirm });
 
   const deleteJob = (job: SchedulingEvent) => {
-    if (!canDelete) return triggerNotification("Only an Owner, General Manager, or Admin can delete jobs.");
+    if (!canDelete) return triggerNotification("You do not have Delete permission for Jobs.");
     requestConfirm(`Delete ${displayNumber(job)}? This cannot be undone.`, () => {
       setSchedulingEvents(prev => prev.filter(j => j.id !== job.id));
       setSelectedId(null);
