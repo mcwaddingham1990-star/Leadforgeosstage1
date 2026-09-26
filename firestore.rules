@@ -196,7 +196,10 @@ service cloud.firestore {
           request.resource.data.inviteCode is string &&
           get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.status == "pending" &&
           get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.businessEmail == request.resource.data.businessEmail &&
-          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.role == request.resource.data.role
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.role == request.resource.data.role &&
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.permissions == request.resource.data.permissions &&
+          get(/databases/$(database)/documents/employee_invites/$(request.resource.data.inviteCode)).data.granularPermissions == request.resource.data.granularPermissions &&
+          request.resource.data.isEmployee == true
         )
       );
       allow update: if isAuthenticated() && (
@@ -278,23 +281,60 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && hasModulePermission(email, "settings", "delete");
     }
 
-    // Employee invites: the code must stay readable pre-signup (an
-    // unauthenticated visitor looks it up by code before they have an
-    // account to prove tenancy with), but creating/updating one now requires
-    // being a real member of the business the invite is being issued for --
-    // it was previously `if true`, letting anyone on the internet mint an
-    // invite for any business (e.g. role: "Owner") and then use it during
-    // signup to join that business with any role they chose.
+    // Employee invites are bearer credentials: a person who knows one exact
+    // code must be able to validate it before they have an account, but nobody
+    // should be able to enumerate the collection. Creation/administration is
+    // limited to the real business owner or a role the owner explicitly gave
+    // Roster edit/delete permission. A delegated roster admin may invite staff,
+    // but only the actual owner may issue an Owner-role invite.
     match /employee_invites/{code} {
-      allow read: if true;
-      allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessEmail);
-      // Update also covers the invited user marking their own invite
-      // "completed" right after they create their account -- by then their
-      // own user_profile.businessEmail already matches this invite's
-      // businessEmail (set in the same signup flow, just before this call),
-      // so isBusinessMember(resource.data.businessEmail) covers them too.
-      allow update: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
-      allow delete: if isAuthenticated() && isBusinessMember(resource.data.businessEmail);
+      // Exact-code lookup used by the existing sign-up screen.
+      allow get: if true;
+      // Prevent public or authenticated bulk enumeration of bearer invite codes.
+      allow list: if false;
+
+      allow create: if isAuthenticated()
+        && request.resource.data.code == code
+        && request.resource.data.status == "pending"
+        && (
+          request.auth.token.email == request.resource.data.businessEmail
+          || hasModulePermission(request.resource.data.businessEmail, "roster", "edit")
+        )
+        && (
+          request.resource.data.role != "Owner"
+          || request.auth.token.email == request.resource.data.businessEmail
+        );
+
+      // Roster administrators may maintain an invite inside their own tenant,
+      // but cannot move it to another business or use delegated access to mint
+      // an Owner invite. The invited user gets one narrow post-signup update:
+      // mark this exact invite completed and stamp their own auth email.
+      allow update: if isAuthenticated()
+        && request.resource.data.businessEmail == resource.data.businessEmail
+        && request.resource.data.code == resource.data.code
+        && (
+          (
+            hasModulePermission(resource.data.businessEmail, "roster", "edit")
+            && (
+              request.resource.data.role != "Owner"
+              || request.auth.token.email == resource.data.businessEmail
+            )
+          )
+          || (
+            resource.data.status == "pending"
+            && request.resource.data.status == "completed"
+            && request.resource.data.usedBy == request.auth.token.email
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "usedBy"])
+            && getUserProfile().inviteCode == code
+            && getUserProfile().businessEmail == resource.data.businessEmail
+            && getUserProfile().role == resource.data.role
+            && getUserProfile().permissions == resource.data.permissions
+            && getUserProfile().granularPermissions == resource.data.granularPermissions
+          )
+        );
+
+      allow delete: if isAuthenticated()
+        && hasModulePermission(resource.data.businessEmail, "roster", "delete");
     }
 
     // Employees collection
