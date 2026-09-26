@@ -6,6 +6,7 @@ import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, RGB } from "pdf-lib"
 import type { Estimate, Customer, DocumentItem, Lead, MissedCallEvent, TextMessage } from "../types/domain";
 import type { Invoice, InvoiceLineItem } from "../types/accounting";
 import { normalizeContactPhone, normalizeEstimateCompany } from "./contactNormalization";
+import { calculateEstimatePricing } from "./estimatePricing";
 
 export interface BusinessProfile {
   name: string;
@@ -148,7 +149,7 @@ function money(n: number): string {
   return `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate: number) {
+function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate: number, discountPercent = 0) {
   const colDesc = MARGIN, colQty = PAGE_W - MARGIN - 210, colPrice = PAGE_W - MARGIN - 140, colTotal = PAGE_W - MARGIN - 70;
   writer.ensureRoom(24);
   writer.page.drawRectangle({ x: MARGIN, y: writer.y - 4, width: PAGE_W - MARGIN * 2, height: 20, color: rgb(0.918, 0.961, 1) });
@@ -157,10 +158,8 @@ function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate
   writer.page.drawText("Unit Price", { x: colPrice, y: writer.y, size: 8.5, font: writer.bold, color: NAVY });
   writer.page.drawText("Total", { x: colTotal, y: writer.y, size: 8.5, font: writer.bold, color: NAVY });
   writer.y -= 22;
-  let subtotal = 0;
   for (const item of items) {
     const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-    subtotal += lineTotal;
     const descLines = writer.wrapLine(item.description || "—", writer.font, 9.5, colQty - colDesc - 12);
     writer.ensureRoom(descLines.length * 12 + 6);
     descLines.forEach((line, i) => {
@@ -172,8 +171,7 @@ function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate
     writer.y -= descLines.length * 12 + 6;
   }
   writer.rule();
-  const tax = subtotal * (Number(taxRate || 0) / 100);
-  const total = subtotal + tax;
+  const pricing = calculateEstimatePricing(items, discountPercent, taxRate);
   const summaryX = colPrice;
   const row = (label: string, value: string, bold = false) => {
     writer.ensureRoom(16);
@@ -181,10 +179,11 @@ function drawLineItemsTable(writer: PdfWriter, items: InvoiceLineItem[], taxRate
     writer.page.drawText(value, { x: colTotal, y: writer.y, size: 9.5, font: bold ? writer.bold : writer.font, color: NAVY });
     writer.y -= 15;
   };
-  row("Subtotal", money(subtotal));
-  if (taxRate) row(`Tax (${taxRate}%)`, money(tax));
-  row("Total", money(total), true);
-  return { subtotal, tax, total };
+  row("Subtotal", money(pricing.subtotal));
+  if (pricing.discountAmount > 0) row(`Discount (${pricing.discountPercent}%)`, `-${money(pricing.discountAmount)}`);
+  if (pricing.taxAmount > 0) row(`Tax (${pricing.taxRate}%)`, money(pricing.taxAmount));
+  row("Total", money(pricing.total), true);
+  return pricing;
 }
 
 export async function buildEstimatePdf(estimate: Estimate, customer: Customer | undefined, business: BusinessProfile): Promise<Uint8Array> {
@@ -211,8 +210,14 @@ export async function buildEstimatePdf(estimate: Estimate, customer: Customer | 
   writer.text(`Prepared by: ${estimate.salesRep || "—"}`, { gap: 8 });
   writer.rule();
 
-  writer.heading("Estimated total");
-  writer.text(money(estimate.amount), { size: 16, font: bold, color: NAVY, gap: 10 });
+  if (estimate.lineItems?.length) {
+    writer.heading("Itemized pricing");
+    drawLineItemsTable(writer, estimate.lineItems, estimate.taxRate || 0, estimate.discountPercent || 0);
+    writer.spacer(6);
+  } else {
+    writer.heading("Estimated total");
+    writer.text(money(estimate.amount), { size: 16, font: bold, color: NAVY, gap: 10 });
+  }
 
   if (estimate.projectSpecifics) {
     writer.heading("Project specifics");

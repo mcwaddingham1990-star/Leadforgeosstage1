@@ -167,6 +167,10 @@ export interface Estimate {
    * separately-typed number -- every existing estimate with no lineItems
    * keeps working exactly as before, amount alone. */
   lineItems?: Array<{ id: string; description: string; quantity: number; unitPrice: number; priceBookModelId?: string }>;
+  /** Percentage discount applied to the itemized subtotal before tax. */
+  discountPercent?: number;
+  /** Percentage tax applied after discount. */
+  taxRate?: number;
   /** Marketing attribution, carried over from the Lead/Customer this estimate came from (see Customer.source). */
   source?: LeadSource;
   sourceLeadId?: string;
