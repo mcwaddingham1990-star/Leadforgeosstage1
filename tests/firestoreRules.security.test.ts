@@ -455,6 +455,10 @@ describe("Privilege escalation via user_profiles", () => {
         email: brokenEmail,
         isEmployee: false,
         inviteCode: "RECOVER_OFFICE",
+        // This regression is about tenant-root repair, not permission
+        // migration. Preserve the employee's legacy module grant so the
+        // repaired profile can still read its own business's Customers.
+        permissions: ["customers"],
       });
     });
 
