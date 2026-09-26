@@ -425,8 +425,7 @@ service cloud.firestore {
         && request.resource.data.jobId == jobId
         && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId, request.resource.data.businessId));
       allow delete: if isAuthenticated()
-        && hasModulePermission(resource.data.businessId, "jobs", "delete")
-        && canManageProjectCompletion(resource.data.businessId);
+        && hasModulePermission(resource.data.businessId, "jobs", "delete");
       allow update: if isAuthenticated()
         && hasModulePermission(request.resource.data.businessId, "jobs", "edit")
         && request.resource.data.businessId == resource.data.businessId
