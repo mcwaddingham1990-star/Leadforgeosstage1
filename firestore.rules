@@ -103,10 +103,7 @@ service cloud.firestore {
     }
 
     function canManageProjectCompletion(businessId) {
-      return request.auth.token.email == businessId || getUserProfile().role in [
-        "Owner", "Manager", "General Manager", "Office Manager",
-        "Operations Manager", "Scheduler", "Dispatch", "Dispatcher"
-      ];
+      return hasModulePermission(businessId, "jobs", "edit");
     }
 
     // Owner or a role explicitly granted the Time Clock "Clock Employees
@@ -426,14 +423,15 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && hasModulePermission(request.resource.data.businessId, "jobs", "edit")
         && request.resource.data.jobId == jobId
+        && get(/databases/$(database)/documents/scheduling_events/$(jobId)).data.businessId == request.resource.data.businessId
         && (canManageProjectCompletion(request.resource.data.businessId) || isAssignedToJob(jobId, request.resource.data.businessId));
       allow delete: if isAuthenticated()
-        && hasModulePermission(resource.data.businessId, "jobs", "delete")
-        && canManageProjectCompletion(resource.data.businessId);
+        && hasModulePermission(resource.data.businessId, "jobs", "delete");
       allow update: if isAuthenticated()
         && hasModulePermission(request.resource.data.businessId, "jobs", "edit")
         && request.resource.data.businessId == resource.data.businessId
         && request.resource.data.jobId == resource.data.jobId
+        && get(/databases/$(database)/documents/scheduling_events/$(resource.data.jobId)).data.businessId == resource.data.businessId
         && (
           canManageProjectCompletion(request.resource.data.businessId)
           || (isAssignedToJob(resource.data.jobId, resource.data.businessId)
