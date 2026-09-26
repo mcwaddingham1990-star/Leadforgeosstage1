@@ -159,6 +159,14 @@ const RecurringMaintenanceView: React.FC = () => {
 export const SchedulingPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
+  const currentUserIdentity = useMemo(
+    () => [loggedInUser?.name, loggedInUser?.email]
+      .filter(Boolean)
+      .map(value => String(value).trim().toLowerCase()),
+    [loggedInUser?.name, loggedInUser?.email]
+  );
+  const isAssignedToCurrentUser = (event: SchedulingEvent) =>
+    currentUserIdentity.includes((event.assignedEmployee || "").trim().toLowerCase());
   const {
     schedulingEvents: events,
     setSchedulingEvents: setEvents,
@@ -570,10 +578,8 @@ export const SchedulingPage: React.FC = () => {
       // Real fix: compare against the actual logged-in user's name, not their role title
       // (the old heuristic compared assignedEmployee to activeRole, which are different
       // concepts — a job title isn't a person's name).
-      if (!isHighPrivilege) {
-        const myName = (loggedInUser?.name || "").trim().toLowerCase();
-        const isAssigned = !!myName && evt.assignedEmployee.trim().toLowerCase() === myName;
-        if (!isAssigned) return false;
+      if (!isHighPrivilege && !isAssignedToCurrentUser(evt)) {
+        return false;
       }
 
       return true;
@@ -879,15 +885,7 @@ export const SchedulingPage: React.FC = () => {
     const eventToUpdate = events.find(e => e.id === evtId);
     if (!eventToUpdate) return;
 
-    const isAssigned = eventToUpdate.assignedEmployee.toLowerCase().includes(activeRole.toLowerCase()) || 
-                       activeRole.toLowerCase() === "owner" || 
-                       activeRole.toLowerCase() === "general manager" || 
-                       activeRole.toLowerCase() === "office manager" ||
-                       activeRole.toLowerCase() === "operations manager" ||
-                       activeRole.toLowerCase() === "scheduler" ||
-                       activeRole.toLowerCase() === "dispatcher";
-
-    if (!isAssigned) {
+    if (!isHighPrivilege && !isAssignedToCurrentUser(eventToUpdate)) {
       triggerNotification("Role Permission Error: You can only update the status of events assigned directly to you.");
       return;
     }
