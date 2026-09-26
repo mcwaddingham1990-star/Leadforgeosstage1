@@ -20,7 +20,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection } from "firebase/firestore";
 
 const PROJECT_ID = "demo-ownerslocal-security-test";
 
@@ -132,8 +132,14 @@ beforeEach(async () => {
 
     // A pending invite for Business A, role Technician.
     await setDoc(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      code: "INVITE_A_TECH",
       businessEmail: BIZ_A,
       role: "Technician",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
       status: "pending",
     });
 
@@ -423,7 +429,33 @@ describe("Privilege escalation via user_profiles", () => {
         businessEmail: BIZ_A,
         role: "Technician",
         email: "newemp@example.com",
+        isEmployee: true,
         inviteCode: "INVITE_A_TECH",
+        permissions: ["customers", "jobs"],
+        granularPermissions: {
+          customers: { view: true, edit: false, delete: false },
+          jobs: { view: true, edit: true, delete: false },
+        },
+      })
+    );
+  });
+
+  test("a valid invite cannot be used to forge stronger permissions at profile creation", async () => {
+    const db = ctxFor("forged-perms-uid", "forgedperms@example.com").firestore();
+    await assertFails(
+      setDoc(doc(db, "user_profiles", "forged-perms-uid"), {
+        businessEmail: BIZ_A,
+        role: "Technician",
+        email: "forgedperms@example.com",
+        isEmployee: true,
+        inviteCode: "INVITE_A_TECH",
+        permissions: ["customers", "jobs", "roster", "accounting"],
+        granularPermissions: {
+          customers: { view: true, edit: true, delete: true },
+          jobs: { view: true, edit: true, delete: true },
+          roster: { view: true, edit: true, delete: true },
+          accounting: { view: true, edit: true, delete: true },
+        },
       })
     );
   });
@@ -709,15 +741,153 @@ describe("Team clock permission", () => {
   });
 });
 
-describe("Employee invites cannot be minted for a business you don't belong to", () => {
-  test("a Business A member cannot create an invite for Business B", async () => {
-    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
-    await assertFails(setDoc(doc(db, "employee_invites", "FORGED"), { businessEmail: BIZ_B, role: "Owner", status: "pending" }));
+describe("Employee invite credential security", () => {
+  test("an unauthenticated caller CAN validate one exact invite code", async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(db, "employee_invites", "INVITE_A_TECH")));
   });
 
-  test("a Business A member CAN create an invite for their own business", async () => {
+  test("invite codes cannot be enumerated by an unauthenticated caller", async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(db, "employee_invites")));
+  });
+
+  test("invite codes cannot be enumerated by an authenticated employee either", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(getDocs(collection(db, "employee_invites")));
+  });
+
+  test("a regular same-business employee cannot create an invite", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "employee_invites", "EMP_FORGED"), {
+      code: "EMP_FORGED",
+      businessEmail: BIZ_A,
+      role: "Technician",
+      permissions: ["customers"],
+      granularPermissions: { customers: { view: true, edit: true, delete: false } },
+      status: "pending",
+    }));
+  });
+
+  test("an employee explicitly granted Roster edit CAN create a non-owner invite", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          roster: { view: true, edit: true, delete: false },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "employee_invites", "ROSTER_OK"), {
+      code: "ROSTER_OK",
+      businessEmail: BIZ_A,
+      role: "Technician",
+      permissions: ["customers"],
+      granularPermissions: { customers: { view: true, edit: false, delete: false } },
+      status: "pending",
+    }));
+  });
+
+  test("a delegated Roster editor cannot issue an Owner-role invite", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        granularPermissions: {
+          roster: { view: true, edit: true, delete: true },
+        },
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "employee_invites", "OWNER_FORGED"), {
+      code: "OWNER_FORGED",
+      businessEmail: BIZ_A,
+      role: "Owner",
+      permissions: ["roster"],
+      granularPermissions: { roster: { view: true, edit: true, delete: true } },
+      status: "pending",
+    }));
+  });
+
+  test("the actual owner CAN create an Owner-role invite for their own business", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
-    await assertSucceeds(setDoc(doc(db, "employee_invites", "REAL_A"), { businessEmail: BIZ_A, role: "Technician", status: "pending" }));
+    await assertSucceeds(setDoc(doc(db, "employee_invites", "OWNER_REAL"), {
+      code: "OWNER_REAL",
+      businessEmail: BIZ_A,
+      role: "Owner",
+      permissions: ["roster"],
+      granularPermissions: { roster: { view: true, edit: true, delete: true } },
+      status: "pending",
+    }));
+  });
+
+  test("a Business A owner cannot create an invite for Business B", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(setDoc(doc(db, "employee_invites", "FORGED"), {
+      code: "FORGED",
+      businessEmail: BIZ_B,
+      role: "Technician",
+      permissions: ["customers"],
+      granularPermissions: { customers: { view: true, edit: false, delete: false } },
+      status: "pending",
+    }));
+  });
+
+  test("an invite document's code must match its document id", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(setDoc(doc(db, "employee_invites", "REAL_ID"), {
+      code: "DIFFERENT_CODE",
+      businessEmail: BIZ_A,
+      role: "Technician",
+      permissions: ["customers"],
+      granularPermissions: { customers: { view: true, edit: false, delete: false } },
+      status: "pending",
+    }));
+  });
+
+  test("a redeemed employee can only mark their exact invite completed", async () => {
+    const db = ctxFor("new-emp-uid", "newemp@example.com").firestore();
+    await assertSucceeds(setDoc(doc(db, "user_profiles", "new-emp-uid"), {
+      businessEmail: BIZ_A,
+      role: "Technician",
+      email: "newemp@example.com",
+      isEmployee: true,
+      inviteCode: "INVITE_A_TECH",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
+    }));
+    await assertSucceeds(updateDoc(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      status: "completed",
+      usedBy: "newemp@example.com",
+    }));
+  });
+
+  test("a redeemer cannot alter the invite permission payload while completing it", async () => {
+    const db = ctxFor("new-emp-uid", "newemp@example.com").firestore();
+    await assertSucceeds(setDoc(doc(db, "user_profiles", "new-emp-uid"), {
+      businessEmail: BIZ_A,
+      role: "Technician",
+      email: "newemp@example.com",
+      isEmployee: true,
+      inviteCode: "INVITE_A_TECH",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
+    }));
+    await assertFails(updateDoc(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      status: "completed",
+      usedBy: "newemp@example.com",
+      permissions: ["customers", "jobs", "roster"],
+    }));
+  });
+
+  test("a regular employee cannot modify or delete an existing invite", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "employee_invites", "INVITE_A_TECH"), { status: "cancelled" }));
+    await assertFails(deleteDoc(doc(db, "employee_invites", "INVITE_A_TECH")));
   });
 });
 
