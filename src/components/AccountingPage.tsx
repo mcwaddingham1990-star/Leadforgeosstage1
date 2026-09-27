@@ -12,6 +12,11 @@ import { CustomerPortalControls } from "./CustomerPortalControls";
 import { ReviewRequestControls } from "./ReviewRequestControls";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { useStripeConnectStatus } from "../hooks/useStripeConnectStatus";
+import {
+  findExistingInvoiceForJob,
+  parsePendingInvoicePrefill,
+  type PendingInvoicePrefill
+} from "../lib/jobInvoiceHandoff";
 import { MarketingAttributionView } from "./MarketingAttributionView";
 import {
   Account,
@@ -187,12 +192,17 @@ export const AccountingPage: React.FC = () => {
   // flag) since AccountingPage is mounted fresh by App.tsx's screen switch
   // with no props of its own to carry an "open the invoice form" intent.
   const [autoOpenInvoiceCreate, setAutoOpenInvoiceCreate] = useState(false);
+  const [invoiceCreatePrefill, setInvoiceCreatePrefill] = useState<PendingInvoicePrefill | null>(null);
   useEffect(() => {
-    if (sessionStorage.getItem("ownerslocal_pending_invoice_create") === "1") {
-      sessionStorage.removeItem("ownerslocal_pending_invoice_create");
-      setActiveTab("invoices");
-      setAutoOpenInvoiceCreate(true);
-    }
+    const shouldOpen = sessionStorage.getItem("ownerslocal_pending_invoice_create") === "1";
+    const prefill = parsePendingInvoicePrefill(sessionStorage.getItem("ownerslocal_pending_invoice_prefill"));
+    if (!shouldOpen && !prefill) return;
+
+    sessionStorage.removeItem("ownerslocal_pending_invoice_create");
+    sessionStorage.removeItem("ownerslocal_pending_invoice_prefill");
+    setActiveTab("invoices");
+    setInvoiceCreatePrefill(prefill);
+    setAutoOpenInvoiceCreate(true);
   }, []);
 
   // Inventory is a live subledger: its current asset value is the same
@@ -312,7 +322,11 @@ export const AccountingPage: React.FC = () => {
           logOperationalEvent={logOperationalEvent}
           loggedInUser={loggedInUser}
           autoOpenCreate={autoOpenInvoiceCreate}
-          onAutoOpenCreateHandled={() => setAutoOpenInvoiceCreate(false)}
+          createPrefill={invoiceCreatePrefill}
+          onAutoOpenCreateHandled={() => {
+            setAutoOpenInvoiceCreate(false);
+            setInvoiceCreatePrefill(null);
+          }}
         />
       )}
 
@@ -541,24 +555,19 @@ function InvoicesTab({
   logOperationalEvent,
   loggedInUser,
   autoOpenCreate,
+  createPrefill,
   onAutoOpenCreateHandled
 }: any) {
-  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates, setCustomers } = useDomainData();
+  const { setGeneratedPdfDraft, documents, setDocuments, businessProfile, estimates, setEstimates, setCustomers } = useDomainData();
   const { navigateToScreen } = useNavTelemetry();
   const [isCreating, setIsCreating] = useState(false);
-  useEffect(() => {
-    if (autoOpenCreate) {
-      setIsCreating(true);
-      onAutoOpenCreateHandled?.();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenCreate]);
   const [isPriceBookOpen, setIsPriceBookOpen] = useState(false);
   const [customer, setCustomer] = useState("");
   const [dueInDays, setDueInDays] = useState(30);
   const [taxRate, setTaxRate] = useState<number>(salesTaxRates.find((r: any) => r.isDefault)?.rate || 0);
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
   const [linkedEstimateId, setLinkedEstimateId] = useState("");
+  const [linkedJobId, setLinkedJobId] = useState("");
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
@@ -586,6 +595,7 @@ function InvoicesTab({
     setDueInDays(30);
     setLineItems([{ id: genId("li"), description: "", quantity: 1, unitPrice: 0 }]);
     setLinkedEstimateId("");
+    setLinkedJobId("");
   };
 
   const applyLinkedEstimate = (estimateId: string) => {
@@ -595,6 +605,52 @@ function InvoicesTab({
     setCustomer(est.customerName || est.company || "");
     setLineItems([{ id: genId("li"), description: `Estimate ${est.number}`, quantity: 1, unitPrice: est.amount || 0 }]);
   };
+
+  useEffect(() => {
+    if (!autoOpenCreate) return;
+
+    const prefill = createPrefill as PendingInvoicePrefill | null;
+    const existingJobInvoice = findExistingInvoiceForJob(invoices, prefill?.jobId);
+    if (existingJobInvoice) {
+      setIsCreating(false);
+      setViewingInvoice(existingJobInvoice);
+      triggerNotification(`Invoice ${existingJobInvoice.invoiceNumber} already exists for this job.`);
+      onAutoOpenCreateHandled?.();
+      return;
+    }
+
+    setLinkedJobId(prefill?.jobId || "");
+
+    if (prefill?.estimateId && estimates.some((estimate: Estimate) => estimate.id === prefill.estimateId)) {
+      applyLinkedEstimate(prefill.estimateId);
+    } else {
+      const matchedCustomer = customers.find((item: Customer) =>
+        item.id === prefill?.customerId ||
+        item.contact === prefill?.customerName ||
+        item.company === prefill?.customerName
+      );
+      setCustomer(
+        matchedCustomer?.company ||
+        matchedCustomer?.contact ||
+        prefill?.customerName ||
+        (customers.length === 1 ? (customers[0].company || customers[0].contact || "") : "")
+      );
+      if (prefill?.description || (prefill?.amount ?? 0) > 0) {
+        setLineItems([{
+          id: genId("li"),
+          description: prefill?.description || "Completed job",
+          quantity: 1,
+          unitPrice: Number(prefill?.amount) || 0
+        }]);
+      }
+    }
+
+    setIsCreating(true);
+    onAutoOpenCreateHandled?.();
+    // The handoff should run once for the explicit auto-open signal. Form
+    // edits after opening must not re-apply the prefill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenCreate]);
 
   // Builds a real PDF from the actual invoice data right now (no signing
   // required), saves it to the Documents Hub immediately, then opens the
@@ -663,7 +719,9 @@ function InvoicesTab({
     // specific to this actual sale), then the matched customer's source,
     // over leaving it blank.
     const linkedEstimate = linkedEstimateId ? estimates.find((e: Estimate) => e.id === linkedEstimateId) : undefined;
-    const matchedCustomerForSource = customers.find((c: any) => c.contact === customer.trim() || c.company === customer.trim());
+    const matchedCustomerForSource =
+      customers.find((c: any) => c.id === (createPrefill as PendingInvoicePrefill | null)?.customerId) ||
+      customers.find((c: any) => c.contact === customer.trim() || c.company === customer.trim());
     const source = linkedEstimate?.source || matchedCustomerForSource?.source || "Manual Entry";
     const sourceLeadId = linkedEstimate?.sourceLeadId || matchedCustomerForSource?.sourceLeadId;
     const invoice: Invoice = {
@@ -679,12 +737,18 @@ function InvoicesTab({
       amountPaid: 0,
       createdAt: new Date().toISOString(),
       createdBy: loggedInUser?.email,
+      jobId: linkedJobId || undefined,
       estimateId: linkedEstimateId || undefined,
       source,
       sourceLeadId
     };
     setInvoices((prev: Invoice[]) => [...prev, invoice]);
     setJournalEntries((prev: JournalEntry[]) => [...prev, postInvoiceCreatedEntry(invoice, loggedInUser?.email)]);
+    if (linkedEstimateId) {
+      setEstimates((prev: Estimate[]) => prev.map(estimate =>
+        estimate.id === linkedEstimateId ? { ...estimate, status: "Completed" } : estimate
+      ));
+    }
     if (logOperationalEvent) logOperationalEvent("Invoice Created", `${invoice.invoiceNumber} for ${invoice.customer}: ${fmt(invoiceTotal(invoice))}`, "🧾");
     triggerNotification(`Invoice ${invoice.invoiceNumber} created for ${fmt(invoiceTotal(invoice))}.`);
     if (openPdf) void generateInvoicePdf(invoice);
