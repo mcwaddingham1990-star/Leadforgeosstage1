@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -66,7 +66,7 @@ const DEFAULT_INVITE_ROLES: InviteRole[] = ONBOARDING_ROLE_TEMPLATES.map(([id, n
 import { StructuredAddressFields } from "./StructuredAddressFields";
 
 export const RosterPage: React.FC = () => {
-  const { employees, setEmployees, timeClockLogs } = useDomainData();
+  const { employees, refreshEmployees, timeClockLogs } = useDomainData();
   const { triggerNotification, logOperationalEvent, navigateToScreen } = useNavTelemetry();
   const { loggedInUser, businessId } = useAuth();
 
@@ -178,24 +178,45 @@ export const RosterPage: React.FC = () => {
   };
 
   const handleSaveEdit = async () => {
-    if (!editingEmployee) return;
+    if (!editingEmployee || !businessId) return;
     const permissions = MODULE_CATALOG.filter(mod => {
       const flags = getPermissionFlags(editingEmployee.granularPermissions, mod.id);
       return flags.view || flags.edit || flags.delete;
     }).map(mod => mod.id);
     const savedEmployee = { ...editingEmployee, permissions };
-    setEmployees(prev => prev.map(e => (e.email === savedEmployee.email ? savedEmployee : e)));
-    if (savedEmployee.userUid) {
-      await setDoc(doc(db, "user_profiles", savedEmployee.userUid), {
-        role: savedEmployee.role,
-        permissions,
-        granularPermissions: savedEmployee.granularPermissions,
-        requireTimeClockVerification: !!savedEmployee.requireTimeClockVerification
+
+    try {
+      // Role/permission edits must be one atomic server operation. The roster
+      // record is what the Owner sees; user_profiles is what the employee
+      // actually receives on their next login. Saving them separately can
+      // leave those two sources disagreeing after a network failure.
+      const batch = writeBatch(db);
+      batch.set(doc(db, "employees", savedEmployee.email), {
+        ...savedEmployee,
+        businessEmail: businessId,
+        businessId,
+        updatedAt: new Date().toISOString()
       }, { merge: true });
+
+      if (savedEmployee.userUid) {
+        batch.set(doc(db, "user_profiles", savedEmployee.userUid), {
+          role: savedEmployee.role,
+          permissions,
+          granularPermissions: savedEmployee.granularPermissions,
+          requireTimeClockVerification: !!savedEmployee.requireTimeClockVerification
+        }, { merge: true });
+      }
+
+      await batch.commit();
+      await refreshEmployees();
+
+      triggerNotification(`Updated ${editingEmployee.firstName} ${editingEmployee.lastName}.`);
+      if (logOperationalEvent) logOperationalEvent("Employee Updated", `${editingEmployee.firstName} ${editingEmployee.lastName}`, "👤");
+      setEditingEmployee(null);
+    } catch (err) {
+      console.error("Employee role/permission save failed:", err);
+      triggerNotification("Couldn't save that employee update. Nothing was partially changed.");
     }
-    triggerNotification(`Updated ${editingEmployee.firstName} ${editingEmployee.lastName}.`);
-    if (logOperationalEvent) logOperationalEvent("Employee Updated", `${editingEmployee.firstName} ${editingEmployee.lastName}`, "👤");
-    setEditingEmployee(null);
   };
 
   const chooseEmployeeRole = (roleId: string) => {
