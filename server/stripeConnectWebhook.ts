@@ -4,6 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
+import { processStripeEventOnce } from "./stripeWebhookDelivery";
 import { applyPortalInvoicePayment, applyChargeRefund, applyDisputeFundsMovement, notifyDisputeStatus, recordPayoutEvent } from "./customerPortal";
 
 // Separate path, separate signing secret, separate handler from the
@@ -40,21 +41,27 @@ function getAdminApp(): App | null {
  * is keyed by businessId (the owner's email), not by Stripe account id.
  */
 /**
- * Idempotency guard keyed by Stripe's own permanent event.id -- Stripe can
- * (and does) redeliver the same webhook event more than once (retries,
- * manual resends from the Dashboard). Recording the id BEFORE processing
- * means a near-simultaneous duplicate delivery sees it too, not just one
- * arriving after the first finished.
+ * Existing event records are treated as completed for backward compatibility.
+ * New deliveries are recorded only after the connected-account update succeeds.
  */
 async function wasAlreadyProcessed(eventId: string): Promise<boolean> {
   const app = getAdminApp();
-  if (!app) return false; // Not configured -- nothing to dedup against; let it through.
+  if (!app) return false;
   const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
-  const ref = db.collection("stripe_webhook_events").doc(eventId);
-  const snap = await ref.get();
-  if (snap.exists) return true;
-  await ref.set({ id: eventId, source: "connect", processedAt: new Date().toISOString() });
-  return false;
+  const snap = await db.collection("stripe_webhook_events").doc(eventId).get();
+  return snap.exists;
+}
+
+async function markProcessed(eventId: string): Promise<void> {
+  const app = getAdminApp();
+  if (!app) throw new Error("Firebase Admin is not configured for Stripe Connect webhook idempotency.");
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  await db.collection("stripe_webhook_events").doc(eventId).set({
+    id: eventId,
+    source: "connect",
+    status: "processed",
+    processedAt: new Date().toISOString()
+  });
 }
 
 async function resolveBusinessIdForConnectedAccount(stripeAccountId: string): Promise<string | null> {
@@ -84,70 +91,66 @@ export async function handleStripeConnectWebhook(req: Request, res: Response) {
     return;
   }
 
-  // Acknowledge immediately, same reasoning as the platform webhook --
-  // Stripe retries on anything but a fast 2xx.
-  res.status(200).json({ received: true });
-
   try {
-    const alreadyProcessed = await wasAlreadyProcessed(event.id);
-    if (alreadyProcessed) {
+    const result = await processStripeEventOnce({
+      eventId: event.id,
+      alreadyProcessed: wasAlreadyProcessed,
+      process: async () => {
+        const stripeAccountId = event.account;
+        if (!stripeAccountId) {
+          throw new Error(`Stripe Connect event ${event.type} (${event.id}) had no top-level account field.`);
+        }
+        const businessId = await resolveBusinessIdForConnectedAccount(stripeAccountId);
+        if (!businessId) {
+          // This can be transient immediately after account creation. Return
+          // a retryable failure instead of permanently discarding the event.
+          throw new Error(`Stripe Connect event ${event.type} (${event.id}) for account ${stripeAccountId} matched no known business.`);
+        }
+
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object as Stripe.Checkout.Session;
+            if (session.metadata?.ownerslocalInvoiceId) await applyPortalInvoicePayment(businessId, session);
+            break;
+          }
+          case "charge.refunded": {
+            await applyChargeRefund(businessId, event.data.object as Stripe.Charge);
+            break;
+          }
+          case "charge.dispute.funds_withdrawn": {
+            await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "withdrawn", stripeAccountId);
+            break;
+          }
+          case "charge.dispute.funds_reinstated": {
+            await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "reinstated", stripeAccountId);
+            break;
+          }
+          case "charge.dispute.created":
+          case "charge.dispute.updated":
+          case "charge.dispute.closed": {
+            await notifyDisputeStatus(businessId, event.data.object as Stripe.Dispute, stripeAccountId);
+            break;
+          }
+          case "payout.created":
+          case "payout.paid":
+          case "payout.failed":
+          case "payout.canceled": {
+            await recordPayoutEvent(businessId, event.data.object as Stripe.Payout, event.type);
+            break;
+          }
+          default:
+            console.log(`[stripe-connect] ${event.type} (${event.id}) for business ${businessId} (account ${stripeAccountId}) -- no handler wired yet.`);
+        }
+      },
+      markProcessed,
+    });
+
+    if (result === "duplicate") {
       console.log(`[stripe-connect] ${event.type} (${event.id}) already processed -- skipping duplicate delivery.`);
-      return;
     }
-    const stripeAccountId = event.account;
-    if (!stripeAccountId) {
-      // Shouldn't happen for a connect-scoped webhook, but fail loud in the
-      // log rather than silently dropping an event with nowhere to route.
-      console.error(`Stripe Connect event ${event.type} (${event.id}) had no top-level account field.`);
-      return;
-    }
-    const businessId = await resolveBusinessIdForConnectedAccount(stripeAccountId);
-    if (!businessId) {
-      console.error(`Stripe Connect event ${event.type} (${event.id}) for account ${stripeAccountId} matched no known business.`);
-      return;
-    }
-
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        if (session.metadata?.ownerslocalInvoiceId) await applyPortalInvoicePayment(businessId, session);
-        return;
-      }
-      case "charge.refunded": {
-        await applyChargeRefund(businessId, event.data.object as Stripe.Charge);
-        return;
-      }
-      case "charge.dispute.funds_withdrawn": {
-        await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "withdrawn", stripeAccountId);
-        return;
-      }
-      case "charge.dispute.funds_reinstated": {
-        await applyDisputeFundsMovement(businessId, event.data.object as Stripe.Dispute, "reinstated", stripeAccountId);
-        return;
-      }
-      case "charge.dispute.created":
-      case "charge.dispute.updated":
-      case "charge.dispute.closed": {
-        await notifyDisputeStatus(businessId, event.data.object as Stripe.Dispute, stripeAccountId);
-        return;
-      }
-      case "payout.created":
-      case "payout.paid":
-      case "payout.failed":
-      case "payout.canceled": {
-        await recordPayoutEvent(businessId, event.data.object as Stripe.Payout, event.type);
-        return;
-      }
-    }
-
-    // Every other subscribed event type (SaaS subscription billing --
-    // there's no paywall built yet to react to it; Financial Connections;
-    // KYC/account.updated; saved payment methods; 1099 reporting; etc.) is
-    // acknowledged and logged rather than invented ahead of the feature
-    // that would actually use it. See the handoff doc's spec mapping for
-    // what each of these is reserved for.
-    console.log(`[stripe-connect] ${event.type} (${event.id}) for business ${businessId} (account ${stripeAccountId}) -- no handler wired yet.`);
+    res.status(200).json({ received: true });
   } catch (err) {
     console.error(`Error handling Stripe Connect event ${event.type} (${event.id}):`, err);
+    res.status(500).json({ error: "Stripe Connect event processing failed; retry requested." });
   }
 }
