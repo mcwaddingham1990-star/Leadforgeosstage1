@@ -10,6 +10,7 @@ import { useDomainData } from "../context/DomainDataContext";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { ReviewRequestControls } from "./ReviewRequestControls";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { buildJobInvoicePrefill } from "../lib/jobInvoiceHandoff";
 
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const now = () => new Date().toISOString();
@@ -161,14 +162,10 @@ export function ProjectCompletionTracking(props: {
     } : item));
 
     sessionStorage.setItem("ownerslocal_pending_invoice_create", "1");
-    sessionStorage.setItem("ownerslocal_pending_invoice_prefill", JSON.stringify({
-      jobId: job.id,
-      estimateId: job.sourceEstimateId || "",
-      customerId: job.customerId || "",
-      customerName: job.customer || "",
-      description: job.title || job.description || "Completed job",
-      amount: Number(job.budget) || 0
-    }));
+    sessionStorage.setItem(
+      "ownerslocal_pending_invoice_prefill",
+      JSON.stringify(buildJobInvoicePrefill(job))
+    );
 
     notify("Final closeout approved. Job marked Completed and the invoice is ready to review.");
     onClose();
