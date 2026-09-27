@@ -577,22 +577,22 @@ select option {
    ========================================================================== */
 
 .workspace-theme.theme-dark-basic {
-  --dark-canvas: #070809;
-  --dark-sidebar: #0b0d10;
-  --dark-surface: #111317;
-  --dark-surface-raised: #181b20;
-  --dark-input: #0d0f12;
-  --dark-border: #2a2e35;
-  --dark-border-strong: #3a4049;
-  --dark-text: #f5f7fa;
-  --dark-muted: #a5adb8;
+  --dark-canvas: #050f1a;
+  --dark-sidebar: #071522;
+  --dark-surface: #091827;
+  --dark-surface-raised: #0c1d2e;
+  --dark-input: #081522;
+  --dark-border: #1c3042;
+  --dark-border-strong: #29445e;
+  --dark-text: #f4f7fb;
+  --dark-muted: #98a7b9;
   --dark-accent: #145dff;
   --dark-accent-hover: #2870ff;
   background: var(--dark-canvas) !important;
   border-color: var(--dark-border) !important;
   color: var(--dark-text) !important;
   color-scheme: dark !important;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .42) !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .38) !important;
 }
 
 /* Navigation and solid content surfaces. */
@@ -825,8 +825,8 @@ select option {
   box-shadow: none !important;
 }
 .workspace-theme.theme-dark-basic button:hover {
-  background-color: #20242a !important;
-  border-color: #4b535e !important;
+  background-color: #10253a !important;
+  border-color: #376084 !important;
 }
 .workspace-theme.theme-dark-basic button[class~="bg-[#4A86F7]"],
 .workspace-theme.theme-dark-basic button[class~="bg-[#4A9BFF]"],
@@ -874,16 +874,20 @@ select option {
    the generic button rule (three classes vs. two-plus-element), so this
    wins regardless of source order. */
 .workspace-theme.theme-dark-basic .sidebar-nav-btn {
-  background-color: var(--dark-surface-raised) !important;
-  background-image: none !important;
-  border-color: var(--dark-border-strong) !important;
-  box-shadow: none !important;
+  background-image: linear-gradient(180deg, rgba(32, 111, 255, .16), rgba(9, 24, 39, .4)) !important;
+  border-color: rgba(56, 145, 255, .32) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(140, 190, 255, .12),
+    inset 0 -1px 0 rgba(0, 0, 0, .35),
+    0 2px 6px rgba(0, 0, 0, .35) !important;
 }
 .workspace-theme.theme-dark-basic .sidebar-nav-btn:hover {
-  background-color: #20242a !important;
-  background-image: none !important;
-  border-color: #4b535e !important;
-  box-shadow: none !important;
+  background-image: linear-gradient(180deg, rgba(46, 130, 255, .28), rgba(9, 24, 39, .5)) !important;
+  border-color: rgba(74, 163, 255, .55) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(160, 205, 255, .16),
+    inset 0 -1px 0 rgba(0, 0, 0, .35),
+    0 0 14px rgba(20, 93, 255, .3) !important;
 }
 .workspace-theme.theme-dark-basic .sidebar-nav-btn.sidebar-nav-btn-active {
   background-image: linear-gradient(180deg, #3688ff, #145dff) !important;
@@ -1085,17 +1089,15 @@ select option {
    turns the menu and every card/panel into illuminated glass tiles that let
    that starscape show through, matching the approved reference. */
 .workspace-theme.theme-dark-dynamic {
-  --dynamic-surface: rgba(8, 29, 61, .58);
-  --dynamic-surface-raised: rgba(11, 38, 77, .66);
-  --dynamic-border: rgba(82, 181, 255, .92);
-  --dynamic-border-soft: rgba(54, 151, 255, .70);
-  --dynamic-cyan: #39d6ff;
+  --dynamic-surface: rgba(4, 13, 28, .74);
+  --dynamic-surface-raised: rgba(7, 21, 42, .8);
+  --dynamic-border: rgba(56, 145, 255, .85);
+  --dynamic-border-soft: rgba(56, 145, 255, .55);
+  --dynamic-cyan: #18c8ff;
   --dynamic-blue: #145dff;
-  --dynamic-text: #f0f8ff;
+  --dynamic-text: #eaf6ff;
   background-color: #010713 !important;
   background-repeat: no-repeat !important;
-  background-size: cover !important;
-  background-position: center center !important;
   background-attachment: fixed !important;
 }
 
@@ -1116,15 +1118,12 @@ select option {
 .workspace-theme.theme-dark-dynamic > div,
 .workspace-theme.theme-dark-dynamic > aside,
 .workspace-theme.theme-dark-dynamic > main {
-  background-color: rgba(7, 27, 58, .52) !important;
-  background-image: linear-gradient(145deg, rgba(26, 72, 121, .22), rgba(4, 14, 38, .18)) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
+  background-color: var(--dynamic-surface) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
   border-color: var(--dynamic-border-soft) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(167, 224, 255, .12),
-    inset -1px 0 0 rgba(66, 172, 255, .34),
-    0 0 18px rgba(0, 129, 255, .16) !important;
+  box-shadow: inset -1px 0 0 rgba(56, 145, 255, .3) !important;
 }
 
 /* Cards and panels become translucent navy glass with a crisp glowing edge,
@@ -1133,18 +1132,16 @@ select option {
 .workspace-theme.theme-dark-dynamic :is(div, section, article, main, aside, header, footer, form)[class*="rounded"][class*="border"],
 .workspace-theme.theme-dark-dynamic :is(div, section, article, main, aside, header, footer, form)[class*="shadow"] {
   background-color: var(--dynamic-surface) !important;
-  background-image:
-    linear-gradient(145deg, rgba(30, 78, 129, .30), rgba(4, 16, 43, .24)) !important;
+  background-image: none !important;
   border-width: 1.5px !important;
   border-color: var(--dynamic-border) !important;
   box-shadow:
-    inset 0 1px 0 rgba(181, 229, 255, .18),
-    inset 0 -1px 12px rgba(0, 20, 55, .28),
-    0 0 0 1px rgba(42, 204, 255, .12),
-    0 0 18px rgba(0, 180, 255, .30),
-    0 8px 28px rgba(0, 8, 28, .48) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(145%);
-  backdrop-filter: blur(20px) saturate(145%);
+    inset 0 1px 0 rgba(140, 210, 255, .12),
+    0 0 0 1px rgba(24, 200, 255, .1),
+    0 0 22px rgba(20, 93, 255, .22),
+    0 8px 28px rgba(0, 10, 30, .5) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  backdrop-filter: blur(16px) saturate(130%);
 }
 
 /* Keep nested table rows clean while preserving the blue linework. */
@@ -1167,10 +1164,9 @@ select option {
 .workspace-theme.theme-dark-dynamic .filter-button-group,
 .workspace-theme.theme-dark-dynamic .custom-dropdown-popover,
 .workspace-theme.theme-dark-dynamic .custom-dropdown-item {
-  background-color: rgba(6, 24, 52, .72) !important;
-  background-image: linear-gradient(145deg, rgba(25, 65, 111, .22), rgba(4, 16, 38, .18)) !important;
-  border-color: rgba(70, 165, 255, .72) !important;
-  box-shadow: inset 0 1px 0 rgba(139, 212, 255, .10), 0 0 10px rgba(0, 136, 255, .10) !important;
+  background-color: rgba(2, 15, 33, .88) !important;
+  border-color: rgba(41, 126, 237, .58) !important;
+  box-shadow: inset 0 1px 0 rgba(91, 178, 255, .06) !important;
 }
 .workspace-theme.theme-dark-dynamic input:focus,
 .workspace-theme.theme-dark-dynamic textarea:focus,
@@ -1431,281 +1427,3 @@ select option {
     margin-right: 12px !important;
   }
 }
-
-
-/* OWNER'SLOCAL BUTTON HIERARCHY — STYLE ONLY
-   This intentionally overrides the older workspace rule that painted nearly
-   every button as the same glowing blue primary action. Existing markup,
-   handlers, labels, order, routing, billing, permissions and data are not
-   changed. Login and public signing/customer pages remain untouched. */
-#root .workspace-theme button,
-#root .ownerslocal-paywall-screen button {
-  box-sizing: border-box !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  border-radius: 12px !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
-  background-color: #EAF5FF !important;
-  background-image: none !important;
-  border: 1px solid #9EC8EF !important;
-  color: #1F3557 !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-
-/* Secondary buttons inherit this as the default action treatment. Keep all
-   nested icons/labels on the same navy hierarchy instead of allowing the
-   legacy force-white rule to leak through. */
-#root .workspace-theme button *,
-#root .ownerslocal-paywall-screen button * {
-  color: inherit !important;
-}
-
-/* Tertiary / text actions. */
-#root .workspace-theme button.bg-transparent,
-#root .workspace-theme button.border-transparent,
-#root .workspace-theme button[class*="underline"],
-#root .workspace-theme button[class*="text-[#315C9F]"]:not([class*="bg-"]),
-#root .workspace-theme button[class*="text-blue-"]:not([class*="bg-"]),
-#root .workspace-theme button[class*="text-sky-"]:not([class*="bg-"]),
-#root .ownerslocal-paywall-screen button.bg-transparent,
-#root .ownerslocal-paywall-screen button.border-transparent,
-#root .ownerslocal-paywall-screen button[class*="underline"],
-#root .ownerslocal-paywall-screen button[class*="text-[#315C9F]"]:not([class*="bg-"]),
-#root .ownerslocal-paywall-screen button[class*="text-blue-"]:not([class*="bg-"]),
-#root .ownerslocal-paywall-screen button[class*="text-sky-"]:not([class*="bg-"]) {
-  height: auto !important;
-  min-height: 44px !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  border-color: transparent !important;
-  color: #315C9F !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-
-/* Primary actions: explicit solid/gradient action buttons only. This restores
-   the hierarchy intended by the components instead of promoting every button.
-   Any non-destructive solid action with white text is treated as the one
-   dominant action in its existing action area. */
-#root .workspace-theme button[class~="bg-[#315C9F]"],
-#root .workspace-theme button[class~="bg-[#4A86F7]"],
-#root .workspace-theme button[class~="bg-[#3977EE]"],
-#root .workspace-theme button[class~="bg-[#4A9BFF]"],
-#root .workspace-theme button[class~="bg-blue-500"],
-#root .workspace-theme button[class~="bg-blue-600"],
-#root .workspace-theme button[class~="bg-sky-500"],
-#root .workspace-theme button[class~="bg-sky-600"],
-#root .workspace-theme button[class~="bg-indigo-500"],
-#root .workspace-theme button[class~="bg-indigo-600"],
-#root .workspace-theme button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]),
-#root .workspace-theme button[class*="text-white"][class*="from-"]:not([class*="from-red-"]):not([class*="from-rose-"]),
-#root .ownerslocal-paywall-screen button[class~="bg-[#315C9F]"],
-#root .ownerslocal-paywall-screen button[class~="bg-[#4A86F7]"],
-#root .ownerslocal-paywall-screen button[class~="bg-[#3977EE]"],
-#root .ownerslocal-paywall-screen button[class~="bg-[#4A9BFF]"],
-#root .ownerslocal-paywall-screen button[class~="bg-blue-500"],
-#root .ownerslocal-paywall-screen button[class~="bg-blue-600"],
-#root .ownerslocal-paywall-screen button[class~="bg-sky-500"],
-#root .ownerslocal-paywall-screen button[class~="bg-sky-600"],
-#root .ownerslocal-paywall-screen button[class~="bg-indigo-500"],
-#root .ownerslocal-paywall-screen button[class~="bg-indigo-600"],
-#root .ownerslocal-paywall-screen button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]),
-#root .ownerslocal-paywall-screen button[class*="text-white"][class*="from-"]:not([class*="from-red-"]):not([class*="from-rose-"]) {
-  height: 48px !important;
-  min-height: 48px !important;
-  border-radius: 12px !important;
-  padding-left: 20px !important;
-  padding-right: 20px !important;
-  background-color: #158CEB !important;
-  background-image: linear-gradient(135deg, #29B7F6 0%, #1485F4 58%, #3977EE 100%) !important;
-  border: 1px solid transparent !important;
-  color: #ffffff !important;
-  font-size: 14px !important;
-  font-weight: 700 !important;
-  box-shadow: 0 4px 12px rgba(14,165,233,0.28) !important;
-  text-shadow: none !important;
-}
-
-/* Destructive actions always stay red and never inherit the blue primary
-   treatment. */
-#root .workspace-theme button[class*="bg-red-"],
-#root .workspace-theme button[class*="bg-rose-"],
-#root .workspace-theme button[class*="text-red-"]:not([class*="bg-"]),
-#root .workspace-theme button[class*="text-rose-"]:not([class*="bg-"]),
-#root .ownerslocal-paywall-screen button[class*="bg-red-"],
-#root .ownerslocal-paywall-screen button[class*="bg-rose-"],
-#root .ownerslocal-paywall-screen button[class*="text-red-"]:not([class*="bg-"]),
-#root .ownerslocal-paywall-screen button[class*="text-rose-"]:not([class*="bg-"]) {
-  height: 44px !important;
-  min-height: 44px !important;
-  border-radius: 12px !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
-  background-color: #DC2626 !important;
-  background-image: none !important;
-  border: 1px solid #DC2626 !important;
-  color: #ffffff !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-
-/* Icon-only controls keep their location while meeting the 44px tap target. */
-#root .workspace-theme button:has(> svg:only-child),
-#root .ownerslocal-paywall-screen button:has(> svg:only-child) {
-  width: 44px !important;
-  min-width: 44px !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  padding: 0 !important;
-}
-
-/* Disabled state is deliberately quiet in every hierarchy tier. */
-#root .workspace-theme button:disabled,
-#root .workspace-theme button[aria-disabled="true"],
-#root .ownerslocal-paywall-screen button:disabled,
-#root .ownerslocal-paywall-screen button[aria-disabled="true"] {
-  opacity: 0.5 !important;
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-/* Hover/focus may provide feedback, but must not change hierarchy or create
-   the old neon glow. */
-#root .workspace-theme button:hover,
-#root .workspace-theme button:focus-visible,
-#root .ownerslocal-paywall-screen button:hover,
-#root .ownerslocal-paywall-screen button:focus-visible {
-  box-shadow: none !important;
-}
-#root .workspace-theme button[class~="bg-[#315C9F]"]:hover,
-#root .workspace-theme button[class~="bg-[#4A86F7]"]:hover,
-#root .workspace-theme button[class~="bg-[#3977EE]"]:hover,
-#root .workspace-theme button[class~="bg-[#4A9BFF]"]:hover,
-#root .workspace-theme button[class~="bg-blue-500"]:hover,
-#root .workspace-theme button[class~="bg-blue-600"]:hover,
-#root .workspace-theme button[class~="bg-sky-500"]:hover,
-#root .workspace-theme button[class~="bg-sky-600"]:hover,
-#root .workspace-theme button[class~="bg-indigo-500"]:hover,
-#root .workspace-theme button[class~="bg-indigo-600"]:hover,
-#root .workspace-theme button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]):hover,
-#root .ownerslocal-paywall-screen button[class~="bg-[#315C9F]"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-[#4A86F7]"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-[#3977EE]"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-[#4A9BFF]"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-blue-500"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-blue-600"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-sky-500"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-sky-600"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-indigo-500"]:hover,
-#root .ownerslocal-paywall-screen button[class~="bg-indigo-600"]:hover,
-#root .ownerslocal-paywall-screen button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]):hover {
-  box-shadow: 0 4px 12px rgba(14,165,233,0.28) !important;
-}
-
-/* Disabled state is the final cascade winner: never glow, including hover. */
-#root .workspace-theme button:disabled,
-#root .workspace-theme button[aria-disabled="true"],
-#root .ownerslocal-paywall-screen button:disabled,
-#root .ownerslocal-paywall-screen button[aria-disabled="true"] {
-  opacity: 0.5 !important;
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-
-/* ==========================================================================
-   DARK THEME FINISHING OVERRIDES
-   Keep the global button hierarchy introduced later in this file, but remap
-   its neutral secondary/tertiary surfaces back into the selected dark theme.
-   Light modes are intentionally untouched.
-   ========================================================================== */
-
-#root .workspace-theme.theme-dark-basic button {
-  background-color: var(--dark-surface-raised) !important;
-  background-image: none !important;
-  border-color: var(--dark-border-strong) !important;
-  color: var(--dark-text) !important;
-  box-shadow: none !important;
-}
-#root .workspace-theme.theme-dark-basic button.bg-transparent,
-#root .workspace-theme.theme-dark-basic button.border-transparent,
-#root .workspace-theme.theme-dark-basic button[class*="underline"],
-#root .workspace-theme.theme-dark-basic button[class*="text-[#315C9F]"]:not([class*="bg-"]),
-#root .workspace-theme.theme-dark-basic button[class*="text-blue-"]:not([class*="bg-"]),
-#root .workspace-theme.theme-dark-basic button[class*="text-sky-"]:not([class*="bg-"]) {
-  background-color: transparent !important;
-  background-image: none !important;
-  border-color: transparent !important;
-  color: #72a9ff !important;
-  box-shadow: none !important;
-}
-#root .workspace-theme.theme-dark-basic button[class~="bg-[#315C9F]"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-[#4A86F7]"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-[#3977EE]"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-[#4A9BFF]"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-blue-500"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-blue-600"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-sky-500"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-sky-600"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-indigo-500"],
-#root .workspace-theme.theme-dark-basic button[class~="bg-indigo-600"],
-#root .workspace-theme.theme-dark-basic button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]),
-#root .workspace-theme.theme-dark-basic button[class*="text-white"][class*="from-"]:not([class*="from-red-"]):not([class*="from-rose-"]) {
-  background-color: var(--dark-accent) !important;
-  background-image: linear-gradient(135deg, #2a7cff 0%, #145dff 62%, #0b46d8 100%) !important;
-  border-color: #3f7cff !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(20, 93, 255, .24) !important;
-}
-
-#root .workspace-theme.theme-dark-dynamic button {
-  background-color: var(--dynamic-surface-raised) !important;
-  background-image: linear-gradient(145deg, rgba(31, 78, 128, .32), rgba(5, 18, 47, .28)) !important;
-  border-color: var(--dynamic-border-soft) !important;
-  color: var(--dynamic-text) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(166, 225, 255, .12),
-    0 0 12px rgba(0, 158, 255, .16) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
-}
-#root .workspace-theme.theme-dark-dynamic button.bg-transparent,
-#root .workspace-theme.theme-dark-dynamic button.border-transparent,
-#root .workspace-theme.theme-dark-dynamic button[class*="underline"],
-#root .workspace-theme.theme-dark-dynamic button[class*="text-[#315C9F]"]:not([class*="bg-"]),
-#root .workspace-theme.theme-dark-dynamic button[class*="text-blue-"]:not([class*="bg-"]),
-#root .workspace-theme.theme-dark-dynamic button[class*="text-sky-"]:not([class*="bg-"]) {
-  background-color: transparent !important;
-  background-image: none !important;
-  border-color: transparent !important;
-  color: #69d7ff !important;
-  box-shadow: none !important;
-}
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-[#315C9F]"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-[#4A86F7]"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-[#3977EE]"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-[#4A9BFF]"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-blue-500"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-blue-600"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-sky-500"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-sky-600"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-indigo-500"],
-#root .workspace-theme.theme-dark-dynamic button[class~="bg-indigo-600"],
-#root .workspace-theme.theme-dark-dynamic button[class*="text-white"][class*="bg-"]:not([class*="bg-red-"]):not([class*="bg-rose-"]),
-#root .workspace-theme.theme-dark-dynamic button[class*="text-white"][class*="from-"]:not([class*="from-red-"]):not([class*="from-rose-"]) {
-  background-color: var(--dynamic-blue) !important;
-  background-image: linear-gradient(135deg, #19a6ff 0%, #145dff 58%, #1434d6 100%) !important;
-  border-color: #39d6ff !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(14,165,233,.28), 0 0 16px rgba(32, 184, 255, .24) !important;
-}
-#root .workspace-theme.theme-dark-basic button:disabled,
-#root .workspace-theme.theme-dark-basic button[aria-disabled="true"],
-#root .workspace-theme.theme-dark-dynamic button:disabled,
-#root .workspace-theme.theme-dark-dynamic button[aria-disabled="true"] {
-  opacity: .5 !important;
-  box-shadow: none !important;
-}
-
