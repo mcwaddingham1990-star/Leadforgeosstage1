@@ -11,6 +11,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data;
     }
 
+    // Reads the authenticated user's profile as it will exist after every
+    // write in the current atomic batch. Employee signup creates the profile,
+    // employee roster record, and invite redemption together, so rules that
+    // validate the latter two must see the just-created profile.
+    function getUserProfileAfter() {
+      return getAfter(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data;
+    }
+
     function getBusinessEmail() {
       return getUserProfile().businessEmail;
     }
@@ -322,11 +330,11 @@ service cloud.firestore {
             && request.resource.data.status == "completed"
             && request.resource.data.usedBy == request.auth.token.email
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "usedBy"])
-            && getUserProfile().inviteCode == code
-            && getUserProfile().businessEmail == resource.data.businessEmail
-            && getUserProfile().role == resource.data.role
-            && getUserProfile().permissions == resource.data.permissions
-            && getUserProfile().granularPermissions == resource.data.granularPermissions
+            && getUserProfileAfter().inviteCode == code
+            && getUserProfileAfter().businessEmail == resource.data.businessEmail
+            && getUserProfileAfter().role == resource.data.role
+            && getUserProfileAfter().permissions == resource.data.permissions
+            && getUserProfileAfter().granularPermissions == resource.data.granularPermissions
           )
         );
 
@@ -343,11 +351,11 @@ service cloud.firestore {
         || (
           request.auth.token.email == email
           && request.resource.data.userUid == request.auth.uid
-          && request.resource.data.businessEmail == getBusinessEmail()
-          && request.resource.data.businessId == getBusinessEmail()
-          && request.resource.data.role == getUserProfile().role
-          && request.resource.data.permissions == getUserProfile().get("permissions", [])
-          && request.resource.data.granularPermissions == getUserProfile().get("granularPermissions", {})
+          && request.resource.data.businessEmail == getUserProfileAfter().businessEmail
+          && request.resource.data.businessId == getUserProfileAfter().businessEmail
+          && request.resource.data.role == getUserProfileAfter().role
+          && request.resource.data.permissions == getUserProfileAfter().get("permissions", [])
+          && request.resource.data.granularPermissions == getUserProfileAfter().get("granularPermissions", {})
         )
       );
 
