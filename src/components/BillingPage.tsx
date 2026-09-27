@@ -133,7 +133,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-5 animate-fade-in text-[#1F3557] max-w-2xl">
+    <div className="ownerslocal-paywall-billing flex-1 flex flex-col gap-5 animate-fade-in text-[#1F3557] max-w-2xl">
       <div className="flex items-center gap-2">
         <Receipt className="w-5 h-5 text-[#315C9F]" />
         <h1 className="text-lg font-black">Billing</h1>
@@ -203,12 +203,12 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
       )}
 
       {!subscription.loading && !subscription.subscriptionActive && !freeAccessActive && (
-        <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 space-y-2">
+        <div className="ownerslocal-paywall-access-panel bg-white border border-[#DDE8F5] rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F3557]">
             <KeyRound className="w-3.5 h-3.5 text-[#315C9F]" />
             Enter a discount or access code
           </div>
-          <div className="flex gap-2">
+          <div className="ownerslocal-paywall-access-row flex gap-2">
             <input
               type="password"
               autoComplete="off"
@@ -216,12 +216,12 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
               onChange={e => setAccessCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submitAccessCode()}
               placeholder="Enter code"
-              className="flex-1 px-3 py-2 text-xs border border-[#DDE8F5] rounded-xl focus:outline-none focus:border-[#315C9F]"
+              className="ownerslocal-paywall-access-input flex-1 px-3 py-2 text-xs border border-[#DDE8F5] rounded-xl focus:outline-none focus:border-[#315C9F]"
             />
             <button
               onClick={submitAccessCode}
               disabled={isRedeeming || !accessCode.trim()}
-              className="px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer flex items-center gap-1.5"
+              className="ownerslocal-paywall-apply-code px-4 py-2 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase cursor-pointer flex items-center gap-1.5"
             >
               {isRedeeming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply Code"}
             </button>
@@ -232,13 +232,13 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
 
       {subscription.configured && !subscription.subscriptionActive && !freeAccessActive && !subscription.loading && (
         <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 flex items-baseline gap-2">
-          <span className="text-2xl font-black text-[#1F3557]">{FIRST_MONTH_PRICE}</span>
-          <span className="text-xs text-slate-500">first month, then {REGULAR_PRICE}/month. Cancel anytime.</span>
+          <span className="ownerslocal-paywall-price text-2xl font-black text-[#1F3557]">{FIRST_MONTH_PRICE}</span>
+          <span className="ownerslocal-paywall-price-detail text-xs text-slate-500">first month, then {REGULAR_PRICE}/month. Cancel anytime.</span>
         </div>
       )}
 
       {!subscription.loading && (
-        <div className="bg-white border border-[#DDE8F5] rounded-2xl p-4 text-xs text-slate-600 space-y-1">
+        <div className="ownerslocal-paywall-plan-details bg-white border border-[#DDE8F5] rounded-2xl p-4 text-xs text-slate-600 space-y-1">
           <div className="font-bold text-[#1F3557]">
             Includes you (the owner) plus {subscription.seatPricing.includedEmployees} employees.
           </div>
@@ -254,12 +254,12 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="ownerslocal-paywall-actions flex flex-wrap gap-2">
         {subscription.configured && !subscription.subscriptionActive && !freeAccessActive && !subscription.isAdminBusiness && (
           <button
             onClick={startCheckout}
             disabled={isRedirecting !== null}
-            className="px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+            className="ownerslocal-paywall-subscribe px-4 py-2.5 bg-[#315C9F] hover:bg-[#1F3557] disabled:opacity-50 text-white text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
           >
             {isRedirecting === "checkout" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
             Subscribe
@@ -269,7 +269,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
           <button
             onClick={openBillingPortal}
             disabled={isRedirecting !== null}
-            className="px-4 py-2.5 bg-white hover:bg-[#E3F3FF] disabled:opacity-50 text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
+            className="ownerslocal-paywall-manage-billing px-4 py-2.5 bg-white hover:bg-[#E3F3FF] disabled:opacity-50 text-[#315C9F] border border-[#A9CDEE] text-xs font-bold rounded-xl uppercase flex items-center gap-1.5 cursor-pointer"
           >
             {isRedirecting === "portal" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Receipt className="w-3.5 h-3.5" />}
             Manage Billing
