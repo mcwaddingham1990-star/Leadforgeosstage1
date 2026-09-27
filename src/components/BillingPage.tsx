@@ -138,7 +138,7 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
         <Receipt className="w-5 h-5 text-[#315C9F]" />
         <h1 className="text-lg font-black">Billing</h1>
       </div>
-      <p className="text-xs text-slate-500 -mt-3">
+      <p className="ownerslocal-paywall-detail text-xs text-slate-500 -mt-3">
         This page manages your Owner’sLOCAL subscription. To accept payments from customers, open Payments and connect Stripe.
       </p>
 
