@@ -20,7 +20,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
-import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch } from "firebase/firestore";
 
 const PROJECT_ID = "demo-ownerslocal-security-test";
 
@@ -337,6 +337,33 @@ describe("Employee record tampering is blocked", () => {
   test("the owner can still administer employee records", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
     await assertSucceeds(updateDoc(doc(db, "employees", EMP_A_EMAIL), { hourlyRate: 30 }));
+  });
+
+  test("the owner can atomically keep roster permissions and login permissions in sync", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    const permissions = ["customers", "jobs", "roster"];
+    const granularPermissions = {
+      customers: { view: true, edit: true, delete: false },
+      jobs: { view: true, edit: true, delete: false },
+      roster: { view: true, edit: false, delete: false },
+    };
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, "employees", EMP_A_EMAIL), {
+      role: "Custom Operations",
+      permissions,
+      granularPermissions,
+    });
+    batch.update(doc(db, "user_profiles", EMP_A_UID), {
+      role: "Custom Operations",
+      permissions,
+      granularPermissions,
+    });
+
+    await assertSucceeds(batch.commit());
+
+    expect((await getDoc(doc(db, "employees", EMP_A_EMAIL))).data()?.role).toBe("Custom Operations");
+    expect((await getDoc(doc(db, "user_profiles", EMP_A_UID))).data()?.role).toBe("Custom Operations");
   });
 });
 
@@ -913,6 +940,96 @@ describe("Employee invite credential security", () => {
       granularPermissions: { customers: { view: true, edit: false, delete: false } },
       status: "pending",
     }));
+  });
+
+  test("employee signup can atomically create profile + roster record + redeem invite", async () => {
+    const uid = "atomic-new-emp-uid";
+    const email = "atomicnewemp@example.com";
+    const db = ctxFor(uid, email).firestore();
+    const batch = writeBatch(db);
+
+    batch.set(doc(db, "user_profiles", uid), {
+      businessEmail: BIZ_A,
+      role: "Technician",
+      isEmployee: true,
+      inviteCode: "INVITE_A_TECH",
+      name: "Atomic Employee",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
+    });
+
+    batch.set(doc(db, "employees", email), {
+      id: email,
+      userUid: uid,
+      email,
+      firstName: "Atomic",
+      lastName: "Employee",
+      role: "Technician",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
+      businessEmail: BIZ_A,
+      businessId: BIZ_A,
+    });
+
+    batch.update(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      status: "completed",
+      usedBy: email,
+    });
+
+    await assertSucceeds(batch.commit());
+
+    expect((await getDoc(doc(db, "user_profiles", uid))).exists()).toBe(true);
+    expect((await getDoc(doc(db, "employees", email))).exists()).toBe(true);
+    expect((await getDoc(doc(db, "employee_invites", "INVITE_A_TECH"))).data()?.status).toBe("completed");
+  });
+
+  test("atomic employee signup rejects a roster permission payload that does not match the invite", async () => {
+    const uid = "atomic-forged-emp-uid";
+    const email = "atomicforged@example.com";
+    const db = ctxFor(uid, email).firestore();
+    const batch = writeBatch(db);
+
+    batch.set(doc(db, "user_profiles", uid), {
+      businessEmail: BIZ_A,
+      role: "Technician",
+      isEmployee: true,
+      inviteCode: "INVITE_A_TECH",
+      permissions: ["customers", "jobs"],
+      granularPermissions: {
+        customers: { view: true, edit: false, delete: false },
+        jobs: { view: true, edit: true, delete: false },
+      },
+    });
+
+    batch.set(doc(db, "employees", email), {
+      id: email,
+      userUid: uid,
+      email,
+      firstName: "Atomic",
+      lastName: "Forged",
+      role: "Owner",
+      permissions: ["customers", "jobs", "roster"],
+      granularPermissions: {
+        customers: { view: true, edit: true, delete: true },
+        jobs: { view: true, edit: true, delete: true },
+        roster: { view: true, edit: true, delete: true },
+      },
+      businessEmail: BIZ_A,
+      businessId: BIZ_A,
+    });
+
+    batch.update(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      status: "completed",
+      usedBy: email,
+    });
+
+    await assertFails(batch.commit());
   });
 
   test("a redeemed employee can only mark their exact invite completed", async () => {
