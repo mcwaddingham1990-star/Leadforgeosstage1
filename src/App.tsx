@@ -162,6 +162,7 @@ import {
 } from "./initialData";
 import { validateConnection } from "./lib/firestoreService";
 import { onSyncError } from "./lib/syncErrorBus";
+import { waitForPersistenceQueue } from "./lib/persistenceQueue";
 import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
 import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
@@ -3871,10 +3872,11 @@ Access to full financial telemetry is restricted.`;
     };
 
     try {
-      // Collection setters are optimistic. Flush every Firestore write queued
-      // by the current account before revoking its auth permissions, otherwise
-      // a quick Save -> Logout can leave data visible locally but never
-      // persisted on the server.
+      // Collection setters are optimistic. First wait for app-level queued
+      // sync work (including serialized saves and retry delays), then wait for
+      // the Firebase SDK's own pending network writes before revoking auth.
+      // This makes Save -> Logout -> Login persistence deterministic.
+      await waitForPersistenceQueue();
       await waitForPendingWrites(db);
       await signOut(auth);
       clearSessionUi();
