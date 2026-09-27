@@ -8740,7 +8740,7 @@ Access to full financial telemetry is restricted.`;
                         
                         <div className="text-center pt-2">
                           <button
-                            onClick={() => setRevenueConfirmAction({ label: "Complete Payroll & Wages", icon: "👥" })}
+                            onClick={() => navigateToScreen("roster")}
                             className="text-[#315C9F] hover:text-[#1F3557] font-bold text-xs hover:underline inline-flex items-center gap-1 cursor-pointer"
                           >
                             View Employees
