@@ -756,17 +756,28 @@ export const LeadsPage: React.FC = () => {
               defaultValue=""
               onChange={(event) => {
                 const action = event.target.value;
-                if (action === "customer") onOpenPlaceholder("Convert Lead to Customer Profile", "👤");
+                if (action === "customer") {
+                  if (selectedLead) {
+                    handleConvertLead();
+                  } else {
+                    onNavigateToScreen("customers");
+                    triggerNotification?.("Open Add Customer, or open a lead and use Convert to Client to carry its details over.");
+                  }
+                }
                 if (action === "estimate") {
                   if (selectedLead) openEstimateFromLead(selectedLead);
                   else triggerNotification?.("Select a lead before creating an estimate.");
                 }
                 if (action === "schedule") {
-                  if (onNavigateToScreen) onNavigateToScreen("scheduling");
-                  else onOpenPlaceholder("Lead Dispatch Calendar", "📅");
+                  onNavigateToScreen("scheduling");
                 }
-                if (action === "message") onOpenPlaceholder("Lead SMS & Email Board", "💬");
-                if (action === "follow-up") onOpenPlaceholder("Lead Follow-Up Automator", "⏰");
+                if (action === "message") {
+                  onNavigateToScreen("messages");
+                }
+                if (action === "follow-up") {
+                  onNavigateToScreen("scheduling");
+                  triggerNotification?.("Create a Follow-Up event from Scheduling.");
+                }
                 event.currentTarget.value = "";
               }}
               className="w-full px-3 py-2.5 bg-[#EAF5FF] border border-[#9EC8EF] rounded-xl text-xs font-bold text-[#1F3557] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#6FAFE7]"

@@ -506,6 +506,29 @@ export const EstimatesPage: React.FC = () => {
     setIsEditMode(false);
   };
 
+  const duplicateEstimate = (source: Estimate) => {
+    const duplicate: Estimate = {
+      ...source,
+      id: `est_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      number: generateEstimateNumber(),
+      status: "Draft",
+      createdDate: formatEstimateDate(new Date()),
+      expirationDate: estimateExpirationDate(),
+      lineItems: source.lineItems?.map(line => ({
+        ...line,
+        id: `eli_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
+      }))
+    };
+    if (setEstimates) {
+      setEstimates(prev => [duplicate, ...prev]);
+    } else {
+      setLocalEstimates(prev => [duplicate, ...prev]);
+    }
+    openViewModal(duplicate);
+    logOperationalEvent?.("Estimate Duplicated", `${source.number} copied to ${duplicate.number}`, "📋", { screen: "estimates" });
+    triggerNotification(`Duplicated ${source.number} as ${duplicate.number}.`);
+  };
+
   const closeEstimateActionMenu = () => {
     setActionMenuEstimate(null);
     setActionMenuPosition(null);
@@ -1452,6 +1475,10 @@ export const EstimatesPage: React.FC = () => {
                     const target = selectedEstimate || estimates[0];
                     if (target) void generateEstimatePdf(target);
                     else triggerNotification("Create or select an estimate first.");
+                  } else if (btn.label === "Duplicate Estimate") {
+                    const target = selectedEstimate || estimates[0];
+                    if (target) duplicateEstimate(target);
+                    else triggerNotification("Create or select an estimate first.");
                   } else if (btn.label === "Convert to Job") {
                     if (convertibleEstimates.length === 0) {
                       triggerNotification("No signed or accepted estimates are waiting to be converted.");
@@ -1461,15 +1488,11 @@ export const EstimatesPage: React.FC = () => {
                       setIsConversionPickerOpen(true);
                     }
                   } else if (btn.label === "Schedule Appointment") {
-                    if (onNavigateToScreen) {
-                      onNavigateToScreen("scheduling");
-                    } else {
-                      onOpenPlaceholder("scheduling", "📅");
-                    }
+                    onNavigateToScreen("scheduling");
                   } else if (btn.label === "Message Customer") {
-                    onNavigateToScreen?.("messages");
-                  } else {
-                    onOpenPlaceholder(`${btn.label} Action`, btn.icon);
+                    onNavigateToScreen("messages");
+                  } else if (btn.label === "View Documents") {
+                    onNavigateToScreen("documents");
                   }
                 }}
                 className="p-3.5 bg-[#EAF5FF] hover:bg-[#BDDDF8] border border-[#9EC8EF]/60 text-[#1F3557] font-extrabold rounded-xl text-[10.5px] uppercase tracking-wide transition-all cursor-pointer text-center flex flex-col items-center justify-center gap-1.5 shadow-2xs"
@@ -1507,7 +1530,13 @@ export const EstimatesPage: React.FC = () => {
             ].map((card) => (
               <div
                 key={card.title}
-                onClick={() => onOpenPlaceholder(`AI Recommendation: ${card.title}`, "🤖")}
+                onClick={() => {
+                  const target = selectedEstimate || estimates[0];
+                  const estimateContext = target
+                    ? `Focus on ${card.title} for estimate ${target.number}: customer ${target.customerName}, status ${target.status}, amount ${target.amount.toFixed(2)}, scope ${target.projectSpecifics || target.notes || "not provided"}.`
+                    : `Focus on ${card.title} for the Estimates & Bids page using the real estimate data currently shown.`;
+                  onOpenAIAnalysis("estimates", `Estimates & Bids — ${card.title}`, estimateContext);
+                }}
                 className={`p-3 rounded-xl border ${card.color} text-slate-800 hover:scale-[1.02] cursor-pointer transition-all flex flex-col justify-between h-20 shadow-2xs text-left group`}
               >
                 <div className="flex justify-between items-start">
@@ -1544,7 +1573,11 @@ export const EstimatesPage: React.FC = () => {
           {activities.map((act) => (
             <div
               key={act.id}
-              onClick={() => onOpenPlaceholder(`Activity Details: ${act.type}`, "📋")}
+              onClick={() => {
+                const estimate = estimates.find(item => item.id === act.id);
+                if (estimate) openViewModal(estimate);
+                else triggerNotification("That estimate is no longer available.");
+              }}
               className="p-3.5 bg-[#F5FAFF] hover:bg-[#EAF5FF] border border-[#9EC8EF]/40 rounded-xl flex items-start gap-3 cursor-pointer transition-all shadow-2xs text-left"
             >
               <span className="text-lg select-none shrink-0">{act.icon}</span>
