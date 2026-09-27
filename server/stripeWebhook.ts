@@ -4,6 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
+import { processStripeEventOnce } from "./stripeWebhookDelivery";
 
 let adminApp: App | null | undefined;
 function getAdminApp(): App | null {
@@ -23,20 +24,27 @@ function getAdminApp(): App | null {
 }
 
 /**
- * Idempotency guard keyed by Stripe's own permanent event.id -- Stripe can
- * (and does) redeliver the same webhook event more than once (retries,
- * manual resends from the Dashboard). Recording the id BEFORE processing
- * means a near-simultaneous duplicate delivery sees it too.
+ * Existing event records are treated as completed for backward compatibility.
+ * New deliveries are recorded only AFTER routeEvent succeeds.
  */
 async function wasAlreadyProcessed(eventId: string): Promise<boolean> {
   const app = getAdminApp();
-  if (!app) return false; // Not configured -- nothing to dedup against; let it through.
+  if (!app) return false;
   const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
-  const ref = db.collection("stripe_webhook_events").doc(eventId);
-  const snap = await ref.get();
-  if (snap.exists) return true;
-  await ref.set({ id: eventId, source: "platform", processedAt: new Date().toISOString() });
-  return false;
+  const snap = await db.collection("stripe_webhook_events").doc(eventId).get();
+  return snap.exists;
+}
+
+async function markProcessed(eventId: string): Promise<void> {
+  const app = getAdminApp();
+  if (!app) throw new Error("Firebase Admin is not configured for Stripe webhook idempotency.");
+  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+  await db.collection("stripe_webhook_events").doc(eventId).set({
+    id: eventId,
+    source: "platform",
+    status: "processed",
+    processedAt: new Date().toISOString()
+  });
 }
 
 // Verifies the request actually came from Stripe (not a forged POST from
@@ -66,22 +74,22 @@ export async function handleStripeWebhook(req: Request, res: Response) {
     return;
   }
 
-  // Acknowledge immediately -- Stripe retries on anything but a fast 2xx,
-  // and none of the handling below needs to finish before responding.
-  res.status(200).json({ received: true });
-
   try {
-    if (await wasAlreadyProcessed(event.id)) {
+    const result = await processStripeEventOnce({
+      eventId: event.id,
+      alreadyProcessed: wasAlreadyProcessed,
+      process: () => routeEvent(event),
+      markProcessed,
+    });
+    if (result === "duplicate") {
       console.log(`[stripe] ${event.type} (${event.id}) already processed -- skipping duplicate delivery.`);
-      return;
     }
-    await routeEvent(event);
+    // Only acknowledge AFTER the state change and idempotency marker both
+    // succeed. A transient failure returns 500 so Stripe will retry.
+    res.status(200).json({ received: true });
   } catch (err) {
-    // Nothing to do about a failure after the 200 has already gone out --
-    // log it so it's visible, rather than throwing into an unhandled
-    // rejection. Stripe's own Dashboard also records delivery + payload
-    // for every event, so this is a convenience log, not the only record.
     console.error(`Error handling Stripe event ${event.type} (${event.id}):`, err);
+    res.status(500).json({ error: "Stripe event processing failed; retry requested." });
   }
 }
 
@@ -105,7 +113,7 @@ async function syncSubscriptionState(subscription: Stripe.Subscription): Promise
     return;
   }
   const app = getAdminApp();
-  if (!app) return;
+  if (!app) throw new Error("Firebase Admin is not configured for subscription webhook processing.");
   const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
   const item = subscription.items.data[0];
   await db.collection("business_profiles").doc(businessId).set(

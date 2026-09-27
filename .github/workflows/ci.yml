@@ -24,8 +24,8 @@ jobs:
       - run: npm ci
       - name: TypeScript check
         run: npm run lint
-      - name: Data, workflow, persistence, and estimate pricing regression tests
-        run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts
+      - name: Data, workflow, persistence, Stripe, and estimate pricing regression tests
+        run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts tests/stripeWebhookDelivery.test.ts
       - name: Production build
         run: npm run build
 
