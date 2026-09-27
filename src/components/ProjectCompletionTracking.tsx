@@ -9,6 +9,7 @@ import { approveCompletionMaterial } from "../lib/completionService";
 import { useDomainData } from "../context/DomainDataContext";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { ReviewRequestControls } from "./ReviewRequestControls";
+import { useNavTelemetry } from "../context/NavTelemetryContext";
 
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const now = () => new Date().toISOString();
@@ -31,6 +32,7 @@ export function ProjectCompletionTracking(props: {
   const { job, plan, businessId, actor, canManage, canCreate = canManage, canRespond = false, inline = false, inventory, setPlans, setDocuments, onClose, notify, onSkip, onRemindLater } = props;
   const { loggedInUser } = useAuth();
   const { customers, setSchedulingEvents } = useDomainData();
+  const { navigateToScreen } = useNavTelemetry();
   const [draft, setDraft] = useState<ProjectCompletionPlan | null>(plan || null);
   const [busy, setBusy] = useState(false);
   const [showInlineSetup, setShowInlineSetup] = useState(false);
@@ -129,6 +131,50 @@ export function ProjectCompletionTracking(props: {
       setPlans(prev => prev.filter(item => item.id !== draft.id)); onClose();
     });
   };
+  const approveFinalCloseout = () => {
+    if (!canManage || !draft || draft.finalCloseoutApproved) return;
+    const stamp = now();
+
+    persist({
+      ...draft,
+      finalCloseoutApproved: true,
+      finalCloseoutApprovedBy: actor,
+      finalCloseoutApprovedAt: stamp
+    }, "Final project closeout approved");
+
+    // Final closeout is the actual Jobs -> Invoice handoff. Previously this
+    // only changed the completion-plan flag, leaving the underlying Job open
+    // forever and forcing the owner to manually rebuild the billing context.
+    setSchedulingEvents(prev => prev.map(item => item.id === job.id ? {
+      ...item,
+      status: "Completed",
+      updatedAt: stamp,
+      activity: [
+        ...(item.activity || []),
+        {
+          id: id("act"),
+          timestamp: stamp,
+          action: "Final project closeout approved — job completed",
+          by: actor
+        }
+      ]
+    } : item));
+
+    sessionStorage.setItem("ownerslocal_pending_invoice_create", "1");
+    sessionStorage.setItem("ownerslocal_pending_invoice_prefill", JSON.stringify({
+      jobId: job.id,
+      estimateId: job.sourceEstimateId || "",
+      customerId: job.customerId || "",
+      customerName: job.customer || "",
+      description: job.title || job.description || "Completed job",
+      amount: Number(job.budget) || 0
+    }));
+
+    notify("Final closeout approved. Job marked Completed and the invoice is ready to review.");
+    onClose();
+    navigateToScreen("accounting");
+  };
+
   const addMaterial = (goal: CompletionGoal, inventoryItemId: string, quantity: number, notes: string) => {
     const item = inventory.find(entry => entry.id === inventoryItemId);
     if (!item || quantity <= 0) return notify("Select an inventory item and enter a quantity greater than zero.");
@@ -213,7 +259,7 @@ export function ProjectCompletionTracking(props: {
       {canManage&&<button onClick={()=>persist({...draft,goals:[...draft.goals,blankGoal()]},"Goal created")} className="w-full rounded-xl border-2 border-dashed border-[#4A86F7] bg-blue-50 px-4 py-3 text-xs font-black text-[#315C9F]"><Plus className="mr-1 inline h-4 w-4"/>Add Project Completion Goal</button>}
       <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Review Requests</h4><div className="mt-3"><ReviewRequestControls customer={resolveCustomerByIdOrName(customers, job.customerId, job.customer)} jobId={job.id} jobDescription={job.title || job.description} /></div><label className="mt-3 flex items-center gap-2 text-[11px] font-bold text-slate-600"><input type="checkbox" checked={!!job.reviewRequestExcluded} onChange={e=>setSchedulingEvents(prev=>prev.map(j=>j.id===job.id?{...j,reviewRequestExcluded:e.target.checked}:j))}/>Don't automatically request a review for this job</label></section>
       <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Activity History</h4><div className="mt-3 max-h-64 space-y-2 overflow-y-auto">{[...draft.activity].reverse().map(item=><div key={item.id} className="border-l-2 border-blue-300 pl-3"><p className="text-xs font-bold">{item.action}{item.detail?` — ${item.detail}`:""}</p><p className="text-[9px] text-slate-400">{new Date(item.at).toLocaleString()} · {item.by}</p></div>)}</div></section>
-      {canManage&&<div className="flex flex-wrap justify-between gap-2"><button onClick={deletePlan} className="rounded-xl bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700"><Trash2 className="mr-1 inline h-4 w-4"/>Delete Plan</button><button disabled={draft.finalCloseoutApproved} onClick={()=>persist({...draft,finalCloseoutApproved:true,finalCloseoutApprovedBy:actor,finalCloseoutApprovedAt:now()},"Final project closeout approved")} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{draft.finalCloseoutApproved?"Closeout Approved":"Approve Final Closeout"}</button></div>}
+      {canManage&&<div className="flex flex-wrap justify-between gap-2"><button onClick={deletePlan} className="rounded-xl bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700"><Trash2 className="mr-1 inline h-4 w-4"/>Delete Plan</button><button disabled={draft.finalCloseoutApproved} onClick={approveFinalCloseout} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50">{draft.finalCloseoutApproved?"Closeout Approved":"Approve Final Closeout"}</button></div>}
     </div>
   </Modal>
   {confirmState && <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={e=>e.target===e.currentTarget&&setConfirmState(null)}><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><p className="text-sm font-bold text-[#1F3557]">{confirmState.message}</p><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setConfirmState(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100">Cancel</button><button onClick={()=>{const run=confirmState.onConfirm;setConfirmState(null);run();}} className="rounded-xl bg-[#315C9F] px-4 py-2 text-xs font-black text-white">Confirm</button></div></div></div>}
