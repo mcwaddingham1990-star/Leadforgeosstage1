@@ -46,6 +46,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence
 } from "firebase/auth";
+import type { User as FirebaseUser } from "firebase/auth";
 import { Capacitor } from "@capacitor/core";
 import { 
   Mail, 
@@ -4427,7 +4428,7 @@ Access to full financial telemetry is restricted.`;
   // Complete Employee Onboarding Flow
   const handleCompleteEmployeeOnboarding = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = empEmail.trim();
+    const cleanEmail = empEmail.trim().toLowerCase();
     if (!cleanEmail || !empPassword || !empFirstName || !empLastName || !empPhone || !empAddress) {
       triggerNotification("Please fill in all required employee fields.");
       return;
@@ -4459,6 +4460,11 @@ Access to full financial telemetry is restricted.`;
         return;
       }
       const inviteData = inviteSnap.data();
+      if (inviteData.status !== "pending") {
+        triggerNotification("This invite code has already been used or cancelled. Please ask your owner for a new invite.");
+        setIsSubmitting(false);
+        return;
+      }
       inviteRole = inviteData.role || inviteRole;
       invitePermissions = inviteData.permissions || invitePermissions;
       inviteGranularPermissions = inviteData.granularPermissions || inviteGranularPermissions;
@@ -4478,35 +4484,57 @@ Access to full financial telemetry is restricted.`;
     }
 
     try {
-      // Creating a Firebase Auth user switches auth.currentUser immediately.
-      // Finish any writes from the current account first so account creation
-      // cannot interrupt a just-saved Job (or any other business record).
+      // Creating/signing into a Firebase Auth user switches auth.currentUser
+      // immediately. Drain both app-level queued saves and Firebase writes
+      // before changing identities.
+      await waitForPersistenceQueue();
       await waitForPendingWrites(db);
 
-      // 1. Create real Auth User
-      const authResult = await createUserWithEmailAndPassword(auth, cleanEmail, empPassword);
-      const user = authResult.user;
+      // 1. Create the Auth user. If a prior registration attempt created Auth
+      // but its Firestore commit failed, allow the employee to submit the same
+      // invite/email/password again and repair that orphaned attempt.
+      let user: FirebaseUser;
+      try {
+        user = (await createUserWithEmailAndPassword(auth, cleanEmail, empPassword)).user;
+      } catch (authErr: any) {
+        if (authErr?.code !== "auth/email-already-in-use") throw authErr;
+        user = (await signInWithEmailAndPassword(auth, cleanEmail, empPassword)).user;
+      }
 
-      // 2. Initialize user_profile
-      await setDoc(doc(db, "user_profiles", user.uid), {
-        role: inviteRole,
-        permissions: invitePermissions,
-        granularPermissions: inviteGranularPermissions,
-        isEmployee: true,
-        businessEmail,
-        // Lets firestore.rules' user_profiles create rule verify this
-        // businessEmail/role actually came from a real, still-open invite
-        // this business issued, instead of trusting whatever this new
-        // account itself claims.
-        inviteCode: empInviteCode,
-        requireTimeClockVerification: inviteRequiresClockVerification,
-        isOnboarded: true,
-        name: `${empFirstName} ${empLastName}`,
-        goals: empGoals,
-        createdAt: new Date().toISOString()
-      });
+      const profileRef = doc(db, "user_profiles", user.uid);
+      const employeeRef = doc(db, "employees", cleanEmail);
+      const inviteRef = doc(db, "employee_invites", empInviteCode);
 
-      // 3. Save detailed employees entry
+      const existingProfileSnap = await getDoc(profileRef);
+      let employeeAlreadyExists = false;
+
+      if (existingProfileSnap.exists()) {
+        const existingProfile = existingProfileSnap.data();
+        const matchesThisInvite =
+          existingProfile.isEmployee === true &&
+          existingProfile.businessEmail === businessEmail &&
+          existingProfile.inviteCode === empInviteCode &&
+          existingProfile.role === inviteRole;
+
+        if (!matchesThisInvite) {
+          throw new Error("This email is already registered to a different Owner'sLOCAL account.");
+        }
+
+        // A previous build could save profile + employee and then fail before
+        // completing the invite. In that repair case, don't rewrite the
+        // employee record as a self-update with payroll/role fields; just
+        // finish the still-pending invite atomically.
+        const existingEmployeeSnap = await getDoc(employeeRef);
+        if (existingEmployeeSnap.exists()) {
+          const existingEmployee = existingEmployeeSnap.data();
+          if (existingEmployee.userUid !== user.uid || existingEmployee.businessEmail !== businessEmail) {
+            throw new Error("This email is already linked to a different employee record.");
+          }
+          employeeAlreadyExists = true;
+        }
+      }
+
+      const now = new Date().toISOString();
       const newEmployee = {
         id: cleanEmail,
         userUid: user.uid,
@@ -4524,18 +4552,45 @@ Access to full financial telemetry is restricted.`;
         requireTimeClockVerification: inviteRequiresClockVerification,
         gpsTrackingEnabled: inviteGpsTrackingEnabled,
         businessEmail,
-        // Also tagged as businessId (same value) so this collection is
-        // queryable through the same convention every other Firestore
-        // collection uses (see subscribeToCollection).
         businessId: businessEmail,
-        createdAt: new Date().toISOString()
+        createdAt: now
       };
-      await setDoc(doc(db, "employees", cleanEmail), newEmployee);
 
-      // 4. Update invite status
-      if (empInviteCode && empInviteCode !== "DRIVER-X4F91") {
-        await setDoc(doc(db, "employee_invites", empInviteCode), { status: "completed", usedBy: cleanEmail }, { merge: true });
+      // 2. Commit the login profile, roster record, and invite redemption as
+      // one Firestore batch. Either all three persist or none of them do.
+      const batch = writeBatch(db);
+
+      if (existingProfileSnap.exists()) {
+        batch.set(profileRef, {
+          isOnboarded: true,
+          goals: empGoals
+        }, { merge: true });
+      } else {
+        batch.set(profileRef, {
+          role: inviteRole,
+          permissions: invitePermissions,
+          granularPermissions: inviteGranularPermissions,
+          isEmployee: true,
+          businessEmail,
+          inviteCode: empInviteCode,
+          requireTimeClockVerification: inviteRequiresClockVerification,
+          isOnboarded: true,
+          name: `${empFirstName} ${empLastName}`,
+          goals: empGoals,
+          createdAt: now
+        });
       }
+
+      if (!employeeAlreadyExists) {
+        batch.set(employeeRef, newEmployee);
+      }
+
+      batch.update(inviteRef, {
+        status: "completed",
+        usedBy: cleanEmail
+      });
+
+      await batch.commit();
 
       let verificationEmailSent = false;
       try {
