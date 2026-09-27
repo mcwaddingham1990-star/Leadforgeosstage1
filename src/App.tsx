@@ -8239,8 +8239,8 @@ Access to full financial telemetry is restricted.`;
                                   card on this page. */}
                               {(() => {
                                 const jobCostingColumns: Array<{ key: string; header: string; bold: boolean; color: string; get: (r: typeof jobCostingRows[number]) => string }> = [
-                                  { key: "estPlus", header: "Estimated income", bold: false, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
-                                  { key: "estMinus", header: "Estimated costs", bold: false, color: "#FF1744", get: r => fmt(r.totalCost) },
+                                  { key: "estPlus", header: "pay est.", bold: false, color: "#00C853", get: r => fmt(r.estimatedRevenue) },
+                                  { key: "estMinus", header: "cost est.", bold: false, color: "#FF1744", get: r => fmt(r.totalCost) },
                                   { key: "labor", header: "Labor cost", bold: false, color: "#FF1744", get: r => fmt(r.laborCost) },
                                   { key: "material", header: "Material cost", bold: false, color: "#FF1744", get: r => fmt(r.materialCost) },
                                   { key: "other", header: "Other costs", bold: false, color: "#FF1744", get: r => fmt(r.otherCost) },
