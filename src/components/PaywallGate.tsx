@@ -21,9 +21,9 @@ interface PaywallGateProps {
  */
 export const PaywallGate: React.FC<PaywallGateProps> = ({ isEmployee, onLogout, onAccessGranted }) => {
   return (
-    <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
-      <div className="max-w-lg w-full space-y-5">
-        <div className="bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl p-6 space-y-4">
+    <div className="ownerslocal-paywall-screen min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4">
+      <div className="ownerslocal-paywall-shell max-w-lg w-full space-y-5">
+        <div className="ownerslocal-paywall-card bg-white rounded-3xl border-2 border-[#9EC8EF] shadow-xl p-6 space-y-4">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-[#E3F3FF] text-[#315C9F] rounded-xl border border-[#A9CDEE]">
               <Lock className="w-5 h-5" />
@@ -41,7 +41,7 @@ export const PaywallGate: React.FC<PaywallGateProps> = ({ isEmployee, onLogout, 
         </div>
         <button
           onClick={() => void onLogout()}
-          className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 text-xs font-bold rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+          className="ownerslocal-paywall-logout w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 text-xs font-bold rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" />
           Sign in to a different account
