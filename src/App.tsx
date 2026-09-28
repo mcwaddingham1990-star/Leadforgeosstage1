@@ -951,6 +951,21 @@ const OS_SCREENS = [
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
+const SIDEBAR_MENU = [
+  { type: "screen", id: "dashboard" },
+  { type: "screen", id: "ai_assistant" },
+  { type: "screen", id: "integrations" },
+  { type: "screen", id: "missed_call_textback" },
+  { type: "group", id: "finances", label: "Finances", iconScreenId: "revenue", items: ["revenue", "accounting", "payments", "billing"] },
+  { type: "group", id: "clientele", label: "Clientele", iconScreenId: "customers", items: ["customers", "leads", "estimates"] },
+  { type: "group", id: "jobs_group", label: "Jobs", iconScreenId: "jobs", items: ["scheduling", "dispatch", "routes", "employee_locations", "jobs"] },
+  { type: "group", id: "roster_group", label: "Roster", iconScreenId: "roster", items: ["timeclock", "payroll", "training", "roster"] },
+  { type: "group", id: "collectibles", label: "Collectibles", iconScreenId: "documents", items: ["inventory", "documents", "snapshots"] },
+  { type: "group", id: "communications", label: "Communications", iconScreenId: "messages", items: ["messages", "bulletins", "notifications"] },
+  { type: "screen", id: "settings" }
+] as const;
+
+
 
 /**
  * A bill's real expense cost for the Revenue graph -- prefers the amount
@@ -1748,6 +1763,7 @@ export default function App() {
 
   // New Sidebar & Workspace Simulation states
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [expandedSidebarGroups, setExpandedSidebarGroups] = useState<Record<string, boolean>>({});
   const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
   const [liveTime, setLiveTime] = useState(new Date());
 
@@ -6648,60 +6664,129 @@ Access to full financial telemetry is restricted.`;
 
               {/* Dynamic Menu List (Role-Based Visibility) */}
               <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-none">
-                {getVisibleScreens().filter(screen => screen.id !== "owner_console").map((screen) => {
-                  const isCurrent = activeScreen.id === screen.id;
-                  // Calculate unread count for this screen
-                  const pendingCustomerCount = screen.id === "customers" ? customers.filter(customer => customer.pendingConfirmation).length : 0;
-                  const unreadCount = Math.max(notifications.filter(n => n.screenId === screen.id && !n.isRead).length, pendingCustomerCount);
+                {(() => {
+                  const visibleScreens = getVisibleScreens().filter(screen => screen.id !== "owner_console");
+                  const visibleById = new Map(visibleScreens.map(screen => [screen.id, screen]));
 
-                  return (
-                    <button
-                      key={screen.id}
-                      onClick={() => {
-                        setActiveScreen(screen);
-                        setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
-                        triggerNotification(`Navigated to: ${screen.label}`);
-                      }}
-                      className={`sidebar-nav-btn w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
-                        isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
-                      } ${
-                        isCurrent
-                          ? "sidebar-nav-btn-active bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
-                          : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
-                      }`}
-                      title={screen.label}
-                    >
-                      {isSidebarCollapsed ? (
-                        /* Only show menu icons when collapsed */
-                        <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
-                          {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
-                        </span>
-                      ) : (
-                        /* Show both icon and label when expanded */
-                        <div className="flex items-center gap-2.5 w-full min-w-0">
+                  const renderScreenButton = (screen: (typeof OS_SCREENS)[number], isNested = false) => {
+                    const isCurrent = activeScreen.id === screen.id;
+                    const pendingCustomerCount = screen.id === "customers" ? customers.filter(customer => customer.pendingConfirmation).length : 0;
+                    const unreadCount = Math.max(notifications.filter(n => n.screenId === screen.id && !n.isRead).length, pendingCustomerCount);
+
+                    return (
+                      <button
+                        key={screen.id}
+                        onClick={() => {
+                          setActiveScreen(screen);
+                          setNotifications(prev => prev.map(n => n.screenId === screen.id ? { ...n, isRead: true } : n));
+                          triggerNotification(`Navigated to: ${screen.label}`);
+                        }}
+                        className={`sidebar-nav-btn rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
+                          isNested && !isSidebarCollapsed ? "ml-5 w-[calc(100%-1.25rem)] px-3 py-1.5" : "w-full"
+                        } ${
+                          isSidebarCollapsed ? "justify-center p-2" : !isNested ? "px-3 py-2" : ""
+                        } ${
+                          isCurrent
+                            ? "sidebar-nav-btn-active bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
+                            : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
+                        }`}
+                        title={screen.label}
+                      >
+                        {isSidebarCollapsed ? (
                           <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
                             {getScreenIcon(screen.id, "w-[18px] h-[18px] text-current")}
                           </span>
-                          <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
-                            {screen.label}
-                          </span>
-                        </div>
-                      )}
-                      
-                      {/* Badge for AI Assistant */}
-                      {!isSidebarCollapsed && screen.badge && (
-                        <span className="text-[7.5px] bg-[#1F3557]/10 text-[#1F3557] px-1 py-0.5 rounded font-black tracking-wider uppercase select-none">
-                          {screen.badge}
-                        </span>
-                      )}
+                        ) : (
+                          <div className="flex items-center gap-2.5 w-full min-w-0">
+                            <span className={`shrink-0 select-none ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                              {getScreenIcon(screen.id, isNested ? "w-4 h-4 text-current" : "w-[18px] h-[18px] text-current")}
+                            </span>
+                            <span className={`font-sans font-bold tracking-wide flex-1 text-left truncate ${isNested ? "text-[11px]" : "text-xs"} ${isCurrent ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                              {screen.label}
+                            </span>
+                          </div>
+                        )}
 
-                      {/* Subtle red notification dot next to menu item (no count, extremely refined!) */}
-                      {unreadCount > 0 && (
-                        <span className="absolute top-2 right-2 flex h-2 w-2 items-center justify-center rounded-full bg-red-500 ring-1 ring-white" />
-                      )}
-                    </button>
-                  );
-                })}
+                        {!isSidebarCollapsed && screen.badge && (
+                          <span className="text-[7.5px] bg-[#1F3557]/10 text-[#1F3557] px-1 py-0.5 rounded font-black tracking-wider uppercase select-none">
+                            {screen.badge}
+                          </span>
+                        )}
+
+                        {unreadCount > 0 && (
+                          <span className="absolute top-2 right-2 flex h-2 w-2 items-center justify-center rounded-full bg-red-500 ring-1 ring-white" />
+                        )}
+                      </button>
+                    );
+                  };
+
+                  return SIDEBAR_MENU.map((entry) => {
+                    if (entry.type === "screen") {
+                      const screen = visibleById.get(entry.id);
+                      return screen ? renderScreenButton(screen) : null;
+                    }
+
+                    const childScreens = entry.items
+                      .map(id => visibleById.get(id))
+                      .filter((screen): screen is (typeof OS_SCREENS)[number] => Boolean(screen));
+
+                    if (childScreens.length === 0) return null;
+
+                    const isExpanded = Boolean(expandedSidebarGroups[entry.id]);
+                    const containsCurrentScreen = childScreens.some(screen => screen.id === activeScreen.id);
+                    const showGroupAsActive = containsCurrentScreen && !isExpanded;
+
+                    return (
+                      <div key={entry.id} className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isSidebarCollapsed) {
+                              setIsSidebarCollapsed(false);
+                              setExpandedSidebarGroups(prev => ({ ...prev, [entry.id]: true }));
+                              return;
+                            }
+                            setExpandedSidebarGroups(prev => ({ ...prev, [entry.id]: !prev[entry.id] }));
+                          }}
+                          className={`sidebar-nav-btn w-full rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group ${
+                            isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
+                          } ${
+                            showGroupAsActive
+                              ? "sidebar-nav-btn-active bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
+                              : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
+                          }`}
+                          title={entry.label}
+                        >
+                          {isSidebarCollapsed ? (
+                            <span className={`shrink-0 select-none ${showGroupAsActive ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                              {getScreenIcon(entry.iconScreenId, "w-[18px] h-[18px] text-current")}
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-2.5 w-full min-w-0">
+                              <span className={`shrink-0 select-none ${showGroupAsActive ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                                {getScreenIcon(entry.iconScreenId, "w-[18px] h-[18px] text-current")}
+                              </span>
+                              <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${showGroupAsActive ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                                {entry.label}
+                              </span>
+                              {isExpanded ? (
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-current" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-current" />
+                              )}
+                            </div>
+                          )}
+                        </button>
+
+                        {!isSidebarCollapsed && isExpanded && (
+                          <div className="space-y-1">
+                            {childScreens.map(screen => renderScreenButton(screen, true))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
 
                 {/* Role preview card */}
                 {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
