@@ -43,6 +43,48 @@ jobs:
       - name: Core regression tests
         run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts tests/stripeWebhookDelivery.test.ts
 
+      - name: QA-only admin access fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("server/subscriptionRoutes.ts")
+          s = p.read_text()
+          needle = 'export async function handleGetSubscriptionStatus(req: Request, res: Response) {\n  try {\n'
+          patch = '''export async function handleGetSubscriptionStatus(req: Request, res: Response) {
+  try {
+    // QA runner only: GitHub does not have Render's Firebase Admin secret.
+    // Let the platform owner account exercise the app shell without changing
+    // production behavior. This source edit exists only in the ephemeral runner.
+    const qaCallerEmail = (req.firebaseUser?.email || "").trim().toLowerCase();
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && qaCallerEmail === "the.owner@ownerslocal.com") {
+      res.json({
+        configured: false,
+        hasBillingAccount: false,
+        subscriptionActive: false,
+        status: "qa-admin",
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        bypassActive: false,
+        bypassExpiresAt: null,
+        isAdminBusiness: true,
+        seatPricing: {
+          includedEmployees: 5,
+          employeesPerAdditionalBlock: 5,
+          additionalBlockPriceDollars: 20,
+          employeeCount: 0,
+          extraSeatBlocks: 0,
+          additionalMonthlyCostDollars: 0,
+        },
+      });
+      return;
+    }
+'''
+          if needle not in s:
+              raise SystemExit("QA patch target not found")
+          p.write_text(s.replace(needle, patch, 1))
+          PY
+
       - name: Production build
         run: npm run build
 
