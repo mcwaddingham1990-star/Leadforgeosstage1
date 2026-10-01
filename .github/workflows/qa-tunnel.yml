@@ -84,6 +84,17 @@ jobs:
           cat /tmp/cloudflared.log
           exit 1
 
+      - name: Save temporary URL
+        shell: bash
+        run: echo "$QA_TUNNEL_URL" > /tmp/qa-tunnel-url.txt
+
+      - name: Upload temporary URL
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-tunnel-url
+          path: /tmp/qa-tunnel-url.txt
+          retention-days: 1
+
       - name: Keep QA tunnel alive
         shell: bash
         run: |
