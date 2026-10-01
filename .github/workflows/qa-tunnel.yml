@@ -1,0 +1,104 @@
+name: Temporary Owner'sLOCAL QA Tunnel
+
+on:
+  push:
+    branches: [qa-live-tunnel-2026-09-30]
+  workflow_dispatch:
+
+jobs:
+  qa-tunnel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PORT: "8080"
+      DISABLE_HMR: "true"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_MAPS_PLATFORM_KEY: ${{ secrets.GOOGLE_MAPS_PLATFORM_KEY }}
+      GOOGLE_MAPS_MAP_ID: ${{ secrets.GOOGLE_MAPS_MAP_ID }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_BASE_PRICE: ${{ secrets.STRIPE_BASE_PRICE }}
+      STRIPE_ADDITIONAL_SEATS_PRICE: ${{ secrets.STRIPE_ADDITIONAL_SEATS_PRICE }}
+      STRIPE_CONNECT_WEBHOOK_SECRET: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+      FIREBASE_VAPID_KEY: ${{ secrets.FIREBASE_VAPID_KEY }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_DATABASE_ID: ai-studio-leadforgelocalos-a91c76d6-18b0-4f96-b3fb-ef1e755e81f4
+      RECURRING_CRON_SECRET: ${{ secrets.RECURRING_CRON_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Core regression tests
+        run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts tests/stripeWebhookDelivery.test.ts
+
+      - name: Production build
+        run: npm run build
+
+      - name: Start Owner'sLOCAL
+        shell: bash
+        run: |
+          nohup npm start > /tmp/ownerslocal.log 2>&1 &
+          echo $! > /tmp/ownerslocal.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              echo "Owner'sLOCAL is listening on 8080"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App failed to start"
+          cat /tmp/ownerslocal.log
+          exit 1
+
+      - name: Start temporary public tunnel
+        shell: bash
+        run: |
+          curl -L --fail --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          nohup /tmp/cloudflared tunnel --url http://127.0.0.1:8080 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
+          echo $! > /tmp/cloudflared.pid
+          for i in {1..60}; do
+            URL=$(grep -oE 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/cloudflared.log | head -n 1 || true)
+            if [ -n "$URL" ]; then
+              echo "QA_TUNNEL_URL=$URL" | tee -a "$GITHUB_ENV"
+              echo "### Temporary QA URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "QA_TUNNEL_URL=$URL"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Tunnel failed to start"
+          cat /tmp/cloudflared.log
+          exit 1
+
+      - name: Keep QA tunnel alive
+        shell: bash
+        run: |
+          echo "Temporary QA environment: $QA_TUNNEL_URL"
+          echo "Keeping tunnel alive for browser QA."
+          for i in {1..180}; do
+            if ! kill -0 "$(cat /tmp/ownerslocal.pid)" 2>/dev/null; then
+              echo "Owner'sLOCAL process exited"
+              cat /tmp/ownerslocal.log
+              exit 1
+            fi
+            if ! kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null; then
+              echo "Cloudflare tunnel process exited"
+              cat /tmp/cloudflared.log
+              exit 1
+            fi
+            sleep 30
+          done
