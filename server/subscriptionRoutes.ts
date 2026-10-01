@@ -141,6 +141,33 @@ function resolveAppUrl(req: Request): string {
 
 export async function handleGetSubscriptionStatus(req: Request, res: Response) {
   try {
+    // QA-BRANCH ONLY: GitHub's temporary runner does not have Render's
+    // FIREBASE_SERVICE_ACCOUNT_JSON. Let the platform owner account reach
+    // the app shell so browser QA can exercise the product. This branch is
+    // never deployed to production.
+    const qaCallerEmail = (req.firebaseUser?.email || "").trim().toLowerCase();
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && qaCallerEmail === "the.owner@ownerslocal.com") {
+      res.json({
+        configured: false,
+        hasBillingAccount: false,
+        subscriptionActive: false,
+        status: "qa-admin",
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        bypassActive: false,
+        bypassExpiresAt: null,
+        isAdminBusiness: true,
+        seatPricing: {
+          includedEmployees: INCLUDED_EMPLOYEES,
+          employeesPerAdditionalBlock: EMPLOYEES_PER_ADDITIONAL_BLOCK,
+          additionalBlockPriceDollars: ADDITIONAL_SEAT_PRICE_DOLLARS,
+          employeeCount: 0,
+          extraSeatBlocks: 0,
+          additionalMonthlyCostDollars: 0,
+        },
+      });
+      return;
+    }
     const businessId = await resolveCallerBusinessId(req.firebaseUser!.uid);
     if (!businessId) {
       res.status(503).json({ error: "Your account has no business linked yet." });
