@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { confirmJobCompletion } from "../lib/completionGuard";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
@@ -157,6 +158,8 @@ export const DispatchPage: React.FC = () => {
   );
 
   // Handle setting status / assigning dispatch
+  // Set while a completion the user already confirmed re-enters handleUpdateDispatch.
+  const completionConfirmedRef = useRef(false);
   const handleUpdateDispatch = (
     eventId: string,
     updates: {
@@ -171,6 +174,18 @@ export const DispatchPage: React.FC = () => {
       if (logOperationalEvent) {
         logOperationalEvent("Permission Denied", "Attempted to modify dispatch without write permissions", "⚠️");
       }
+      return;
+    }
+    const target = events.find(evt => evt.id === eventId);
+    if (updates.status === "Completed" && target?.eventType === "Job" && target.status !== "Completed" && !completionConfirmedRef.current) {
+      void confirmJobCompletion(eventId).then(ok => {
+        if (!ok) {
+          if (selectedEvent?.id === eventId) setSelectedEvent(prev => prev ? { ...prev, status: target.status as DispatchEvent["status"] } : null);
+          return;
+        }
+        completionConfirmedRef.current = true;
+        try { handleUpdateDispatch(eventId, updates); } finally { completionConfirmedRef.current = false; }
+      });
       return;
     }
 

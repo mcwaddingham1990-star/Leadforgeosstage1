@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { confirmJobCompletion } from "../lib/completionGuard";
 import { waitForPendingWrites } from "firebase/firestore";
 import { db } from "../firebase";
 import { Check, ChevronDown, ClipboardCheck, FileText, X } from "lucide-react";
@@ -165,6 +166,7 @@ export function BuildJobModal({
 
   const doSave = async (): Promise<SchedulingEvent | null> => {
     if (!canEdit) { triggerNotification("Your role cannot create or edit jobs."); return null; }
+    if (savedJob && form.status === "Completed" && normalizedStatus(savedJob) !== "Completed" && !(await confirmJobCompletion(savedJob.id))) return null;
     const customer = customerOptions.find(c => c.id === form.customerId);
     const customerName = form.customerName.trim();
     const customerPhone = form.customerPhone.trim();

@@ -154,6 +154,8 @@ import { StructuredAddressFields } from "./components/StructuredAddressFields";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
 import { MissedCallTextBackPage } from "./components/MissedCallTextBackPage";
+import { OwnerProtectionPage } from "./components/OwnerProtectionPage";
+import { CompletionGuard } from "./components/CompletionGuard";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
 import {
   INITIAL_DASHBOARD_LEADS,
@@ -950,11 +952,13 @@ const OS_SCREENS = [
   { id: "snapshots", label: "Snapshots Folder", url: "", icon: "📸", top: "82%", bottom: "87%" },
   { id: "notifications", label: "Notifications", url: "", icon: "🔔", top: "82%", bottom: "87%" },
   { id: "missed_call_textback", label: "Missed Call Text-Back", url: "", icon: "📵", top: "82%", bottom: "87%" },
+  { id: "owner_protection", label: "Money at Risk", url: "", icon: "🛡️", top: "12%", bottom: "17%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
 
 const SIDEBAR_MENU = [
   { type: "screen", id: "dashboard" },
+  { type: "screen", id: "owner_protection" },
   { type: "screen", id: "ai_assistant" },
   { type: "screen", id: "integrations" },
   { type: "screen", id: "missed_call_textback" },
@@ -1348,6 +1352,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
   switch (screenId) {
     case "owner_console":
       return <ShieldAlert className={className} />;
+    case "owner_protection":
+      return <Shield className={className} />;
     case "dashboard":
       return <LayoutDashboard className={className} />;
     case "revenue":
@@ -2252,6 +2258,7 @@ export default function App() {
     // Allow revenue & accounting for specific management/accounting roles
     const highPrivilegeRoles = ["Owner", "General Manager", "Office Manager", "Accountant", "Accountant / Bookkeeper"];
     if (highPrivilegeRoles.includes(activeRole)) {
+      if (!perms.includes("owner_protection")) perms.push("owner_protection");
       if (!perms.includes("revenue")) perms.push("revenue");
       if (!perms.includes("accounting")) perms.push("accounting");
       if (!perms.includes("payments")) perms.push("payments");
@@ -4842,6 +4849,7 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
+    {isLoggedIn && <CompletionGuard />}
     <TutorialHost
       tutorialId={
         !authReady ? null
@@ -9096,6 +9104,10 @@ Access to full financial telemetry is restricted.`;
                   ) : activeScreen.id === "missed_call_textback" ? (
 
                     <MissedCallTextBackPage />
+
+                  ) : activeScreen.id === "owner_protection" ? (
+
+                    <OwnerProtectionPage />
 
                   ) : (
                     

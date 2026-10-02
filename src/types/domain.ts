@@ -174,6 +174,8 @@ export interface Estimate {
   /** Marketing attribution, carried over from the Lead/Customer this estimate came from (see Customer.source). */
   source?: LeadSource;
   sourceLeadId?: string;
+  /** Set when this estimate is a change order: priced, signed added work on an existing Job (SchedulingEvent.id). Reuses every estimate flow (pricing, PDF, e-sign, portal approval); Owner Protection adds approved change orders to the job's approved value. */
+  changeOrderForJobId?: string;
 }
 
 export interface InventoryItem {

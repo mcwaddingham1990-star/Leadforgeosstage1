@@ -144,7 +144,12 @@ export const EstimatesPage: React.FC = () => {
   const createEstimateLockedRef = useRef(false);
   const createEstimateSessionRef = useRef<{ id: string; number: string } | null>(null);
 
+  // Set when the form was opened as a change order for an existing job
+  // (Owner Protection's "Create Change Order"). Cleared for ordinary estimates.
+  const [changeOrderTarget, setChangeOrderTarget] = useState<{ jobId: string; label: string } | null>(null);
+
   const beginCreateEstimateSession = () => {
+    setChangeOrderTarget(null);
     createEstimateLockedRef.current = false;
     createEstimateSessionRef.current = {
       id: `est_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
@@ -171,6 +176,9 @@ export const EstimatesPage: React.FC = () => {
     setFormDiscountPercent(0);
     setFormTaxRate(0);
     beginCreateEstimateSession();
+    if (estimatePrefill.changeOrderForJobId) {
+      setChangeOrderTarget({ jobId: estimatePrefill.changeOrderForJobId, label: estimatePrefill.changeOrderJobLabel || "this job" });
+    }
     setIsAddModalOpen(true);
     setEstimatePrefill(null);
   }, [estimatePrefill, setEstimatePrefill]);
@@ -457,7 +465,8 @@ export const EstimatesPage: React.FC = () => {
       createdDate: formatEstimateDate(new Date()),
       expirationDate: estimateExpirationDate(),
       source,
-      sourceLeadId
+      sourceLeadId,
+      ...(changeOrderTarget ? { changeOrderForJobId: changeOrderTarget.jobId } : {})
     };
 
     if (setEstimates) {
@@ -1220,6 +1229,9 @@ export const EstimatesPage: React.FC = () => {
                     >
                       <td className="py-3.5 px-4 font-mono font-black text-[#315C9F] group-hover:underline">
                         {est.number}
+                        {est.changeOrderForJobId && (
+                          <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 font-sans text-[8px] font-black uppercase tracking-wide text-amber-800 no-underline">Change Order</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-[#1F3557]">
                         {est.customerName}
@@ -1658,7 +1670,7 @@ export const EstimatesPage: React.FC = () => {
             <div className="bg-[#315C9F] text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-white" />
-                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">Create New Estimate</h3>
+                <h3 className="font-display font-extrabold text-sm uppercase tracking-wider">{changeOrderTarget ? "Create Change Order" : "Create New Estimate"}</h3>
               </div>
               <button 
                 onClick={() => setIsAddModalOpen(false)}
@@ -1669,6 +1681,11 @@ export const EstimatesPage: React.FC = () => {
             </div>
             
             <div className="p-4 sm:p-6 overflow-y-auto space-y-4 min-h-0">
+              {changeOrderTarget && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                  Change order for {changeOrderTarget.label}. Price only the added work, then get the customer's signature. Once signed, it's added to the job's approved amount.
+                </div>
+              )}
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-[#5E7393]">Select Customer</label>
                 <select
