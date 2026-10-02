@@ -663,6 +663,12 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && request.auth.uid == uid;
     }
 
+    // Which page tutorials this login has turned off ("Don't show this
+    // again"), so the choice follows them to other devices. Own uid only.
+    match /tutorial_progress/{uid} {
+      allow read, write: if isAuthenticated() && request.auth.uid == uid;
+    }
+
     // Time clock collections
     match /time_clock_logs/{docId} {
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)

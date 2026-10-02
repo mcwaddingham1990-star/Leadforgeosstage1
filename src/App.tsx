@@ -92,6 +92,7 @@ import {
   FolderOpen,
   MessageSquare,
   GraduationCap,
+  BookOpen,
   Link,
   ChevronLeft,
   Moon,
@@ -142,6 +143,7 @@ import { AccountingPage } from "./components/AccountingPage";
 import { PaymentsPage } from "./components/PaymentsPage";
 import { BillingPage } from "./components/BillingPage";
 import { PaywallGate } from "./components/PaywallGate";
+import TutorialHost from "./components/TutorialHost";
 import { useSubscriptionStatus } from "./hooks/useSubscriptionStatus";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
@@ -1636,13 +1638,13 @@ export default function App() {
   // life of this mounted instance, so which branch runs never changes
   // between re-renders of the same instance.
   const remoteSignToken = getRemoteSigningTokenFromUrl();
-  if (remoteSignToken) return <RemoteSigningPage token={remoteSignToken} />;
+  if (remoteSignToken) return <><RemoteSigningPage token={remoteSignToken} /><TutorialHost tutorialId="remote_signing" /></>;
 
   // Same reasoning, for a customer's own Customer Portal link -- no
   // OwnersLocal login of theirs is involved, so this renders instead of
   // the normal logged-in app shell entirely.
   const customerPortalToken = getCustomerPortalTokenFromUrl();
-  if (customerPortalToken) return <CustomerPortalPage token={customerPortalToken} />;
+  if (customerPortalToken) return <><CustomerPortalPage token={customerPortalToken} /><TutorialHost tutorialId="customer_portal" /></>;
 
   // Logged in user profile (null if guest/default owner, or set when authenticated)
   const [loggedInUser, setLoggedInUser] = useState<{
@@ -1748,6 +1750,8 @@ export default function App() {
   // business -- see src/hooks/useStripeConnectStatus.ts.
   const stripeConnectStatus = useStripeConnectStatus();
   const [currentView, setCurrentView] = useState<string>("login");
+  // Bumped by the sidebar's "Revisit Tutorial" button to reopen the current page's tutorial.
+  const [tutorialOpenRequest, setTutorialOpenRequest] = useState(0);
   const [activeScreen, setActiveScreen] = useState(() => {
     const savedId = screenIdFromPath() || sessionStorage.getItem("ownerslocal_active_screen");
     return OS_SCREENS.find(screen => screen.id === savedId) || OS_SCREENS[0];
@@ -4827,6 +4831,7 @@ Access to full financial telemetry is restricted.`;
       <AuthContext.Provider value={authContextValue}>
         <NavTelemetryContext.Provider value={navTelemetryContextValue}>
           <PaywallGate isEmployee={!!loggedInUser.isEmployee} onLogout={handleLogout} />
+          <TutorialHost tutorialId="subscription_required" accountUid={auth.currentUser?.uid} />
         </NavTelemetryContext.Provider>
       </AuthContext.Provider>
     );
@@ -4837,6 +4842,16 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
+    <TutorialHost
+      tutorialId={
+        !authReady ? null
+          : isLoggedIn ? activeScreen.id
+          : currentView === "login" ? "sign_in"
+          : "onboarding"
+      }
+      accountUid={auth.currentUser?.uid}
+      openRequest={tutorialOpenRequest}
+    />
     {isLoggedIn && canUseSnapshot && (
       <UniversalAIIntake snapshotFolder={loggedInUser?.isEmployee ? "Employee Snapshot" : undefined} />
     )}
@@ -6787,6 +6802,20 @@ Access to full financial telemetry is restricted.`;
                     );
                   });
                 })()}
+
+                {/* Always-available tutorial for whichever page is open */}
+                <button
+                  onClick={() => setTutorialOpenRequest(n => n + 1)}
+                  title={`Revisit the ${activeScreen.label} tutorial`}
+                  className={`sidebar-nav-btn mt-2 rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2.5 w-full border border-dashed border-[#9EC8EF] text-[#5E7393] hover:text-[#1F3557] hover:bg-[#B9DAF7] ${
+                    isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
+                  }`}
+                >
+                  <BookOpen className="w-[18px] h-[18px] shrink-0" />
+                  {!isSidebarCollapsed && (
+                    <span className="font-sans font-bold tracking-wide text-xs text-left truncate">Revisit Tutorial</span>
+                  )}
+                </button>
 
                 {/* Role preview card */}
                 {!isSidebarCollapsed && !loggedInUser?.isEmployee && (
