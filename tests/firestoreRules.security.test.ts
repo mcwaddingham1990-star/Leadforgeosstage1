@@ -1145,3 +1145,74 @@ describe("Paywall self-grant via business_profiles (regression for the open-devt
     await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), { subscriptionActive: true }));
   });
 });
+
+describe("Missed Call Text-Back standalone accounts (mctb_accounts)", () => {
+  const SUB_A = "mctb-sub-a";
+  const SUB_B = "mctb-sub-b";
+
+  test("a subscriber can create and update their own account settings", async () => {
+    const db = ctxFor(SUB_A, "suba@example.com").firestore();
+    await assertSucceeds(setDoc(doc(db, "mctb_accounts", SUB_A), { email: "suba@example.com" }));
+    await assertSucceeds(
+      setDoc(doc(db, "mctb_accounts", SUB_A), { enabled: true, messageTemplate: "Call you back soon" }, { merge: true })
+    );
+    await assertSucceeds(getDoc(doc(db, "mctb_accounts", SUB_A)));
+  });
+
+  test("a subscriber cannot read or write another subscriber's account", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "mctb_accounts", SUB_B), { email: "subb@example.com" });
+    });
+    const db = ctxFor(SUB_A, "suba@example.com").firestore();
+    await assertFails(getDoc(doc(db, "mctb_accounts", SUB_B)));
+    await assertFails(setDoc(doc(db, "mctb_accounts", SUB_B), { messageTemplate: "hijacked" }, { merge: true }));
+    await assertFails(getDocs(collection(db, "mctb_accounts", SUB_B, "call_events")));
+    await assertFails(setDoc(doc(db, "mctb_accounts", SUB_B, "call_events", "e1"), { phoneNumber: "5551234567" }));
+  });
+
+  test("a subscriber cannot self-grant a subscription on create or update", async () => {
+    const db = ctxFor(SUB_A, "suba@example.com").firestore();
+    await assertFails(setDoc(doc(db, "mctb_accounts", SUB_A), { email: "suba@example.com", subscriptionActive: true }));
+    await assertSucceeds(setDoc(doc(db, "mctb_accounts", SUB_A), { email: "suba@example.com" }));
+    await assertFails(updateDoc(doc(db, "mctb_accounts", SUB_A), { subscriptionActive: true }));
+    await assertFails(updateDoc(doc(db, "mctb_accounts", SUB_A), { subscriptionCurrentPeriodEnd: "2099-01-01T00:00:00Z" }));
+    await assertFails(updateDoc(doc(db, "mctb_accounts", SUB_A), { stripeCustomerId: "cus_forged" }));
+  });
+
+  test("a subscriber's call/text logs are append-only", async () => {
+    const db = ctxFor(SUB_A, "suba@example.com").firestore();
+    const event = doc(db, "mctb_accounts", SUB_A, "call_events", "call-1");
+    await assertSucceeds(setDoc(event, { phoneNumber: "5551234567", direction: "missed" }));
+    await assertSucceeds(getDoc(event));
+    await assertFails(updateDoc(event, { autoReplySent: true }));
+    await assertSucceeds(
+      setDoc(doc(db, "mctb_accounts", SUB_A, "text_messages", "sms-1"), { phoneNumber: "5551234567", body: "hi" })
+    );
+  });
+
+  test("an OwnersLOCAL business owner gets no access to standalone accounts", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "mctb_accounts", SUB_B), { email: "subb@example.com" });
+    });
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(getDoc(doc(db, "mctb_accounts", SUB_B)));
+  });
+});
+
+describe("Missed Call Text-Back app writes for an OwnersLOCAL business", () => {
+  test("the owner can log a call event under a caller-chosen ID, and Business B cannot", async () => {
+    const ownerA = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(
+      setDoc(doc(ownerA, "missed_call_events", "call-1700000000000-42"), {
+        businessId: BIZ_A,
+        phoneNumber: "5551234567",
+        direction: "missed",
+      })
+    );
+    const ownerB = ctxFor(OWNER_B_UID, BIZ_B).firestore();
+    await assertFails(getDoc(doc(ownerB, "missed_call_events", "call-1700000000000-42")));
+    await assertFails(
+      setDoc(doc(ownerB, "text_messages", "sms-in-1"), { businessId: BIZ_A, phoneNumber: "5551234567", body: "x" })
+    );
+  });
+});

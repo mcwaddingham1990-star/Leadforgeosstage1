@@ -783,6 +783,38 @@ service cloud.firestore {
       allow read: if isAuthenticated() && hasMessagingPermission(resource.data.businessId, "view");
     }
 
+    // Missed Call Text-Back standalone subscribers: individuals who pay for
+    // the Android app on its own, with no OwnersLOCAL business. Keyed by
+    // their own Firebase Auth uid, entirely separate from user_profiles /
+    // isBusinessMember. Not offered in the app yet (Config.ENABLED_ACCOUNT_KINDS
+    // in missed-call-text-back-app), but the data model is live so billing
+    // can switch it on without a rules change.
+    //
+    // SECURITY: subscription fields are written only by the server (Admin
+    // SDK, bypasses these rules) from Stripe webhooks, same reasoning as the
+    // business_profiles paywall fields above. A client that could set
+    // subscriptionActive on its own doc would never have to pay.
+    match /mctb_accounts/{uid} {
+      function mctbBillingKeys() {
+        return ['subscriptionActive', 'subscriptionStatus', 'subscriptionCurrentPeriodEnd',
+          'subscriptionCancelAtPeriodEnd', 'stripeCustomerId', 'stripeSubscriptionId'];
+      }
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow create: if isAuthenticated() && request.auth.uid == uid &&
+        !request.resource.data.keys().hasAny(mctbBillingKeys());
+      allow update: if isAuthenticated() && request.auth.uid == uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(mctbBillingKeys());
+      allow delete: if false;
+
+      // Call and text logs are append-only from the app; the owner may clear them.
+      match /call_events/{eventId} {
+        allow read, create, delete: if isAuthenticated() && request.auth.uid == uid;
+      }
+      match /text_messages/{messageId} {
+        allow read, create, delete: if isAuthenticated() && request.auth.uid == uid;
+      }
+    }
+
     // One doc per real SMS
 
     // One doc per real SMS (either direction) the companion Android app
