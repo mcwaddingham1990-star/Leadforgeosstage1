@@ -62,6 +62,13 @@ export const TUTORIALS: Record<string, Tutorial> = {
       "Download the Android app, sign in with the same Owner’sLOCAL account, write your automatic reply, and choose the calling apps you use. After setup, this page shows the calls it has recorded and whether a text was sent back or a new lead was created.",
     ],
   },
+  owner_protection: {
+    title: "Money at Risk",
+    paragraphs: [
+      "Money at Risk watches your jobs, estimates, invoices and customer messages and lists anything that could cost you money: finished work that hasn't been invoiced, overdue invoices, extra work without a signed change order, costs running over the approved estimate, and jobs closed without photos or signatures.",
+      "Each item shows the dollar amount when it's known, why it matters, and one button that fixes it, such as Create Change Order, Get Signature, Send Invoice, Add Photos, or Review Job. The scores at the bottom show how well each job is protected. Open a job to see its full Owner Protection checklist and Proof Timeline.",
+    ],
+  },
   revenue: {
     title: "Revenue",
     paragraphs: [

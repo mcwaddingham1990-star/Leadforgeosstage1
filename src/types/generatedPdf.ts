@@ -47,6 +47,10 @@ export interface EstimatePrefill {
   address?: string;
   notes?: string;
   sourceLeadId?: string;
+  /** Opens the form as a change order for this Job id (Estimate.changeOrderForJobId). */
+  changeOrderForJobId?: string;
+  /** Job number shown on the change-order banner, e.g. "JOB-123456". */
+  changeOrderJobLabel?: string;
 }
 
 /** Handoff for opening the single shared "Build Job" modal (BuildJobModal)

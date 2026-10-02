@@ -30,6 +30,8 @@ import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { BuildJobModal } from "./BuildJobModal";
 import { AssignEmployeeField } from "./AssignEmployeeField";
 import type { BuildJobPrefill } from "../types/generatedPdf";
+import { OwnerProtectionPanel, levelStyle } from "./OwnerProtectionPanel";
+import { OPEN_JOB_KEY, useAllProtection } from "../hooks/useOwnerProtection";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -119,6 +121,26 @@ export const JobsPage: React.FC = () => {
   const [materialQty, setMaterialQty] = useState(1);
   const [completionJobId, setCompletionJobId] = useState<string | null>(null);
   const [showAssignMenu, setShowAssignMenu] = useState(false);
+  const { views: protectionViews } = useAllProtection();
+  const protectionByJob = useMemo(() => new Map(protectionViews.map(v => [v.job.id, v.protection])), [protectionViews]);
+  // Owner Protection dashboard / completion warning: "open this job" handoff.
+  const [focusSection, setFocusSection] = useState<"protection" | "timeline" | null>(null);
+  useEffect(() => {
+    const raw = sessionStorage.getItem(OPEN_JOB_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(OPEN_JOB_KEY);
+    try {
+      const { jobId, focus } = JSON.parse(raw);
+      if (typeof jobId === "string") { setSelectedId(jobId); setFocusSection(focus === "timeline" ? "timeline" : "protection"); }
+    } catch { /* ignore a malformed handoff */ }
+  }, []);
+  useEffect(() => {
+    if (!focusSection || !selectedId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(focusSection === "timeline" ? "proof-timeline-section" : "owner-protection-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [focusSection, selectedId]);
 
   const selected = jobs.find(j => j.id === selectedId) || null;
   const selectedCompletionPlan = selected ? completionPlans.find(plan => plan.jobId === selected.id) : undefined;
@@ -290,17 +312,18 @@ export const JobsPage: React.FC = () => {
     </div>
 
     {visibleJobs.length===0 ? <div className="rounded-3xl border-2 border-dashed border-[#9EC8EF] bg-[#EAF5FF] p-12 text-center"><Briefcase className="mx-auto h-10 w-10 text-[#9EC8EF]"/><p className="mt-3 text-sm font-black text-[#1F3557]">No jobs found.</p><p className="text-xs text-[#5E7393]">Clear your filters or select New Job.</p></div> : viewMode==="board" ?
-      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} plan={completionPlans.find(plan=>plan.jobId===job.id)} onOpen={()=>setSelectedId(job.id)} onTracking={()=>openCompletion(job)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
+      <div className="grid gap-4 xl:grid-cols-3">{visibleJobs.map(job=><JobCard key={job.id} job={job} protection={protectionByJob.get(job.id)} plan={completionPlans.find(plan=>plan.jobId===job.id)} onOpen={()=>setSelectedId(job.id)} onTracking={()=>openCompletion(job)} estimatedAmount={estimatedAmount(job)}/>)}</div> :
       <div className="overflow-x-auto rounded-2xl border border-[#9EC8EF] bg-white"><table className="w-full min-w-[900px] text-xs"><thead className="bg-[#C7E3FA] text-[9px] uppercase tracking-wide text-[#5E7393]"><tr>{["Job","Customer","Schedule","Assigned","Priority","Status","Value",""] .map(h=><th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr></thead><tbody>{visibleJobs.map(job=><tr key={job.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-3 font-black text-[#1F3557]">{displayNumber(job)}<p className="font-semibold text-[#5E7393]">{job.title||job.customType||"Service Job"}</p></td><td className="px-4 py-3">{job.customer}</td><td className="px-4 py-3">{job.date} {job.startTime}</td><td className="px-4 py-3">{job.assignedEmployee||"Unassigned"}</td><td className="px-4 py-3">{job.priority}</td><td className="px-4 py-3"><StatusBadge status={normalizedStatus(job)}/></td><td className="px-4 py-3 font-bold">${estimatedAmount(job).toLocaleString()}</td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>setSelectedId(job.id)} className="font-bold text-[#315C9F]">Open <ChevronRight className="inline h-4 w-4"/></button><button onClick={()=>openCompletion(job)} className="font-bold text-emerald-700">Job Tracking</button></div></td></tr>)}</tbody></table></div>}
 
-    {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>e.target===e.currentTarget&&setSelectedId(null)}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
+    {selected && <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/50 backdrop-blur-sm" onMouseDown={e=>{if(e.target===e.currentTarget){setSelectedId(null);setFocusSection(null);}}}><div className="h-full w-full max-w-2xl overflow-y-auto bg-[#F5FAFF] shadow-2xl">
       <div className="sticky top-0 z-10 border-b border-[#9EC8EF] bg-[#C7E3FA] p-5">
         <div className="flex items-start justify-between">
           <div><p className="text-[10px] font-black uppercase tracking-widest text-[#315C9F]">{displayNumber(selected)}</p><h3 className="text-xl font-black text-[#1F3557]">{selected.title||selected.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{selected.customer}</p></div>
-          <button onClick={()=>{setShowAssignMenu(false);setSelectedId(null)}} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button>
+          <button onClick={()=>{setShowAssignMenu(false);setSelectedId(null);setFocusSection(null)}} className="rounded-full p-2 hover:bg-white"><X className="h-5 w-5"/></button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <StatusBadge status={normalizedStatus(selected)}/>
+          {protectionByJob.get(selected.id)&&<button onClick={()=>document.getElementById("owner-protection-section")?.scrollIntoView({behavior:"smooth",block:"start"})} className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${levelStyle[protectionByJob.get(selected.id)!.level]}`}>🛡️ {protectionByJob.get(selected.id)!.score}%</button>}
           {canEdit&&<button onClick={()=>setShowAssignMenu(value=>!value)} className="rounded-lg bg-[#315C9F] px-3 py-1.5 text-xs font-bold text-white"><Users className="mr-1 inline h-3.5 w-3.5"/>Assign To</button>}
           <button onClick={()=>void storeJobPdf(selected)} className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700"><FileText className="mr-1 inline h-3.5 w-3.5"/>Store as PDF</button>
           <button onClick={()=>generateJobPdf(selected)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"><FileText className="mr-1 inline h-3.5 w-3.5"/>Generate PDF</button>
@@ -322,7 +345,8 @@ export const JobsPage: React.FC = () => {
       <div className="space-y-5 p-5">
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}<div className="mt-3 border-t border-blue-100 pt-3"><CustomerPortalControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} /></div><div className="mt-3 border-t border-blue-100 pt-3"><ReviewRequestControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} jobId={selected.id} jobDescription={selected.title || selected.description} /></div></section>
-        <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4">
+        <OwnerProtectionPanel key={selected.id} job={selected} canEdit={canEdit} focusTimeline={focusSection === "timeline"} />
+        <section id="job-tracking-section" className="rounded-2xl border border-[#9EC8EF] bg-white p-4 scroll-mt-28">
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-xs font-black uppercase text-[#1F3557]"><ClipboardCheck className="mr-1 inline h-4 w-4"/>Job Tracking</h4>
             <b className="text-xs text-[#315C9F]">{selectedGoalProgress}%</b>
@@ -437,8 +461,8 @@ export const JobsPage: React.FC = () => {
 
 const StatusBadge = ({status}:{status:JobStatus}) => <span className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${statusStyle[status]||statusStyle.Scheduled}`}>{status}</span>;
 
-const JobCard = ({job,plan,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;plan?:ProjectCompletionPlan;onOpen:()=>void;onTracking:()=>void;estimatedAmount:number}) => {
+const JobCard = ({job,plan,protection,onOpen,onTracking,estimatedAmount}:{key?: React.Key;job:SchedulingEvent;plan?:ProjectCompletionPlan;protection?:{score:number;level:string};onOpen:()=>void;onTracking:()=>void;estimatedAmount:number}) => {
   const goals=plan?.goals||[], done=goals.filter(goal=>goal.completed||goal.status==="Completed").length;
-  return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{goals.length} goals · {job.priority}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Edit/View Job Tracking</button></div></div>;
+  return <div className="group rounded-2xl border border-[#9EC8EF] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onOpen();}}} className="w-full text-left cursor-pointer"><div className="flex items-start justify-between"><div><p className="font-mono text-[9px] font-black uppercase tracking-wider text-[#315C9F]">{displayNumber(job)}</p><h3 className="mt-1 text-sm font-black text-[#1F3557]">{job.title||job.customType||"Service Job"}</h3><p className="text-xs font-semibold text-[#5E7393]">{job.customer}</p></div><StatusBadge status={normalizedStatus(job)}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-slate-600"><p><Calendar className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.date} · {job.startTime}</p><p><User className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.assignedEmployee||"Unassigned"}</p><p className="col-span-2 truncate"><MapPin className="mr-1 inline h-3.5 w-3.5 text-[#4A86F7]"/>{job.location||job.customerAddress||"No site address"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3"><span className="text-[9px] font-bold uppercase text-[#5E7393]">{done}/{goals.length} goals · {job.priority}{protection&&<span className={`ml-1.5 rounded-full border px-1.5 py-0.5 ${levelStyle[protection.level]}`}>🛡️ {protection.score}%</span>}</span><button onClick={onTracking} className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-black text-emerald-700">Edit/View Job Tracking</button></div></div>;
 };
 

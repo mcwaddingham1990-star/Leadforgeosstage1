@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { confirmJobCompletion } from "../lib/completionGuard";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useDomainActions } from "../hooks/useDomainActions";
@@ -982,7 +983,8 @@ export const InteractiveMapPage: React.FC<InteractiveMapPageProps> = ({
   };
 
   // Complete a Job directly from the Map UI
-  const handleCompleteJob = (jobId: string) => {
+  const handleCompleteJob = async (jobId: string) => {
+    if (!(await confirmJobCompletion(jobId))) return;
     setSchedulingEvents(prev => prev.map(evt => {
       if (evt.id === jobId) {
         return {

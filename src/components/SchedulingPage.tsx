@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { confirmJobCompletion } from "../lib/completionGuard";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -905,6 +906,15 @@ export const SchedulingPage: React.FC = () => {
 
     if (!canEditScheduling && !(canEditAssignedSharedEvent && isAssignedToCurrentUser(eventToUpdate))) {
       triggerNotification("You can only update assigned events when your permissions allow it.");
+      return;
+    }
+    if (newStatus === "Completed" && eventToUpdate.eventType === "Job" && eventToUpdate.status !== "Completed") {
+      void confirmJobCompletion(evtId).then(ok => {
+        if (!ok) return;
+        setEvents(prev => prev.map(e => e.id === evtId ? { ...e, status: newStatus } : e));
+        setSelectedEvent(prev => prev && prev.id === evtId ? { ...prev, status: newStatus } : prev);
+        if (logOperationalEvent) logOperationalEvent("Status Changed", `Event status for ${eventToUpdate.customer} changed to ${newStatus}`, "🔄");
+      });
       return;
     }
 

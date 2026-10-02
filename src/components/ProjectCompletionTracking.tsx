@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { confirmJobCompletion } from "../lib/completionGuard";
 import { CheckCircle2, ChevronDown, ChevronRight, FileUp, Plus, Save, Trash2, X } from "lucide-react";
 import { doc, setDoc, waitForPendingWrites } from "firebase/firestore";
 import { db } from "../firebase";
@@ -132,8 +133,9 @@ export function ProjectCompletionTracking(props: {
       setPlans(prev => prev.filter(item => item.id !== draft.id)); onClose();
     });
   };
-  const approveFinalCloseout = () => {
+  const approveFinalCloseout = async () => {
     if (!canManage || !draft || draft.finalCloseoutApproved) return;
+    if (!(await confirmJobCompletion(job.id))) return;
     const stamp = now();
 
     persist({
