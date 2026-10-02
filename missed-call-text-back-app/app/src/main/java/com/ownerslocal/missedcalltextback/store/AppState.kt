@@ -58,6 +58,43 @@ class AppState(context: Context) {
         get() = prefs.getLong("sent_sms_watermark", -1L)
         set(value) = prefs.edit(commit = true) { putLong("sent_sms_watermark", value) }
 
+    // ---- Widget / notification popup ----
+
+    var pulseForCalls: Boolean
+        get() = prefs.getBoolean("pulse_calls", true)
+        set(value) = prefs.edit { putBoolean("pulse_calls", value) }
+
+    var pulseForAppNotifications: Boolean
+        get() = prefs.getBoolean("pulse_app", true)
+        set(value) = prefs.edit { putBoolean("pulse_app", value) }
+
+    /** The widget stops pulsing for anything that arrived before the popup was last opened. */
+    var popupOpenedAt: Long
+        get() = prefs.getLong("popup_opened_at", 0L)
+        set(value) = prefs.edit { putLong("popup_opened_at", value) }
+
+    /** Team messages older than this (first sign-in here) never count as unread. */
+    var inboxBaseline: Long
+        get() = prefs.getLong("inbox_baseline", 0L).takeIf { it > 0 } ?: System.currentTimeMillis().also { inboxBaseline = it }
+        set(value) = prefs.edit { putLong("inbox_baseline", value) }
+
+    var lastInboxSyncAt: Long
+        get() = prefs.getLong("last_inbox_sync_at", 0L)
+        set(value) = prefs.edit { putLong("last_inbox_sync_at", value) }
+
+    var myName: String?
+        get() = prefs.getString("my_name", null)
+        set(value) = prefs.edit { putString("my_name", value) }
+
+    var myRole: String?
+        get() = prefs.getString("my_role", null)
+        set(value) = prefs.edit { putString("my_role", value) }
+
+    /** The FCM token already registered in push_subscriptions. */
+    var registeredPushToken: String?
+        get() = prefs.getString("push_token", null)
+        set(value) = prefs.edit { putString("push_token", value) }
+
     // ---- Per-number reply cooldown (persisted, so a process restart can't double-text) ----
 
     @Synchronized

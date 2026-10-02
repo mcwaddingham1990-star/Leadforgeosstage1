@@ -7,7 +7,7 @@ import { PhoneMissed, PhoneIncoming, PhoneOutgoing, Download, Smartphone, Messag
 
 // Served from public/downloads (copied there from missed-call-text-back-app's build).
 const APK_URL = "/downloads/MissedCallTextBack.apk";
-const APK_VERSION = "2.1";
+const APK_VERSION = "3.0";
 
 const isIOS = () =>
   typeof navigator !== "undefined" &&
@@ -18,6 +18,7 @@ const STEPS = [
   "Open Missed Call Text-Back and sign in with this same OwnersLOCAL login.",
   "Tap Allow on each item in the app's Setup list.",
   "Write your auto-reply message and pick any calling apps you use (Google Voice, TextNow…) right in the app.",
+  "Long-press your home screen → Widgets → Missed Call Text-Back to add the pulse widget. Tap it for your notifications, missed calls & texts, and team messages.",
 ];
 
 /**

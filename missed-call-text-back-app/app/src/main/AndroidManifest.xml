@@ -60,6 +60,37 @@
             </intent-filter>
         </activity>
 
+        <!-- The widget's floating notification popup. Own task so it floats over
+             whatever app is open instead of pulling the settings screen up behind it. -->
+        <activity
+            android:name=".ui.PopupActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.ownerslocal.missedcalltextback.popup"
+            android:theme="@style/Theme.MissedCallTextBack.Popup"
+            android:windowSoftInputMode="adjustResize" />
+
+        <receiver
+            android:name=".widget.PulseWidget"
+            android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pulse_widget_info" />
+        </receiver>
+
+        <service
+            android:name=".sync.PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".service.MonitorService"
             android:exported="false"

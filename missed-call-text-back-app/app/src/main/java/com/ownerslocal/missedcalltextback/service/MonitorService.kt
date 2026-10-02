@@ -35,6 +35,14 @@ class MonitorService : Service() {
     private val scanCalls = Runnable { CallLogScanner.scan(this) }
     private val scanSms = Runnable { SentSmsScanner.scan(this) }
 
+    /** Fallback for main-app notifications/messages when push isn't set up (or a push is lost). */
+    private val pollInbox: Runnable = object : Runnable {
+        override fun run() {
+            com.ownerslocal.missedcalltextback.sync.InboxSync.refresh(MissedCallApp.from(this@MonitorService))
+            handler.postDelayed(this, if (com.ownerslocal.missedcalltextback.sync.Push.enabled) 10 * 60_000L else 2 * 60_000L)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         worker = HandlerThread("mctb-monitor").apply { start() }
@@ -53,6 +61,8 @@ class MonitorService : Service() {
         // Catch up on anything that happened while we weren't running.
         handler.post(scanCalls)
         handler.post(scanSms)
+        handler.removeCallbacks(pollInbox)
+        handler.post(pollInbox)
         return START_STICKY
     }
 

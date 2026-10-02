@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brightness frames cross-faded by the launcher: one full pulse every ~1.6s. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ViewFlipper
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:autoStart="true"
+        android:flipInterval="200"
+        android:inAnimation="@anim/pulse_in"
+        android:outAnimation="@anim/pulse_out">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_0" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_1" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_2" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_3" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_4" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_5" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_6" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_7" />
+    </ViewFlipper>
+</FrameLayout>

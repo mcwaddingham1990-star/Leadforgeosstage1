@@ -71,38 +71,61 @@ export async function sendPushToRecipients(req: SendPushRequest): Promise<SendPu
     emailBatches.push(req.recipientEmails.slice(i, i + 30));
   }
 
-  const tokens: string[] = [];
+  // Browsers get a normal notification push. The Missed Call Text-Back
+  // Android app (platform "android") gets a data-only, high-priority push
+  // instead: a notification payload would be shown by Android itself and
+  // never reach the app, which needs to wake up to refresh and pulse its widget.
+  const webTokens: string[] = [];
+  const androidTokens: string[] = [];
   for (const batch of emailBatches) {
     const snap = await db.collection("push_subscriptions").where("email", "in", batch).get();
     snap.forEach(doc => {
       const data = doc.data();
       if (data?.businessId !== callerBusinessId) return;
       const token = data?.token;
-      if (typeof token === "string" && token) tokens.push(token);
+      if (typeof token !== "string" || !token) return;
+      (data?.platform === "android" ? androidTokens : webTokens).push(token);
     });
   }
-  if (!tokens.length) return { sent: 0, configured: true };
+  if (!webTokens.length && !androidTokens.length) return { sent: 0, configured: true };
 
   const messaging = getMessaging(app);
-  const result = await messaging.sendEachForMulticast({
-    tokens,
-    notification: { title: req.title, body: req.body },
-    data: req.data || {},
-  });
+  const data = Object.fromEntries(Object.entries(req.data || {}).map(([k, v]) => [k, String(v)]));
+  const batches: { tokens: string[]; responses: { success: boolean; error?: { code?: string } }[] }[] = [];
+  if (webTokens.length) {
+    const result = await messaging.sendEachForMulticast({
+      tokens: webTokens,
+      notification: { title: req.title, body: req.body },
+      data,
+    });
+    batches.push({ tokens: webTokens, responses: result.responses });
+  }
+  if (androidTokens.length) {
+    const result = await messaging.sendEachForMulticast({
+      tokens: androidTokens,
+      data: { ...data, title: req.title, body: req.body },
+      android: { priority: "high" },
+    });
+    batches.push({ tokens: androidTokens, responses: result.responses });
+  }
 
   // Prune tokens FCM reports as dead so future sends don't keep paying the
   // latency/quota cost of a device that unregistered or reinstalled.
   const staleTokens: string[] = [];
-  result.responses.forEach((response, index) => {
-    const code = response.error?.code;
-    if (!response.success && (code === "messaging/registration-token-not-registered" || code === "messaging/invalid-registration-token")) {
-      staleTokens.push(tokens[index]);
-    }
-  });
+  let successCount = 0;
+  for (const batch of batches) {
+    batch.responses.forEach((response, index) => {
+      if (response.success) successCount++;
+      const code = response.error?.code;
+      if (!response.success && (code === "messaging/registration-token-not-registered" || code === "messaging/invalid-registration-token")) {
+        staleTokens.push(batch.tokens[index]);
+      }
+    });
+  }
   if (staleTokens.length) {
     const staleSnap = await db.collection("push_subscriptions").where("token", "in", staleTokens.slice(0, 30)).get();
     await Promise.all(staleSnap.docs.map(d => d.ref.delete()));
   }
 
-  return { sent: result.successCount, configured: true };
+  return { sent: successCount, configured: true };
 }

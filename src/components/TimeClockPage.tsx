@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
-import { resolveApproverEmails, buildTimeClockApprovalNotifications, sendPushBestEffort } from "../lib/notificationsService";
+import { resolveApproverEmails, buildTimeClockApprovalNotifications } from "../lib/notificationsService";
 import { TimeClockApprovalModal } from "./TimeClockApprovalModal";
 import {
   Clock,
@@ -445,13 +445,8 @@ export const TimeClockPage: React.FC<TimeClockPageProps> = ({
       time: log.time,
       recipientEmails
     });
+    // Pushed to each approver by the notifications subscriber in useEventEngineSubscribers.
     setNotifications(prev => [...prev, ...notifs]);
-    void sendPushBestEffort(
-      recipientEmails,
-      "Clock Verification Needed",
-      `${log.employeeName} needs approval for ${log.type} at ${log.time}.`,
-      { type: "time_clock_approval", logId: log.id }
-    );
   };
 
   const performClockIn = async (jobId: string, route: string, vehicle: string) => {

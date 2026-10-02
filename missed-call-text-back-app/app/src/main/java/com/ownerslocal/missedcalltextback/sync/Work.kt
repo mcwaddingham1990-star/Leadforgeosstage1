@@ -87,6 +87,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : Worker(con
         com.ownerslocal.missedcalltextback.service.MonitorService.start(applicationContext)
         CallLogScanner.scan(applicationContext)
         SentSmsScanner.scan(applicationContext)
+        InboxSync.refresh(app)
         if (app.outbox.size > 0) Work.flushOutbox(applicationContext)
         return Result.success()
     }

@@ -20,6 +20,45 @@ the browser nor the OwnersLOCAL app needs to be open.
 `public/downloads/MissedCallTextBack.apk` and `releases/`, and bump
 `APK_VERSION` in `src/components/MissedCallTextBackPage.tsx`.
 
+## Widget and notification popup
+
+The 1×1 home-screen widget (`widget/PulseWidget`) is the pulse-line icon. It
+pulses when something arrived since you last opened the popup:
+
+- missed calls and every incoming text (if **Pulse for missed calls** is on)
+- unread OwnersLOCAL notifications and team messages (if **Pulse for notifications in main app** is on)
+
+Those two switches sit at the very top of the app's settings. The pulse is
+eight brightness frames in a `ViewFlipper` that the launcher animates itself,
+so it keeps pulsing while the app is asleep.
+
+Tapping the widget opens `ui/PopupActivity`, a floating glass panel on the
+starfield with a thin border:
+
+- **Counts:** app notifications, missed calls & texts, team messages.
+- **Calls & texts list:** tap a missed call to open the dialer, or a text to open the phone's Messages app at that conversation.
+- **"Set missed call response preferences"** opens the settings screen.
+- **App notifications** and **Team messages** open a smaller, borderless popup on top, and the main popup blurs behind it on Android 12+.
+  - Tapping a notification shows it, marks it read, and offers **Open in OwnersLOCAL**, which opens the website (`Config.MAIN_APP_URL`).
+  - Team chat reads and sends text and photos. **+ New** starts a direct message with any teammate. Messages use the web app's own conversation format, so they appear in the main app's Messages page. Photos are shrunk to under ~250 KB because the whole conversation lives in one Firestore document, which is capped at 1 MB.
+- Unread team messages are counted per person, using `conversation_reads/{uid}`, which both the app and the web Messages page update.
+
+### Getting main-app updates to the phone
+
+- **Push (instant, even asleep):**
+  - The server sends a data-only, high-priority FCM message to Android tokens (`server/pushNotifications.ts`).
+  - Every new Alert Center notification is pushed to its recipient (`useEventEngineSubscribers`).
+  - Every team message is pushed to the other participants (`MessagesPage` and the app's own sends).
+- **Fallback with push off:**
+  - Every 2 minutes while the background monitor runs.
+  - About every 15 minutes while the phone is in deep sleep (the watchdog alarm).
+  - Whenever the popup opens.
+
+**To turn push on (one-time):**
+1. Firebase console → Project settings → Add app → Android, package `com.ownerslocal.missedcalltextback`. Download `google-services.json`.
+2. From that file, copy `mobilesdk_app_id` into `Config.FCM_APP_ID` and `current_key` into `Config.FCM_API_KEY`, then rebuild.
+3. On the server, set `FIREBASE_SERVICE_ACCOUNT_JSON` (Firebase console → Project settings → Service accounts → Generate new private key). Web push needs this too.
+
 ## Accounts
 
 The app signs in through the same Firebase project as OwnersLOCAL. Each
@@ -115,6 +154,7 @@ Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## What's verified
 
-- Compiles with no warnings, Android lint finds no errors, 10 unit tests pass (phone matching, queue persistence, missed-call notification parsing).
-- Firestore rules suite passes (92 tests, including the new `mctb_accounts` ones).
+- Compiles with no warnings, Android lint finds no errors, 13 unit tests pass (phone matching, queue persistence, missed-call notification parsing, message timestamps).
+- The popup is rendered off-device with Paparazzi (`app/src/test/.../PopupScreenshotTest.kt`, images in `app/src/test/snapshots`). Re-render with `ANDROID_HOME=<sdk> ./gradlew recordPaparazziDebug`.
+- Firestore rules suite passes (95 tests, including `mctb_accounts`, `conversation_reads` and push registration).
 - **Not yet tested on a real phone.** Installing, granting permissions, actually detecting a missed call and sending the text all still need a device test. Behavior can differ by manufacturer, especially Samsung and Xiaomi battery management.

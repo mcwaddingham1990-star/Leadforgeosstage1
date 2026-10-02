@@ -79,6 +79,16 @@ class MainActivity : AppCompatActivity() {
             if (!fillingForm) formDirty = true
             updateMessageMeta()
         }
+        binding.pulseCallsSwitch.setOnCheckedChangeListener { _, checked ->
+            if (fillingForm) return@setOnCheckedChangeListener
+            app.state.pulseForCalls = checked
+            com.ownerslocal.missedcalltextback.widget.PulseWidget.refresh(this)
+        }
+        binding.pulseAppSwitch.setOnCheckedChangeListener { _, checked ->
+            if (fillingForm) return@setOnCheckedChangeListener
+            app.state.pulseForAppNotifications = checked
+            com.ownerslocal.missedcalltextback.widget.PulseWidget.refresh(this)
+        }
         binding.enabledSwitch.setOnCheckedChangeListener { _, _ ->
             if (!fillingForm) formDirty = true
             updateMessageMeta()
@@ -92,6 +102,7 @@ class MainActivity : AppCompatActivity() {
             MonitorService.start(this)
             Work.schedulePeriodic(this)
             Watchdog.schedule(this)
+            com.ownerslocal.missedcalltextback.sync.Push.register(app)
             syncNow(showToast = false)
         }
     }
@@ -172,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         if (previous == null || previous.uid != tokens.uid || previous.kind != kind) {
             app.state.clearAll()
             app.outbox.clear()
+            app.inbox.clear()
         }
         app.sessions.save(
             Session(
@@ -191,6 +203,8 @@ class MainActivity : AppCompatActivity() {
         CallLogScanner.scan(app)
         SentSmsScanner.scan(app)
         app.state.log("Signed in as ${tokens.email}.")
+        com.ownerslocal.missedcalltextback.sync.Push.register(app)
+        com.ownerslocal.missedcalltextback.sync.InboxSync.refresh(app, force = true)
         if (app.outbox.size > 0) Work.flushOutbox(app)
         return null
     }
@@ -218,6 +232,8 @@ class MainActivity : AppCompatActivity() {
         app.sessions.clear()
         app.state.clearAll()
         app.outbox.clear()
+        app.inbox.clear()
+        com.ownerslocal.missedcalltextback.widget.PulseWidget.refresh(this)
         formDirty = false
         render()
     }
@@ -387,6 +403,12 @@ class MainActivity : AppCompatActivity() {
             if (session.email != session.tenantName) append(" · ").append(session.email)
             if (entitlement.summary.isNotBlank()) append("\n").append(entitlement.summary)
         }
+
+        fillingForm = true
+        binding.pulseCallsSwitch.isChecked = state.pulseForCalls
+        binding.pulseAppSwitch.isChecked = state.pulseForAppNotifications
+        fillingForm = false
+        binding.pulseAppSwitch.visibility = if (session.kind == AccountKind.OWNERSLOCAL) View.VISIBLE else View.GONE
 
         renderSetup(coreReady, settings)
         renderCallingApps(settings)

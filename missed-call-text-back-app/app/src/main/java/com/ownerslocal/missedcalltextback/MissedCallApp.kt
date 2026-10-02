@@ -28,12 +28,15 @@ class MissedCallApp : Application() {
     val state by lazy { AppState(this) }
     val tokens by lazy { TokenProvider(sessions, state, auth) }
     val outbox by lazy { Outbox(this) }
+    val inbox by lazy { com.ownerslocal.missedcalltextback.store.InboxStore(this) }
+    val team by lazy { com.ownerslocal.missedcalltextback.team.TeamRepository(firestore, http) }
 
     /** Provider for the signed-in account type, or null when signed out. */
     fun provider(): AccountProvider? = sessions.get()?.let { AccountProvider.forKind(it.kind, firestore) }
 
     override fun onCreate() {
         super.onCreate()
+        com.ownerslocal.missedcalltextback.sync.Push.init(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(Config.MONITOR_CHANNEL_ID, "Running in background", NotificationManager.IMPORTANCE_MIN)

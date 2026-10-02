@@ -1216,3 +1216,32 @@ describe("Missed Call Text-Back app writes for an OwnersLOCAL business", () => {
     );
   });
 });
+
+describe("Per-person conversation read markers (conversation_reads)", () => {
+  test("a user can save and read their own read markers", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "conversation_reads", EMP_A_UID), { email: EMP_A_EMAIL, reads: { conv_1: 1 } }, { merge: true }));
+    await assertSucceeds(getDoc(doc(db, "conversation_reads", EMP_A_UID)));
+  });
+
+  test("a user cannot read or change someone else's read markers, even in the same business", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "conversation_reads", OWNER_A_UID), { reads: { conv_1: 1 } });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(getDoc(doc(db, "conversation_reads", OWNER_A_UID)));
+    await assertFails(setDoc(doc(db, "conversation_reads", OWNER_A_UID), { reads: { conv_1: 2 } }, { merge: true }));
+  });
+});
+
+describe("Missed Call Text-Back push registration", () => {
+  test("the app can register a push token for its own login only", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, "push_subscriptions", `${BIZ_A}__tokenA`), { email: BIZ_A, businessId: BIZ_A, token: "tokenA", platform: "android" })
+    );
+    await assertFails(
+      setDoc(doc(db, "push_subscriptions", `${BIZ_B}__tokenB`), { email: BIZ_B, businessId: BIZ_B, token: "tokenB", platform: "android" })
+    );
+  });
+});

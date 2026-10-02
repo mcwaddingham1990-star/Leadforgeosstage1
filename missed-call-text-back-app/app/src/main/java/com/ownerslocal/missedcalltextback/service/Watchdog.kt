@@ -27,6 +27,7 @@ class Watchdog : BroadcastReceiver() {
             try {
                 CallLogScanner.scan(context.applicationContext)
                 SentSmsScanner.scan(context.applicationContext)
+                com.ownerslocal.missedcalltextback.sync.InboxSync.refresh(app)
             } finally {
                 pending.finish()
             }

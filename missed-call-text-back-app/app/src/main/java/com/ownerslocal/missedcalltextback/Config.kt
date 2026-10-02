@@ -17,6 +17,20 @@ object Config {
      */
     val ENABLED_ACCOUNT_KINDS: List<AccountKind> = listOf(AccountKind.OWNERSLOCAL)
 
+    /** The OwnersLOCAL website: opened from main-app notifications, and its API sends pushes. */
+    const val MAIN_APP_URL = "https://ownerslocal.com"
+
+    /**
+     * Firebase Cloud Messaging for instant widget pulses. Fill these in from
+     * the Android app registered in the Firebase console (Project settings ->
+     * Your apps -> the com.ownerslocal.missedcalltextback app's
+     * google-services.json: "mobilesdk_app_id" and "current_key"). Blank =
+     * push off; the app then checks for new items every couple of minutes.
+     */
+    const val FCM_APP_ID = ""
+    const val FCM_API_KEY = ""
+    const val FCM_SENDER_ID = "1077711892994"
+
     const val DEFAULT_MESSAGE = "Sorry we missed your call! We'll get back to you shortly."
 
     /** One auto-reply per number inside this window, however many times they call. */

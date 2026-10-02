@@ -27,6 +27,10 @@ object AutoReplier {
         val reply = decideAndSend(context, number, atMillis, source)
         if (!number.isNullOrBlank()) {
             app.outbox.add(OutboxEvent.Call(eventId, number, "missed", atMillis, reply))
+            app.inbox.addPhoneItem(
+                com.ownerslocal.missedcalltextback.store.PhoneItem(eventId, "call", number, source, atMillis, handled = false)
+            )
+            com.ownerslocal.missedcalltextback.widget.PulseWidget.refresh(context)
         }
     }
 

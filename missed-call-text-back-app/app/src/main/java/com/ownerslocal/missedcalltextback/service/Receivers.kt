@@ -7,6 +7,8 @@ import android.provider.Telephony
 import android.telephony.TelephonyManager
 import com.ownerslocal.missedcalltextback.MissedCallApp
 import com.ownerslocal.missedcalltextback.core.CallLogScanner
+import com.ownerslocal.missedcalltextback.store.PhoneItem
+import com.ownerslocal.missedcalltextback.widget.PulseWidget
 import com.ownerslocal.missedcalltextback.sync.OutboxEvent
 import com.ownerslocal.missedcalltextback.sync.Work
 import java.util.concurrent.Executors
@@ -61,6 +63,8 @@ class SmsReceiver : BroadcastReceiver() {
             try {
                 val id = "sms-in-$at-${(sender + body).hashCode().toUInt()}"
                 app.outbox.add(OutboxEvent.Text(id, sender, "incoming", at, body))
+                app.inbox.addPhoneItem(PhoneItem(id, "text", sender, body, at, handled = false))
+                PulseWidget.refresh(context)
             } finally {
                 pending.finish()
             }
@@ -76,5 +80,6 @@ class BootReceiver : BroadcastReceiver() {
         Work.schedulePeriodic(context)
         Watchdog.schedule(context)
         MonitorService.start(context)
+        PulseWidget.refresh(context)
     }
 }

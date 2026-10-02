@@ -655,6 +655,14 @@ service cloud.firestore {
       allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "messages", "view");
     }
 
+    // Per-person "last read" time for each team conversation, so unread
+    // counts (the Missed Call Text-Back widget, the web Messages page) are
+    // that person's own and not the shared conversations.isRead flag. Only
+    // the owner of the uid can see or change their own read markers.
+    match /conversation_reads/{uid} {
+      allow read, write: if isAuthenticated() && request.auth.uid == uid;
+    }
+
     // Time clock collections
     match /time_clock_logs/{docId} {
       allow create: if isAuthenticated() && isBusinessMember(request.resource.data.businessId)
