@@ -1245,3 +1245,20 @@ describe("Missed Call Text-Back push registration", () => {
     );
   });
 });
+
+describe("Tutorial progress (tutorial_progress)", () => {
+  test("a user can save and read which tutorials they turned off", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "tutorial_progress", EMP_A_UID), { dismissed: { dashboard: true } }, { merge: true }));
+    await assertSucceeds(getDoc(doc(db, "tutorial_progress", EMP_A_UID)));
+  });
+
+  test("a user cannot read or change another user's tutorial progress", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "tutorial_progress", OWNER_A_UID), { dismissed: { dashboard: true } });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(getDoc(doc(db, "tutorial_progress", OWNER_A_UID)));
+    await assertFails(setDoc(doc(db, "tutorial_progress", OWNER_A_UID), { dismissed: { dashboard: false } }, { merge: true }));
+  });
+});
