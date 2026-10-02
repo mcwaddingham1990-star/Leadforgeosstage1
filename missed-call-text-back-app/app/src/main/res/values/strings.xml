@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Missed Call Text-Back</string>
+    <string name="widget_label">Missed Call Text-Back notifications</string>
+    <string name="widget_description">Pulses when you have missed calls, texts, team messages or OwnersLOCAL notifications. Tap to see them.</string>
+    <string name="tile_app">App\nnotifications</string>
+    <string name="tile_calls">Missed calls\n&amp; texts</string>
+    <string name="tile_messages">Team\nmessages</string>
 </resources>

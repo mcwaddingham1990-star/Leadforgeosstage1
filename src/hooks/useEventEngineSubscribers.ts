@@ -6,6 +6,7 @@ import { SchedulingEvent, Estimate } from "../types/domain";
 import type { Invoice } from "../types/accounting";
 import type { ReviewRequest } from "../types/reviewRequest";
 import { postJobCompletionRevenueEntry } from "../lib/accountingEngine";
+import { sendPushBestEffort } from "../lib/notificationsService";
 
 function generateRevenueEventId(): string {
   return `rev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -179,4 +180,22 @@ export function useEventEngineSubscribers(): void {
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, schedulingEvents, reviewAutomationSettings]);
+
+  // Push every new Alert Center notification to its recipient's devices, so
+  // it reaches them (and pulses the Missed Call Text-Back widget) with this
+  // site closed. "created" only fires on the client that wrote the
+  // notification, so each one is pushed exactly once.
+  useEffect(() => {
+    const unsubscribe = onCollectionEvent("notifications", (evt: CollectionEvent) => {
+      if (evt.type !== "created") return;
+      const { recipientEmail, title, description, id, type } = evt.item || {};
+      if (!recipientEmail || !title) return;
+      void sendPushBestEffort([recipientEmail], title, description || title, {
+        kind: "notification",
+        notificationId: String(id || ""),
+        type: String(type || "general"),
+      });
+    });
+    return unsubscribe;
+  }, []);
 }

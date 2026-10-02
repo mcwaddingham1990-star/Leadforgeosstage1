@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand_primary">#315C9F</color>
-    <color name="brand_primary_dark">#254A84</color>
-    <color name="surface_light">#E3F3FF</color>
+    <color name="brand_soft">#9EC8EF</color>
+    <color name="ok">#1E8E5A</color>
+    <color name="warn">#C0392B</color>
+    <color name="glass_text">#FFFFFF</color>
+    <color name="glass_subtext">#BFD8F5</color>
+    <color name="glass_border">#9ECFFF</color>
+    <color name="glass_overlay">#5C06112C</color>
+    <color name="glass_secondary">#F50B1530</color>
+    <color name="bubble_mine">#315C9F</color>
+    <color name="bubble_theirs">#26365A</color>
 </resources>

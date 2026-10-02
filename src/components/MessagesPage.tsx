@@ -52,7 +52,8 @@ import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
 import { geocodeAddress } from "./InteractiveMapPage";
 import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
+import { sendPushBestEffort } from "../lib/notificationsService";
 import { hasPermission } from "../types/permissions";
 import { composeSms, callNumber } from "../lib/deviceHandoff";
 import { TextMessage, Lead } from "../types/domain";
@@ -72,6 +73,8 @@ export interface MessageAttachment {
 export interface Message {
   id: string;
   sender: string;
+  /** Lets the Missed Call Text-Back app tell its own messages apart from a teammate with the same name. */
+  senderEmail?: string;
   senderRole: string;
   avatar?: string;
   content: string;
@@ -217,6 +220,20 @@ export const MessagesPage: React.FC = () => {
   const activeConv = useMemo(() => {
     return conversations.find(c => c.id === selectedConvId) || conversations.find(c => !c.isArchived) || conversations[0];
   }, [conversations, selectedConvId]);
+
+  // Per-person read marker (conversation_reads/{uid}), used by the Missed Call
+  // Text-Back app's unread counts -- the shared isRead flag below flips for
+  // everyone as soon as anyone opens the conversation.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !activeConv?.id) return;
+    setDoc(
+      doc(db, "conversation_reads", uid),
+      { email: currentUserEmail, reads: { [activeConv.id]: Date.now() } },
+      { merge: true }
+    ).catch(() => { /* best effort */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConvId, activeConv?.messages.length]);
 
   // Read state tracker
   useEffect(() => {
@@ -570,6 +587,7 @@ export const MessagesPage: React.FC = () => {
     const newMessage: Message = {
       id: "m_" + Date.now(),
       sender: currentUserName,
+      senderEmail: currentUserEmail || undefined,
       senderRole: activeRole,
       content: inputText.trim(),
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -593,6 +611,25 @@ export const MessagesPage: React.FC = () => {
     setConversations(updatedConversations);
     setInputText("");
     setDraftAttachments([]);
+
+    // Reach the other participants with this site closed (their browsers and
+    // the Missed Call Text-Back widget). Participants are stored by name.
+    if (activeConv.type !== "AI Conversation") {
+      const recipientEmails = activeConv.participants
+        .filter(name => name !== currentUserName)
+        .map(name => employees.find(e => `${e.firstName} ${e.lastName}`.trim() === name)?.email
+          // The owner usually has no employee record; their email is the businessId.
+          ?? (businessId && currentUserEmail !== businessId && !employees.some(e => `${e.firstName} ${e.lastName}`.trim() === name) ? businessId : undefined))
+        .filter((email): email is string => !!email && email !== currentUserEmail);
+      if (recipientEmails.length) {
+        void sendPushBestEffort(
+          recipientEmails,
+          `${currentUserName} · ${activeConv.title}`,
+          newMessage.content || "📷 Photo",
+          { kind: "message", conversationId: activeConv.id }
+        );
+      }
+    }
 
     // Real AI conversations get a real model response; other conversation
     // types wait for an actual reply from the other real participant --

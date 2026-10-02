@@ -9,39 +9,50 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="16dp">
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="@color/brand_primary_dark"
-            android:layout_marginBottom="24dp" />
-
-        <!-- LOGIN GROUP -->
-        <LinearLayout
-            android:id="@+id/loginGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textStyle="bold" />
+
+        <!-- ============ Sign in ============ -->
+        <LinearLayout
+            android:id="@+id/signInGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/signInHint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Sign in with your OwnersLOCAL owner account."
-                android:textSize="13sp"
-                android:layout_marginBottom="16dp" />
+                android:text="Sign in with your OwnersLOCAL owner or manager login."
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/accountKindGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:singleSelection="true"
+                app:selectionRequired="true" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
                 android:hint="Email">
+
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/emailInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:autofillHints="emailAddress"
                     android:inputType="textEmailAddress" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -49,136 +60,253 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="Password">
+                android:hint="Password"
+                app:endIconMode="password_toggle">
+
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/passwordInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:autofillHints="password"
                     android:inputType="textPassword" />
             </com.google.android.material.textfield.TextInputLayout>
-
-            <TextView
-                android:id="@+id/loginError"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="#C0392B"
-                android:textSize="12sp"
-                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/signInButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Sign In" />
-
-            <ProgressBar
-                android:id="@+id/loginProgress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
                 android:layout_marginTop="12dp"
+                android:text="Sign in" />
+
+            <TextView
+                android:id="@+id/signInError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/warn"
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- STATUS / SETUP GROUP -->
+        <!-- ============ Dashboard ============ -->
         <LinearLayout
-            android:id="@+id/statusGroup"
+            android:id="@+id/dashboardGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
             android:orientation="vertical"
             android:visibility="gone">
 
-            <TextView
-                android:id="@+id/signedInAsText"
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Outlined"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:layout_marginBottom="16dp" />
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp">
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pulseCallsSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="52dp"
+                        android:text="Pulse for missed calls" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/pulseAppSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="52dp"
+                        android:text="Pulse for notifications in main app" />
+
+                    <TextView
+                        android:id="@+id/widgetHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingBottom="6dp"
+                        android:text="Add the widget: long-press your home screen → Widgets → Missed Call Text-Back."
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/statusHeadline"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/statusDetail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                    <TextView
+                        android:id="@+id/accountLine"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <TextView
+                style="@style/SectionTitle"
+                android:text="Setup" />
+
+            <LinearLayout
+                android:id="@+id/setupList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Setup checklist"
-                android:textStyle="bold"
-                android:textSize="14sp"
-                android:layout_marginBottom="8dp" />
+                android:orientation="vertical" />
 
             <TextView
-                android:id="@+id/permissionsStatusText"
+                style="@style/SectionTitle"
+                android:text="Auto-reply" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/enabledSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:layout_marginBottom="8dp" />
+                android:text="Text people back when I miss their call" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/grantPermissionsButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Grant Phone / SMS Permissions" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/openNotificationAccessButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Grant Notification Access (for TextNow/WhatsApp/etc.)" />
+                android:hint="Message">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/messageInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:minLines="3" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:id="@+id/messageMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/ignoreBatteryOptimizationButton"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:id="@+id/saveSettingsButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Allow to Run in Background (disable battery optimization)" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#E0E0E0"
-                android:layout_marginVertical="20dp" />
+                android:text="Save" />
 
             <TextView
-                android:id="@+id/settingsSummaryText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Settings not synced yet."
-                android:textSize="13sp"
-                android:layout_marginBottom="12dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/syncNowButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Sync Now" />
-
-            <ProgressBar
-                android:id="@+id/syncProgress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_marginTop="12dp"
-                android:visibility="gone" />
+                style="@style/SectionTitle"
+                android:text="Other calling apps" />
 
             <TextView
-                android:id="@+id/subscriptionStatusText"
+                android:id="@+id/callingAppsHint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:textSize="12sp"
-                android:textColor="#7A7A7A" />
+                android:textAppearance="?attr/textAppearanceBodySmall" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/signOutButton"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
+            <LinearLayout
+                android:id="@+id/callingAppsList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="Sign Out" />
+                android:orientation="vertical" />
+
+            <TextView
+                style="@style/SectionTitle"
+                android:text="Send a test" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Phone number">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/testNumberInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="phone" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/sendTestButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Send" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/SectionTitle"
+                android:text="Recent activity" />
+
+            <TextView
+                android:id="@+id/syncLine"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+
+            <TextView
+                android:id="@+id/activityLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="4dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textIsSelectable="true" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/syncButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Sync now" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/signOutButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="Sign out" />
+            </LinearLayout>
         </LinearLayout>
-
     </LinearLayout>
 </ScrollView>

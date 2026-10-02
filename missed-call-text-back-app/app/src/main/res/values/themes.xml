@@ -1,8 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MissedCallTextBack" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.MissedCallTextBack" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_primary</item>
-        <item name="colorPrimaryDark">@color/brand_primary_dark</item>
-        <item name="colorAccent">@color/brand_primary</item>
+        <item name="colorPrimaryContainer">@color/brand_soft</item>
+        <item name="colorSecondary">@color/brand_primary</item>
+    </style>
+    <style name="SectionTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">24dp</item>
+        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <!-- Floating popup over whatever is on screen: transparent window, dimmed behind. -->
+    <style name="Theme.MissedCallTextBack.Popup" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/brand_soft</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.35</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <style name="GlassTile">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingVertical">12dp</item>
+        <item name="android:paddingHorizontal">6dp</item>
+        <item name="android:background">@drawable/glass_tile</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:foreground">?attr/selectableItemBackground</item>
+    </style>
+    <style name="GlassTileCount">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/glass_text</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="GlassTileLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/glass_subtext</item>
+        <item name="android:textSize">11sp</item>
     </style>
 </resources>
