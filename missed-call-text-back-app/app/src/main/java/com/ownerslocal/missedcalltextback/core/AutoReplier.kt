@@ -67,6 +67,7 @@ object AutoReplier {
         val message = settings.messageTemplate
         return if (send(context, number!!, message)) {
             state.log("Texted $who back ($source).")
+            OverlayBanner.show(context, "Texted back $who", "Missed call ($source)")
             message
         } else {
             null

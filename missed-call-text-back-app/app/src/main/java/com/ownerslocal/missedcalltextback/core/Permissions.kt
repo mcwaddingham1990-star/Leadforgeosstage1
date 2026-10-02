@@ -33,6 +33,8 @@ object Permissions {
     fun notificationAccess(context: Context) =
         context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
+    fun overlay(context: Context) = android.provider.Settings.canDrawOverlays(context)
+
     fun batteryUnrestricted(context: Context) =
         context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 }

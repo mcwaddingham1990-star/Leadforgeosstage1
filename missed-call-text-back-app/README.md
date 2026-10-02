@@ -4,9 +4,21 @@ A standalone Android app: when you miss a call, the caller automatically
 gets a text from your phone's own number. It is separate from the main
 OwnersLOCAL app (`/android` is the Capacitor wrapper for that one).
 
-**Install:** `releases/MissedCallTextBack-debug.apk`. If version 1 is already
-on the phone, uninstall it first: this build is signed with a different key,
-so Android won't install it as an update.
+**Install:** the OwnersLOCAL web app's Missed Call Text-Back page is now a
+"Download APK for Android" button (served from `public/downloads/MissedCallTextBack.apk`
+in the main repo). The same file is in `releases/`. If version 1 is already on
+the phone, uninstall it first: this build is signed with a different key, so
+Android won't install it as an update.
+
+**All setup happens in this app.** That covers sign-in with an OwnersLOCAL
+login, permissions, the message, on/off, and which other calling apps to
+watch. The web page only offers the download and shows the call log. After
+setup the app runs by itself. The phone can be asleep or in use, and neither
+the browser nor the OwnersLOCAL app needs to be open.
+
+**When you update the app:** copy the new `app-debug.apk` to both
+`public/downloads/MissedCallTextBack.apk` and `releases/`, and bump
+`APK_VERSION` in `src/components/MissedCallTextBackPage.tsx`.
 
 ## Accounts
 
@@ -45,7 +57,8 @@ all call that same scan:
 
 - the call log changing (a `ContentObserver` in the foreground `MonitorService`)
 - a call ending (the manifest `PHONE_STATE` receiver, which also wakes the app if Android killed it)
-- every 15 minutes (`MaintenanceWorker`, the safety net)
+- every ~15 minutes, **even in deep sleep** (`Watchdog`, an `setAndAllowWhileIdle` alarm), which also restarts the monitor if Android killed it
+- every 15 minutes when not asleep (`MaintenanceWorker`), which also re-syncs settings
 - opening the app, rebooting, or updating the app
 
 So a late, duplicated or missing broadcast can't make the app skip a call or
@@ -61,8 +74,8 @@ Rules for when a missed call gets a reply (`AutoReplier`):
 - Each number gets at most one reply per 10 minutes. This limit survives app restarts.
 - Long messages are sent as multi-part texts from the default SMS SIM, and the carrier's accept/fail result is shown in the activity log.
 
-Other calling apps (Google Voice, TextNow, WhatsApp, chosen on the web
-settings page) don't write to the call log. For those, `CallNotificationListener`
+Other calling apps (Google Voice, TextNow, WhatsApp, etc., switched on in the
+app's "Other calling apps" section; see `core/KnownCallingApps.kt`) don't write to the call log. For those, `CallNotificationListener`
 replies only when that app's notification says "missed" **and** shows a phone
 number. Ordinary chat messages are ignored.
 
@@ -76,8 +89,19 @@ document ID, so a retry can't create a duplicate record or a duplicate lead.
 - **Calls & SMS**: phone state, call log, send SMS. Required.
 - **Text history**: receive and read SMS, so customer replies and your own texts show up in their record.
 - **Notifications** (Android 13+): warns you if auto-replies stop working.
-- **Run in background**: battery-optimization exemption. On Samsung, also set Battery to "Unrestricted".
-- **Notification access**: only needed if you picked other calling apps on the web settings page.
+- **Run in background**: battery-optimization exemption. Keeps it alive while asleep, and lets Android restart the monitor from the background. On Samsung, also set Battery to "Unrestricted".
+- **Show over other apps**: shows a "Texted back (555) 123-4567" banner over whatever app is open.
+- **Notification access**: only needed if you turned on other calling apps. Android 13+ blocks this for sideloaded apps until you open App info → ⋮ → "Allow restricted settings"; the app explains this when it asks.
+
+## iPhone
+
+There is no iPhone version, and one isn't possible as an app. iOS doesn't let
+any app read call history, detect a missed call, see another app's
+notifications, or send an SMS without the user tapping Send. That includes
+Google Voice and TextNow on iPhone. The only way to text back iPhone users'
+missed calls is outside the phone: forward unanswered calls (carrier
+conditional call forwarding) to a cloud number such as Twilio that sends the
+text. The reply would then come from that cloud number, not the owner's own.
 
 ## Building
 

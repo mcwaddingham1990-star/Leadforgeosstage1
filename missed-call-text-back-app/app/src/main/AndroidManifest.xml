@@ -18,6 +18,25 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Show the "texted back" banner over other apps; also lets Android restart
+         the monitor from the background. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Android 11+ hides other installed apps unless they're declared here
+         (core/KnownCallingApps.kt). -->
+    <queries>
+        <package android:name="com.google.android.apps.googlevoice" />
+        <package android:name="com.enflick.android.TextNow" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.skype.raider" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.viber.voip" />
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.glip.mobile" />
+        <package android:name="com.microsoft.teams" />
+    </queries>
 
     <application
         android:name=".MissedCallApp"
@@ -86,6 +105,10 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".service.Watchdog"
+            android:exported="false" />
 
         <receiver
             android:name=".core.SmsResultReceiver"

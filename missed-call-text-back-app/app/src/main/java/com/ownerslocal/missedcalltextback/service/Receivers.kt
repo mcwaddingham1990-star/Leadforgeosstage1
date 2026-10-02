@@ -24,6 +24,8 @@ class CallStateReceiver : BroadcastReceiver() {
         if (intent.getStringExtra(TelephonyManager.EXTRA_STATE) != TelephonyManager.EXTRA_STATE_IDLE) return
         if (!MissedCallApp.from(context).sessions.isSignedIn) return
 
+        // If Android killed the monitor, this is our chance to bring it back.
+        MonitorService.start(context)
         val pending = goAsync()
         val appContext = context.applicationContext
         background.execute {
@@ -72,6 +74,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         if (!MissedCallApp.from(context).sessions.isSignedIn) return
         Work.schedulePeriodic(context)
+        Watchdog.schedule(context)
         MonitorService.start(context)
     }
 }

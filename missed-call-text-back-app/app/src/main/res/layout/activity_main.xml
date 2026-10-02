@@ -181,6 +181,22 @@
 
             <TextView
                 style="@style/SectionTitle"
+                android:text="Other calling apps" />
+
+            <TextView
+                android:id="@+id/callingAppsHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodySmall" />
+
+            <LinearLayout
+                android:id="@+id/callingAppsList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                style="@style/SectionTitle"
                 android:text="Send a test" />
 
             <LinearLayout

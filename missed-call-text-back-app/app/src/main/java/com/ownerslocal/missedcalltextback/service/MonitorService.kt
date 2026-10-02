@@ -101,9 +101,9 @@ class MonitorService : Service() {
             try {
                 ContextCompat.startForegroundService(context, Intent(context, MonitorService::class.java))
             } catch (e: Exception) {
-                // Android 12+ refuses background starts outside the exempt cases; the
-                // manifest receivers and the periodic worker still cover detection.
-                MissedCallApp.from(context).state.log("Couldn't start the background monitor: ${e.javaClass.simpleName}")
+                // Android 12+ refuses background starts unless the app is exempt from
+                // battery optimization (a Setup item). The PHONE_STATE receiver and the
+                // watchdog alarm still catch calls without the monitor.
             }
         }
 

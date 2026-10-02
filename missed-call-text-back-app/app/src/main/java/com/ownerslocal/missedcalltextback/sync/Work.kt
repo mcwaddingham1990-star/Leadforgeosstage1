@@ -84,6 +84,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : Worker(con
         if (!app.sessions.isSignedIn) return Result.success()
         val sync = Syncer.syncSettings(app)
         if (sync is Syncer.Outcome.Failed && sync.signedOut) Alerts.signedOut(applicationContext)
+        com.ownerslocal.missedcalltextback.service.MonitorService.start(applicationContext)
         CallLogScanner.scan(applicationContext)
         SentSmsScanner.scan(applicationContext)
         if (app.outbox.size > 0) Work.flushOutbox(applicationContext)

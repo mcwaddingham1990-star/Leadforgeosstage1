@@ -21,7 +21,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // Never touch API calls or cross-origin requests (Firebase, Google Maps, Gemini, etc.).
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) {
+  // Downloads (the Android APKs) go straight to the network: never cache multi-MB files.
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/downloads/")) {
     return;
   }
 

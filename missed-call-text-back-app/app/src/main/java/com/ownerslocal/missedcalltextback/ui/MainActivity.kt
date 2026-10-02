@@ -16,6 +16,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.ownerslocal.missedcalltextback.Config
 import com.ownerslocal.missedcalltextback.MissedCallApp
 import com.ownerslocal.missedcalltextback.R
@@ -27,6 +28,7 @@ import com.ownerslocal.missedcalltextback.account.TenantResult
 import com.ownerslocal.missedcalltextback.account.TokenProvider
 import com.ownerslocal.missedcalltextback.core.AutoReplier
 import com.ownerslocal.missedcalltextback.core.CallLogScanner
+import com.ownerslocal.missedcalltextback.core.KnownCallingApps
 import com.ownerslocal.missedcalltextback.core.Permissions
 import com.ownerslocal.missedcalltextback.core.PhoneNumbers
 import com.ownerslocal.missedcalltextback.core.SentSmsScanner
@@ -34,6 +36,7 @@ import com.ownerslocal.missedcalltextback.core.shortTime
 import com.ownerslocal.missedcalltextback.databinding.ActivityMainBinding
 import com.ownerslocal.missedcalltextback.databinding.ItemSetupBinding
 import com.ownerslocal.missedcalltextback.service.MonitorService
+import com.ownerslocal.missedcalltextback.service.Watchdog
 import com.ownerslocal.missedcalltextback.store.Session
 import com.ownerslocal.missedcalltextback.sync.Syncer
 import com.ownerslocal.missedcalltextback.sync.Work
@@ -88,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         if (isActive()) {
             MonitorService.start(this)
             Work.schedulePeriodic(this)
+            Watchdog.schedule(this)
             syncNow(showToast = false)
         }
     }
@@ -143,6 +147,7 @@ class MainActivity : AppCompatActivity() {
             binding.passwordInput.setText("")
             formDirty = false
             Work.schedulePeriodic(this@MainActivity)
+            Watchdog.schedule(this@MainActivity)
             MonitorService.start(this@MainActivity)
             render()
             if (!Permissions.allGranted(this@MainActivity, Permissions.CORE)) requestCorePermissions()
@@ -209,6 +214,7 @@ class MainActivity : AppCompatActivity() {
     private fun signOut() {
         MonitorService.stop(this)
         Work.cancelAll(this)
+        Watchdog.cancel(this)
         app.sessions.clear()
         app.state.clearAll()
         app.outbox.clear()
@@ -259,6 +265,43 @@ class MainActivity : AppCompatActivity() {
             }
             render()
         }
+    }
+
+    /** Saves the calling-app picks right away (separate from the message form's Save button). */
+    private fun setCallingAppWatched(packageName: String, watched: Boolean) {
+        val current = app.state.settings
+        val packages = if (watched) current.watchedPackages + packageName else current.watchedPackages - packageName
+        val updated = current.copy(watchedPackages = packages)
+        lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { pushSettings(updated) }
+            if (saved) {
+                app.state.settings = updated
+                if (watched && !Permissions.notificationAccess(this@MainActivity)) promptNotificationAccess()
+            } else {
+                Toast.makeText(this@MainActivity, "Couldn't save. Check your connection.", Toast.LENGTH_LONG).show()
+            }
+            render()
+        }
+    }
+
+    private fun promptNotificationAccess() {
+        val restrictedNote = if (Build.VERSION.SDK_INT >= 33) {
+            "\n\nIf Android says the setting is restricted: open App info for Missed Call Text-Back, " +
+                "tap ⋮ (top right) → \"Allow restricted settings\", then come back and try again."
+        } else ""
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Allow notification access")
+            .setMessage("To catch missed calls from other calling apps, turn on Missed Call Text-Back on the next screen.$restrictedNote")
+            .setPositiveButton("Open settings") { _, _ -> startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            .setNeutralButton("App info") { _, _ ->
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    private fun openOverlaySettings() {
+        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
     }
 
     private fun pushSettings(settings: RemoteSettings): Boolean {
@@ -323,13 +366,18 @@ class MainActivity : AppCompatActivity() {
         val entitlement = state.entitlement
         val coreReady = Permissions.allGranted(this, Permissions.CORE)
         val needsListener = settings.watchedPackages.isNotEmpty() && !Permissions.notificationAccess(this)
+        val canRunAsleep = Permissions.batteryUnrestricted(this)
 
         val (headline, color, detail) = when {
             !coreReady -> Triple("Needs setup", R.color.warn, "Allow calls & SMS below so the app can see missed calls and text back.")
             !entitlement.active -> Triple("Paused", R.color.warn, entitlement.summary)
             !settings.enabled -> Triple("Auto-reply is OFF", R.color.warn, "Missed calls are still logged, but nobody gets a text.")
+            !canRunAsleep -> Triple("Mostly on", R.color.warn, "Allow \"Run in background\" below, or Android may pause the app while your phone sleeps.")
             needsListener -> Triple("Mostly on", R.color.warn, "Phone calls are covered. Allow notification access to cover your other calling apps.")
-            else -> Triple("Auto-reply is ON", R.color.ok, "Anyone whose call you miss gets your message by text.")
+            else -> Triple(
+                "Auto-reply is ON", R.color.ok,
+                "Runs on its own in the background, even while your phone sleeps. You don't need the OwnersLOCAL app or a browser open."
+            )
         }
         binding.statusHeadline.text = headline
         binding.statusHeadline.setTextColor(ContextCompat.getColor(this, color))
@@ -341,6 +389,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         renderSetup(coreReady, settings)
+        renderCallingApps(settings)
 
         if (!formDirty) {
             fillingForm = true
@@ -376,6 +425,16 @@ class MainActivity : AppCompatActivity() {
 
         row(coreReady, "Calls & SMS", "See missed calls and send the reply.", "Allow") { requestCorePermissions() }
         row(
+            Permissions.batteryUnrestricted(this), "Run in background",
+            "Keeps working while your phone sleeps. On Samsung, also set Battery to \"Unrestricted\" in App info.",
+            "Allow"
+        ) { openBatterySettings() }
+        row(
+            Permissions.overlay(this), "Show over other apps",
+            "Pops up a banner over whatever you're using when someone gets texted back.",
+            "Allow"
+        ) { openOverlaySettings() }
+        row(
             Permissions.allGranted(this, Permissions.TEXT_HISTORY), "Text history",
             "Log customer replies to their record.", "Allow"
         ) { requestCorePermissions() }
@@ -385,17 +444,31 @@ class MainActivity : AppCompatActivity() {
                 "Warns you if auto-replies stop working.", "Allow"
             ) { requestCorePermissions() }
         }
-        row(
-            Permissions.batteryUnrestricted(this), "Run in background",
-            "Stops Android from pausing the app. On Samsung, also set the app to \"Unrestricted\" in Battery settings.",
-            "Allow"
-        ) { openBatterySettings() }
         if (settings.watchedPackages.isNotEmpty()) {
             row(
-                Permissions.notificationAccess(this), "Other calling apps",
-                "Reads missed-call alerts from ${settings.watchedPackages.size} app(s) you picked in OwnersLOCAL.",
-                "Open"
-            ) { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                Permissions.notificationAccess(this), "Notification access",
+                "Needed to see missed calls in the calling apps you picked below.",
+                "Allow"
+            ) { promptNotificationAccess() }
+        }
+    }
+
+    private fun renderCallingApps(settings: RemoteSettings) {
+        binding.callingAppsList.removeAllViews()
+        val installed = KnownCallingApps.installed(this)
+        binding.callingAppsHint.text = if (installed.isEmpty()) {
+            "None of the supported calling apps (Google Voice, TextNow, WhatsApp…) are installed. Regular phone calls are always covered."
+        } else {
+            "Calls to these apps don't show up in your phone's call log. Turn one on to text back its missed calls too. " +
+                "Works when the app's missed-call notification shows the caller's number."
+        }
+        installed.forEach { entry ->
+            val toggle = MaterialSwitch(this).apply {
+                text = entry.label
+                isChecked = entry.packageName in settings.watchedPackages
+                setOnCheckedChangeListener { _, checked -> setCallingAppWatched(entry.packageName, checked) }
+            }
+            binding.callingAppsList.addView(toggle)
         }
     }
 
