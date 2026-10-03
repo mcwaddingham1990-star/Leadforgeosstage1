@@ -404,3 +404,216 @@ export async function handleScanFinancialDocument(req: ScanFinancialDocumentRequ
     unreadable: parsed.unreadable ?? false
   };
 }
+
+// ---------------------------------------------------------------------------
+// No Tap Info Entry: spoken job updates and job photos -> structured fields
+// that the client shows on a Review & Save screen before anything is written.
+// ---------------------------------------------------------------------------
+
+export interface JobEntryContext {
+  jobTitle?: string;
+  customer?: string;
+  jobDescription?: string;
+  jobStatus?: string;
+  assignedEmployee?: string;
+  /** Speaker's local date and weekday, e.g. "2026-10-03 (Saturday)", so "Tuesday" resolves to a real date. */
+  today: string;
+  /** Inventory the business tracks, so spoken materials can be matched to real items. */
+  inventory?: Array<{ id: string; name: string; unit?: string }>;
+}
+
+export interface JobVoiceEntryRequest {
+  context: JobEntryContext;
+  /** Live speech-recognition text, when the browser provided it. */
+  transcript?: string;
+  /** Otherwise the recording itself (base64, no data: prefix). */
+  audioBase64?: string;
+  mimeType?: string;
+}
+
+export interface JobVoiceEntryResponse {
+  transcript: string;
+  workPerformed: string | null;
+  jobNotes: string | null;
+  progressSummary: string | null;
+  materials: Array<{ name: string; quantity: number | null; unit: string | null; inventoryId: string | null }>;
+  followUps: Array<{ description: string; date: string | null; time: string | null; kind: "appointment" | "task" }>;
+  customerRequests: string[];
+  changeOrders: Array<{ description: string; amount: number | null; customerApproved: boolean }>;
+  partsToOrder: Array<{ name: string; quantity: number | null }>;
+  issues: Array<{ description: string; kind: "callback" | "warranty" | "complaint" | "damage" | "safety" | "other" }>;
+  jobFinished: boolean;
+}
+
+const VOICE_ENTRY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    transcript: { type: Type.STRING },
+    workPerformed: { type: Type.STRING, nullable: true },
+    jobNotes: { type: Type.STRING, nullable: true },
+    progressSummary: { type: Type.STRING, nullable: true },
+    materials: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      name: { type: Type.STRING }, quantity: { type: Type.NUMBER, nullable: true }, unit: { type: Type.STRING, nullable: true }, inventoryId: { type: Type.STRING, nullable: true }
+    }, required: ["name"] } },
+    followUps: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      description: { type: Type.STRING }, date: { type: Type.STRING, nullable: true }, time: { type: Type.STRING, nullable: true }, kind: { type: Type.STRING, enum: ["appointment", "task"] }
+    }, required: ["description", "kind"] } },
+    customerRequests: { type: Type.ARRAY, items: { type: Type.STRING } },
+    changeOrders: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      description: { type: Type.STRING }, amount: { type: Type.NUMBER, nullable: true }, customerApproved: { type: Type.BOOLEAN }
+    }, required: ["description", "customerApproved"] } },
+    partsToOrder: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      name: { type: Type.STRING }, quantity: { type: Type.NUMBER, nullable: true }
+    }, required: ["name"] } },
+    issues: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      description: { type: Type.STRING }, kind: { type: Type.STRING, enum: ["callback", "warranty", "complaint", "damage", "safety", "other"] }
+    }, required: ["description", "kind"] } },
+    jobFinished: { type: Type.BOOLEAN }
+  },
+  required: ["transcript", "materials", "followUps", "customerRequests", "changeOrders", "partsToOrder", "issues", "jobFinished"]
+};
+
+const describeJob = (c: JobEntryContext) => [
+  `Today is ${c.today}.`,
+  `Job: ${c.jobTitle || "Service job"} for ${c.customer || "the customer"}.`,
+  c.jobDescription ? `Job description: ${c.jobDescription.slice(0, 600)}` : "",
+  c.jobStatus ? `Current job status: ${c.jobStatus}.` : "",
+  c.assignedEmployee ? `Assigned technician: ${c.assignedEmployee}.` : "",
+].filter(Boolean).join(" ");
+
+/**
+ * Turns a technician's spoken update ("finished the upstairs bathroom, used
+ * six feet of PEX, she approved another $180, come back Tuesday...") into
+ * the fields Owner'sLOCAL already has. Nothing here is saved: the client
+ * shows every extracted item for review first.
+ */
+export async function handleJobVoiceEntry(req: JobVoiceEntryRequest): Promise<JobVoiceEntryResponse> {
+  const ai = getClient();
+  const transcript = (req.transcript || "").trim();
+  if (!transcript && !req.audioBase64) throw new Error("Nothing was recorded.");
+  const inventory = (req.context.inventory || []).slice(0, 400).map(i => `${i.id} | ${i.name}${i.unit ? ` (${i.unit})` : ""}`).join("\n");
+  const instructions = [
+    "You turn a field technician's spoken job update into structured data for a home-service business app.",
+    describeJob(req.context),
+    req.audioBase64 ? "First transcribe the attached recording word for word into `transcript`." : "The technician's words are in the transcript below; copy them into `transcript` unchanged.",
+    "Then extract only what was actually said. Never invent quantities, prices, dates or items.",
+    "workPerformed: the work completed, as a short clear sentence or two (null if none). jobNotes: other useful job details that are not work performed (null if none). progressSummary: one short line suitable for a job activity log.",
+    "materials: each material or part used, with quantity and unit as spoken (\"six feet of PEX\" -> quantity 6, unit \"ft\"). If it clearly matches an inventory item below, set inventoryId to that item's id, otherwise null.",
+    "followUps: return visits or tasks. Resolve relative days (\"Tuesday\", \"tomorrow\", \"next week\") to a YYYY-MM-DD date using today's date; the next occurrence of a weekday is after today. time in 24h HH:MM only if a time was said. kind=appointment for visits with the customer, task for internal to-dos.",
+    "customerRequests: anything the customer asked for, in plain words.",
+    "changeOrders: added work beyond the original job, with the dollar amount if said; customerApproved=true only if the speaker said the customer approved/agreed/OK'd it.",
+    "partsToOrder: parts that need to be ordered or picked up.",
+    "issues: complaints, leaks, damage, callbacks, warranty or safety concerns.",
+    "jobFinished: true only if the speaker said the whole job is finished/done/complete (not just one task).",
+    inventory ? `Inventory items (id | name):\n${inventory}` : "The business has no inventory list; leave inventoryId null.",
+  ].join("\n");
+
+  const parts: any[] = [];
+  if (req.audioBase64) parts.push({ inlineData: { data: req.audioBase64, mimeType: req.mimeType || "audio/webm" } });
+  parts.push({ text: transcript ? `${instructions}\n\nTranscript:\n"""${transcript.slice(0, 6000)}"""` : instructions });
+
+  const response = await generateContentWithFallback(ai, {
+    contents: [{ role: "user", parts }],
+    config: { responseMimeType: "application/json", responseSchema: VOICE_ENTRY_SCHEMA }
+  });
+
+  let parsed: Partial<JobVoiceEntryResponse> = {};
+  try { parsed = JSON.parse(response.text ?? "{}"); } catch { /* fall through to empty result */ }
+  const arr = <T,>(v: unknown): T[] => Array.isArray(v) ? v as T[] : [];
+  const str = (v: unknown) => typeof v === "string" && v.trim() ? v.trim() : null;
+  const num = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : null;
+  const date = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  const time = (v: unknown) => typeof v === "string" && /^\d{1,2}:\d{2}$/.test(v) ? v.padStart(5, "0") : null;
+  return {
+    transcript: str(parsed.transcript) || transcript,
+    workPerformed: str(parsed.workPerformed),
+    jobNotes: str(parsed.jobNotes),
+    progressSummary: str(parsed.progressSummary),
+    materials: arr<any>(parsed.materials).filter(m => str(m?.name)).map(m => ({ name: str(m.name)!, quantity: num(m.quantity), unit: str(m.unit), inventoryId: str(m.inventoryId) })),
+    followUps: arr<any>(parsed.followUps).filter(f => str(f?.description)).map(f => ({ description: str(f.description)!, date: date(f.date), time: time(f.time), kind: f.kind === "task" ? "task" : "appointment" })),
+    customerRequests: arr<unknown>(parsed.customerRequests).map(str).filter((s): s is string => !!s),
+    changeOrders: arr<any>(parsed.changeOrders).filter(c => str(c?.description)).map(c => ({ description: str(c.description)!, amount: num(c.amount), customerApproved: c.customerApproved === true })),
+    partsToOrder: arr<any>(parsed.partsToOrder).filter(p => str(p?.name)).map(p => ({ name: str(p.name)!, quantity: num(p.quantity) })),
+    issues: arr<any>(parsed.issues).filter(i => str(i?.description)).map(i => ({ description: str(i.description)!, kind: ["callback", "warranty", "complaint", "damage", "safety"].includes(i.kind) ? i.kind : "other" })),
+    jobFinished: parsed.jobFinished === true,
+  };
+}
+
+export const JOB_PHOTO_CATEGORIES = ["before", "during", "after", "damage", "materials", "receipt", "serial", "completed", "other"] as const;
+export type JobPhotoCategory = typeof JOB_PHOTO_CATEGORIES[number];
+
+export interface JobPhotoEntryRequest {
+  context: JobEntryContext;
+  imageBase64: string;
+  mimeType: string;
+}
+
+export interface JobPhotoEntryResponse {
+  category: JobPhotoCategory;
+  caption: string | null;
+  brand: string | null;
+  modelNumber: string | null;
+  serialNumber: string | null;
+  equipmentType: string | null;
+  receiptVendor: string | null;
+  receiptTotal: number | null;
+  receiptDate: string | null;
+  materials: Array<{ name: string; quantity: number | null; unit: string | null }>;
+}
+
+const PHOTO_ENTRY_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    category: { type: Type.STRING, enum: [...JOB_PHOTO_CATEGORIES] },
+    caption: { type: Type.STRING, nullable: true },
+    brand: { type: Type.STRING, nullable: true },
+    modelNumber: { type: Type.STRING, nullable: true },
+    serialNumber: { type: Type.STRING, nullable: true },
+    equipmentType: { type: Type.STRING, nullable: true },
+    receiptVendor: { type: Type.STRING, nullable: true },
+    receiptTotal: { type: Type.NUMBER, nullable: true },
+    receiptDate: { type: Type.STRING, nullable: true },
+    materials: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+      name: { type: Type.STRING }, quantity: { type: Type.NUMBER, nullable: true }, unit: { type: Type.STRING, nullable: true }
+    }, required: ["name"] } }
+  },
+  required: ["category", "materials"]
+};
+
+/** Classifies a job photo and reads any label, serial plate or receipt in it. */
+export async function handleJobPhotoEntry(req: JobPhotoEntryRequest): Promise<JobPhotoEntryResponse> {
+  const ai = getClient();
+  const response = await generateContentWithFallback(ai, {
+    contents: [{
+      role: "user",
+      parts: [
+        { inlineData: { data: req.imageBase64, mimeType: req.mimeType } },
+        { text: [
+          "This photo was taken by a field technician on a home-service job (plumbing, HVAC, electrical, general contracting).",
+          describeJob(req.context),
+          "Classify it into exactly one category: before (site/problem before work started), during (work in progress, open walls, parts out), after (finished area), damage (a leak, break, burn, rot or other problem/damage close-up), materials (parts, supplies or equipment not yet installed), receipt (a store receipt, invoice or packing slip), serial (an equipment data plate, model/serial label or nameplate), completed (close-up of finished installed work), other.",
+          "If the job status says work hasn't started, an overview of the site is most likely 'before'; if the job is completed, an overview is most likely 'after'.",
+          "caption: one short plain sentence describing what the photo shows.",
+          "Read any visible text exactly. brand, modelNumber, serialNumber, equipmentType from a data plate or label. receiptVendor, receiptTotal (the printed total including tax), receiptDate (YYYY-MM-DD) from a receipt. materials: distinct parts/supplies visible on a receipt or in the photo, with quantity if readable or countable.",
+          "Never guess characters you can't read: set a field to null if it isn't clearly legible."
+        ].join(" ") }
+      ]
+    }],
+    config: { responseMimeType: "application/json", responseSchema: PHOTO_ENTRY_SCHEMA }
+  });
+  let parsed: any = {};
+  try { parsed = JSON.parse(response.text ?? "{}"); } catch { /* empty */ }
+  const str = (v: unknown) => typeof v === "string" && v.trim() ? v.trim() : null;
+  return {
+    category: (JOB_PHOTO_CATEGORIES as readonly string[]).includes(parsed.category) ? parsed.category : "other",
+    caption: str(parsed.caption),
+    brand: str(parsed.brand),
+    modelNumber: str(parsed.modelNumber),
+    serialNumber: str(parsed.serialNumber),
+    equipmentType: str(parsed.equipmentType),
+    receiptVendor: str(parsed.receiptVendor),
+    receiptTotal: typeof parsed.receiptTotal === "number" && Number.isFinite(parsed.receiptTotal) ? parsed.receiptTotal : null,
+    receiptDate: typeof parsed.receiptDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.receiptDate) ? parsed.receiptDate : null,
+    materials: Array.isArray(parsed.materials) ? parsed.materials.filter((m: any) => str(m?.name)).map((m: any) => ({ name: str(m.name)!, quantity: typeof m.quantity === "number" ? m.quantity : null, unit: str(m.unit) })) : [],
+  };
+}

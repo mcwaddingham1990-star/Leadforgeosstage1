@@ -151,6 +151,7 @@ export const TUTORIALS: Record<string, Tutorial> = {
     paragraphs: [
       "Jobs is where accepted work is managed from start to finish. Each job can hold the customer, service location, assigned employee, work status, job tracking, materials, costs, work orders, memberships, purchase orders, and activity history.",
       "Search for a job or choose New Job. Open a job to assign workers, update the work, add materials, use Job Tracking, create a work order, review job costs, or save and send job documents. When the work changes, keep the job record updated so the rest of Owner’sLOCAL stays useful.",
+      "Inside a job, tap the No Tap Info Entry microphone and just talk: what you did, materials used, what the customer asked for or approved, and what has to happen next. Or snap photos and they're sorted into before, after, damage, receipts and serial numbers for you. You get a quick Review & Save screen first, so nothing is saved until you check it.",
     ],
   },
   timeclock: {

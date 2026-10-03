@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScanBusinessRecord, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest, ScanBusinessRecordRequest } from './server/aiHandler';
+import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScanBusinessRecord, handleJobVoiceEntry, handleJobPhotoEntry, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest, ScanBusinessRecordRequest, JobVoiceEntryRequest, JobPhotoEntryRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 import { sendPushToRecipients } from './server/pushNotifications';
 import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } from './server/webLeadFormHandler';
@@ -112,6 +112,25 @@ app.post('/api/ai/scan-business-record', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'AI record scan failed' });
+  }
+});
+
+// No Tap Info Entry (Jobs): spoken update / job photo -> structured fields
+// for the client's Review & Save screen. Same auth + per-account rate limit
+// as every other /api/ai route (see the app.use above).
+app.post('/api/ai/job-voice-entry', async (req, res) => {
+  try {
+    res.json(await handleJobVoiceEntry(req.body as JobVoiceEntryRequest));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Voice entry failed' });
+  }
+});
+
+app.post('/api/ai/job-photo-entry', async (req, res) => {
+  try {
+    res.json(await handleJobPhotoEntry(req.body as JobPhotoEntryRequest));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Photo analysis failed' });
   }
 });
 

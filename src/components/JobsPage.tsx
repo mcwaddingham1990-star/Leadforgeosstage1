@@ -32,6 +32,7 @@ import { AssignEmployeeField } from "./AssignEmployeeField";
 import type { BuildJobPrefill } from "../types/generatedPdf";
 import { OwnerProtectionPanel, levelStyle } from "./OwnerProtectionPanel";
 import { OPEN_JOB_KEY, useAllProtection } from "../hooks/useOwnerProtection";
+import { NoTapEntryLauncher } from "./NoTapEntry";
 
 type JobStatus = SchedulingEvent["status"];
 type ViewMode = "board" | "list";
@@ -343,6 +344,7 @@ export const JobsPage: React.FC = () => {
         </div>}
       </div>
       <div className="space-y-5 p-5">
+        <NoTapEntryLauncher key={`notap-${selected.id}`} job={selected} />
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[["Date",selected.date,Calendar],["Time",`${selected.startTime}–${selected.endTime}`,Clock],["Technician",selected.assignedEmployee||"Unassigned",User],["Priority",selected.priority,AlertTriangle]].map(([l,v,I]:any)=><div key={l} className="rounded-xl border border-[#9EC8EF] bg-white p-3"><I className="h-4 w-4 text-[#4A86F7]"/><p className="mt-2 text-[9px] font-bold uppercase text-[#5E7393]">{l}</p><p className="truncate text-xs font-black text-[#1F3557]">{v}</p></div>)}</section>
         <section className="rounded-2xl border border-[#9EC8EF] bg-white p-4"><h4 className="text-xs font-black uppercase text-[#1F3557]">Customer & Site</h4><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><p><User className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.customer}</p><p><MapPin className="mr-2 inline h-4 w-4 text-[#4A86F7]"/>{selected.location||selected.customerAddress||"No site address"}</p><p>{selected.customerPhone||"No phone"}</p><p>{selected.customerEmail||"No email"}</p></div>{selected.description&&<p className="mt-3 border-t border-blue-100 pt-3 text-xs text-slate-600">{selected.description}</p>}<div className="mt-3 border-t border-blue-100 pt-3"><CustomerPortalControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} /></div><div className="mt-3 border-t border-blue-100 pt-3"><ReviewRequestControls customer={resolveCustomerByIdOrName(customers, selected.customerId, selected.customer)} jobId={selected.id} jobDescription={selected.title || selected.description} /></div></section>
         <OwnerProtectionPanel key={selected.id} job={selected} canEdit={canEdit} focusTimeline={focusSection === "timeline"} />
