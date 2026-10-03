@@ -7,7 +7,7 @@ import { PhoneMissed, PhoneIncoming, PhoneOutgoing, Download, Smartphone, Messag
 
 // Served from public/downloads (copied there from missed-call-text-back-app's build).
 const APK_URL = "/downloads/MissedCallTextBack.apk";
-const APK_VERSION = "3.0";
+const APK_VERSION = "3.1";
 
 const isIOS = () =>
   typeof navigator !== "undefined" &&

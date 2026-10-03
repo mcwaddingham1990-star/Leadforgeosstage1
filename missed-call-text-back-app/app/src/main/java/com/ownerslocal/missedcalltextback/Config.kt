@@ -27,8 +27,8 @@ object Config {
      * google-services.json: "mobilesdk_app_id" and "current_key"). Blank =
      * push off; the app then checks for new items every couple of minutes.
      */
-    const val FCM_APP_ID = ""
-    const val FCM_API_KEY = ""
+    const val FCM_APP_ID = "1:1077711892994:android:8b99007fb5105c485cad1b"
+    const val FCM_API_KEY = "AIzaSyDUVYYl7_a9_V1PWNVbWTa3F8Z0ywP_xLE"
     const val FCM_SENDER_ID = "1077711892994"
 
     const val DEFAULT_MESSAGE = "Sorry we missed your call! We'll get back to you shortly."
