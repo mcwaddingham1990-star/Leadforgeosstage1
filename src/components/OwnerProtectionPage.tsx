@@ -13,7 +13,7 @@ const CATEGORY_TYPES: Record<Exclude<Category, "all">, AlertType[]> = {
   unbilled: ["completed_not_invoiced"],
   overdue: ["invoice_overdue", "payment_disputed"],
   change: ["extra_work_no_change_order", "scope_change_message", "unsigned_change_order"],
-  proof: ["closing_without_proof"],
+  proof: ["closing_without_proof", "callback_risk"],
   cost: ["over_estimate", "labor_overrun"],
 };
 

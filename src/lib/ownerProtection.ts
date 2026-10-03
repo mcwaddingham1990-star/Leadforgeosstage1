@@ -104,6 +104,7 @@ export type AlertType =
   | "completed_not_invoiced"
   | "invoice_overdue"
   | "closing_without_proof"
+  | "callback_risk"
   | "payment_disputed";
 
 export interface RiskAlert {
@@ -309,7 +310,8 @@ export function computeJobProtection(job: SchedulingEvent, sources: ProtectionSo
     const doc = sources.documents.find(d => d.id === a.documentId);
     if (doc && isPhoto(doc)) photoTimes.set(doc.id, { at: toMillis(a.uploadedAt) ?? docTime(doc), doc });
   }));
-  const photos = [...photoTimes.values()];
+  // Receipts, data plates and parts shots are reference photos, not before/after proof.
+  const photos = [...photoTimes.values()].filter(p => !/receipt|serial|materials/i.test(tagText(p.doc)) && !/receipt/i.test(p.doc.type || ""));
   const tagged = (p: { doc: DocumentItem }, word: string) => tagText(p.doc).includes(word);
   const beforePhotos = photos.filter(p => tagged(p, "before") || (!tagged(p, "after") && p.at != null && win.start != null && p.at <= win.start + 30 * 60_000));
   const afterPhotos = photos.filter(p => tagged(p, "after") || (!tagged(p, "before") && p.at != null && (
@@ -470,6 +472,16 @@ export function computeJobAlerts(job: SchedulingEvent, protection: JobProtection
       title: `${number} is running over on labor`,
       why: `${costing.laborHours.toFixed(1)} hours logged against ${estHours.toFixed(1)} estimated (${Math.round((costing.laborHours / estHours - 1) * 100)}% over).`,
       amount: rate ? (costing.laborHours - estHours) * rate : undefined, action: { kind: "review_job", label: "Review Job" }
+    });
+  }
+
+  if ((job.tags || []).includes("Callback Risk")) {
+    const flagged = [...(job.activity || [])].reverse().find(a => /^Possible .* flagged$/i.test(a.action));
+    alerts.push({
+      id: `${job.id}:callback_risk`, type: "callback_risk", severity: "medium", jobId: job.id,
+      title: `Possible callback or warranty issue on ${number}`,
+      why: `${flagged?.detail ? `"${flagged.detail}"` : "A complaint or problem was reported"}${flagged?.by ? ` (${flagged.by})` : ""}. Callbacks are unpaid work. Document it and follow up before it becomes a dispute.`,
+      action: { kind: "review_job", label: "Review Job" }
     });
   }
 
