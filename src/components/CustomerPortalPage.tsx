@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Briefcase, FileText, Calendar, CreditCard, FolderOpen, ShieldCheck, PlusCircle, MessageSquare,
-  Loader2, AlertTriangle, CheckCircle2, Camera, X, Send, Download, FileSignature, Building2
+  Loader2, AlertTriangle, CheckCircle2, Camera, X, Send, Download, FileSignature, Building2,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
   fetchPortalData, fetchPortalDocumentPdf, submitPortalEstimateDecision, submitPortalServiceRequest,
@@ -26,6 +27,15 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
   { id: "messages", label: "Messages", icon: <MessageSquare className="w-4 h-4" /> }
 ];
 
+const BrandIcon: React.FC<{ className?: string }> = ({ className = "" }) => (
+  <img
+    src="/branding/owners-sidebar-icon-1000043699.png"
+    alt=""
+    aria-hidden="true"
+    className={`object-contain ${className}`}
+  />
+);
+
 const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="rounded-2xl border border-[#9EC8EF] bg-white p-4 shadow-sm">{children}</div>
 );
@@ -48,6 +58,7 @@ export default function CustomerPortalPage({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("jobs");
   const [toast, setToast] = useState("");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const reload = useCallback(async () => {
     const result = await fetchPortalData(token);
@@ -108,29 +119,63 @@ export default function CustomerPortalPage({ token }: { token: string }) {
     );
   }
 
+  const activeTab = TABS.find(item => item.id === tab) || TABS[0];
+
   return (
-    <div className="min-h-[100dvh] w-full bg-[#EAF5FF] sm:p-3">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1600px] overflow-hidden border-[#9EC8EF] bg-[#EAF5FF] shadow-2xl sm:min-h-[calc(100dvh-24px)] sm:rounded-2xl sm:border">
-        {/* Same left-nav shell as the main Owner'sLOCAL app. It stays on the
-            left on phones too -- no separate horizontal mobile tab strip. */}
-        <aside className="flex w-[146px] shrink-0 flex-col border-r border-[#9EC8EF] bg-[#C7E3FA] text-[#1F3557] sm:w-[220px] lg:w-[240px]">
-          <div className="border-b border-[#9EC8EF] px-2.5 py-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#315C9F] text-[10px] font-black text-white sm:h-8 sm:w-8">
-                OL
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[10px] font-black tracking-tight text-[#1F3557] sm:text-sm">Owner'sLOCAL</p>
-                <p className="truncate text-[7px] font-black uppercase tracking-wider text-[#5E7393] sm:text-[8px]">Customer Portal</p>
-              </div>
+    <div className="min-h-[100dvh] w-full bg-[#F5FAFF] p-2 sm:p-4 flex items-center justify-center">
+      <div
+        className="w-full h-[calc(100dvh-16px)] sm:h-[calc(100dvh-32px)] min-h-[650px] bg-[#EAF5FF] border border-[#9EC8EF] overflow-hidden flex flex-row shadow-2xl relative max-w-7xl mx-auto workspace-theme theme-light-basic"
+        style={{ borderRadius: "24px" }}
+      >
+        {/* CUSTOMER PORTAL — same workspace shell as the main Owner'sLOCAL app. */}
+        <aside
+          style={{
+            width: isSidebarCollapsed ? "72px" : "240px",
+            backgroundColor: "#C7E3FA",
+            transition: "width 0.2s ease-in-out"
+          }}
+          className="flex flex-col border-r border-[#9EC8EF] text-[#1F3557] shrink-0 relative"
+        >
+          <div className="p-4 border-b border-[#9EC8EF] flex flex-col gap-2 relative">
+            <div className="flex items-center justify-between">
+              {!isSidebarCollapsed ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+                    <BrandIcon className="w-full h-full" />
+                  </div>
+                  <span className="font-sans font-black tracking-tight text-sm text-[#1F3557] select-none truncate">OwnersLOCAL</span>
+                  <span className="text-[7.5px] px-1.5 py-0.5 bg-[#4A86F7]/10 text-[#1F3557] rounded font-black uppercase tracking-wider select-none shrink-0">Customer</span>
+                </div>
+              ) : (
+                <div className="mx-auto w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
+                  <BrandIcon className="w-full h-full" />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(v => !v)}
+                style={{ width: "24px", height: "24px" }}
+                className="absolute -right-3 top-5 bg-[#4A86F7] hover:bg-[#3977EE] border border-[#9EC8EF] rounded-full flex items-center justify-center text-white shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer z-20"
+                title={isSidebarCollapsed ? "Expand Menu" : "Collapse Menu"}
+              >
+                {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+              </button>
             </div>
-            <div className="mt-3 rounded-xl border border-[#9EC8EF]/70 bg-white/45 px-2 py-2">
-              <p className="truncate text-[7px] font-black uppercase tracking-wider text-[#5E7393] sm:text-[8px]">{data.businessName || "Your Service Provider"}</p>
-              <p className="mt-0.5 truncate text-[10px] font-black text-[#1F3557] sm:text-xs">{data.customer?.name}</p>
-            </div>
+
+            {!isSidebarCollapsed && (
+              <div className="mt-2.5 px-0.5 animate-fade-in text-left min-w-0">
+                <p className="font-sans font-black text-xs text-[#1F3557] tracking-wider uppercase leading-normal truncate">
+                  {data.businessName || "Your Service Provider"}
+                </p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-[#5E7393] truncate">
+                  Customer Portal
+                </p>
+              </div>
+            )}
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-1.5 py-3 sm:px-2">
+          <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-none">
             {TABS.map(item => {
               const active = tab === item.id;
               return (
@@ -138,43 +183,70 @@ export default function CustomerPortalPage({ token }: { token: string }) {
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`group relative flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-all sm:px-3 ${
+                  className={`sidebar-nav-btn rounded-xl transition-all duration-200 cursor-pointer flex items-center relative group w-full ${
+                    isSidebarCollapsed ? "justify-center p-2" : "px-3 py-2"
+                  } ${
                     active
-                      ? "bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white shadow-[0_0_10px_rgba(20,133,244,0.45)]"
-                      : "text-[#5E7393] hover:bg-[#BDDDF8] hover:text-[#1F3557]"
+                      ? "sidebar-nav-btn-active bg-gradient-to-r from-[#2E7BEF] to-[#1485F4] text-white font-bold shadow-[0_0_10px_rgba(20,133,244,0.45)]"
+                      : "hover:bg-[#BDDDF8] text-[#5E7393] hover:text-[#1F3557] border border-transparent"
                   }`}
+                  title={item.label}
                 >
-                  <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5 sm:[&>svg]:h-[18px] sm:[&>svg]:w-[18px]">{item.icon}</span>
-                  <span className="min-w-0 flex-1 truncate text-[9px] font-bold sm:text-xs">{item.label}</span>
+                  {isSidebarCollapsed ? (
+                    <span className={`shrink-0 select-none ${active ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                      {item.icon}
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2.5 w-full min-w-0">
+                      <span className={`shrink-0 select-none ${active ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                        {item.icon}
+                      </span>
+                      <span className={`font-sans font-bold tracking-wide text-xs flex-1 text-left truncate ${active ? "text-white" : "text-[#5E7393] group-hover:text-[#1F3557]"}`}>
+                        {item.label}
+                      </span>
+                    </div>
+                  )}
                 </button>
               );
             })}
           </nav>
 
-          <div className="border-t border-[#9EC8EF] p-2 sm:p-3">
-            <div className="rounded-xl border border-[#9EC8EF] bg-white/55 px-2 py-2 text-center">
-              <p className="text-[7px] font-black uppercase tracking-wider text-[#315C9F] sm:text-[8px]">Customer Access</p>
-              <p className="mt-0.5 text-[7px] font-semibold text-[#5E7393] sm:text-[9px]">Powered by Owner'sLOCAL</p>
+          <div className="p-3 border-t border-[#9EC8EF] bg-transparent">
+            <div className={`flex ${isSidebarCollapsed ? "flex-col items-center" : "items-center gap-2"} min-w-0 overflow-hidden`}>
+              <div className="w-10 h-10 rounded-full bg-[#A9CEF5] text-[#1F3557] flex items-center justify-center text-xs font-black shrink-0 border border-[#9EC8EF] uppercase select-none">
+                {(data.customer?.name || "CU").slice(0, 2)}
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex-1 min-w-0 animate-fade-in text-left">
+                  <p className="text-xs font-sans font-extrabold text-[#1F3557] truncate leading-tight">{data.customer?.name || "Customer"}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <p className="text-[10px] font-mono text-[#1F3557]/60 truncate uppercase tracking-wider leading-none">Customer</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[#EAF5FF]">
-          <header className="border-b border-[#9EC8EF] bg-[#1F3557] px-3 py-3 text-white sm:px-5 sm:py-4">
-            <p className="truncate text-[8px] font-black uppercase tracking-[0.16em] text-[#9EC8EF] sm:text-[10px]">{data.businessName || "Your Service Provider"}</p>
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="mt-0.5 truncate text-sm font-black sm:text-lg">Hi, {data.customer?.name}</h1>
-              <span className="shrink-0 rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 py-1 text-[7px] font-black uppercase tracking-wider text-emerald-200 sm:text-[9px]">● Live sync</span>
+        <main className="flex-1 flex flex-col min-w-0 min-h-[640px] overflow-hidden relative bg-[#EAF5FF]">
+          <div className="px-5 py-3 border-b border-[#9EC8EF] bg-[#C7E3FA] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[10px] font-bold text-[#5E7393] uppercase font-mono tracking-wider shrink-0">CURRENT PAGE:</span>
+              <span className="text-xs font-extrabold text-[#1F3557] bg-[#EAF5FF] border border-[#9EC8EF] px-2.5 py-1 rounded-xl truncate">
+                {activeTab.label}
+              </span>
             </div>
-          </header>
+            <span className="shrink-0 rounded-xl border border-emerald-300/70 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-700">● Live sync</span>
+          </div>
 
           {toast && (
-            <div className="mx-2.5 mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-[10px] font-bold text-emerald-800 sm:mx-4 sm:mt-3 sm:px-4 sm:py-2.5 sm:text-sm">
+            <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-2.5 text-xs font-bold text-emerald-800">
               <CheckCircle2 className="h-4 w-4 shrink-0" /> {toast}
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-2.5 sm:p-5">
+          <div className="flex-1 overflow-y-auto p-4 pb-28 md:p-6 md:pb-10 space-y-6 scrollbar-thin">
             <div className="mx-auto w-full max-w-5xl space-y-3">
               {tab === "providers" && <ServiceProvidersTab data={data} token={token} onNotify={setToast} />}
               {tab === "jobs" && <JobsTab data={data} />}
