@@ -12,6 +12,7 @@ import {
 import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { base64ToBytes } from "../lib/pdfExport";
+import { auth } from "../firebase";
 
 type Tab = "providers" | "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "request" | "messages";
 
@@ -276,6 +277,15 @@ function ServiceProvidersTab({ data, token, onNotify }: { data: PortalData; toke
     if (!result.ok || !result.code) {
       onNotify(result.error || "Could not prepare your free customer account. Try again.");
       return;
+    }
+    // Customer signup must start from a clean auth session. Otherwise an owner
+    // previewing the portal is immediately restored into the business app.
+    // Keep an explicit intent marker as a second guard for the auth listener.
+    sessionStorage.setItem("ownerslocal_customer_auth_intent", "1");
+    try {
+      await auth.signOut();
+    } catch (error) {
+      console.warn("Could not clear the existing session before customer signup.", error);
     }
     window.location.href = `/?joinCode=${encodeURIComponent(result.code)}&customer=signup`;
   };
