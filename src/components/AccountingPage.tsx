@@ -715,6 +715,17 @@ function InvoicesTab({
       triggerNotification("Add a customer and at least one line item.");
       return;
     }
+    // Same one-active-invoice-per-job rule the job handoff applies when this
+    // form opens -- re-checked here because the job's invoice can appear while
+    // the form is open (e.g. a "Job Completed -> Create Invoice" automation).
+    const existingJobInvoice = findExistingInvoiceForJob(invoices, linkedJobId || undefined);
+    if (existingJobInvoice) {
+      triggerNotification(`Invoice ${existingJobInvoice.invoiceNumber} already exists for this job.`);
+      resetForm();
+      setIsCreating(false);
+      setViewingInvoice(existingJobInvoice);
+      return;
+    }
     // Marketing attribution -- prefer the linked estimate's source (most
     // specific to this actual sale), then the matched customer's source,
     // over leaving it blank.

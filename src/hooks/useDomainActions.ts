@@ -112,6 +112,8 @@ export function useDomainActions() {
     sourceEstimateId?: string;
     sourceLeadId?: string;
     source?: Customer["source"];
+    /** Set only by the Automation Engine -- stamps the job so its own "Job Created" event can't re-trigger automations. */
+    createdByAutomationId?: string;
   }): SchedulingEvent => {
     if (input.sourceEstimateId) {
       const existingJob = schedulingEvents.find(event => event.sourceEstimateId === input.sourceEstimateId);
@@ -153,6 +155,7 @@ export function useDomainActions() {
       sourceEstimateId: input.sourceEstimateId,
       sourceLeadId: input.sourceLeadId,
       source: input.source,
+      ...(input.createdByAutomationId ? { createdByAutomationId: input.createdByAutomationId } : {}),
       progress: 0,
       checklist: [],
       materials: [],
@@ -161,12 +164,16 @@ export function useDomainActions() {
       activity: [{
         id: "activity_" + Math.random().toString(36).substring(2, 9),
         timestamp: now,
-        action: input.sourceEstimateId ? "Job created from accepted estimate" : "Job created",
+        action: (input.sourceEstimateId ? "Job created from accepted estimate" : "Job created") + (input.createdByAutomationId ? " (automation)" : ""),
         by: actor
       }]
     };
 
-    setSchedulingEvents(prev => [newJob, ...prev]);
+    // Re-checked against the very latest list inside the updater too: the
+    // `schedulingEvents` closure above can lag a render behind when two
+    // conversions of the same estimate land back to back (e.g. a manual
+    // Convert to Job and an "Estimate Accepted -> Create Job" automation).
+    setSchedulingEvents(prev => input.sourceEstimateId && prev.some(event => event.sourceEstimateId === input.sourceEstimateId) ? prev : [newJob, ...prev]);
 
     if (input.sourceEstimateId) {
       setEstimates(prev => prev.map(e => (e.id === input.sourceEstimateId ? { ...e, status: "Accepted" } : e)));
@@ -233,6 +240,76 @@ export function useDomainActions() {
   };
 
   /**
+   * One shared path for a non-Job calendar entry (Site Visit, Consultation,
+   * Follow-Up...) -- the same SchedulingEvent shape the Lead page's
+   * "Schedule Home Visit" writes, so it shows up on Scheduling, Dispatch,
+   * and the Map like any other appointment. Used by automations; a
+   * `dedupeKey` makes repeat calls for the same source return the existing
+   * entry instead of adding a second one.
+   */
+  const createAppointment = (input: {
+    eventType: string;
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    customer: string;
+    customerId?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    customerAddress?: string;
+    notes?: string;
+    priority?: SchedulingEvent["priority"];
+    sourceLeadId?: string;
+    source?: Customer["source"];
+    dedupeKey?: string;
+    createdByAutomationId?: string;
+  }): SchedulingEvent => {
+    const id = input.dedupeKey
+      ? `appt_${input.dedupeKey.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`
+      : "appt_" + Math.random().toString(36).substring(2, 9);
+    const existing = schedulingEvents.find(event => event.id === id);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const appointment: SchedulingEvent = {
+      id,
+      eventType: input.eventType,
+      title: input.title,
+      customType: input.title,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      customerId: input.customerId,
+      customer: input.customer,
+      customerPhone: input.customerPhone || "",
+      customerEmail: input.customerEmail || "",
+      customerAddress: input.customerAddress || "",
+      location: input.customerAddress || "",
+      assignedEmployee: "",
+      priority: input.priority || "Medium",
+      notes: input.notes,
+      status: "Unassigned",
+      // Never sourceEstimateId: createJob's one-job-per-estimate check looks
+      // that field up across every calendar entry, so an appointment carrying
+      // it would be mistaken for the estimate's job.
+      sourceLeadId: input.sourceLeadId,
+      source: input.source,
+      ...(input.createdByAutomationId ? { createdByAutomationId: input.createdByAutomationId } : {}),
+      createdAt: now,
+      updatedAt: now,
+      activity: [{ id: "activity_" + Math.random().toString(36).substring(2, 9), timestamp: now, action: `${input.eventType} scheduled${input.createdByAutomationId ? " (automation)" : ""}`, by: actor }]
+    };
+    let added = false;
+    setSchedulingEvents(prev => {
+      if (prev.some(event => event.id === id)) return prev;
+      added = true;
+      return [appointment, ...prev];
+    });
+    if (added) logOperationalEvent(`${input.eventType} Scheduled`, `${input.title} for ${input.customer} on ${input.date}`, "📅", { screen: "scheduling" });
+    return appointment;
+  };
+
+  /**
    * Called whenever a new estimate is created for someone who isn't already a
    * customer. Creates a "Potential" customer record so the name shows up in
    * the CRM immediately. If a matching customer already exists (by name or
@@ -264,5 +341,5 @@ export function useDomainActions() {
     logOperationalEvent("Potential Customer Added", `${trimmedName} added from estimate`, "🔮", { screen: "customers", customerId: newCustomer.id });
   };
 
-  return { convertLeadToCustomer, createEstimateFromLead, createJob, updateJob, upsertPotentialCustomer };
+  return { convertLeadToCustomer, createEstimateFromLead, createJob, createAppointment, updateJob, upsertPotentialCustomer };
 }

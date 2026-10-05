@@ -112,7 +112,16 @@ export function BuildJobModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (editingJob) {
+    // A prefill for an estimate that already has its job (e.g. an "Estimate
+    // Accepted -> Create Job" automation converted it first) opens that job
+    // for editing -- createJob would return it anyway, and this way the
+    // details entered here are saved to it instead of being dropped.
+    const existingEstimateJob = !editingJob && prefill?.sourceEstimateId
+      ? schedulingEvents.find(event => event.eventType === "Job" && event.sourceEstimateId === prefill.sourceEstimateId)
+      : undefined;
+    const jobToEdit = editingJob || existingEstimateJob;
+    if (jobToEdit) {
+      const editingJob = jobToEdit;
       const customer = customers.find(c => c.id === editingJob.customerId || c.contact === editingJob.customer || c.company === editingJob.customer);
       setForm({
         ...EMPTY_FORM, customerId: customer?.id || "", customerName: editingJob.customer || customer?.contact || customer?.company || "",
@@ -192,7 +201,14 @@ export function BuildJobModal({
       }, ...prev]);
     }
 
-    if (savedJob) {
+    // Same reasoning as the prefill effect above: if this estimate's job was
+    // created while the form was open (an automation got there first), save
+    // these details onto that job rather than letting createJob drop them.
+    const jobToUpdate = savedJob || (form.sourceEstimateId
+      ? schedulingEvents.find(event => event.eventType === "Job" && event.sourceEstimateId === form.sourceEstimateId)
+      : undefined);
+    if (jobToUpdate) {
+      const savedJob = jobToUpdate;
       const updated = updateJob(savedJob.id, {
         // Editing a record through Build Job means it either already was a
         // Job, or (e.g. someone switched a Scheduling event's type to

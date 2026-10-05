@@ -88,6 +88,8 @@ export interface Lead {
   /** Photos the customer attached when requesting service, same inline-
    * base64 convention as every other small attached image in this app. */
   photos?: string[];
+  /** Optional triage priority (set by hand or by a "Mark Priority" automation). Leads without one behave exactly as before. */
+  priority?: "Low" | "Medium" | "High" | "Urgent";
 }
 
 /**
@@ -495,6 +497,8 @@ export interface SchedulingEvent {
    * not an opt-in. Only relevant when eventType is "Job"; other calendar
    * entry types are never customer-facing at all regardless of this flag. */
   customerVisible?: boolean;
+  /** Set when an Automation (WHEN -> IF -> DO) created this record; also keeps that creation from firing other "...Created" automations. */
+  createdByAutomationId?: string;
 }
 
 /**

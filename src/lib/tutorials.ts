@@ -55,6 +55,13 @@ export const TUTORIALS: Record<string, Tutorial> = {
       "This page also contains tools for website lead forms, connection logs, webhooks, backups, and other advanced connections. If you are unsure about an advanced setting, leave it alone until you know what the connected service requires.",
     ],
   },
+  automations: {
+    title: "Automations",
+    paragraphs: [
+      "Automations are optional shortcuts that follow a simple WHEN → IF → DO pattern: when something happens (for example, an estimate is accepted), if your conditions are met (for example, the amount is over $5,000), do one or more things you already do by hand (create the job, notify a manager, send the customer a confirmation).",
+      "Every automation starts OFF. Nothing changes until you switch one on, and every manual button keeps working the same either way. Automations never delete records, move money, issue refunds, or change approved prices. Use History to see exactly what each automation did, skipped, or couldn't do.",
+    ],
+  },
   missed_call_textback: {
     title: "Missed Call Text-Back",
     paragraphs: [

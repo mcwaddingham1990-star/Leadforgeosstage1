@@ -51,6 +51,7 @@ export const MODULE_CATALOG: Array<{ id: string; label: string; singleAction?: P
   { id: "ai_assistant", label: "AI Assistant" },
   { id: "settings", label: "Settings" },
   { id: "missed_call_textback", label: "Missed Call Text-Back" },
+  { id: "automations", label: "Automations" },
   { id: "view_lead_messages", label: "View Lead Messages in Inbox" },
   { id: "collect_signatures", label: "Collect Signatures" }
 ];
