@@ -26,7 +26,7 @@ export function OnlineBookingSettingsPanel({ businessId, webFormToken, onNotify 
   const [config, setConfig] = useState<OnlineBookingConfig | null>(null);
   const [originsText, setOriginsText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState<"" | "embed" | "api">("");
+  const [copied, setCopied] = useState<"" | "embed" | "combined" | "api">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,8 +52,14 @@ export function OnlineBookingSettingsPanel({ businessId, webFormToken, onNotify 
 <div id="ownerslocal-booking"></div>
 <script src="${origin}/embed/ownerslocal-booking.js" data-token="${webFormToken}" async></script>` : "", [origin, webFormToken]);
 
+  const combinedSnippet = useMemo(() => webFormToken ? `<!-- Owner'sLOCAL Contact + Online Booking (all-in-one) -->
+<div id="ownerslocal-booking"></div>
+<script src="${origin}/embed/ownerslocal-booking.js" data-token="${webFormToken}" data-mode="combined" async></script>` : "", [origin, webFormToken]);
+
   const apiReference = useMemo(() => webFormToken ? `Base URL: ${origin}/api/booking/web/${webFormToken}
 
+GET  /info
+     -> { ok, businessName, phone, email, address, hours, bookingEnabled }
 GET  /options
      -> { ok, businessName, services: [{ id, name, durationMinutes }], timeZone, maxDaysAhead }
 GET  /availability?serviceId=ID&from=YYYY-MM-DD&days=1-14
@@ -97,7 +103,7 @@ POST ${origin}/api/leads/submit-web-form
     }
   };
 
-  const copy = async (text: string, which: "embed" | "api") => {
+  const copy = async (text: string, which: "embed" | "combined" | "api") => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(which);
@@ -250,11 +256,29 @@ POST ${origin}/api/leads/submit-web-form
         {saving ? "Saving…" : "Save Online Booking Settings"}
       </button>
 
+      {webFormToken && (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase text-slate-500">All-in-one website code (contact info + lead form + booking)</span>
+            <button type="button" onClick={() => void copy(combinedSnippet, "combined")} className="px-2.5 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer">
+              <Copy className="h-3 w-3" /> {copied === "combined" ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            One paste does it all: shows your business phone, email, address and hours (from Settings), then lets each visitor choose
+            <strong> Book a time</strong> (books a real open slot as a Job) or <strong>Just contact me</strong> (creates a normal Lead, same as the lead form above).
+            {!(config.enabled && config.websiteEnabled) && " Website booking is currently off, so this will show only the contact form until you turn it on and save."}
+            {" "}Use this instead of the separate lead-form code, not alongside it.
+          </p>
+          <textarea readOnly value={combinedSnippet} rows={4} onFocus={e => e.target.select()} className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-lg text-[10px] font-mono text-slate-700" />
+        </div>
+      )}
+
       {config.enabled && config.websiteEnabled && (
         webFormToken ? (
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-slate-500">Website booking embed code</span>
+              <span className="text-[10px] font-bold uppercase text-slate-500">Booking calendar only (embed code)</span>
               <button type="button" onClick={() => void copy(embedSnippet, "embed")} className="px-2.5 py-1 bg-[#BDDDF8] hover:bg-[#A1CEF4] text-[#315C9F] border border-[#9EC8EF] rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer">
                 <Copy className="h-3 w-3" /> {copied === "embed" ? "Copied!" : "Copy"}
               </button>

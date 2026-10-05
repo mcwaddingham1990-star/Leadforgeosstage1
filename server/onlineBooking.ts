@@ -101,6 +101,37 @@ export function originAllowed(config: OnlineBookingConfig, origin: string | unde
   return config.allowedOrigins.includes(origin.replace(/\/+$/, ""));
 }
 
+export interface WebsiteBusinessInfo {
+  ok: true;
+  businessName: string;
+  phone: string;
+  email: string;
+  address: string;
+  hours: string;
+  bookingEnabled: boolean;
+}
+
+/** Public contact card for the all-in-one website widget: only details a
+ * business already publishes (name, business phone, the company contact
+ * email from Settings, address, hours) -- never the owner's login email /
+ * businessId -- plus whether website booking is currently on. */
+export async function getWebsiteBusinessInfo(db: Firestore, businessId: string): Promise<WebsiteBusinessInfo> {
+  const snap = await db.collection("business_profiles").doc(businessId).get();
+  const profile = snap.data() || {};
+  const company = profile.companySettings?.company || {};
+  const config = normalizeOnlineBookingConfig(profile.onlineBooking, profile.companySettings);
+  const first = (value: unknown) => (Array.isArray(value) && typeof value[0] === "string" ? value[0] : "");
+  return {
+    ok: true,
+    businessName: profile.name || first(profile.businessNames) || company.dba || "",
+    phone: first(profile.businessPhones) || (typeof profile.phone === "string" ? profile.phone : ""),
+    email: typeof company.email === "string" ? company.email : "",
+    address: first(profile.businessAddresses) || (typeof profile.address === "string" ? profile.address : ""),
+    hours: typeof company.businessHours === "string" ? company.businessHours : "",
+    bookingEnabled: config.enabled && config.websiteEnabled
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Read side: options + availability
 // ---------------------------------------------------------------------------

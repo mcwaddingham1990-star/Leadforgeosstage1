@@ -5,7 +5,7 @@ import { resolvePortalBookingContext } from "./customerPortal";
 import { resolveCustomerAccountBookingContext } from "./customerAccounts";
 import { handleWebLeadFormSubmit, type WebLeadFormSubmission } from "./webLeadFormHandler";
 import {
-  createBooking, getBookingAvailability, getBookingDb, getBookingOptions, loadBookingSettings, originAllowed, resolveWebsiteBusiness,
+  createBooking, getBookingAvailability, getBookingDb, getBookingOptions, getWebsiteBusinessInfo, loadBookingSettings, originAllowed, resolveWebsiteBusiness,
   type BookingRequestInput, type CreateBookingResult
 } from "./onlineBooking";
 
@@ -132,6 +132,16 @@ export function registerOnlineBookingRoutes(app: Express) {
   app.options("/api/booking/web/:token/*", (req, res) => { setWebsiteCors(req, res); res.sendStatus(204); });
   app.options("/api/booking/web/:token", (req, res) => { setWebsiteCors(req, res); res.sendStatus(204); });
 
+  // All-in-one widget: business contact card + whether booking is on.
+  // Works even while booking is off, so the contact form still shows.
+  app.get("/api/booking/web/:token/info", rateLimit("web-booking-read", 60_000, 60), async (req, res) => {
+    setWebsiteCors(req, res);
+    try {
+      const ctx = await resolveWebsiteRequest(req, res);
+      if (!ctx) return;
+      res.json(await getWebsiteBusinessInfo(ctx.db, ctx.businessId));
+    } catch (err) { fail(res, err, "Could not load this business's details."); }
+  });
   app.get("/api/booking/web/:token/options", rateLimit("web-booking-read", 60_000, 60), async (req, res) => {
     setWebsiteCors(req, res);
     try {
