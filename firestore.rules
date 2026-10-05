@@ -567,6 +567,83 @@ service cloud.firestore {
       allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "marketing", "view");
     }
 
+    // ---- Automations (WHEN -> IF -> DO) ----
+    //
+    // SECURITY: tenant isolation is enforced here, never trusted from the
+    // client: every read/write is checked against the businessId stored on
+    // the document (and businessId can never be changed by an update), so a
+    // session can't read, run, edit, or log runs for another business's
+    // automations. The safe-action allowlist is enforced here too -- an
+    // automation naming any other action (refunds, deletes, payments...)
+    // can't be saved at all -- and a brand-new automation must be saved OFF.
+    function automationActionAllowlist() {
+      return ["create_job", "create_appointment", "create_invoice", "send_customer_confirmation",
+        "send_customer_message", "notify_team", "create_follow_up_task", "request_review",
+        "mark_priority", "update_status", "add_timeline_entry"];
+    }
+
+    function automationTriggerAllowlist() {
+      return ["lead.created", "estimate.created", "estimate.accepted", "job.created", "job.completed",
+        "appointment.created", "invoice.created", "invoice.paid", "invoice.overdue",
+        "booking.website.created", "booking.portal.created"];
+    }
+
+    function validAutomation(data) {
+      return data.businessId is string
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.trigger in automationTriggerAllowlist()
+        && data.enabled is bool
+        && data.conditions is list && data.conditions.size() <= 10
+        && data.actions is list && data.actions.size() >= 1 && data.actions.size() <= 10
+        && data.actionTypes is list && data.actionTypes.size() == data.actions.size()
+        && data.actionTypes.hasOnly(automationActionAllowlist());
+    }
+
+    match /automations/{automationId} {
+      // Every member's session reads them: the engine runs in whichever
+      // signed-in session performs the triggering action.
+      allow read: if isAuthenticated() && isBusinessMember(resource.data.businessId);
+      allow create: if isAuthenticated()
+        && hasModulePermission(request.resource.data.businessId, "automations", "edit")
+        && validAutomation(request.resource.data)
+        && request.resource.data.enabled == false;
+      allow update: if isAuthenticated()
+        && request.resource.data.businessId == resource.data.businessId
+        && (
+          (hasModulePermission(resource.data.businessId, "automations", "edit") && validAutomation(request.resource.data))
+          // Any member's session may record the "Last run / Result" summary
+          // after executing a run -- nothing else.
+          || (isBusinessMember(resource.data.businessId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastRunAt", "lastRunStatus", "lastRunSummary"]))
+        );
+      allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "automations", "delete");
+    }
+
+    // Execution history. The document id is deterministic per automation +
+    // event, and a run can only be CREATED once (any later write is an
+    // update, which only finishes a Running run) -- that is what makes a
+    // replayed event unable to run an automation twice, across tabs and
+    // devices. Append-only: no client can delete or rewrite history.
+    match /automation_runs/{runId} {
+      // A get of a run that doesn't exist yet is how the engine's claim
+      // transaction checks "already handled?"; it reveals nothing.
+      allow get: if isAuthenticated() && (resource == null || isBusinessMember(resource.data.businessId));
+      allow list: if isAuthenticated() && hasModulePermission(resource.data.businessId, "automations", "view");
+      allow create: if isAuthenticated()
+        && isBusinessMember(request.resource.data.businessId)
+        && request.resource.data.automationId is string
+        && request.resource.data.automationId.matches('^[A-Za-z0-9_-]+$')
+        && runId.matches(request.resource.data.automationId + '__.+')
+        && get(/databases/$(database)/documents/automations/$(request.resource.data.automationId)).data.businessId == request.resource.data.businessId
+        && request.resource.data.status in ["Running", "Skipped"];
+      allow update: if isAuthenticated()
+        && isBusinessMember(resource.data.businessId)
+        && resource.data.status == "Running"
+        && request.resource.data.status in ["Completed", "Partial", "Skipped", "Failed"]
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["businessId", "automationId", "eventKey", "trigger", "sourceCollection", "sourceRecordId", "startedAt", "conditions", "conditionsMet", "conditionResults"]);
+      allow delete: if false;
+    }
+
     // Financial / accounting collections
     match /transactions/{docId} {
       allow create, update: if isAuthenticated() && (

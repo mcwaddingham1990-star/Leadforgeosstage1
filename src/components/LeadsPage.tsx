@@ -851,6 +851,11 @@ export const LeadsPage: React.FC = () => {
                         >
                           {ld.status}
                         </span>
+                        {(ld.priority === "High" || ld.priority === "Urgent") && (
+                          <span className="ml-1 inline-block px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-rose-600 text-white">
+                            {ld.priority}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right font-bold font-mono text-[#1F3557]">
                         ${ld.estimatedValue.toLocaleString()}

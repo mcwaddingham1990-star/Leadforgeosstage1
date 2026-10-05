@@ -124,7 +124,7 @@ import {
   Legend
 } from "recharts";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } from "recharts";
-import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star, Receipt } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Search, Filter, Landmark, Box, CreditCard, Camera, Star, Receipt, Zap } from "lucide-react";
 
 import { CustomersPage, Customer, INITIAL_CUSTOMERS } from "./components/CustomersPage";
 import { LeadsPage, INITIAL_LEADS, Lead } from "./components/LeadsPage";
@@ -154,6 +154,7 @@ import { StructuredAddressFields } from "./components/StructuredAddressFields";
 import { IntegrationsPage } from "./components/IntegrationsPage";
 import { NotificationsPage } from "./components/NotificationsPage";
 import { MissedCallTextBackPage } from "./components/MissedCallTextBackPage";
+import { AutomationsPage } from "./components/AutomationsPage";
 import { OwnerProtectionPage } from "./components/OwnerProtectionPage";
 import { CompletionGuard } from "./components/CompletionGuard";
 import { OwnerConsolePage } from "./components/OwnerConsolePage";
@@ -173,6 +174,7 @@ import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
 import { NavTelemetryContext, NavTelemetryContextValue } from "./context/NavTelemetryContext";
 import { useEventEngineSubscribers } from "./hooks/useEventEngineSubscribers";
+import { useAutomationEngine } from "./hooks/useAutomationEngine";
 import darkLoginBackground from "../Src/Assets/Login/Darkloginbg.png";
 import darkLoginCard from "../Src/Assets/Login/Darkmodecard.png";
 import lightLoginCard from "../Src/Assets/Login/Lightmodecard.png";
@@ -952,6 +954,7 @@ const OS_SCREENS = [
   { id: "snapshots", label: "Snapshots Folder", url: "", icon: "📸", top: "82%", bottom: "87%" },
   { id: "notifications", label: "Notifications", url: "", icon: "🔔", top: "82%", bottom: "87%" },
   { id: "missed_call_textback", label: "Missed Call Text-Back", url: "", icon: "📵", top: "82%", bottom: "87%" },
+  { id: "automations", label: "Automations", url: "", icon: "⚡", top: "77%", bottom: "82%" },
   { id: "owner_protection", label: "Money at Risk", url: "", icon: "🛡️", top: "12%", bottom: "17%" },
   { id: "owner_console", label: "Owner Console", url: "", icon: "🛠️", top: "82%", bottom: "87%" }
 ];
@@ -961,6 +964,7 @@ const SIDEBAR_MENU = [
   { type: "screen", id: "owner_protection" },
   { type: "screen", id: "ai_assistant" },
   { type: "screen", id: "integrations" },
+  { type: "screen", id: "automations" },
   { type: "screen", id: "missed_call_textback" },
   { type: "group", id: "finances", label: "Finances", iconScreenId: "revenue", items: ["revenue", "accounting", "payments", "billing"] },
   { type: "group", id: "clientele", label: "Clientele", iconScreenId: "customers", items: ["customers", "leads", "estimates"] },
@@ -1408,6 +1412,8 @@ const getScreenIcon = (screenId: string, className: string = "w-4 h-4") => {
       return <Bell className={className} />;
     case "missed_call_textback":
       return <PhoneMissed className={className} />;
+    case "automations":
+      return <Zap className={className} />;
     default:
       return <BrandIcon className={className} />;
   }
@@ -1633,6 +1639,13 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ value, onChange, option
 // Renders nothing — must be rendered inside DomainDataContext/NavTelemetryContext.
 const EventEngineEffects: React.FC = () => {
   useEventEngineSubscribers();
+  return null;
+};
+
+// Mounts the optional WHEN -> IF -> DO Automation Engine (see src/hooks/useAutomationEngine.ts).
+// Does nothing unless the business has turned an automation on.
+const AutomationEngineEffects: React.FC = () => {
+  useAutomationEngine();
   return null;
 };
 
@@ -4868,6 +4881,7 @@ Access to full financial telemetry is restricted.`;
     <DomainDataContext.Provider value={domainDataContextValue}>
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
+    <AutomationEngineEffects />
     {isLoggedIn && <CompletionGuard />}
     <TutorialHost
       tutorialId={
@@ -9123,6 +9137,10 @@ Access to full financial telemetry is restricted.`;
                   ) : activeScreen.id === "missed_call_textback" ? (
 
                     <MissedCallTextBackPage />
+
+                  ) : activeScreen.id === "automations" ? (
+
+                    <AutomationsPage />
 
                   ) : activeScreen.id === "owner_protection" ? (
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
 import { syncArrayToFirestore, subscribeToCollection, subscribeToCollectionByField, fetchCollectionFromServer } from "../lib/firestoreService";
-import { emitCollectionEvent } from "../lib/eventBus";
+import { emitCollectionEvent, emitRemoteCollectionEvent, hasRemoteCollectionListeners } from "../lib/eventBus";
 import { emitSyncError } from "../lib/syncErrorBus";
 import { db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -113,7 +113,11 @@ export function useFirestoreCollection<T extends WithId>(
     pendingItemsRef.current.clear();
     itemsRef.current = [];
     _setItems([]);
+    // The first snapshot is the initial load of existing records, not new
+    // activity -- only later snapshots are diffed for the remote channel.
+    let hasReceivedSnapshot = false;
     const handleDocs = (docs: any[]) => {
+      const previousServerItems = collectionItemsRef.current;
       collectionItemsRef.current = options?.normalize ? (docs as T[]).map(options.normalize) : docs as T[];
       const serverById = new Map(collectionItemsRef.current.filter(item => item.id).map(item => [item.id as string, item]));
       pendingItemsRef.current.forEach((pending, id) => {
@@ -123,6 +127,10 @@ export function useFirestoreCollection<T extends WithId>(
         }
       });
       publish();
+      if (hasReceivedSnapshot && hasRemoteCollectionListeners(collectionName)) {
+        emitDiffEvents(collectionName, previousServerItems, collectionItemsRef.current, emitRemoteCollectionEvent, false);
+      }
+      hasReceivedSnapshot = true;
     };
     const handleError = collectionName === "time_clock_logs" ? () => publish() : undefined;
     const unsubscribe = options?.tenantField && options.tenantField !== "businessId"
@@ -179,7 +187,13 @@ function samePersistedItem<T>(serverItem: T | undefined, pendingItem: T): boolea
   return JSON.stringify(withoutMetadata(serverItem)) === JSON.stringify(withoutMetadata(pendingItem));
 }
 
-function emitDiffEvents<T extends WithId>(collection: string, prev: T[], next: T[]): void {
+function emitDiffEvents<T extends WithId>(
+  collection: string,
+  prev: T[],
+  next: T[],
+  emit: typeof emitCollectionEvent = emitCollectionEvent,
+  includeDeletes = true
+): void {
   const prevMap = new Map(prev.map((item) => [item.id, item]));
   const nextIds = new Set<string | undefined>();
 
@@ -187,15 +201,16 @@ function emitDiffEvents<T extends WithId>(collection: string, prev: T[], next: T
     nextIds.add(item.id);
     const previous = prevMap.get(item.id);
     if (!previous) {
-      emitCollectionEvent({ collection, type: "created", item });
+      emit({ collection, type: "created", item });
     } else if (JSON.stringify(previous) !== JSON.stringify(item)) {
-      emitCollectionEvent({ collection, type: "updated", item, previous });
+      emit({ collection, type: "updated", item, previous });
     }
   }
 
+  if (!includeDeletes) return;
   for (const item of prev) {
     if (!nextIds.has(item.id)) {
-      emitCollectionEvent({ collection, type: "deleted", item });
+      emit({ collection, type: "deleted", item });
     }
   }
 }
