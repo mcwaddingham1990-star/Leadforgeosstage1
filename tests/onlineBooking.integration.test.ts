@@ -249,6 +249,26 @@ describe("Business website booking", () => {
     expect((await call("POST", `/api/booking/web/${TOKEN_A}/book`, websiteBooking(TOKEN_A), { Origin: "https://alpha.example" })).status).toBe(200);
   });
 
+  test("info endpoint (all-in-one widget) shows only public contact details, and works while booking is off", async () => {
+    await db.collection("business_profiles").doc(BIZ_A).set({
+      businessPhones: ["(555) 222-3333"], businessAddresses: ["1 Pipe Way, Springfield"],
+      companySettings: { company: { email: "hello@alpha.example", businessHours: "08:00 AM - 05:00 PM" } }
+    }, { merge: true });
+    const a = await call("GET", `/api/booking/web/${TOKEN_A}/info`);
+    expect(a.status).toBe(200);
+    expect(a.body).toEqual({ ok: true, businessName: "Alpha Plumbing", phone: "(555) 222-3333", email: "hello@alpha.example", address: "1 Pipe Way, Springfield", hours: "08:00 AM - 05:00 PM", bookingEnabled: true });
+    expect(JSON.stringify(a.body)).not.toContain(BIZ_A);
+    expect(JSON.stringify(a.body)).not.toContain(TOKEN_A);
+
+    const c = await call("GET", `/api/booking/web/${TOKEN_C}/info`);
+    expect(c.status).toBe(200);
+    expect(c.body).toMatchObject({ ok: true, businessName: "Charlie Roofing", bookingEnabled: false, email: "" });
+    // The contact half of the widget still creates a lead while booking is off.
+    expect((await call("POST", "/api/leads/submit-web-form", { token: TOKEN_C, name: "Contact Only", email: "c@example.com" })).status).toBe(200);
+    expect((await db.collection("leads").where("businessId", "==", BIZ_C).get()).size).toBe(1);
+    expect((await call("GET", `/api/booking/web/bogus/info`)).status).toBe(404);
+  });
+
   test("an unknown or regenerated token is rejected", async () => {
     expect((await call("GET", `/api/booking/web/not-a-real-token/options`)).status).toBe(404);
     expect((await call("POST", `/api/booking/web/not-a-real-token/book`, websiteBooking("x"))).status).toBe(404);

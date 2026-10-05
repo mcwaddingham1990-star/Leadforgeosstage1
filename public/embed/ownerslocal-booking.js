@@ -6,8 +6,18 @@
  *   <script src="https://YOUR-OWNERSLOCAL-APP/embed/ownerslocal-booking.js"
  *           data-token="YOUR_WEBSITE_FORM_TOKEN" async></script>
  *
- * Optional attributes: data-target="element-id" (default "ownerslocal-booking"),
- * data-accent="#315C9F".
+ * Optional attributes:
+ *   data-mode="booking"   booking calendar only (default)
+ *   data-mode="combined"  business contact info + a choice between
+ *                         "Book a time" and "Just contact me" (lead form)
+ *   data-mode="contact"   contact info + lead form only
+ *   data-show-contact="false"  hide the business contact card
+ *   data-track-visit="false"   don't count this page view (combined/contact
+ *                              modes count it, like the lead form snippet)
+ *   data-target="element-id" (default "ownerslocal-booking"), data-accent="#315C9F"
+ *
+ * "Just contact me" posts to the same Website Lead Capture webhook as the
+ * standalone lead form, so it still creates an ordinary Lead.
  *
  * Talks only to /api/booking/web/:token/* on the Owner'sLOCAL server that
  * served this file. Every slot shown and every booking made is validated
@@ -21,7 +31,11 @@
   var token = script.getAttribute("data-token") || "";
   var targetId = script.getAttribute("data-target") || "ownerslocal-booking";
   var accent = /^#[0-9a-fA-F]{3,8}$/.test(script.getAttribute("data-accent") || "") ? script.getAttribute("data-accent") : "#315C9F";
-  var apiBase = new URL(script.src).origin + "/api/booking/web/" + encodeURIComponent(token);
+  var serverOrigin = new URL(script.src).origin;
+  var apiBase = serverOrigin + "/api/booking/web/" + encodeURIComponent(token);
+  var mode = ({ combined: "combined", contact: "contact" })[script.getAttribute("data-mode") || ""] || "booking";
+  var showContact = script.getAttribute("data-show-contact") !== "false";
+  var trackVisit = mode !== "booking" && script.getAttribute("data-track-visit") !== "false";
 
   function start() {
     var root = document.getElementById(targetId);
@@ -105,13 +119,33 @@
   function run(root) {
     var state = {
       options: null, serviceId: "", days: null, date: "", time: "", error: "", busy: false,
-      name: "", phone: "", email: "", address: "", description: "", photos: [], website: "", key: newKey(), confirmation: null, step: "service"
+      name: "", phone: "", email: "", address: "", description: "", photos: [], website: "", key: newKey(), confirmation: null,
+      company: "", notes: "", info: null,
+      step: mode === "booking" ? "service" : mode === "contact" ? "contact" : "choose"
     };
+    var CONTACT_STEPS = { choose: 1, contact: 1, contactDone: 1 };
+
+    function bookingAvailable() {
+      return mode !== "contact" && !!(state.options && state.options.ok);
+    }
 
     function render() {
       root.textContent = "";
       var box = el("div", { style: S.box });
       root.appendChild(box);
+      if (mode !== "booking") {
+        if (!state.info) { box.appendChild(el("p", { style: S.sub, text: "Loading…" })); return; }
+        // Booking is off (or still loading) -> combined mode falls back to the contact form.
+        if (state.step === "choose" && state.options && !bookingAvailable()) state.step = "contact";
+      }
+      if (CONTACT_STEPS[state.step]) {
+        var name = state.info.businessName || (state.options && state.options.businessName) || "";
+        box.appendChild(el("p", { style: S.h, text: state.step === "contactDone" ? "Message Sent" : name ? "Contact " + name : "Contact Us" }));
+        if (showContact && state.step !== "contactDone") renderContactCard(box);
+        if (state.error) box.appendChild(el("div", { style: S.err, role: "alert", text: state.error }));
+        ({ choose: renderChoose, contact: renderContactForm, contactDone: renderContactDone })[state.step](box);
+        return;
+      }
       if (!state.options) { box.appendChild(el("p", { style: S.sub, text: "Loading available appointments…" })); return; }
       if (!state.options.ok) {
         box.appendChild(el("p", { style: S.h, text: "Online booking unavailable" }));
@@ -143,7 +177,7 @@
         ]));
       });
       box.appendChild(list);
-      box.appendChild(el("div", { style: S.row }, [el("span"), el("button", {
+      box.appendChild(el("div", { style: S.row }, [mode === "combined" ? el("button", { type: "button", style: S.btn2, onclick: function () { state.step = "choose"; state.error = ""; render(); } }, ["← Back"]) : el("span"), el("button", {
         type: "button", style: S.btn + (state.serviceId ? "" : "opacity:.4;"), disabled: !state.serviceId,
         onclick: function () { state.step = "time"; state.error = ""; render(); loadDays(""); }
       }, ["Choose a time →"])]));
@@ -310,6 +344,81 @@
       });
     }
 
+    function renderContactCard(box) {
+      var i = state.info, rows = [];
+      if (i.phone) rows.push(["Phone", el("a", { href: "tel:" + i.phone.replace(/[^0-9+]/g, ""), style: "color:" + accent + ";font-weight:700;text-decoration:none;", text: i.phone })]);
+      if (i.email) rows.push(["Email", el("a", { href: "mailto:" + i.email, style: "color:" + accent + ";font-weight:700;text-decoration:none;", text: i.email })]);
+      if (i.address) rows.push(["Address", el("span", { text: i.address })]);
+      if (i.hours) rows.push(["Hours", el("span", { text: i.hours })]);
+      if (!rows.length) return;
+      var card = el("div", { style: "margin:4px 0 14px;padding:10px 12px;border-radius:12px;background:#F5FAFF;border:1px solid #D6E8F8;font-size:13px;" });
+      rows.forEach(function (r) {
+        card.appendChild(el("div", { style: "display:flex;gap:10px;padding:2px 0;" }, [
+          el("span", { style: "width:64px;flex-shrink:0;font-size:11px;font-weight:800;text-transform:uppercase;color:#5E7393;padding-top:1px;", text: r[0] }), r[1]
+        ]));
+      });
+      box.appendChild(card);
+    }
+
+    function choiceButton(title, sub, onclick) {
+      return el("button", { type: "button", onclick: onclick, style: "text-align:left;padding:14px;border-radius:12px;cursor:pointer;background:#fff;border:1px solid #9EC8EF;font-family:inherit;width:100%;" }, [
+        el("div", { style: "font-weight:800;font-size:15px;color:" + accent + ";", text: title }),
+        el("div", { style: "font-size:12px;color:#5E7393;margin-top:2px;", text: sub })
+      ]);
+    }
+
+    function renderChoose(box) {
+      box.appendChild(el("span", { style: S.label, text: "How can we help?" }));
+      box.appendChild(el("div", { style: "display:grid;gap:8px;" }, [
+        choiceButton("📅 Book a time", "Pick an open appointment on our schedule.", function () {
+          state.step = "service"; state.error = ""; render();
+        }),
+        choiceButton("✉️ Just contact me", "Send us your info and we'll reach out.", function () {
+          state.step = "contact"; state.error = ""; render();
+        })
+      ]));
+    }
+
+    function renderContactForm(box) {
+      field(box, "Your name *", "name", { autocomplete: "name" });
+      field(box, "Phone", "phone", { type: "tel", autocomplete: "tel" });
+      field(box, "Email", "email", { type: "email", autocomplete: "email" });
+      field(box, "Company (optional)", "company", { autocomplete: "organization" });
+      field(box, "What do you need help with?", "notes", { textarea: true, rows: "3", maxlength: "2000" });
+      var hp = el("input", { name: "website", tabindex: "-1", autocomplete: "off", "aria-hidden": "true", style: "position:absolute;left:-9999px;" });
+      hp.addEventListener("input", function () { state.website = hp.value; });
+      box.appendChild(hp);
+      var canGoBack = mode === "combined" && bookingAvailable();
+      box.appendChild(el("div", { style: S.row }, [
+        canGoBack ? el("button", { type: "button", style: S.btn2, disabled: state.busy, onclick: function () { state.step = "choose"; state.error = ""; render(); } }, ["← Back"]) : el("span"),
+        el("button", { type: "button", style: S.btn + (state.busy ? "opacity:.5;" : ""), disabled: state.busy, onclick: submitContact }, [state.busy ? "Sending…" : "Send"])
+      ]));
+    }
+
+    function submitContact() {
+      if (state.busy) return;
+      if (!state.name.trim()) { state.error = "Please enter your name."; render(); return; }
+      if (!state.phone.trim() && !state.email.trim()) { state.error = "Please enter a phone number or email."; render(); return; }
+      state.busy = true; state.error = ""; render();
+      fetch(serverOrigin + "/api/leads/submit-web-form", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token, name: state.name.trim(), phone: state.phone.trim(), email: state.email.trim(), company: state.company.trim(), notes: state.notes.trim(), website: state.website })
+      }).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
+        state.busy = false;
+        if (r.ok) { state.step = "contactDone"; render(); return; }
+        state.error = r.error || "Something went wrong -- please try again.";
+        render();
+      });
+    }
+
+    function renderContactDone(box) {
+      box.appendChild(el("p", { style: S.sub, text: "Thanks, " + (state.name.trim().split(" ")[0] || "we got it") + "! We'll be in touch shortly." }));
+      if (mode === "combined" && bookingAvailable()) {
+        box.appendChild(el("button", { type: "button", style: S.btn2, onclick: function () { state.step = "service"; render(); } }, ["Or book a time now →"]));
+      }
+    }
+
     function renderDone(box) {
       var c = state.confirmation;
       if (!c) { box.appendChild(el("p", { style: S.sub, text: "Thanks! We'll be in touch shortly." })); return; }
@@ -324,11 +433,28 @@
     }
 
     render();
-    api("/options").then(function (r) {
-      state.options = r;
-      if (r.ok && r.services && r.services.length === 1) state.serviceId = r.services[0].id;
-      render();
-    });
+    if (trackVisit) {
+      // Same visitor counter the standalone lead form snippet uses.
+      fetch(serverOrigin + "/api/leads/track-visit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: token }) }).catch(function () {});
+    }
+    function loadOptions() {
+      api("/options").then(function (r) {
+        state.options = r;
+        if (r.ok && r.services && r.services.length === 1) state.serviceId = r.services[0].id;
+        render();
+      });
+    }
+    if (mode === "booking") loadOptions();
+    else {
+      api("/info").then(function (r) {
+        state.info = r && r.ok ? r : { businessName: "" };
+        // Only ask for the calendar when booking is actually on; otherwise
+        // combined mode simply becomes the contact form.
+        if (mode === "combined" && r && r.bookingEnabled) loadOptions();
+        else state.options = { ok: false };
+        render();
+      });
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
