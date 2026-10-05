@@ -1262,3 +1262,45 @@ describe("Tutorial progress (tutorial_progress)", () => {
     await assertFails(setDoc(doc(db, "tutorial_progress", OWNER_A_UID), { dismissed: { dashboard: false } }, { merge: true }));
   });
 });
+
+describe("Online Booking records (online_bookings / booking_slot_locks)", () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "online_bookings", "booking_a"), { businessId: BIZ_A, source: "Website Booking", photos: [] });
+      await setDoc(doc(db, "online_bookings", "booking_b"), { businessId: BIZ_B, source: "Customer Portal", photos: [] });
+      await setDoc(doc(db, "booking_slot_locks", "lock_a"), { businessId: BIZ_A, date: "2026-10-08" });
+    });
+  });
+
+  test("owner and a Scheduling-view employee can read their own business's booking", async () => {
+    await assertSucceeds(getDoc(doc(ctxFor(OWNER_A_UID, BIZ_A).firestore(), "online_bookings", "booking_a")));
+    await assertSucceeds(getDoc(doc(ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore(), "online_bookings", "booking_a")));
+  });
+
+  test("no one can read another business's booking, and an employee without Scheduling access can't read their own", async () => {
+    await assertFails(getDoc(doc(ctxFor(OWNER_A_UID, BIZ_A).firestore(), "online_bookings", "booking_b")));
+    await assertFails(getDoc(doc(ctxFor(EMP_B_UID, EMP_B_EMAIL).firestore(), "online_bookings", "booking_b")));
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), "online_bookings", "booking_a")));
+  });
+
+  test("clients can never create, edit or delete a booking (only the server pipeline writes them)", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(setDoc(doc(db, "online_bookings", "forged"), { businessId: BIZ_A, source: "Website Booking" }));
+    await assertFails(updateDoc(doc(db, "online_bookings", "booking_a"), { status: "Cancelled" }));
+    await assertFails(deleteDoc(doc(db, "online_bookings", "booking_a")));
+  });
+
+  test("slot locks are server-only", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(getDoc(doc(db, "booking_slot_locks", "lock_a")));
+    await assertFails(setDoc(doc(db, "booking_slot_locks", "lock_new"), { businessId: BIZ_A }));
+  });
+
+  test("the owner can save Online Booking settings on their own profile but not another business's", async () => {
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertSucceeds(setDoc(doc(db, "business_profiles", BIZ_A), { onlineBooking: { enabled: true } }, { merge: true }));
+    await assertFails(setDoc(doc(db, "business_profiles", BIZ_B), { onlineBooking: { enabled: true } }, { merge: true }));
+    await assertFails(setDoc(doc(ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore(), "business_profiles", BIZ_A), { onlineBooking: { enabled: false } }, { merge: true }));
+  });
+});

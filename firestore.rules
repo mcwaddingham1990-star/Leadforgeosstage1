@@ -416,6 +416,17 @@ service cloud.firestore {
       allow read: if isAuthenticated() && hasSchedulingDataPermission(resource.data.businessId, "view");
     }
 
+    // Online Booking records (server/onlineBooking.ts). Written ONLY by the
+    // server's booking pipeline via the Admin SDK -- which re-validates the
+    // slot inside a transaction -- so no client may create or alter one
+    // (a client-written "booking" would bypass availability checks). Staff
+    // with Scheduling/Dispatch/Jobs view access read their own business's.
+    // booking_slot_locks is deliberately left unmatched (default-deny).
+    match /online_bookings/{docId} {
+      allow read: if isAuthenticated() && hasSchedulingDataPermission(resource.data.businessId, "view");
+      allow write: if false;
+    }
+
     match /inventory/{docId} {
       allow create: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "inventory", "edit");
       allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "inventory", "delete");

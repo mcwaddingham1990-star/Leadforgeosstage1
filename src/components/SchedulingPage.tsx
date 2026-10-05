@@ -39,6 +39,7 @@ import { CreateMembershipPicker } from "./CreateMembershipPicker";
 import { MembershipBuilder } from "./MembershipBuilder";
 import type { Membership } from "../types/membership";
 import { CustomerPortalControls } from "./CustomerPortalControls";
+import { OnlineBookingDetails } from "./OnlineBookingDetails";
 import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { BulkImportModal } from "./BulkImportModal";
 import type { ImportFieldSpec, DuplicateCheckResult } from "../lib/spreadsheetImport";
@@ -2155,6 +2156,10 @@ export const SchedulingPage: React.FC = () => {
                   </p>
                 </div>
               </div>
+
+              {selectedEvent.bookingSource && (
+                <OnlineBookingDetails bookingSource={selectedEvent.bookingSource} onlineBookingId={selectedEvent.onlineBookingId} />
+              )}
 
               {/* Customer Portal */}
               <div className="space-y-1.5 border-b border-slate-50 pb-3">

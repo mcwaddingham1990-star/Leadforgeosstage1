@@ -495,6 +495,11 @@ export interface SchedulingEvent {
    * not an opt-in. Only relevant when eventType is "Job"; other calendar
    * entry types are never customer-facing at all regardless of this flag. */
   customerVisible?: boolean;
+  /** Set when this Job was created by Online Booking (server/onlineBooking.ts):
+   * which entry point it came through, and its online_bookings record
+   * (customer description + photos). */
+  bookingSource?: "Customer Portal" | "Website Booking";
+  onlineBookingId?: string;
 }
 
 /**

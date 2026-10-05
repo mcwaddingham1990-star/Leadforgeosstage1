@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 import { handleAiAsk, handleScanReceipt, handleScanFinancialDocument, handleScanBusinessRecord, handleJobVoiceEntry, handleJobPhotoEntry, AiAskRequest, ScanReceiptRequest, ScanFinancialDocumentRequest, ScanBusinessRecordRequest, JobVoiceEntryRequest, JobPhotoEntryRequest } from './server/aiHandler';
 import { getClientIp } from './server/clientInfo';
 import { sendPushToRecipients } from './server/pushNotifications';
-import { handleWebLeadFormSubmit, WebLeadFormSubmission, recordWebsiteVisit } from './server/webLeadFormHandler';
+import { recordWebsiteVisit } from './server/webLeadFormHandler';
+import { registerOnlineBookingRoutes, handleWebFormSubmission } from './server/onlineBookingRoutes';
 import { processDueRecurringTransactions, processDueMembershipMaintenance, processDueMembershipBilling, processDueReviewRequests, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
@@ -219,8 +220,11 @@ app.options('/api/leads/submit-web-form', (req, res) => {
 app.post('/api/leads/submit-web-form', rateLimit('web-lead-form', 60_000, 10), async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   try {
-    const result = await handleWebLeadFormSubmit(req.body as WebLeadFormSubmission);
-    res.status(result.ok ? 200 : 400).json(result);
+    // Online Booking extends this same webhook: a submission carrying a
+    // chosen appointment slot goes through the one canonical booking
+    // pipeline; everything else stays an ordinary website lead as before.
+    const { status, result } = await handleWebFormSubmission(req.body || {}, req.headers.origin);
+    res.status(status).json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Lead form submission failed' });
   }
@@ -245,6 +249,11 @@ app.post('/api/leads/track-visit', rateLimit('site-visit', 60_000, 120), async (
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not record this visit' });
   }
 });
+
+// Online Booking: Customer Portal, Customer Account, and business-website
+// entry points into the one shared booking pipeline -- see
+// server/onlineBookingRoutes.ts for how each proves its business/customer.
+registerOnlineBookingRoutes(app);
 
 // Remote e-signing: a customer opening a "sign this remotely" link has no
 // OwnersLocal login, so these two endpoints are the only way that flow can

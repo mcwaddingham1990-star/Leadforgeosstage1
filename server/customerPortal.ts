@@ -757,3 +757,12 @@ export async function recordPayoutEvent(businessId: string, payout: Stripe.Payou
     await notifyBusinessUsers(db, businessId, "accounting", "Payout failed", `A $${amount.toFixed(2)} payout from Stripe failed${payout.failure_message ? `: ${payout.failure_message}` : "."}`, "accounting");
   }
 }
+
+/** Online Booking (server/onlineBooking.ts) entry point for the token
+ * portal -- the portalToken alone decides the business AND the customer,
+ * exactly like every other portal action in this file. */
+export async function resolvePortalBookingContext(token: string): Promise<{ ok: true; db: Firestore; businessId: string; customerId: string; customer: FirebaseFirestore.DocumentData } | { ok: false; error: string }> {
+  const resolved = await resolvePortalCustomer(token);
+  if (resolved.ok === false) return { ok: false, error: resolved.error };
+  return { ok: true, ...resolved.value };
+}
