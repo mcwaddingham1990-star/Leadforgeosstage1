@@ -2790,12 +2790,31 @@ export default function App() {
           const customerAccountSnap = await getDoc(doc(db, "customer_accounts", user.uid));
           if (customerAccountSnap.exists()) {
             const accountData = customerAccountSnap.data();
+            sessionStorage.removeItem("ownerslocal_customer_auth_intent");
             setCustomerSession({ uid: user.uid, email: user.email || accountData.email || "", name: accountData.name || "" });
+            setLoggedInUser(null);
             setIsLoggedIn(false);
             setAuthReady(true);
             return;
           }
           setCustomerSession(null);
+
+          // A customer signup/sign-in can change Firebase Auth before the
+          // customer_accounts document write is visible. Never fall through
+          // to owner auto-repair while the browser is explicitly in a
+          // customer-auth flow; doing so can create a bogus business profile
+          // for a customer uid and route the user into the business app.
+          const authParams = new URLSearchParams(window.location.search);
+          const customerAuthIntent =
+            sessionStorage.getItem("ownerslocal_customer_auth_intent") === "1" ||
+            authParams.has("joinCode") ||
+            authParams.has("customer");
+          if (customerAuthIntent) {
+            setLoggedInUser(null);
+            setIsLoggedIn(false);
+            setAuthReady(true);
+            return;
+          }
 
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
           if (profileSnap.exists()) {
