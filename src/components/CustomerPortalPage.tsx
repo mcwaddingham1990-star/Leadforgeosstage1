@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Briefcase, FileText, Calendar, CreditCard, FolderOpen, ShieldCheck, PlusCircle, MessageSquare,
   Loader2, AlertTriangle, CheckCircle2, Camera, X, Send, Download, FileSignature, Building2,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, CalendarPlus
 } from "lucide-react";
 import {
   fetchPortalData, fetchPortalDocumentPdf, submitPortalEstimateDecision, submitPortalServiceRequest,
@@ -13,8 +13,10 @@ import { buildRemoteSigningLink } from "../lib/remoteSigningClient";
 import { downscaleImageToBase64 } from "../lib/imageCompression";
 import { base64ToBytes } from "../lib/pdfExport";
 import { auth } from "../firebase";
+import BookServiceFlow from "./BookServiceFlow";
+import { portalBookingApi } from "../lib/onlineBookingClient";
 
-type Tab = "providers" | "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "request" | "messages";
+type Tab = "providers" | "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "book" | "request" | "messages";
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
   { id: "providers", label: "My Service Providers", icon: <Building2 className="w-4 h-4" /> },
@@ -24,6 +26,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
   { id: "invoices", label: "Invoices", icon: <CreditCard className="w-4 h-4" /> },
   { id: "documents", label: "Documents", icon: <FolderOpen className="w-4 h-4" /> },
   { id: "memberships", label: "Memberships", icon: <ShieldCheck className="w-4 h-4" /> },
+  { id: "book", label: "Book Service", icon: <CalendarPlus className="w-4 h-4" /> },
   { id: "request", label: "Request Service", icon: <PlusCircle className="w-4 h-4" /> },
   { id: "messages", label: "Messages", icon: <MessageSquare className="w-4 h-4" /> }
 ];
@@ -60,6 +63,7 @@ export default function CustomerPortalPage({ token }: { token: string }) {
   const [tab, setTab] = useState<Tab>("jobs");
   const [toast, setToast] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const bookingApi = useMemo(() => portalBookingApi(token), [token]);
 
   const reload = useCallback(async () => {
     const result = await fetchPortalData(token);
@@ -256,6 +260,7 @@ export default function CustomerPortalPage({ token }: { token: string }) {
               {tab === "invoices" && <InvoicesTab data={data} token={token} onNotify={setToast} />}
               {tab === "documents" && <DocumentsTab data={data} token={token} />}
               {tab === "memberships" && <MembershipsTab data={data} />}
+              {tab === "book" && <BookServiceFlow api={bookingApi} onBooked={() => void reload()} onViewAppointments={() => setTab("appointments")} />}
               {tab === "request" && <RequestServiceTab data={data} token={token} onNotify={setToast} />}
               {tab === "messages" && <MessagesTab data={data} token={token} onReload={reload} />}
             </div>

@@ -346,6 +346,23 @@ describe("WHEN: deriving business events", () => {
     expect(triggers({ collection: "customers", type: "created", item: { id: "c" } })).toEqual([]);
   });
 
+  test("Online Booking jobs fire the booking triggers (plus job.created)", () => {
+    const triggers = (e: any) => deriveAutomationEvents(e).map(x => x.trigger);
+    expect(triggers({ collection: "scheduling_events", type: "created", item: { id: "job_booking_1", eventType: "Job", bookingSource: "Website Booking" } })).toEqual(["job.created", "booking.website.created"]);
+    expect(triggers({ collection: "scheduling_events", type: "created", item: { id: "job_booking_2", eventType: "Job", bookingSource: "Customer Portal" } })).toEqual(["job.created", "booking.portal.created"]);
+  });
+
+  test("Website emergency booking template also handles a booked job: High priority + managers notified", async () => {
+    const booked = { id: "job_booking_3", eventType: "Job", jobNumber: "JOB-2026-0011", customer: "Sam", status: "Scheduled", priority: "Medium", bookingSource: "Website Booking", source: "Website", description: "Furnace out, emergency", activity: [] } as unknown as SchedulingEvent;
+    const app = memoryApp({ jobs: [booked] });
+    const automation = enabledFromTemplate("website_emergency_priority");
+    const events = deriveAutomationEvents({ collection: "scheduling_events", type: "created", item: booked });
+    const outcomes = await runAll([automation], events, app, memoryStore().store);
+    expect(outcomes).toContain("Completed");
+    expect(app.schedulingEvents.value[0].priority).toBe("High");
+    expect(app.notifications.value.map(n => n.recipientEmail)).toEqual(["mgr@example.com"]);
+  });
+
   test("records created by an automation don't fire '...created' automations (no loops)", async () => {
     const automation: Automation = { ...automationFromTemplate(AUTOMATION_TEMPLATES[0]), trigger: "job.created", enabled: true, actions: [{ id: "a", type: "notify_team" }], actionTypes: ["notify_team"] };
     const [event] = deriveAutomationEvents({ collection: "scheduling_events", type: "created", item: { id: "j", eventType: "Job", createdByAutomationId: "auto_other" } });

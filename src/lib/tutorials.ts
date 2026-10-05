@@ -249,7 +249,7 @@ export const TUTORIALS: Record<string, Tutorial> = {
     title: "Customer Portal",
     paragraphs: [
       "The Customer Portal gives customers a simple place to work with your business without giving them access to your Owner’sLOCAL business account. Customers can see their own jobs, estimates, appointments, invoices, documents, service agreements, and messages.",
-      "Customers can approve or decline estimates, check job progress, request new service, send messages, and review the information your business has shared with them. They can also create a free customer account so their Owner’sLOCAL information is easier to access again later.",
+      "Customers can approve or decline estimates, check job progress, book an open appointment time online (when the business has Online Booking turned on), request new service, send messages, and review the information your business has shared with them. They can also create a free customer account so their Owner’sLOCAL information is easier to access again later.",
     ],
   },
   remote_signing: {

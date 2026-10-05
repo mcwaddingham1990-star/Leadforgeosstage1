@@ -50,8 +50,8 @@ export interface TriggerDefinition {
 
 export const AUTOMATION_TRIGGERS: TriggerDefinition[] = [
   { id: "lead.created", label: "Lead Created", description: "Any new lead, from any source.", collection: "leads", creation: true },
-  { id: "booking.website.created", label: "Website Booking", description: "A request submitted through your website lead form.", collection: "leads", creation: true },
-  { id: "booking.portal.created", label: "Customer Portal Booking", description: "A service request a customer submitted from their Customer Portal.", collection: "leads", creation: true },
+  { id: "booking.website.created", label: "Website Booking", description: "A job booked through Online Booking on your website, or a request sent from your website lead form.", collection: "leads", creation: true },
+  { id: "booking.portal.created", label: "Customer Portal Booking", description: "A job a customer booked (or a service request they sent) from their Customer Portal.", collection: "leads", creation: true },
   { id: "estimate.created", label: "Estimate Created", description: "A new estimate is saved.", collection: "estimates", creation: true },
   { id: "estimate.accepted", label: "Estimate Accepted", description: "An estimate's status becomes Accepted (by you or by the customer in the portal).", collection: "estimates", creation: false },
   { id: "job.created", label: "Job Created", description: "A new job is created.", collection: "scheduling_events", creation: true },
@@ -106,6 +106,8 @@ export interface ActionDefinition {
 }
 
 const LEAD_TRIGGERS: AutomationTrigger[] = ["lead.created", "booking.website.created", "booking.portal.created"];
+/** Booking triggers fire for both a booked Job (Online Booking) and a request Lead (website form / portal service request). */
+export const BOOKING_TRIGGERS: AutomationTrigger[] = ["booking.website.created", "booking.portal.created"];
 const ESTIMATE_TRIGGERS: AutomationTrigger[] = ["estimate.created", "estimate.accepted"];
 const JOB_TRIGGERS: AutomationTrigger[] = ["job.created", "job.completed"];
 const INVOICE_TRIGGERS: AutomationTrigger[] = ["invoice.created", "invoice.paid", "invoice.overdue"];
@@ -122,8 +124,8 @@ export const AUTOMATION_ACTIONS: ActionDefinition[] = [
   { id: "create_job", label: "Create Job", description: "Runs the same Estimate/Lead → Job conversion as the Convert to Job button. Never creates a second job for the same estimate or lead.", triggers: [...LEAD_TRIGGERS, "estimate.accepted"] },
   { id: "create_appointment", label: "Create Appointment", description: "Puts an unassigned appointment on the Scheduling calendar.", triggers: [...LEAD_TRIGGERS, ...ESTIMATE_TRIGGERS, "job.created"] },
   { id: "create_invoice", label: "Create Invoice", description: "Creates the job's invoice the same way the Job → Invoice handoff does. Never a second open invoice for the same job.", triggers: ["job.completed"] },
-  { id: "send_customer_confirmation", label: "Send Customer Confirmation", description: "Posts a confirmation in the customer's Messages / Customer Portal conversation.", triggers: [...ESTIMATE_TRIGGERS, ...JOB_TRIGGERS, "appointment.created", "invoice.created", "invoice.paid", "booking.portal.created"] },
-  { id: "send_customer_message", label: "Send Message/Text", description: "Posts your message in the customer's Messages / Customer Portal conversation.", triggers: [...ESTIMATE_TRIGGERS, ...JOB_TRIGGERS, "appointment.created", ...INVOICE_TRIGGERS, "booking.portal.created"] },
+  { id: "send_customer_confirmation", label: "Send Customer Confirmation", description: "Posts a confirmation in the customer's Messages / Customer Portal conversation.", triggers: [...ESTIMATE_TRIGGERS, ...JOB_TRIGGERS, "appointment.created", "invoice.created", "invoice.paid", ...BOOKING_TRIGGERS] },
+  { id: "send_customer_message", label: "Send Message/Text", description: "Posts your message in the customer's Messages / Customer Portal conversation.", triggers: [...ESTIMATE_TRIGGERS, ...JOB_TRIGGERS, "appointment.created", ...INVOICE_TRIGGERS, ...BOOKING_TRIGGERS] },
   { id: "notify_team", label: "Notify Owner/Manager", description: "Sends an Alert Center notification (and push, when set up) to the owner and/or managers.", triggers: ALL_TRIGGERS },
   { id: "create_follow_up_task", label: "Create Follow-Up Task", description: "Adds a Follow-Up entry to the Scheduling calendar.", triggers: ALL_TRIGGERS },
   { id: "request_review", label: "Request Review", description: "Creates the customer's review request (Settings > Automate Reviews message and link). Never duplicates one.", triggers: ["job.completed", "invoice.paid"] },
@@ -148,6 +150,7 @@ export function requiredActionModules(type: AutomationActionType, trigger: Autom
       return scheduling;
     case "mark_priority":
     case "update_status":
+      if (BOOKING_TRIGGERS.includes(trigger)) return ["leads", ...scheduling];
       return TRIGGER_BY_ID.get(trigger)?.collection === "leads" ? ["leads"] : scheduling;
     case "create_invoice":
       return ["invoices", "accounting"];
@@ -165,6 +168,11 @@ export const ALLOWED_ACTION_TYPES: AutomationActionType[] = AUTOMATION_ACTIONS.m
 
 export const SAFE_JOB_STATUSES = ["Scheduled", "Assigned", "On Hold"] as const;
 export const SAFE_LEAD_STATUSES = ["Contacted", "Qualified", "Follow-Up Needed"] as const;
+/** Statuses Update Status may set for this trigger. Booking triggers can be a booked Job or a request Lead, so both safe sets apply (each record only accepts its own). */
+export function safeStatusesForTrigger(trigger: AutomationTrigger): readonly string[] {
+  if (BOOKING_TRIGGERS.includes(trigger)) return [...SAFE_LEAD_STATUSES, ...SAFE_JOB_STATUSES];
+  return TRIGGER_BY_ID.get(trigger)?.collection === "leads" ? SAFE_LEAD_STATUSES : SAFE_JOB_STATUSES;
+}
 export const PRIORITY_VALUES = ["Low", "Medium", "High", "Urgent"] as const;
 export const APPOINTMENT_TYPES = ["Site Visit", "Consultation", "Estimate", "Inspection"] as const;
 
@@ -234,6 +242,9 @@ export function deriveAutomationEvents(evt: CollectionEvent): AutomationEvent[] 
     const isJob = item.eventType === "Job";
     if (type === "created" && isJob) events.push(makeEvent("job.created", "scheduling_events", item, undefined));
     if (type === "created" && isAppointmentRecord(item)) events.push(makeEvent("appointment.created", "scheduling_events", item, undefined));
+    // Online Booking (server/onlineBooking.ts) writes the booked Job directly.
+    if (type === "created" && item.bookingSource === "Website Booking") events.push(makeEvent("booking.website.created", "scheduling_events", item, undefined));
+    if (type === "created" && item.bookingSource === "Customer Portal") events.push(makeEvent("booking.portal.created", "scheduling_events", item, undefined));
     if (type === "updated" && isJob && previous?.status !== "Completed" && item.status === "Completed") {
       events.push(makeEvent("job.completed", "scheduling_events", item, previous));
     }
@@ -326,7 +337,9 @@ export function buildAutomationFacts(event: AutomationEvent, now: Date = new Dat
     case "scheduling_events":
       return {
         amount: r.budget != null ? Number(r.budget) || 0 : undefined,
-        priority: r.priority,
+        // An online booking always lands as Medium; treat one whose customer
+        // notes say emergency/urgent/ASAP as Emergency, same as a request lead.
+        priority: r.bookingSource && r.priority !== "Urgent" && EMERGENCY_WORDS.test(`${r.description || ""} ${r.notes || ""}`) ? "Emergency" : r.priority,
         source: r.source,
         serviceType: r.jobType || r.customType || r.title || r.eventType || "",
         status: r.status
@@ -435,7 +448,7 @@ export function validateAutomation(a: Pick<Automation, "name" | "trigger" | "con
     if (!def.triggers.includes(a.trigger)) errors.push(`Action ${i + 1}: ${def.label} can't run on "${TRIGGER_BY_ID.get(a.trigger)?.label || a.trigger}".`);
     const cfg = action.config || {};
     if (action.type === "update_status") {
-      const allowed: readonly string[] = TRIGGER_BY_ID.get(a.trigger)?.collection === "leads" ? SAFE_LEAD_STATUSES : SAFE_JOB_STATUSES;
+      const allowed: readonly string[] = safeStatusesForTrigger(a.trigger);
       if (!cfg.status || !allowed.includes(cfg.status)) errors.push(`Action ${i + 1}: choose one of ${allowed.join(", ")}.`);
     }
     if (action.type === "mark_priority" && (!cfg.priority || !(PRIORITY_VALUES as readonly string[]).includes(cfg.priority))) {

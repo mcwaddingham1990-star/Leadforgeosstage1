@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
+import { OnlineBookingSettingsPanel } from "./OnlineBookingSettingsPanel";
 import {
   Link2,
   Plus,
@@ -190,7 +191,7 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
       developer: "OwnersLOCAL",
       apiType: "REST",
       logo: "📝",
-      description: "Add this form to your website. Each submission will create a new lead in Owner'sLOCAL.",
+      description: "Add this form to your website. Each submission will create a new lead in Owner'sLOCAL -- or, with Online Booking turned on, let visitors book a real open time on your schedule.",
       connected: true,
       lastSync: "N/A",
       aiEnabled: false,
@@ -1173,6 +1174,10 @@ export const IntegrationsPage: React.FC<IntegrationsPageProps> = ({
                         className="w-full px-3 py-2 bg-white border border-[#A9CDEE] rounded-lg text-[10px] font-mono text-slate-700"
                       />
                     </div>
+                  )}
+
+                  {businessId && !isLoadingWebFormToken && (
+                    <OnlineBookingSettingsPanel businessId={businessId} webFormToken={webFormToken} onNotify={triggerNotification} />
                   )}
                 </div>
               ) : detailTab === "overview" ? (

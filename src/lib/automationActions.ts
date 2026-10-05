@@ -262,6 +262,7 @@ export function createAutomationActionHandlers(deps: AutomationActionDeps): Reco
       });
       return completed(`Created job ${job.jobNumber || job.id} (unassigned, ${date}) from lead ${lead.name}.`, job.id);
     }
+    if (event.collection === "scheduling_events" && event.record?.eventType === "Job") return skipped("This booking is already a job.", event.record.id);
     return skipped("Create Job only applies to estimates and leads.");
   };
 

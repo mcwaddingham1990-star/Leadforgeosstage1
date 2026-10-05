@@ -27,8 +27,6 @@ import {
   MAX_CONDITIONS,
   OPERATOR_LABELS,
   PRIORITY_VALUES,
-  SAFE_JOB_STATUSES,
-  SAFE_LEAD_STATUSES,
   TRIGGER_BY_ID,
   automationFromTemplate,
   describeCondition,
@@ -36,6 +34,7 @@ import {
   newActionId,
   newAutomationId,
   newConditionId,
+  safeStatusesForTrigger,
   validateAutomation
 } from "../lib/automationEngine";
 import { Copy, History, Pencil, Plus, Power, Trash2, X, Zap, ShieldCheck, ChevronRight } from "lucide-react";
@@ -223,7 +222,6 @@ const AutomationBuilder: React.FC<BuilderProps> = ({ initial, isNew, onCancel, o
               {draft.actions.map((a, i) => {
                 const def = ACTION_BY_ID.get(a.type);
                 const cfg = a.config || {};
-                const leadTrigger = triggerDef?.collection === "leads";
                 return (
                   <div key={a.id} className="rounded-2xl border border-[#A9CDEE] bg-white p-2.5 space-y-2">
                     <div className="flex items-start justify-between gap-2">
@@ -263,7 +261,7 @@ const AutomationBuilder: React.FC<BuilderProps> = ({ initial, isNew, onCancel, o
                     )}
                     {a.type === "update_status" && (
                       <select value={cfg.status || ""} onChange={e => updateAction(a.id, { status: e.target.value })} className="w-full rounded-xl border border-[#A9CDEE] px-2 py-2 text-xs">
-                        {(leadTrigger ? SAFE_LEAD_STATUSES : SAFE_JOB_STATUSES).map(s => <option key={s} value={s}>{s}</option>)}
+                        {safeStatusesForTrigger(draft.trigger).map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     )}
                     {(a.type === "send_customer_message" || a.type === "send_customer_confirmation" || a.type === "notify_team" || a.type === "add_timeline_entry" || a.type === "create_follow_up_task") && (

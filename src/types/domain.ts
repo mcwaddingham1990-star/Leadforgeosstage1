@@ -499,6 +499,11 @@ export interface SchedulingEvent {
   customerVisible?: boolean;
   /** Set when an Automation (WHEN -> IF -> DO) created this record; also keeps that creation from firing other "...Created" automations. */
   createdByAutomationId?: string;
+  /** Set when this Job was created by Online Booking (server/onlineBooking.ts):
+   * which entry point it came through, and its online_bookings record
+   * (customer description + photos). */
+  bookingSource?: "Customer Portal" | "Website Booking";
+  onlineBookingId?: string;
 }
 
 /**

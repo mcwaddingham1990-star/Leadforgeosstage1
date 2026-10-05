@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Briefcase, FileText, CalendarClock, Receipt, FolderOpen, ShieldCheck, ClipboardList, MessageSquare,
-  Users, Search, LogOut, ChevronDown, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, ExternalLink, Send, Plus, Building2
+  Users, Search, LogOut, ChevronDown, ChevronLeft, ChevronRight, Loader2, CheckCircle2, XCircle, ExternalLink, Send, Plus, Building2, CalendarPlus
 } from "lucide-react";
+import BookServiceFlow from "./BookServiceFlow";
+import { customerAccountBookingApi } from "../lib/onlineBookingClient";
 import type { CustomerSession } from "../types/customerAccount";
 import * as api from "../lib/customerAccountClient";
 
-type TabId = "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "request" | "messages" | "professionals" | "find";
+type TabId = "jobs" | "estimates" | "appointments" | "invoices" | "documents" | "memberships" | "book" | "request" | "messages" | "professionals" | "find";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode; comingSoon?: boolean }> = [
   { id: "jobs", label: "My Jobs", icon: <Briefcase className="w-[18px] h-[18px]" /> },
@@ -15,6 +17,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode; comingSoon?
   { id: "invoices", label: "Invoices", icon: <Receipt className="w-[18px] h-[18px]" /> },
   { id: "documents", label: "Documents", icon: <FolderOpen className="w-[18px] h-[18px]" /> },
   { id: "memberships", label: "Memberships", icon: <ShieldCheck className="w-[18px] h-[18px]" /> },
+  { id: "book", label: "Book Service", icon: <CalendarPlus className="w-[18px] h-[18px]" /> },
   { id: "request", label: "Request Service", icon: <ClipboardList className="w-[18px] h-[18px]" /> },
   { id: "messages", label: "Messages", icon: <MessageSquare className="w-[18px] h-[18px]" /> },
   { id: "professionals", label: "My Service Providers", icon: <Users className="w-[18px] h-[18px]" /> },
@@ -281,6 +284,7 @@ export const CustomerAppShell: React.FC<CustomerAppShellProps> = ({ session, onS
                 {activeTab === "invoices" && <InvoicesTab businessFilter={businessFilter} onToast={showToast} refreshVersion={liveRefreshVersion} />}
                 {activeTab === "documents" && <DocumentsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
                 {activeTab === "memberships" && <MembershipsTab businessFilter={businessFilter} refreshVersion={liveRefreshVersion} />}
+                {activeTab === "book" && <BookServiceTab businesses={activeBusinesses} onViewAppointments={() => setActiveTab("appointments")} />}
                 {activeTab === "request" && <RequestServiceTab businesses={activeBusinesses} onToast={showToast} />}
                 {activeTab === "messages" && <MessagesTab businesses={activeBusinesses} refreshVersion={liveRefreshVersion} />}
                 {activeTab === "professionals" && (
@@ -613,6 +617,35 @@ const MembershipsTab: React.FC<{ businessFilter: string; refreshVersion: number 
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Book Service -- online booking against a connected business's live
+// Scheduling (server/onlineBooking.ts). The server re-checks the Active
+// relationship for whichever business is picked here.
+// ---------------------------------------------------------------------------
+
+const BookServiceTab: React.FC<{ businesses: Array<{ id: string; name: string }>; onViewAppointments: () => void }> = ({ businesses, onViewAppointments }) => {
+  const [businessId, setBusinessId] = useState("");
+  const effectiveBusinessId = businesses.length === 1 ? businesses[0].id : businessId;
+  const bookingApi = useMemo(() => (effectiveBusinessId ? customerAccountBookingApi(effectiveBusinessId) : null), [effectiveBusinessId]);
+
+  if (!businesses.length) return <EmptyState label="Connect with a service provider first (see My Service Providers) to book service online." />;
+
+  return (
+    <div className="space-y-4">
+      {businesses.length > 1 && (
+        <label className="block max-w-lg">
+          <span className="text-[10px] font-black uppercase tracking-wide text-[#5E7393]">Service Professional</span>
+          <select value={businessId} onChange={e => setBusinessId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#9EC8EF] p-2.5 text-sm">
+            <option value="">Choose one...</option>
+            {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </label>
+      )}
+      {bookingApi && <div key={effectiveBusinessId}><BookServiceFlow api={bookingApi} onViewAppointments={onViewAppointments} /></div>}
     </div>
   );
 };

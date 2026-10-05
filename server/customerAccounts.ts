@@ -757,3 +757,13 @@ export async function getBusinessProfile(customerAccountId: string, businessId: 
     }
   };
 }
+
+/** Online Booking (server/onlineBooking.ts) entry point for a signed-in
+ * CustomerAccount: the same Active-relationship check every other action
+ * above uses, so a customer can only ever book with -- or read availability
+ * of -- a business they're actually connected to. */
+export async function resolveCustomerAccountBookingContext(customerAccountId: string, businessId: string): Promise<{ ok: true; db: Firestore; businessId: string; customerId: string; customer: FirebaseFirestore.DocumentData } | { ok: false; error: string }> {
+  const resolved = await resolveSingleActiveContext(customerAccountId, businessId);
+  if (resolved.ok === false) return resolved;
+  return { ok: true, db: resolved.db, businessId: resolved.ctx.businessId, customerId: resolved.ctx.businessCustomerId, customer: resolved.ctx.customer };
+}

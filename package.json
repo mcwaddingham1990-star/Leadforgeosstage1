@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:rules": "firebase emulators:exec --only firestore --project demo-ownerslocal-security-test \"vitest run tests/firestoreRules.security.test.ts tests/automationRules.security.test.ts\"",
-    "test": "npm run test:rules"
+    "test:booking": "firebase emulators:exec --only firestore --project demo-ownerslocal-booking-test \"vitest run tests/onlineBooking.integration.test.ts\"",
+    "test": "npm run test:rules && npm run test:booking"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.0",
