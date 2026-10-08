@@ -147,6 +147,7 @@ import { BillingPage } from "./components/BillingPage";
 import { PaywallGate } from "./components/PaywallGate";
 import TutorialHost from "./components/TutorialHost";
 import { useSubscriptionStatus } from "./hooks/useSubscriptionStatus";
+import { freeTrialDaysLeft } from "./lib/freeTrial";
 import { RosterPage } from "./components/RosterPage";
 import { MessagesPage } from "./components/MessagesPage";
 import { TrainingPage } from "./components/TrainingPage";
@@ -4885,6 +4886,7 @@ Access to full financial telemetry is restricted.`;
 
   if (
     subscriptionGateApplies && loggedInUser && !subscription.isAdminBusiness &&
+    !subscription.trialActive &&
     (!subscription.configured || (!subscription.subscriptionActive && !subscription.bypassActive))
   ) {
     return (
@@ -6613,6 +6615,7 @@ Access to full financial telemetry is restricted.`;
                             {isSignUpSubmitting ? "Registering..." : "Sign Up"}
                           </button>
                         </div>
+                        <p className="text-center text-[10.5px] font-semibold text-slate-500">Includes a 7-day free trial. No card needed.</p>
                       </form>
                     </div>
                   </div>
@@ -7146,6 +7149,23 @@ Access to full financial telemetry is restricted.`;
                         className="shrink-0 px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-[10.5px] uppercase tracking-wide cursor-pointer hover:bg-amber-900"
                       >
                         Exit Simulation
+                      </button>
+                    </div>
+                  )}
+
+                  {/* No-card free trial (see src/lib/freeTrial.ts) -- the owner sees how long is left and can subscribe anytime. */}
+                  {subscription.trialActive && !subscription.subscriptionActive && !subscription.bypassActive && !loggedInUser?.isEmployee && activeScreen.id !== "billing" && (
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#A9CDEE] bg-[#E3F3FF] px-4 py-2.5 text-xs font-bold text-[#1F3557]">
+                      <span>
+                        Free trial: {freeTrialDaysLeft(subscription.trialEndsAt)} day{freeTrialDaysLeft(subscription.trialEndsAt) === 1 ? "" : "s"} left
+                        <span className="ml-1 font-semibold text-[#5E7393]">· ends {subscription.trialEndsAt ? new Date(subscription.trialEndsAt).toLocaleDateString() : ""}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => navigateToScreen("billing")}
+                        className="shrink-0 rounded-lg bg-[#315C9F] px-3 py-1 text-[10.5px] uppercase tracking-wide text-white cursor-pointer hover:bg-[#1F3557]"
+                      >
+                        Subscribe
                       </button>
                     </div>
                   )}
