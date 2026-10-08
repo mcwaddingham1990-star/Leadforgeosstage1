@@ -45,6 +45,10 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const [scanError, setScanError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Synchronous twin of isSaving: a double-click / repeated Enter can fire
+  // several submits before React re-renders with isSaving=true, so the
+  // state alone let the same payment through more than once.
+  const savingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // The downscaled photo behind the current scan, kept around so it can be
   // filed into Documents > Snapshots once the user actually confirms a save.
@@ -121,7 +125,8 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     const parsedAmount = parseFloat(amount);
     // Amount is the only required field -- a payer/vendor name and a
     // category are optional and can be filled in later.
-    if (!parsedAmount || parsedAmount <= 0 || isSaving) return;
+    if (!parsedAmount || parsedAmount <= 0 || isSaving || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
     if (!pendingIdRef.current) pendingIdRef.current = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -160,6 +165,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     } catch (err) {
       console.error(`Error saving ${type}:`, err);
       setSaveError(`Couldn't save this ${label.toLowerCase()}. Please try again.`);
+      savingRef.current = false;
       setIsSaving(false);
     }
   };

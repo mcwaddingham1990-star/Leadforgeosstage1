@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-leadforgelocalos-a91c76d6-18b0-4f96-b3fb-ef1e755e81f4",
+      "rules": "firestore.rules"
+    }
+  ]
+}
