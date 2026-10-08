@@ -4239,11 +4239,13 @@ Access to full financial telemetry is restricted.`;
       batch.set(doc(db, "transactions", newTxn.id), persistedTxn);
       batch.set(doc(db, "journal_entries", journalEntry.id), persistedJournalEntry);
       await batch.commit();
-      setTransactions(prev => [...prev, newTxn]);
+      // Keyed by the stable id -- a repeated save of the same submission
+      // replaces its row instead of listing the payment/expense twice.
+      setTransactions(prev => [...prev.filter(x => x.id !== newTxn.id), newTxn]);
       // Real double-entry posting -- every logged transaction moves the
       // real ledger (Cash + Revenue or Cash + the matching expense
       // account), not just a line in a list. See accountingEngine.ts.
-      setJournalEntries(prev => [...prev, journalEntry]);
+      setJournalEntries(prev => [...prev.filter(x => x.id !== journalEntry.id), journalEntry]);
       setLogTransactionType(null);
       sessionStorage.removeItem("ownerslocal_pending_financial_scan");
       triggerNotification(`${t.type === "income" ? "Income" : "Expense"} logged: $${t.amount.toLocaleString()}`);
