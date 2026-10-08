@@ -11,7 +11,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:rules": "firebase emulators:exec --only firestore --project demo-ownerslocal-security-test \"vitest run tests/firestoreRules.security.test.ts tests/automationRules.security.test.ts\"",
-    "test:booking": "firebase emulators:exec --only firestore --project demo-ownerslocal-booking-test \"vitest run --no-file-parallelism tests/onlineBooking.integration.test.ts tests/serviceAgreements.integration.test.ts\"",
+    "test:booking": "firebase emulators:exec --only firestore,auth --project demo-ownerslocal-booking-test \"vitest run --no-file-parallelism tests/onlineBooking.integration.test.ts tests/serviceAgreements.integration.test.ts tests/freeTrial.integration.test.ts\"",
     "test": "npm run test:rules && npm run test:booking"
   },
   "dependencies": {

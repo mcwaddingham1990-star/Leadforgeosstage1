@@ -6,6 +6,7 @@ import { getAuth } from "firebase-admin/auth";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { isAdminBusinessId } from "./paywallBypass";
+import { checkTrialEligibility, recordTrialFingerprint } from "./trialEligibility";
 import { FREE_TRIAL_DAYS, freeTrialEndsAt, isFreeTrialActive } from "../src/lib/freeTrial";
 
 // OwnersLOCAL's own SaaS subscription -- the platform charging the business
@@ -128,19 +129,19 @@ async function countEmployees(db: FirebaseFirestore.Firestore, businessId: strin
 }
 
 /**
- * When the business's free trial ends -- 7 days after the OWNER's login
- * account was created (the business id is the owner's email). Firebase sets
- * that creation time itself, so nobody can edit it to extend a trial, and
- * no new paywall field is needed. null when it can't be determined (no
- * Firebase Admin, owner account not found) -- that just means no trial.
+ * When the OWNER's login account was created (the business id is the
+ * owner's email). Firebase sets that time itself, so nobody can edit it to
+ * extend a trial; the 7-day free trial is counted from it. null when it
+ * can't be determined (no Firebase Admin, owner account not found) -- that
+ * just means no trial.
  */
-async function trialEndsAtFor(businessId: string): Promise<number | null> {
+async function ownerCreatedAtFor(businessId: string): Promise<number | null> {
   const app = getAdminApp();
   if (!app) return null;
   try {
     const owner = await getAuth(app).getUserByEmail(businessId);
     const createdAt = Date.parse(owner.metadata.creationTime);
-    return Number.isFinite(createdAt) ? freeTrialEndsAt(createdAt) : null;
+    return Number.isFinite(createdAt) ? createdAt : null;
   } catch (err) {
     console.warn(`Could not determine free trial for ${businessId}:`, err);
     return null;
@@ -180,7 +181,22 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
     const bypassExpiresAt = typeof data.bypassExpiresAt === "number" ? data.bypassExpiresAt : null;
     const bypassActive = !!data.bypassActive && !!bypassExpiresAt && bypassExpiresAt > Date.now();
     const subscriptionActive = !!data.subscriptionActive;
-    const trialEndsAt = await trialEndsAtFor(businessId);
+    const ownerCreatedAt = await ownerCreatedAtFor(businessId);
+    const trialEndsAt = ownerCreatedAt ? freeTrialEndsAt(ownerCreatedAt) : null;
+    const trialWindowOpen = !subscriptionActive && isFreeTrialActive(trialEndsAt);
+    // One trial per business: record this business's phone/name/address/
+    // email, and while it's still inside its 7 days, refuse the trial if any
+    // of them match a business that signed up earlier (server/trialEligibility.ts).
+    let trialBlocked = false;
+    try {
+      const keys = await recordTrialFingerprint(db, businessId, data, ownerCreatedAt);
+      if (trialWindowOpen && ownerCreatedAt && !isAdminBusinessId(businessId)) {
+        trialBlocked = (await checkTrialEligibility(db, getAuth(getAdminApp()!), businessId, keys, ownerCreatedAt)).blocked;
+      }
+    } catch (err) {
+      // A failed duplicate check must not lock a new business out of the app.
+      console.error(`Free trial duplicate check failed for ${businessId}:`, err);
+    }
     res.json({
       configured: isSubscriptionBillingConfigured(),
       hasBillingAccount: typeof data.stripeSubscriptionCustomerId === "string" && !!data.stripeSubscriptionCustomerId,
@@ -197,7 +213,8 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
       // the business hasn't subscribed yet.
       trialDays: FREE_TRIAL_DAYS,
       trialEndsAt,
-      trialActive: !subscriptionActive && isFreeTrialActive(trialEndsAt),
+      trialActive: trialWindowOpen && !trialBlocked,
+      trialBlocked,
       isAdminBusiness: isAdminBusinessId(businessId),
       seatPricing: {
         includedEmployees: INCLUDED_EMPLOYEES,

@@ -4033,6 +4033,9 @@ Access to full financial telemetry is restricted.`;
     setIsSubmitting(true);
     const saved = await saveProfileToFirestore();
     setIsSubmitting(false);
+    // Phone/address are first entered here -- re-check free trial
+    // eligibility (one trial per business) against the saved details.
+    if (saved && !isEditingBusinessProfile) subscription.refresh();
 
     // Editing an existing business profile is not onboarding. In particular,
     // an Office Manager must never continue into Step 2, whose final action
