@@ -262,7 +262,9 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
                 </select>
               </div>
               <div className="space-y-1">
-                <label htmlFor="log-txn-date" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Date</label>
+                {/* No min/max on purpose: back-dating an older payment or expense
+                    is a normal, supported entry. */}
+                <label htmlFor="log-txn-date" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Date (past dates OK)</label>
                 <input
                   id="log-txn-date"
                   type="date"
