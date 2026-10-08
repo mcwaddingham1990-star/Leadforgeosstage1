@@ -137,6 +137,7 @@ import { DispatchPage } from "./components/DispatchPage";
 import { JobsPage } from "./components/JobsPage";
 import { ServiceAgreementsPage } from "./components/ServiceAgreementsPage";
 import { RevenueDetailModal, type RevenueDetailRow } from "./components/RevenueDetailModal";
+import { countableIncome, incomeCountedAsJobRevenue } from "./lib/revenueDedup";
 import { TimeClockPage } from "./components/TimeClockPage";
 import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
@@ -1220,7 +1221,8 @@ function getRevenueStepSeries(
   revenueEvents: RevenueEvent[],
   transactions: Transaction[] = [],
   bills: Bill[] = [],
-  journalEntries: JournalEntry[] = []
+  journalEntries: JournalEntry[] = [],
+  invoices: Invoice[] = []
 ): { points: RevenueStepPoint[]; periodStart: Date; periodEnd: Date } {
   const now = new Date();
   let periodStart: Date;
@@ -1256,8 +1258,12 @@ function getRevenueStepSeries(
     const t = new Date(e.date).getTime();
     if (inRange(t)) events.push({ time: t, kind: "payment", amount: e.amount });
   }
+  // A paid invoice for an already-completed job is the same money as its
+  // revenue event -- count the job once (see lib/revenueDedup.ts).
+  const alreadyCounted = incomeCountedAsJobRevenue(transactions, invoices, revenueEvents);
   for (const t of transactions) {
     if (t.type !== "income" && t.type !== "expense") continue;
+    if (alreadyCounted.has(t.id)) continue;
     const time = new Date(t.date).getTime();
     if (inRange(time)) events.push({ time, kind: t.type === "income" ? "payment" : "expense", amount: t.amount });
   }
@@ -2036,7 +2042,7 @@ export default function App() {
   // logging income actually moves this number, not just an ignored ledger.
   const completedJobsRevenue =
     revenueEvents.reduce((sum, e) => sum + e.amount, 0) +
-    transactions.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
+    countableIncome(transactions, invoices, revenueEvents).reduce((sum, t) => sum + t.amount, 0);
   const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
   const [preSelectedCustomerId, setPreSelectedCustomerId] = useState<string | undefined>(undefined);
   // Lets other pages deep-link into a specific Settings sub-section (e.g.
@@ -7992,7 +7998,7 @@ Access to full financial telemetry is restricted.`;
                         <span className="pointer-events-none absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-white" />
                         <span className="pointer-events-none absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-white" />
                         {(() => {
-                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills, journalEntries);
+                          const stepData = getRevenueStepSeries(revenuePageFilter, revenueEvents, transactions, bills, journalEntries, invoices);
                           const { points, periodStart, periodEnd } = stepData;
                           const latest = points[points.length - 1];
                           const paymentsTotal = latest.Payments;
@@ -8014,9 +8020,10 @@ Access to full financial telemetry is restricted.`;
                           // completed-job revenue + logged income, and logged
                           // expenses + bills, all within this period (same sources
                           // as getRevenueStepSeries).
+                          const incomeToCount = countableIncome(transactions, invoices, revenueEvents);
                           const periodPaymentRows: RevenueDetailRow[] = [
                             ...revenueEvents.filter(e => inPeriod(e.date)).map(e => ({ id: e.id, date: e.date, description: `Completed job — ${e.customer}`, category: "Completed Job Revenue", kind: "payment" as const, amount: e.amount })),
-                            ...transactions.filter(t => t.type === "income" && inPeriod(t.date)).map(t => ({ id: t.id, date: t.date, description: t.description || "Logged income", category: "Logged Income", kind: "payment" as const, amount: t.amount }))
+                            ...incomeToCount.filter(t => inPeriod(t.date)).map(t => ({ id: t.id, date: t.date, description: t.description || "Logged income", category: "Logged Income", kind: "payment" as const, amount: t.amount }))
                           ];
                           const periodBillAmounts = billExpenseAmounts(bills, journalEntries);
                           const periodExpenseRows: RevenueDetailRow[] = [
@@ -8039,7 +8046,7 @@ Access to full financial telemetry is restricted.`;
                           });
 
                           const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
-                          const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
+                          const loggedIncomeThisPeriod = incomeToCount.filter(t => inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
 
                           // Ledger-derived -- one row per real expense account for this
                           // period, the same function the Revenue page's statement table
@@ -8562,7 +8569,7 @@ Access to full financial telemetry is restricted.`;
 
                         const allPaymentItems = [
                           ...revenueEvents.map(e => ({ id: e.id, date: e.date, memo: `Completed job — ${e.customer}`, amount: e.amount, source: "Completed Job Revenue" })),
-                          ...transactions.filter(t => t.type === "income").map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, source: "Logged Income" }))
+                          ...countableIncome(transactions, invoices, revenueEvents).map(t => ({ id: t.id, date: t.date, memo: t.description || "Logged income", amount: t.amount, source: "Logged Income" }))
                         ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
                         const paymentItems = paymentsTableFilter === "all" ? allPaymentItems : allPaymentItems.filter(i => i.source === paymentsTableFilter);
                         const paymentsTotal = paymentItems.reduce((s, i) => s + i.amount, 0);
