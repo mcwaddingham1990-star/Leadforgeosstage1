@@ -5,6 +5,7 @@ import type Stripe from "stripe";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { createInvoiceCheckoutSession, getConnectAccountStatus } from "./stripeConnect";
+import { agreementVisitStats } from "../src/lib/serviceAgreements";
 
 /**
  * Owner'sLOCAL Customer -- the real, global customer-account system. A
@@ -470,7 +471,7 @@ export async function getInvoices(customerAccountId: string, businessIdFilter?: 
   return { ok: true, invoices };
 }
 
-export interface TaggedMembership { id: string; businessId: string; businessName: string; membershipNumber?: string; planName: string; description?: string; price: number; billingFrequency: string; includedServices?: Array<{ id: string; description: string; quantity: number; unitPrice: number }>; startDate: string; endDate?: string; status: string; nextMaintenanceDate?: string; nextPaymentDate?: string }
+export interface TaggedMembership { id: string; businessId: string; businessName: string; membershipNumber?: string; planName: string; description?: string; price: number; billingFrequency: string; includedServices?: Array<{ id: string; description: string; quantity: number; unitPrice: number }>; startDate: string; endDate?: string; status: string; nextMaintenanceDate?: string; nextPaymentDate?: string; coveredEquipment?: Array<{ id: string; type: string; manufacturer?: string; model?: string; location?: string }>; visitsIncluded?: number; visitsRemaining?: number }
 
 export async function getMemberships(customerAccountId: string, businessIdFilter?: string): Promise<{ ok: boolean; error?: string; memberships?: TaggedMembership[] }> {
   const resolved = await resolveContexts(customerAccountId, businessIdFilter);
@@ -479,11 +480,37 @@ export async function getMemberships(customerAccountId: string, businessIdFilter
   const memberships: TaggedMembership[] = [];
   for (const ctx of contexts) {
     const snap = await db.collection("memberships").where("businessId", "==", ctx.businessId).where("customerId", "==", ctx.businessCustomerId).get();
-    snap.docs.map(d => d.data()).forEach(m => memberships.push({
-      id: m.id, businessId: ctx.businessId, businessName: ctx.businessName, membershipNumber: m.membershipNumber, planName: m.planName,
-      description: m.description, price: m.price, billingFrequency: m.billingFrequency, includedServices: m.includedServices,
-      startDate: m.startDate, endDate: m.endDate, status: m.status, nextMaintenanceDate: m.nextMaintenanceDate, nextPaymentDate: m.nextPaymentDate
-    }));
+    for (const m of snap.docs.map(d => d.data())) {
+      // Visits left only matters for agreements with a set number of visits.
+      let visitsRemaining: number | undefined;
+      let nextVisit: string | undefined;
+      if (Number(m.visitsIncluded) > 0) {
+        const [woSnap, evtSnap] = await Promise.all([
+          db.collection("work_orders").where("sourceMembershipId", "==", m.id).get(),
+          db.collection("scheduling_events").where("sourceMembershipId", "==", m.id).get()
+        ]);
+        const sameBusiness = (d: any) => d.businessId === ctx.businessId;
+        const woDocs = woSnap.docs.map(d => d.data() as any).filter(sameBusiness);
+        const woIds = woDocs.map(w => w.id);
+        const companionSnap = woIds.length
+          ? await db.collection("scheduling_events").where("sourceWorkOrderId", "in", woIds.slice(0, 30)).get()
+          : null;
+        const events = [...evtSnap.docs, ...(companionSnap?.docs || [])].map(d => d.data() as any).filter(sameBusiness);
+        const stats = agreementVisitStats(m as any, woDocs, events);
+        visitsRemaining = stats.remaining ?? undefined;
+        nextVisit = stats.nextVisitDate;
+      }
+      memberships.push({
+        id: m.id, businessId: ctx.businessId, businessName: ctx.businessName, membershipNumber: m.membershipNumber, planName: m.planName,
+        description: m.description, price: m.price, billingFrequency: m.billingFrequency, includedServices: m.includedServices,
+        startDate: m.startDate, endDate: m.endDate, status: m.status, nextMaintenanceDate: nextVisit || m.nextMaintenanceDate, nextPaymentDate: m.nextPaymentDate,
+        coveredEquipment: Array.isArray(m.coveredEquipment)
+          ? m.coveredEquipment.map((eq: any) => ({ id: eq.id, type: eq.type, manufacturer: eq.manufacturer, model: eq.model, location: eq.location }))
+          : undefined,
+        visitsIncluded: Number(m.visitsIncluded) > 0 ? Number(m.visitsIncluded) : undefined,
+        visitsRemaining
+      });
+    }
   }
   return { ok: true, memberships };
 }

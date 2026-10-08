@@ -115,6 +115,12 @@ export async function processDueRecurringTransactions(): Promise<{ configured: b
   return { configured: true, processed, failed };
 }
 
+/** Firestore Admin rejects `undefined` values -- drop optional fields that
+ * aren't set (e.g. a membership with no customer phone) instead of letting
+ * the whole visit write fail. */
+const withoutUndefined = <T extends Record<string, unknown>>(data: T): T =>
+  Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) as T;
+
 type MaintenanceFrequency = { unit: "days" | "weeks" | "months" | "years" | "specific_dates"; interval?: number; specificDates?: string[] };
 
 /** Same date math as MembershipBuilder's own addInterval() (client-side,
@@ -184,6 +190,18 @@ export async function processDueMembershipMaintenance(): Promise<{ configured: b
           transaction.update(snapshot.ref, { nextMaintenanceDate: null, status: "Expired", updatedAt: new Date().toISOString() });
           return false;
         }
+        // Service Agreements with a set number of included visits stop
+        // auto-generating once that many have been created this term
+        // (agreements without visitsIncluded are unlimited, as before).
+        const visitsIncluded = Number(m.visitsIncluded) || 0;
+        // After a Renew, the count starts over once visits fall in the new term.
+        const termStart = String(m.startDate || "");
+        const inNewTerm = !!termStart && visitDate >= termStart && m.visitsCountedFrom !== termStart;
+        const generatedThisTerm = inNewTerm ? 0 : Number(m.visitsGenerated) || 0;
+        if (visitsIncluded > 0 && generatedThisTerm >= visitsIncluded) {
+          transaction.update(snapshot.ref, { nextMaintenanceDate: null, updatedAt: new Date().toISOString() });
+          return false;
+        }
         const suffix = `${snapshot.id}_${visitDate.replace(/-/g, "")}`;
         const woId = `wo_membership_${suffix}`;
         const woRef = db.collection("work_orders").doc(woId);
@@ -195,11 +213,24 @@ export async function processDueMembershipMaintenance(): Promise<{ configured: b
           transaction.update(snapshot.ref, { nextMaintenanceDate: nextDate, updatedAt: new Date().toISOString() });
           return false;
         }
+        // A visit already booked by hand (Service Agreements > Schedule
+        // Visit creates a Job linked to the agreement) covers this cycle --
+        // advance the date instead of generating a second visit.
+        const bookedJobs = await transaction.get(db.collection("scheduling_events").where("sourceMembershipId", "==", snapshot.id));
+        const hasOpenBookedJob = bookedJobs.docs.some(d => {
+          const e = d.data();
+          return e.eventType === "Job" && e.businessId === m.businessId && e.status !== "Completed" && e.status !== "Cancelled";
+        });
+        if (hasOpenBookedJob) {
+          transaction.update(snapshot.ref, { nextMaintenanceDate: nextDate, updatedAt: new Date().toISOString() });
+          return false;
+        }
         const now = new Date().toISOString();
         const lineItems = Array.isArray(m.includedServices) ? m.includedServices.map((s: any, i: number) => ({
-          id: `mli_${suffix}_${i}`, description: s.description, quantity: Number(s.quantity) || 1, unitPrice: Number(s.unitPrice) || 0, priceBookModelId: s.priceBookModelId
+          id: `mli_${suffix}_${i}`, description: s.description, quantity: Number(s.quantity) || 1, unitPrice: Number(s.unitPrice) || 0,
+          ...(s.priceBookModelId ? { priceBookModelId: s.priceBookModelId } : {})
         })) : [];
-        transaction.set(woRef, {
+        transaction.set(woRef, withoutUndefined({
           id: woId,
           workOrderNumber: `WO-MAINT-${visitDate.replace(/-/g, "")}-${snapshot.id.slice(-4)}`,
           date: visitDate,
@@ -218,8 +249,8 @@ export async function processDueMembershipMaintenance(): Promise<{ configured: b
           businessId: m.businessId,
           createdAt: now,
           updatedAt: now
-        });
-        transaction.set(db.collection("scheduling_events").doc(`evt_${woId}`), {
+        }));
+        transaction.set(db.collection("scheduling_events").doc(`evt_${woId}`), withoutUndefined({
           id: `evt_${woId}`,
           eventType: "Work Order",
           date: visitDate,
@@ -239,7 +270,7 @@ export async function processDueMembershipMaintenance(): Promise<{ configured: b
           businessId: m.businessId,
           createdAt: now,
           updatedAt: now
-        });
+        }));
         transaction.set(db.collection("notifications").doc(`notif_${woId}`), {
           id: `notif_${woId}`,
           businessId: m.businessId,
@@ -249,7 +280,14 @@ export async function processDueMembershipMaintenance(): Promise<{ configured: b
           isRead: false,
           timestamp: now
         });
-        transaction.update(snapshot.ref, { nextMaintenanceDate: nextDate, lastGeneratedVisitDate: visitDate, updatedAt: now });
+        const visitsGenerated = generatedThisTerm + 1;
+        transaction.update(snapshot.ref, {
+          nextMaintenanceDate: visitsIncluded > 0 && visitsGenerated >= visitsIncluded ? null : nextDate,
+          lastGeneratedVisitDate: visitDate,
+          visitsGenerated,
+          visitsCountedFrom: visitDate >= termStart ? termStart : (m.visitsCountedFrom || null),
+          updatedAt: now
+        });
         return true;
       });
       if (generated) processed++;
@@ -453,6 +491,70 @@ export async function processDueReviewRequests(): Promise<{ configured: boolean;
   return { configured: true, processed, failed };
 }
 
+/**
+ * Service Agreement reminders in the owner's Notifications: a visit coming
+ * up within 7 days, and an agreement expiring within 30 days. Each reminder
+ * has a deterministic id and is only ever created once (create() fails if
+ * it already exists), so repeated runs never duplicate it.
+ */
+export async function processServiceAgreementReminders(): Promise<{ configured: boolean; processed: number; failed: number }> {
+  const db = getDatabase();
+  if (!db) return { configured: false, processed: 0, failed: 0 };
+  const today = new Date().toISOString().slice(0, 10);
+  const plusDays = (days: number) => {
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const visitWindowEnd = plusDays(7);
+  const expiryWindowEnd = plusDays(30);
+  const active = await db.collection("memberships").where("status", "==", "Active").get();
+  let processed = 0;
+  let failed = 0;
+
+  const createOnce = async (id: string, data: Record<string, unknown>) => {
+    try {
+      await db.collection("notifications").doc(id).create(data);
+      processed++;
+    } catch (error: any) {
+      // 6 = ALREADY_EXISTS: this reminder was already sent.
+      if (error?.code !== 6) {
+        failed++;
+        console.error(`Service agreement reminder ${id} failed:`, error);
+      }
+    }
+  };
+
+  for (const snapshot of active.docs) {
+    const m = snapshot.data() as any;
+    if (!m.businessId) continue;
+    const now = new Date().toISOString();
+    const base = {
+      businessId: m.businessId,
+      // Business ids are the owner's email; notifications are addressed to one reader.
+      recipientEmail: m.businessId,
+      type: "general",
+      isRead: false,
+      icon: "📜",
+      screenId: "service_agreements",
+      ...(m.customerId ? { relatedCustomerId: m.customerId } : {}),
+      time: now,
+      createdAt: now
+    };
+    const visitDate = String(m.nextMaintenanceDate || "");
+    if (visitDate && visitDate >= today && visitDate <= visitWindowEnd) {
+      const id = `notif_agreement_visit_${snapshot.id}_${visitDate.replace(/-/g, "")}`;
+      await createOnce(id, { ...base, id, title: "Maintenance visit coming up", description: `${m.planName} for ${m.customerName || "a customer"} has a visit due ${visitDate}.` });
+    }
+    const endDate = String(m.endDate || "");
+    if (endDate && endDate >= today && endDate <= expiryWindowEnd) {
+      const id = `notif_agreement_expiring_${snapshot.id}_${endDate.replace(/-/g, "")}`;
+      await createOnce(id, { ...base, id, title: "Service agreement expiring", description: `${m.planName} for ${m.customerName || "a customer"} expires ${endDate}. Renew it from Service Agreements.` });
+    }
+  }
+  return { configured: true, processed, failed };
+}
+
 export function startRecurringScheduler(): void {
   const run = () => {
     void processDueRecurringTransactions().then(result => {
@@ -464,6 +566,9 @@ export function startRecurringScheduler(): void {
     void processDueMembershipBilling().then(result => {
       if (result.processed || result.failed) console.log("Membership billing scheduler run:", result);
     }).catch(error => console.error("Membership billing scheduler run failed:", error));
+    void processServiceAgreementReminders().then(result => {
+      if (result.processed || result.failed) console.log("Service agreement reminder run:", result);
+    }).catch(error => console.error("Service agreement reminder run failed:", error));
     void processDueReviewRequests().then(result => {
       if (result.processed || result.failed) console.log("Review request scheduler run:", result);
     }).catch(error => console.error("Review request scheduler run failed:", error));

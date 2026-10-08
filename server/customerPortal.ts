@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { createInvoiceCheckoutSession, getConnectAccountStatus, retrieveCharge } from "./stripeConnect";
+import { agreementVisitStats } from "../src/lib/serviceAgreements";
 
 // A customer opening their Portal link has no OwnersLocal login -- same
 // reasoning as server/remoteSigning.ts and server/webLeadFormHandler.ts.
@@ -138,7 +139,7 @@ export interface PortalDataResult {
   appointments?: Array<{ id: string; eventType: string; title?: string; date: string; startTime: string; endTime: string; status: string; assignedEmployee?: string; location?: string }>;
   workOrders?: Array<{ id: string; workOrderNumber?: string; jobDescription: string; date: string; scheduledDate?: string; scheduledTime?: string; status?: string; priority?: string; estimatedValue?: number }>;
   invoices?: Array<{ id: string; invoiceNumber: string; issuedDate: string; dueDate: string; status: string; total: number; amountPaid: number; balanceDue: number; notes?: string; lineItems: Array<{ id: string; description: string; quantity: number; unitPrice: number }> }>;
-  memberships?: Array<{ id: string; membershipNumber?: string; planName: string; description?: string; price: number; billingFrequency: string; includedServices?: Array<{ id: string; description: string; quantity: number; unitPrice: number }>; maintenanceFrequency?: any; startDate: string; endDate?: string; status: string; nextMaintenanceDate?: string; nextPaymentDate?: string }>;
+  memberships?: Array<{ id: string; membershipNumber?: string; planName: string; description?: string; price: number; billingFrequency: string; includedServices?: Array<{ id: string; description: string; quantity: number; unitPrice: number }>; maintenanceFrequency?: any; startDate: string; endDate?: string; status: string; nextMaintenanceDate?: string; nextPaymentDate?: string ; coveredEquipment?: Array<{ id: string; type: string; manufacturer?: string; model?: string; location?: string }>; visitsIncluded?: number; visitsCompleted?: number; visitsRemaining?: number }>;
   documents?: Array<{ id: string; name: string; date: string; status: string; folder?: string; hasPdf: boolean; canSign: boolean; remoteToken?: string }>;
   conversation?: { messages: Array<{ id: string; sender: string; senderRole: string; content: string; timestamp: string }> };
 }
@@ -220,11 +221,19 @@ export async function getPortalData(token: string): Promise<PortalDataResult> {
       };
     });
 
-  const memberships = membershipsSnap.docs.map(d => d.data()).map(m => ({
-    id: m.id, membershipNumber: m.membershipNumber, planName: m.planName, description: m.description, price: m.price,
-    billingFrequency: m.billingFrequency, includedServices: m.includedServices, maintenanceFrequency: m.maintenanceFrequency,
-    startDate: m.startDate, endDate: m.endDate, status: m.status, nextMaintenanceDate: m.nextMaintenanceDate, nextPaymentDate: m.nextPaymentDate
-  }));
+  const rawWorkOrders = workOrdersSnap.docs.map(d => d.data() as any);
+  const memberships = membershipsSnap.docs.map(d => d.data()).map(m => {
+    const visitStats = agreementVisitStats(m as any, rawWorkOrders, allEvents as any[]);
+    return {
+      id: m.id, membershipNumber: m.membershipNumber, planName: m.planName, description: m.description, price: m.price,
+      billingFrequency: m.billingFrequency, includedServices: m.includedServices, maintenanceFrequency: m.maintenanceFrequency,
+      startDate: m.startDate, endDate: m.endDate, status: m.status, nextMaintenanceDate: visitStats.nextVisitDate || m.nextMaintenanceDate, nextPaymentDate: m.nextPaymentDate,
+      coveredEquipment: Array.isArray(m.coveredEquipment)
+        ? m.coveredEquipment.map((eq: any) => ({ id: eq.id, type: eq.type, manufacturer: eq.manufacturer, model: eq.model, location: eq.location }))
+        : undefined,
+      visitsIncluded: m.visitsIncluded, visitsCompleted: visitStats.completedCount, visitsRemaining: visitStats.remaining ?? undefined
+    };
+  });
 
   const linkedDocIds = new Set([
     ...estimates.map(e => e.id), ...invoices.map(i => i.id), ...workOrders.map(w => w.id), ...memberships.map(m => m.id)
