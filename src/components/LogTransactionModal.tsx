@@ -119,7 +119,9 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const parsedAmount = parseFloat(amount);
-    if (!parsedAmount || parsedAmount <= 0 || !description.trim() || isSaving) return;
+    // Amount is the only required field -- a payer/vendor name and a
+    // category are optional and can be filled in later.
+    if (!parsedAmount || parsedAmount <= 0 || isSaving) return;
     setIsSaving(true);
     setSaveError(null);
     if (!pendingIdRef.current) pendingIdRef.current = `txn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -162,7 +164,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
     }
   };
 
-  const canSave = !!parseFloat(amount) && parseFloat(amount) > 0 && description.trim() !== "";
+  const canSave = !!parseFloat(amount) && parseFloat(amount) > 0;
 
   return (
     <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -237,11 +239,10 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="log-txn-description" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">{descLabel}</label>
+              <label htmlFor="log-txn-description" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">{descLabel} (optional)</label>
               <input
                 id="log-txn-description"
                 type="text"
-                required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={type === "income" ? "e.g. Jane Smith" : "e.g. Home Depot"}
@@ -250,7 +251,7 @@ export function LogTransactionModal({ type, createdBy, onSave, onClose }: LogTra
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
-                <label htmlFor="log-txn-category" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Category</label>
+                <label htmlFor="log-txn-category" className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">Category (optional)</label>
                 <select
                   id="log-txn-category"
                   value={category}
