@@ -2,9 +2,11 @@ import type { Request, Response } from "express";
 import Stripe from "stripe";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { isAdminBusinessId } from "./paywallBypass";
+import { FREE_TRIAL_DAYS, freeTrialEndsAt, isFreeTrialActive } from "../src/lib/freeTrial";
 
 // OwnersLOCAL's own SaaS subscription -- the platform charging the business
 // owners who use it (distinct from Stripe Connect in stripeConnect.ts /
@@ -125,6 +127,26 @@ async function countEmployees(db: FirebaseFirestore.Firestore, businessId: strin
   return snap.size;
 }
 
+/**
+ * When the business's free trial ends -- 7 days after the OWNER's login
+ * account was created (the business id is the owner's email). Firebase sets
+ * that creation time itself, so nobody can edit it to extend a trial, and
+ * no new paywall field is needed. null when it can't be determined (no
+ * Firebase Admin, owner account not found) -- that just means no trial.
+ */
+async function trialEndsAtFor(businessId: string): Promise<number | null> {
+  const app = getAdminApp();
+  if (!app) return null;
+  try {
+    const owner = await getAuth(app).getUserByEmail(businessId);
+    const createdAt = Date.parse(owner.metadata.creationTime);
+    return Number.isFinite(createdAt) ? freeTrialEndsAt(createdAt) : null;
+  } catch (err) {
+    console.warn(`Could not determine free trial for ${businessId}:`, err);
+    return null;
+  }
+}
+
 function extraSeatBlocksFor(employeeCount: number): number {
   const extraEmployees = Math.max(0, employeeCount - INCLUDED_EMPLOYEES);
   return Math.ceil(extraEmployees / EMPLOYEES_PER_ADDITIONAL_BLOCK);
@@ -157,10 +179,12 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
     const extraSeatBlocks = extraSeatBlocksFor(employeeCount);
     const bypassExpiresAt = typeof data.bypassExpiresAt === "number" ? data.bypassExpiresAt : null;
     const bypassActive = !!data.bypassActive && !!bypassExpiresAt && bypassExpiresAt > Date.now();
+    const subscriptionActive = !!data.subscriptionActive;
+    const trialEndsAt = await trialEndsAtFor(businessId);
     res.json({
       configured: isSubscriptionBillingConfigured(),
       hasBillingAccount: typeof data.stripeSubscriptionCustomerId === "string" && !!data.stripeSubscriptionCustomerId,
-      subscriptionActive: !!data.subscriptionActive,
+      subscriptionActive,
       status: typeof data.subscriptionStatus === "string" ? data.subscriptionStatus : null,
       currentPeriodEnd: typeof data.subscriptionCurrentPeriodEnd === "number" ? data.subscriptionCurrentPeriodEnd : null,
       cancelAtPeriodEnd: !!data.subscriptionCancelAtPeriodEnd,
@@ -169,6 +193,11 @@ export async function handleGetSubscriptionStatus(req: Request, res: Response) {
       // regardless of subscriptionActive/bypassActive.
       bypassActive,
       bypassExpiresAt: bypassActive ? bypassExpiresAt : null,
+      // No-card free trial (see src/lib/freeTrial.ts). Only "active" while
+      // the business hasn't subscribed yet.
+      trialDays: FREE_TRIAL_DAYS,
+      trialEndsAt,
+      trialActive: !subscriptionActive && isFreeTrialActive(trialEndsAt),
       isAdminBusiness: isAdminBusinessId(businessId),
       seatPricing: {
         includedEmployees: INCLUDED_EMPLOYEES,
