@@ -136,6 +136,7 @@ import { SchedulingPage, SchedulingEvent } from "./components/SchedulingPage";
 import { DispatchPage } from "./components/DispatchPage";
 import { JobsPage } from "./components/JobsPage";
 import { ServiceAgreementsPage } from "./components/ServiceAgreementsPage";
+import { RevenueDetailModal, type RevenueDetailRow } from "./components/RevenueDetailModal";
 import { TimeClockPage } from "./components/TimeClockPage";
 import { InventoryPage, INITIAL_INVENTORY, InventoryItem } from "./components/InventoryPage";
 import { InteractiveMapPage } from "./components/InteractiveMapPage";
@@ -2359,6 +2360,8 @@ export default function App() {
   // "all" is each table's default (every payment / every expense).
   const [paymentsTableFilter, setPaymentsTableFilter] = useState("all");
   const [expensesTableFilter, setExpensesTableFilter] = useState("all");
+  // Revenue page tile pop-up: the payments/expenses behind a tile's number.
+  const [revenueDetail, setRevenueDetail] = useState<{ title: string; periodLabel: string; mode: "payments" | "expenses" | "net"; rows: RevenueDetailRow[] } | null>(null);
   const [newBulletinTitle, setNewBulletinTitle] = useState("");
   const [newBulletinContent, setNewBulletinContent] = useState("");
   const [isAddingBulletin, setIsAddingBulletin] = useState(false);
@@ -4033,6 +4036,9 @@ Access to full financial telemetry is restricted.`;
     setIsSubmitting(true);
     const saved = await saveProfileToFirestore();
     setIsSubmitting(false);
+    // Phone/address are first entered here -- re-check free trial
+    // eligibility (one trial per business) against the saved details.
+    if (saved && !isEditingBusinessProfile) subscription.refresh();
 
     // Editing an existing business profile is not onboarding. In particular,
     // an Office Manager must never continue into Step 2, whose final action
@@ -8004,6 +8010,34 @@ Access to full financial telemetry is restricted.`;
                             const t = new Date(d).getTime();
                             return !Number.isNaN(t) && t >= periodStart.getTime() && t <= periodEnd.getTime();
                           };
+                          // Tile pop-ups list exactly what the tile totals add up:
+                          // completed-job revenue + logged income, and logged
+                          // expenses + bills, all within this period (same sources
+                          // as getRevenueStepSeries).
+                          const periodPaymentRows: RevenueDetailRow[] = [
+                            ...revenueEvents.filter(e => inPeriod(e.date)).map(e => ({ id: e.id, date: e.date, description: `Completed job — ${e.customer}`, category: "Completed Job Revenue", kind: "payment" as const, amount: e.amount })),
+                            ...transactions.filter(t => t.type === "income" && inPeriod(t.date)).map(t => ({ id: t.id, date: t.date, description: t.description || "Logged income", category: "Logged Income", kind: "payment" as const, amount: t.amount }))
+                          ];
+                          const periodBillAmounts = billExpenseAmounts(bills, journalEntries);
+                          const periodExpenseRows: RevenueDetailRow[] = [
+                            ...transactions.filter(t => t.type === "expense" && inPeriod(t.date)).map(t => ({ id: t.id, date: t.date, description: t.description || "Logged expense", category: t.category || "Uncategorized", kind: "expense" as const, amount: t.amount })),
+                            ...bills.filter(b => b.status !== "void" && inPeriod(b.issuedDate)).map(b => ({ id: b.id, date: b.issuedDate, description: [b.vendor, b.serviceProvided || b.billNumber].filter(Boolean).join(" — ") || "Bill", category: b.category || "Bill", kind: "expense" as const, amount: periodBillAmounts.get(b.id) ?? 0 }))
+                          ];
+                          const byNewest = (a: RevenueDetailRow, b: RevenueDetailRow) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+                          const openRevenueDetail = (mode: "payments" | "expenses" | "net", title: string) => setRevenueDetail({
+                            title,
+                            mode,
+                            periodLabel: `${revenuePageFilter} · ${periodStart.toLocaleDateString()} – ${periodEnd.toLocaleDateString()}`,
+                            rows: (mode === "payments" ? periodPaymentRows : mode === "expenses" ? periodExpenseRows : [...periodPaymentRows, ...periodExpenseRows]).slice().sort(byNewest)
+                          });
+                          const tileButtonProps = (mode: "payments" | "expenses" | "net", title: string) => ({
+                            role: "button" as const,
+                            tabIndex: 0,
+                            title: "Click to see the details",
+                            onClick: () => openRevenueDetail(mode, title),
+                            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRevenueDetail(mode, title); } }
+                          });
+
                           const jobRevenueThisPeriod = revenueEvents.filter(e => inPeriod(e.date)).reduce((s, e) => s + e.amount, 0);
                           const loggedIncomeThisPeriod = transactions.filter(t => t.type === "income" && inPeriod(t.date)).reduce((s, t) => s + t.amount, 0);
 
@@ -8330,7 +8364,7 @@ Access to full financial telemetry is restricted.`;
 
                               {/* REVENUE BREAKDOWN / EXPENSE BREAKDOWN / CASH FLOW -- all real, this-period data */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                <div {...tileButtonProps("payments", "Where Your Income Came From")} className="cursor-pointer transition hover:ring-2 hover:ring-[#22D3EE]/60 bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
                                   <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Where Your Income Came From</p>
                                   {revenueSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No revenue this period yet.</p>
@@ -8359,7 +8393,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                <div {...tileButtonProps("expenses", "Where Your Money Went")} className="cursor-pointer transition hover:ring-2 hover:ring-[#22D3EE]/60 bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
                                   <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Where Your Money Went</p>
                                   {expenseSlices.length === 0 ? (
                                     <p className="text-[10.5px] text-[#2473aa]/55 font-mono text-center py-8">No expenses this period yet.</p>
@@ -8388,7 +8422,7 @@ Access to full financial telemetry is restricted.`;
                                   )}
                                 </div>
 
-                                <div className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                <div {...tileButtonProps("net", "Cash Flow")} className="cursor-pointer transition hover:ring-2 hover:ring-[#22D3EE]/60 bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
                                   <p className="text-[10px] font-mono font-black text-[#07599a] uppercase tracking-widest mb-2">Cash Flow</p>
                                   <div style={{ filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.4))' }}>
                                     <ResponsiveContainer width="100%" height={100}>
@@ -8408,11 +8442,11 @@ Access to full financial telemetry is restricted.`;
                               {/* REAL STAT TILES -- own row, below the breakdowns */}
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {([
-                                  { label: "Payments Collected", val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "#22D3EE", bg: "bg-cyan-400/10" },
-                                  { label: "Expenses", val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "#FB7185", bg: "bg-rose-400/10" },
-                                  { label: "Net Revenue", val: netTotal, pct: netPct, icon: TrendingUp, color: "#4ADE80", bg: "bg-emerald-400/10" }
+                                  { label: "Payments Collected", mode: "payments" as const, val: paymentsTotal, pct: paymentsPct, icon: DollarSign, color: "#22D3EE", bg: "bg-cyan-400/10" },
+                                  { label: "Expenses", mode: "expenses" as const, val: expensesTotal, pct: expensesPct, icon: TrendingDown, color: "#FB7185", bg: "bg-rose-400/10" },
+                                  { label: "Net Revenue", mode: "net" as const, val: netTotal, pct: netPct, icon: TrendingUp, color: "#4ADE80", bg: "bg-emerald-400/10" }
                                 ]).map((tile, idx) => (
-                                  <div key={idx} className="bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
+                                  <div key={idx} {...tileButtonProps(tile.mode, tile.label)} className="cursor-pointer transition hover:ring-2 hover:ring-[#22D3EE]/60 bg-[linear-gradient(145deg,rgba(225,243,255,0.96),rgba(194,227,251,0.96))] rounded-lg p-4 border border-white shadow-[0_0_15px_rgba(56,189,248,0.35),inset_0_0_18px_rgba(255,255,255,0.82)]">
                                     <div className="flex items-center justify-between mb-1.5">
                                       <span className="text-[9px] font-mono font-bold text-[#07599a] uppercase tracking-widest">{tile.label}</span>
                                       <div className={`w-7 h-7 rounded-full border flex items-center justify-center ${tile.bg}`} style={{ borderColor: tile.color, color: tile.color, boxShadow: `0 0 8px ${tile.color}66` }}>
@@ -8694,6 +8728,21 @@ Access to full financial telemetry is restricted.`;
                       </div>
 
                       <PriceBookModal isOpen={isPriceBookOpen} onClose={() => setIsPriceBookOpen(false)} />
+
+                      {revenueDetail && (
+                        <RevenueDetailModal
+                          title={revenueDetail.title}
+                          periodLabel={revenueDetail.periodLabel}
+                          mode={revenueDetail.mode}
+                          rows={revenueDetail.rows}
+                          onClose={() => setRevenueDetail(null)}
+                          onDownloadCsv={() => downloadCsv(
+                            `${revenueDetail.title} - ${new Date().toISOString().slice(0, 10)}.csv`,
+                            ["Type", "Category / Source", "Date", "Description", "Amount"],
+                            revenueDetail.rows.map(r => [r.kind === "payment" ? "Payment" : "Expense", r.category, r.date.slice(0, 10), r.description, r.amount.toFixed(2)])
+                          )}
+                        />
+                      )}
 
                       {/* FINANCIAL REPORTS FLOATING PANE */}
                       {isFinancialSnapshotOpen && (

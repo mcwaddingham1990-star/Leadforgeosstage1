@@ -208,7 +208,10 @@ export const BillingPage: React.FC<BillingPageProps> = ({ onAccessGranted }) => 
         <div className="bg-[#E3F3FF] border border-[#A9CDEE] rounded-2xl p-4 flex items-start gap-3">
           <CreditCard className="w-4 h-4 text-[#315C9F] shrink-0 mt-0.5" />
           <div className="text-xs text-[#1F3557]">
-            {!subscription.status && subscription.trialEndsAt && subscription.trialEndsAt <= Date.now() && (
+            {!subscription.status && subscription.trialBlocked && (
+              <div className="font-bold">This business matches one that already used Owner’sLOCAL’s free trial, so it isn’t eligible for another. Subscribe to continue.</div>
+            )}
+            {!subscription.status && !subscription.trialBlocked && subscription.trialEndsAt && subscription.trialEndsAt <= Date.now() && (
               <div className="font-bold">Your {FREE_TRIAL_DAYS}-day free trial has ended. Subscribe to keep using Owner’sLOCAL.</div>
             )}
             {subscription.status

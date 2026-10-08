@@ -1110,6 +1110,20 @@ describe("Paywall self-grant via business_profiles (regression for the open-devt
     await assertFails(updateDoc(doc(db, "business_profiles", BIZ_A), { subscriptionActive: true }));
   });
 
+  test("free trial records are server-only: an owner can't read, clear or forge them", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const admin = context.firestore();
+      await setDoc(doc(admin, "trial_blocks", BIZ_A), { field: "phone", matchedBusinessId: BIZ_B, createdAt: 1 });
+      await setDoc(doc(admin, "trial_fingerprints", BIZ_A), { keys: ["p:5551112222"], ownerCreatedAt: 1 });
+    });
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    await assertFails(getDoc(doc(db, "trial_blocks", BIZ_A)));
+    await assertFails(deleteDoc(doc(db, "trial_blocks", BIZ_A)));
+    await assertFails(getDoc(doc(db, "trial_fingerprints", BIZ_A)));
+    await assertFails(setDoc(doc(db, "trial_fingerprints", BIZ_A), { keys: [] }));
+    await assertFails(getDocs(collection(db, "trial_fingerprints")));
+  });
+
   test("an owner cannot self-grant a bypass via bypassActive/bypassExpiresAt", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
     await assertFails(
