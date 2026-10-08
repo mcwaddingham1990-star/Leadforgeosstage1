@@ -8613,6 +8613,19 @@ Access to full financial telemetry is restricted.`;
                                     <option value="Completed Job Revenue">Completed Job Revenue</option>
                                     <option value="Logged Income">Logged Income</option>
                                   </select>
+                                  {/* Adds straight into this list through the same income/expense
+                                      pipeline as Record Expense / Add Custom Payment above -- any
+                                      date allowed, so older payments can be back-filled. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      sessionStorage.setItem("ownerslocal_pending_financial_scan", "income");
+                                      setLogTransactionType("income");
+                                    }}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-[#315C9F] text-white border border-[#315C9F] hover:bg-[#1F3557] cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Add Payment
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => downloadCsv(
@@ -8665,6 +8678,19 @@ Access to full financial telemetry is restricted.`;
                                     <option value="all">All Expenses</option>
                                     {expenseCategoryAccounts.map(acct => <option key={acct.id} value={acct.name}>{acct.name}</option>)}
                                   </select>
+                                  {/* Adds straight into this list through the same income/expense
+                                      pipeline as Record Expense / Add Custom Payment above -- any
+                                      date allowed, so older expenses can be back-filled. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      sessionStorage.setItem("ownerslocal_pending_financial_scan", "expense");
+                                      setLogTransactionType("expense");
+                                    }}
+                                    className="px-3 py-2 text-[11px] font-bold rounded-xl bg-[#315C9F] text-white border border-[#315C9F] hover:bg-[#1F3557] cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Add Expense
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => downloadCsv(
