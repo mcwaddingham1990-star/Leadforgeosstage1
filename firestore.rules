@@ -714,7 +714,18 @@ service cloud.firestore {
     }
 
     match /recurring_transactions/{docId} {
-      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      // Repeating expenses are set up from Log Expense, which Payments users
+      // can use too -- they may manage those (and only those).
+      allow create: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "accounting", "edit")
+        || (request.resource.data.type == "expense" && hasModulePermission(request.resource.data.businessId, "payments", "edit"))
+      );
+      allow update: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "accounting", "edit")
+        || (resource.data.type == "expense" && request.resource.data.type == "expense"
+            && request.resource.data.businessId == resource.data.businessId
+            && hasModulePermission(request.resource.data.businessId, "payments", "edit"))
+      );
       allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
       allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
