@@ -200,3 +200,32 @@ describe("billing ($25 monthly)", () => {
     expect((await db.collection("invoices").get()).size).toBe(0);
   });
 });
+
+describe("repeating expenses (Log Expense › Repeating)", () => {
+  const repeating = (patch: Record<string, unknown> = {}) => ({
+    id: "rec_rent", businessId: BIZ, type: "expense", templateName: "Landlord", frequency: "monthly", nextRunDate: today(), active: true,
+    payload: { customerOrVendor: "Landlord", lineItems: [{ id: "l1", description: "Landlord", quantity: 1, unitPrice: 1200 }], category: "Rent", dueInDays: 0 },
+    createdAt: new Date().toISOString(), ...patch
+  });
+
+  test("logs the expense (with its ledger entry) once on its due date and moves to the next one", async () => {
+    await db.collection("recurring_transactions").doc("rec_rent").set(repeating());
+    await scheduler.processDueRecurringTransactions();
+    await scheduler.processDueRecurringTransactions();
+    const txns = (await db.collection("transactions").get()).docs.map(d => d.data());
+    expect(txns).toHaveLength(1);
+    expect(txns[0]).toMatchObject({ type: "expense", source: "recurring_expense", amount: 1200, category: "Rent", date: today(), businessId: BIZ, recurringTransactionId: "rec_rent" });
+    const entry = (await db.collection("journal_entries").doc(`je_for_${txns[0].id}`).get()).data()!;
+    expect(entry.lines).toEqual([{ accountId: "acct_rent_expense", debit: 1200, credit: 0 }, { accountId: "acct_cash", debit: 0, credit: 1200 }]);
+    expect((await db.collection("bills").get()).size).toBe(0);
+    const rec = (await db.collection("recurring_transactions").doc("rec_rent").get()).data()!;
+    expect(rec.nextRunDate > today()).toBe(true);
+  });
+
+  test("a stopped or not-yet-due repeating expense logs nothing", async () => {
+    await db.collection("recurring_transactions").doc("rec_rent").set(repeating({ active: false }));
+    await db.collection("recurring_transactions").doc("rec_later").set(repeating({ id: "rec_later", nextRunDate: plusDays(5) }));
+    await scheduler.processDueRecurringTransactions();
+    expect((await db.collection("transactions").get()).size).toBe(0);
+  });
+});

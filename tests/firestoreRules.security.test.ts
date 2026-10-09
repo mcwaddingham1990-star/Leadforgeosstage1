@@ -281,6 +281,38 @@ describe("Owner-configured module permissions are enforced by Firestore", () => 
   });
 });
 
+describe("Repeating expenses (recurring_transactions)", () => {
+  const grantPaymentsEdit = () => testEnv.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+      permissions: ["customers", "jobs", "timeclock", "scheduling", "messages", "payments"],
+      granularPermissions: { payments: { view: true, edit: true, delete: false } },
+    });
+  });
+  const expense = (businessId: string) => ({ businessId, type: "expense", templateName: "Shop rent", frequency: "monthly", nextRunDate: "2030-01-01", active: true, payload: { customerOrVendor: "Landlord", lineItems: [], dueInDays: 0 }, createdAt: "2026-10-09T00:00:00Z" });
+
+  test("a Payments-edit employee can set up, pause and resume a repeating expense for their own business", async () => {
+    await grantPaymentsEdit();
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertSucceeds(setDoc(doc(db, "recurring_transactions", "rec_exp_a"), expense(BIZ_A)));
+    await assertSucceeds(updateDoc(doc(db, "recurring_transactions", "rec_exp_a"), { active: false }));
+  });
+
+  test("Payments edit does not reach recurring invoices/bills, another business, or turning an expense into a bill", async () => {
+    await grantPaymentsEdit();
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "recurring_transactions", "rec_bill_a"), { ...expense(BIZ_A), type: "bill" }));
+    await assertFails(setDoc(doc(db, "recurring_transactions", "rec_exp_b"), expense(BIZ_B)));
+    await assertSucceeds(setDoc(doc(db, "recurring_transactions", "rec_exp_a2"), expense(BIZ_A)));
+    await assertFails(updateDoc(doc(db, "recurring_transactions", "rec_exp_a2"), { type: "invoice" }));
+    await assertFails(updateDoc(doc(db, "recurring_transactions", "rec_exp_a2"), { businessId: BIZ_B }));
+  });
+
+  test("without Payments or Accounting edit, a repeating expense cannot be created", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "recurring_transactions", "rec_exp_none"), expense(BIZ_A)));
+  });
+});
+
 describe("Employee record tampering is blocked", () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {

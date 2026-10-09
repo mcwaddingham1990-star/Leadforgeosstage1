@@ -29,15 +29,22 @@ function advanceDate(date: string, frequency: Frequency): string {
   const next = new Date(`${date}T12:00:00Z`);
   if (frequency === "weekly") next.setUTCDate(next.getUTCDate() + 7);
   if (frequency === "biweekly") next.setUTCDate(next.getUTCDate() + 14);
-  if (frequency === "monthly") next.setUTCMonth(next.getUTCMonth() + 1);
-  if (frequency === "quarterly") next.setUTCMonth(next.getUTCMonth() + 3);
-  if (frequency === "yearly") next.setUTCFullYear(next.getUTCFullYear() + 1);
+  const months = frequency === "monthly" ? 1 : frequency === "quarterly" ? 3 : frequency === "yearly" ? 12 : 0;
+  if (months) {
+    // Due on the 31st -> the last day of shorter months, never skipping one.
+    const day = next.getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
+  }
   return next.toISOString().slice(0, 10);
 }
 
 function expenseAccount(category?: string): string {
   const accounts: Record<string, string> = {
-    Materials: "acct_cogs_materials", Fuel: "acct_fuel_expense",
+    Materials: "acct_cogs_materials", Equipment: "acct_equipment_expense", Tools: "acct_tools_expense",
+    Rent: "acct_rent_expense", Fuel: "acct_fuel_expense",
     "Vehicle Maintenance": "acct_vehicle_expense", "Office Supplies": "acct_office_expense",
     Marketing: "acct_marketing_expense", Utilities: "acct_utilities_expense",
     Insurance: "acct_insurance_expense", Payroll: "acct_payroll_expense"
@@ -88,6 +95,23 @@ export async function processDueRecurringTransactions(): Promise<{ configured: b
           transaction.set(db.collection("journal_entries").doc(journalId), {
             ...common, id: journalId, date: runDate, memo: `Recurring invoice: ${rec.templateName}`,
             source: "invoice", sourceId: id, lines
+          });
+        } else if (rec.type === "expense") {
+          // A repeating expense from Log Expense: log the expense itself on
+          // its due date, same shape and ledger entry as one typed in by hand.
+          const id = `txn_recurring_${suffix}`;
+          const memoName = rec.payload?.customerOrVendor || "";
+          transaction.set(db.collection("transactions").doc(id), {
+            ...common, id, type: "expense", source: "recurring_expense", amount: subtotal,
+            description: memoName, date: runDate, recurringTransactionId: snapshot.id,
+            ...(rec.payload?.category ? { category: rec.payload.category } : {}),
+            ...(rec.payload?.jobId ? { jobId: rec.payload.jobId } : {}),
+            ...(rec.createdBy ? { createdBy: rec.createdBy } : {})
+          });
+          transaction.set(db.collection("journal_entries").doc(`je_for_${id}`), {
+            ...common, id: `je_for_${id}`, date: runDate, memo: memoName ? `Expense: ${memoName}` : "Expense",
+            source: "expense", sourceId: id,
+            lines: [{ accountId: expenseAccount(rec.payload?.category), debit: subtotal, credit: 0 }, { accountId: "acct_cash", debit: 0, credit: subtotal }]
           });
         } else {
           const id = `bill_recurring_${suffix}`;
