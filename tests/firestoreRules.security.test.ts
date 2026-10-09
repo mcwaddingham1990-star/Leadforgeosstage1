@@ -281,6 +281,51 @@ describe("Owner-configured module permissions are enforced by Firestore", () => 
   });
 });
 
+describe("Individual Add Expenses / Log Revenue permissions", () => {
+  const grant = (perms: Record<string, unknown>) => testEnv.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), { granularPermissions: perms });
+  });
+  const txn = (id: string, type: "income" | "expense", businessId = BIZ_A) => ({ id, type, source: "manual", amount: 40, description: "", date: "2025-01-02", createdAt: "x", businessId });
+  const entry = (txnId: string, source: string, businessId = BIZ_A) => ({ id: `je_for_${txnId}`, date: "2025-01-02", memo: "Expense", source, sourceId: txnId, lines: [], createdAt: "x", businessId });
+
+  test("Add Expenses alone lets an employee log an expense with its ledger entry -- but not a payment", async () => {
+    await grant({ add_expenses: { view: false, edit: true, delete: false } });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, "transactions", "txn_e1"), txn("txn_e1", "expense"));
+    batch.set(doc(db, "journal_entries", "je_for_txn_e1"), entry("txn_e1", "expense"));
+    await assertSucceeds(batch.commit());
+    await assertFails(setDoc(doc(db, "transactions", "txn_i1"), txn("txn_i1", "income")));
+    await assertFails(setDoc(doc(db, "journal_entries", "je_for_txn_i1"), entry("txn_i1", "income")));
+    await assertFails(updateDoc(doc(db, "transactions", "txn_e1"), { type: "income" }));
+  });
+
+  test("Log Revenue alone lets an employee log a payment -- but not an expense", async () => {
+    await grant({ log_revenue: { view: false, edit: true, delete: false } });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    const batch = writeBatch(db);
+    batch.set(doc(db, "transactions", "txn_i2"), txn("txn_i2", "income"));
+    batch.set(doc(db, "journal_entries", "je_for_txn_i2"), entry("txn_i2", "income"));
+    await assertSucceeds(batch.commit());
+    await assertFails(setDoc(doc(db, "transactions", "txn_e2"), txn("txn_e2", "expense")));
+  });
+
+  test("these permissions never reach other ledger entries or another business", async () => {
+    await grant({ add_expenses: { view: false, edit: true, delete: false }, log_revenue: { view: false, edit: true, delete: false } });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "journal_entries", "je_manual_1"), entry("txn_x", "expense")));
+    await assertFails(setDoc(doc(db, "journal_entries", "je_for_txn_y"), entry("txn_y", "invoice")));
+    await assertFails(setDoc(doc(db, "transactions", "txn_b"), txn("txn_b", "expense", BIZ_B)));
+    await assertFails(setDoc(doc(db, "journal_entries", "je_for_txn_b"), entry("txn_b", "expense", BIZ_B)));
+    await assertFails(getDoc(doc(db, "journal_entries", "je_a")));
+  });
+
+  test("without them (and without Accounting/Payments), neither can be logged", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(setDoc(doc(db, "transactions", "txn_none"), txn("txn_none", "expense")));
+  });
+});
+
 describe("Repeating expenses (recurring_transactions)", () => {
   const grantPaymentsEdit = () => testEnv.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {

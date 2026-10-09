@@ -644,12 +644,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Logging an expense or a payment (Revenue's Record Expense / Add
+    // Payment). Accounting or Payments "Add or Edit" covers both; the
+    // individual Add Expenses / Log Revenue permissions cover just their kind.
+    function canLogTransaction(businessId, type) {
+      return hasModulePermission(businessId, "accounting", "edit")
+        || hasModulePermission(businessId, "payments", "edit")
+        || (type == "expense" && hasModulePermission(businessId, "add_expenses", "edit"))
+        || (type == "income" && hasModulePermission(businessId, "log_revenue", "edit"));
+    }
+
     // Financial / accounting collections
     match /transactions/{docId} {
-      allow create, update: if isAuthenticated() && (
-        hasModulePermission(request.resource.data.businessId, "accounting", "edit")
-        || hasModulePermission(request.resource.data.businessId, "payments", "edit")
-      );
+      allow create: if isAuthenticated()
+        && canLogTransaction(request.resource.data.businessId, request.resource.data.type);
+      allow update: if isAuthenticated()
+        && request.resource.data.businessId == resource.data.businessId
+        && canLogTransaction(request.resource.data.businessId, request.resource.data.type)
+        && canLogTransaction(resource.data.businessId, resource.data.type);
       allow delete: if isAuthenticated() && (
         hasModulePermission(resource.data.businessId, "accounting", "delete")
         || hasModulePermission(resource.data.businessId, "payments", "delete")
@@ -662,7 +674,15 @@ service cloud.firestore {
     }
 
     match /journal_entries/{docId} {
-      allow create, update: if isAuthenticated() && hasModulePermission(request.resource.data.businessId, "accounting", "edit");
+      // The ledger entry saved together with a logged expense/payment
+      // (je_for_<transaction id>) follows that transaction's permission.
+      allow create, update: if isAuthenticated() && (
+        hasModulePermission(request.resource.data.businessId, "accounting", "edit")
+        || (docId == "je_for_" + request.resource.data.sourceId
+            && request.resource.data.source in ["income", "expense"]
+            && (resource == null || (resource.data.businessId == request.resource.data.businessId && resource.data.source == request.resource.data.source))
+            && canLogTransaction(request.resource.data.businessId, request.resource.data.source))
+      );
       allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
       allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
     }
@@ -714,17 +734,17 @@ service cloud.firestore {
     }
 
     match /recurring_transactions/{docId} {
-      // Repeating expenses are set up from Log Expense, which Payments users
-      // can use too -- they may manage those (and only those).
+      // Repeating expenses are set up from Log Expense, so anyone who may
+      // log an expense may manage those (and only those).
       allow create: if isAuthenticated() && (
         hasModulePermission(request.resource.data.businessId, "accounting", "edit")
-        || (request.resource.data.type == "expense" && hasModulePermission(request.resource.data.businessId, "payments", "edit"))
+        || (request.resource.data.type == "expense" && canLogTransaction(request.resource.data.businessId, "expense"))
       );
       allow update: if isAuthenticated() && (
         hasModulePermission(request.resource.data.businessId, "accounting", "edit")
         || (resource.data.type == "expense" && request.resource.data.type == "expense"
             && request.resource.data.businessId == resource.data.businessId
-            && hasModulePermission(request.resource.data.businessId, "payments", "edit"))
+            && canLogTransaction(request.resource.data.businessId, "expense"))
       );
       allow delete: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "delete");
       allow read: if isAuthenticated() && hasModulePermission(resource.data.businessId, "accounting", "view");
