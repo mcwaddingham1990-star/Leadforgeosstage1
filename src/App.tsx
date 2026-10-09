@@ -33,6 +33,7 @@ import CustomerPortalPage from "./components/CustomerPortalPage";
 import { TimeClockApprovalModal } from "./components/TimeClockApprovalModal";
 import { RolePermissionEditorModal, MODULE_CATALOG } from "./components/RolePermissionEditorModal";
 import { LogTransactionModal } from "./components/LogTransactionModal";
+import { BuildJobPromptHost } from "./components/BuildJobPromptHost";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -4919,6 +4920,7 @@ Access to full financial telemetry is restricted.`;
     <NavTelemetryContext.Provider value={navTelemetryContextValue}>
     <EventEngineEffects />
     <AutomationEngineEffects />
+    {isLoggedIn && <BuildJobPromptHost onOpenJobs={() => navigateToScreen("jobs")} />}
     {isLoggedIn && <CompletionGuard />}
     <TutorialHost
       tutorialId={

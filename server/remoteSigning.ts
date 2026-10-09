@@ -381,7 +381,8 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
     const resolved = await resolveSignedEstimateCustomer(db, data);
     if (resolved.estimate?.id) {
       await db.collection("estimates").doc(resolved.estimate.id).update({
-        status: "Signed",
+        // Signed means accepted (the owner app then prompts to build the job).
+        status: "Accepted",
         ...(resolved.customerId ? { customerId: resolved.customerId } : {}),
         acceptedAt: now.toISOString(),
         acceptedVia: "remote_signature",

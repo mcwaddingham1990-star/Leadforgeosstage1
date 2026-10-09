@@ -56,6 +56,7 @@ import { resolveCustomerByIdOrName } from "../lib/resolveCustomer";
 import { PriceBookModal } from "./PriceBookModal";
 import { buildRemoteSigningLink, shareRemoteSigningPackage } from "../lib/remoteSigningClient";
 import { normalizeContactPhone, normalizeEstimateCompany } from "../lib/contactNormalization";
+import { buildJobPrefillFromEstimate, estimatePromptKey, suppressBuildJobPrompt } from "../lib/buildJobPrompts";
 import { calculateEstimatePricing, clampPercent } from "../lib/estimatePricing";
 
 export type { Estimate } from "../types/domain";
@@ -670,18 +671,9 @@ export const EstimatesPage: React.FC = () => {
   // estimate here can never create a duplicate job.
   const openBuildJobFromEstimate = (estimate: Estimate) => {
     const matchedCustomer = resolveEstimateCustomer(estimate);
-    setBuildJobPrefill({
-      customerId: matchedCustomer?.id,
-      customerName: estimate.customerName,
-      customerPhone: normalizeContactPhone(estimate.phone || matchedCustomer?.phone),
-      customerEmail: matchedCustomer?.email,
-      customerAddress: estimate.address || matchedCustomer?.address,
-      description: estimate.projectSpecifics || undefined,
-      notes: estimate.notes,
-      budget: estimate.amount,
-      sourceEstimateId: estimate.id,
-      source: matchedCustomer?.source
-    });
+    // Already building it -- no separate "build the job?" prompt for it.
+    suppressBuildJobPrompt(estimatePromptKey(estimate.id));
+    setBuildJobPrefill(buildJobPrefillFromEstimate(estimate, matchedCustomer));
     setSelectedEstimate(null);
     onNavigateToScreen("jobs");
   };

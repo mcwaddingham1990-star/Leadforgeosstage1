@@ -25,7 +25,7 @@ jobs:
       - name: TypeScript check
         run: npm run lint
       - name: Data, workflow, persistence, Stripe, estimate pricing, Owner Protection, booking availability, and automation engine regression tests
-        run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts tests/stripeWebhookDelivery.test.ts tests/ownerProtection.test.ts tests/noTapEntry.test.ts tests/bookingAvailability.test.ts tests/automationEngine.test.ts tests/automationsPage.render.test.tsx tests/serviceAgreements.test.ts tests/freeTrial.test.ts tests/revenueDedup.test.ts tests/transactionEntry.test.ts
+        run: npx vitest run tests/contactNormalization.test.ts tests/estimatePricing.test.ts tests/persistenceQueue.test.ts tests/jobInvoiceHandoff.test.ts tests/stripeWebhookDelivery.test.ts tests/ownerProtection.test.ts tests/noTapEntry.test.ts tests/bookingAvailability.test.ts tests/automationEngine.test.ts tests/automationsPage.render.test.tsx tests/serviceAgreements.test.ts tests/freeTrial.test.ts tests/revenueDedup.test.ts tests/transactionEntry.test.ts tests/buildJobPrompts.test.ts
       - name: Production build
         run: npm run build
 
