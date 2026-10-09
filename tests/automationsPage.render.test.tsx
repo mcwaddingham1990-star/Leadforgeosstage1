@@ -17,11 +17,11 @@ describe("Automations page", () => {
   test("renders each automation's name, WHEN, IF, DO, on/off state, and last run result", async () => {
     const { AutomationsPage } = await import("../src/components/AutomationsPage");
     const html = renderToString(<AutomationsPage />).replace(/<!-- -->/g, "");
-    expect(html).toContain("Estimate Accepted → Create Job");
+    expect(html).toContain("Estimate Accepted → Build Job");
     expect(html).toContain("WHEN");
     expect(html).toContain("Estimate Accepted");
     expect(html).toContain("Days overdue &gt; 3");
-    expect(html).toContain("Create Job → Notify Owner/Manager (owner) → Send Customer Confirmation");
+    expect(html).toContain("Prompt to Build Job → Notify Owner/Manager (owner) → Send Customer Confirmation");
     expect(html).toContain("Completed");
     expect(html).toContain("1 on / 2 total");
     for (const control of ["Create automation", "Edit", "Duplicate", "History", "Delete"]) expect(html).toContain(control);

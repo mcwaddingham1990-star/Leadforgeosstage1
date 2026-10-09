@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import type { BuildJobPromptRequest } from "../src/lib/buildJobPrompts";
 import type { Automation, AutomationRun } from "../src/types/automation";
 import type { Customer, Estimate, Lead, SchedulingEvent, AppNotification } from "../src/types/domain";
 import type { Invoice, JournalEntry } from "../src/types/accounting";
@@ -86,6 +87,14 @@ function memoryApp(seed: Partial<{ customers: Customer[]; estimates: Estimate[];
     return job;
   });
 
+  // Mirrors requestBuildJobPrompt's contract: each estimate/lead is asked about once.
+  const prompts: BuildJobPromptRequest[] = [];
+  const promptBuildJob = vi.fn((request: BuildJobPromptRequest) => {
+    if (prompts.some(p => p.key === request.key)) return false;
+    prompts.push(request);
+    return true;
+  });
+
   const deps: AutomationActionDeps = {
     businessId: BIZ,
     businessName: "Acme Services",
@@ -102,6 +111,7 @@ function memoryApp(seed: Partial<{ customers: Customer[]; estimates: Estimate[];
       salesTaxRates: []
     }),
     createJob,
+    promptBuildJob,
     createAppointment: vi.fn((input: any) => {
       const id = `appt_${String(input.dedupeKey).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)}`;
       const existing = schedulingEvents.value.find(e => e.id === id);
@@ -134,7 +144,7 @@ function memoryApp(seed: Partial<{ customers: Customer[]; estimates: Estimate[];
     now: () => new Date("2026-10-05T12:00:00Z")
   };
 
-  return { customers, leads, estimates, schedulingEvents, invoices, journal, notifications, reviewRequests, messages, deps, createJob };
+  return { customers, leads, estimates, schedulingEvents, invoices, journal, notifications, reviewRequests, messages, deps, createJob, promptBuildJob, prompts };
 }
 
 const CUSTOMER: Customer = {
@@ -211,8 +221,8 @@ describe("Acceptance 1: all automations OFF leaves the workflow untouched", () =
   });
 });
 
-describe("Acceptance 2 + 3: Estimate Accepted → Create Job is exactly-once", () => {
-  test("creates exactly one job through the canonical createJob, linked to the estimate", async () => {
+describe("Acceptance 2 + 3: Estimate Accepted → Build Job prompts once and never creates a bare job", () => {
+  test("asks to build the job with the Build Job form pre-filled from the estimate -- no job is created", async () => {
     const app = memoryApp({ customers: [CUSTOMER], estimates: [{ ...ESTIMATE, status: "Accepted" }] });
     const { store, runs } = memoryStore();
     const automation = enabledFromTemplate("estimate_accepted_job");
@@ -220,19 +230,30 @@ describe("Acceptance 2 + 3: Estimate Accepted → Create Job is exactly-once", (
     const [outcome] = await runAll([automation], [acceptedEvent()], app, store);
 
     expect(outcome).toBe("Completed");
-    expect(app.createJob).toHaveBeenCalledTimes(1);
-    expect(app.createJob.mock.calls[0][0]).toMatchObject({ sourceEstimateId: "est_1", customerId: "cust_1", budget: 7200, createdByAutomationId: automation.id });
-    expect(app.schedulingEvents.value.filter(e => e.eventType === "Job")).toHaveLength(1);
+    expect(app.createJob).not.toHaveBeenCalled();
+    expect(app.schedulingEvents.value).toEqual([]);
+    expect(app.prompts).toHaveLength(1);
+    expect(app.prompts[0].key).toBe("estimate:est_1");
+    expect(app.prompts[0].prefill).toMatchObject({ sourceEstimateId: "est_1", customerId: "cust_1", customerName: "Jane Doe", budget: 7200, customerAddress: "1 Main St" });
     // Notify owner + customer confirmation also ran.
     expect(app.notifications.value.map(n => n.recipientEmail)).toEqual([BIZ]);
+    expect(app.notifications.value[0].description).toContain("build the job");
     expect(app.messages).toHaveLength(1);
     const run = runs.get(automationRunId(automation.id, "estimate.accepted:est_1"))!;
     expect(run.status).toBe("Completed");
     expect(run.businessId).toBe(BIZ);
     expect(run.actionResults.map(r => r.status)).toEqual(["completed", "completed", "completed"]);
+    expect(run.actionResults[0].detail).toContain("no job created automatically");
   });
 
-  test("replaying the same event (retry, echo, second tab) never creates another job", async () => {
+  test("a signed estimate counts as accepted", () => {
+    const [event] = deriveAutomationEvents({ collection: "estimates", type: "updated", previous: ESTIMATE, item: { ...ESTIMATE, status: "Signed" } });
+    expect(event?.trigger).toBe("estimate.accepted");
+    // ...and Signed -> Accepted is not a second acceptance.
+    expect(deriveAutomationEvents({ collection: "estimates", type: "updated", previous: { ...ESTIMATE, status: "Signed" }, item: { ...ESTIMATE, status: "Accepted" } })).toEqual([]);
+  });
+
+  test("replaying the same event (retry, echo, second tab) never prompts again", async () => {
     const app = memoryApp({ customers: [CUSTOMER], estimates: [{ ...ESTIMATE, status: "Accepted" }] });
     const { store } = memoryStore();
     const automation = enabledFromTemplate("estimate_accepted_job");
@@ -240,31 +261,32 @@ describe("Acceptance 2 + 3: Estimate Accepted → Create Job is exactly-once", (
     const outcomes = await runAll([automation], [acceptedEvent(), acceptedEvent(), acceptedEvent()], app, store);
 
     expect(outcomes).toEqual(["Completed", "duplicate", "duplicate"]);
-    expect(app.createJob).toHaveBeenCalledTimes(1);
-    expect(app.schedulingEvents.value.filter(e => e.eventType === "Job")).toHaveLength(1);
+    expect(app.prompts).toHaveLength(1);
+    expect(app.createJob).not.toHaveBeenCalled();
     expect(app.notifications.value).toHaveLength(1);
     expect(app.messages).toHaveLength(1);
   });
 
-  test("even if the run log were lost, the action itself refuses a second job, notification, or message", async () => {
+  test("even if the run log were lost, the action itself refuses a second prompt, notification, or message", async () => {
     const app = memoryApp({ customers: [CUSTOMER], estimates: [{ ...ESTIMATE, status: "Accepted" }] });
     const automation = enabledFromTemplate("estimate_accepted_job");
     await runAll([automation], [acceptedEvent()], app, memoryStore().store);
     const [second] = await runAll([automation], [acceptedEvent()], app, memoryStore().store);
 
     expect(second).toBe("Skipped");
-    expect(app.createJob).toHaveBeenCalledTimes(1);
-    expect(app.schedulingEvents.value.filter(e => e.eventType === "Job")).toHaveLength(1);
+    expect(app.prompts).toHaveLength(1);
+    expect(app.createJob).not.toHaveBeenCalled();
     expect(app.notifications.value).toHaveLength(1);
     expect(app.messages).toHaveLength(1);
   });
 
-  test("a job already created by hand is respected (skipped, not duplicated)", async () => {
+  test("a job already built by hand is respected (skipped, no prompt)", async () => {
     const manualJob = { id: "job_manual", eventType: "Job", jobNumber: "JOB-2026-0007", sourceEstimateId: "est_1", customer: "Jane Doe", status: "Assigned" } as SchedulingEvent;
     const app = memoryApp({ customers: [CUSTOMER], estimates: [{ ...ESTIMATE, status: "Accepted" }], jobs: [manualJob] });
     const automation = { ...enabledFromTemplate("estimate_accepted_job"), actions: [{ id: "a1", type: "create_job" as const }], actionTypes: ["create_job" as const] };
     const [outcome] = await runAll([automation], [acceptedEvent()], app, memoryStore().store);
     expect(outcome).toBe("Skipped");
+    expect(app.prompts).toEqual([]);
     expect(app.createJob).not.toHaveBeenCalled();
     expect(app.schedulingEvents.value).toEqual([manualJob]);
   });
@@ -274,7 +296,7 @@ describe("Acceptance 4: an automation failure never breaks the manual action", (
   test("a throwing action is logged as Partial, other actions still run, and nothing throws", async () => {
     const accepted = { ...ESTIMATE, status: "Accepted" as const };
     const app = memoryApp({ customers: [CUSTOMER], estimates: [accepted] });
-    app.deps.createJob = () => { throw new Error("Firestore unavailable"); };
+    app.deps.promptBuildJob = () => { throw new Error("Firestore unavailable"); };
     const { store, runs } = memoryStore();
     const automation = enabledFromTemplate("estimate_accepted_job");
 
