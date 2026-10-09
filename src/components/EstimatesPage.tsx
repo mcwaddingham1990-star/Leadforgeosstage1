@@ -1620,7 +1620,7 @@ export const EstimatesPage: React.FC = () => {
         </div>
 
         <p className="text-slate-600 text-[11px] leading-relaxed font-sans font-semibold">
-          When you approve an accepted estimate, Owner’sLOCAL creates one job and adds it to Jobs, Scheduling, Dispatch, and the Map.
+          When an estimate is accepted or signed, Owner’sLOCAL asks you to build the job. Once you save it, that one job shows up in Jobs, Scheduling, Dispatch, and the Map.
         </p>
 
         {/* CLICKABLE CONNECTION NODES */}
