@@ -40,15 +40,12 @@ import {
   sendEmailVerification,
   signOut,
   onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
-import { Capacitor } from "@capacitor/core";
+import { signInWithGoogle, googleSignInErrorMessage } from "./lib/googleSignIn";
 import { 
   Mail, 
   Lock, 
@@ -3910,33 +3907,23 @@ Access to full financial telemetry is restricted.`;
     }
   };
 
-  // Real Google OAuth via Firebase Auth. This used to be a fake account
-  // picker with 3 hardcoded emails that logged the user in as whichever
-  // identity was clicked, with zero verification — a full authentication
-  // bypass. signInWithPopup performs a real Google sign-in; the existing
-  // onAuthStateChanged listener above already loads the resulting user's
-  // real profile from user_profiles/{uid}, so no duplicate state-setting
-  // logic is needed here.
+  // Web/PWA uses a real Firebase Google popup. The Android APK uses the
+  // native Google account picker, and converts its verified token into the
+  // same JS Firebase Auth session as password login. Roles and business data
+  // continue to be resolved exclusively by onAuthStateChanged above.
   const handleGoogleSignIn = async () => {
+    if (isSubmitting) return;
+    setLoginError(null);
     setIsSubmitting(true);
     setLoginMethod("google");
     try {
-      const provider = new GoogleAuthProvider();
-      if (Capacitor.isNativePlatform()) {
-        // signInWithPopup needs real multi-window support, which Capacitor's
-        // Android WebView doesn't have -- it just silently fails/hangs there.
-        // signInWithRedirect navigates the WebView itself instead, which it
-        // does support; the onAuthStateChanged listener above picks up the
-        // result the same way either way.
-        await signInWithRedirect(auth, provider);
-      } else {
-        await signInWithPopup(auth, provider);
-      }
-    } catch (err: any) {
+      await signInWithGoogle(auth, rememberMe);
+    } catch (err: unknown) {
       console.error("Google sign in error:", err);
-      if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
-        setLoginError("Google sign-in failed. Please try again.");
-        triggerNotification("Google sign-in failed.");
+      const message = googleSignInErrorMessage(err, window.location.hostname);
+      if (message) {
+        setLoginError(message);
+        triggerNotification(message);
       }
     } finally {
       setIsSubmitting(false);
@@ -5034,13 +5021,15 @@ Access to full financial telemetry is restricted.`;
                   >
                     <button
                       type="button"
-                      onClick={() => handleGoogleSignIn()}
+                      onClick={handleGoogleSignIn}
+                      disabled={isSubmitting}
+                      aria-label="Continue with Google"
                       style={{
                         borderRadius: `${14 * scale}px`,
                         gap: `${8 * scale}px`,
                         ...getFontSize(14.5)
                       }}
-                      className="w-full h-full bg-white hover:bg-slate-50 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer"
+                      className="w-full h-full bg-white hover:bg-slate-50 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                     >
                       <svg 
                         style={{ width: `${18 * scale}px`, height: `${18 * scale}px` }} 
