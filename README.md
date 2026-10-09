@@ -11,6 +11,10 @@ Owners Local OS is a mobile-first business operations platform for local busines
 
 Use `npm run lint` for TypeScript validation and `npm run build` for a production build.
 
+## Google login
+
+Google sign-in uses Firebase Auth on the web and the native Google account chooser in the Android APK. Before deploying, enable the Google provider, whitelist each app hostname in Firebase Authentication, and register the Android app's SHA fingerprints. See [GOOGLE_SIGNIN_SETUP.md](./GOOGLE_SIGNIN_SETUP.md) for complete instructions. A rebuilt APK is required for the native plugin; changing only the website will not update installed APKs.
+
 ## Android app
 
 The `android/` folder is a [Capacitor](https://capacitorjs.com/) wrapper around this same web
