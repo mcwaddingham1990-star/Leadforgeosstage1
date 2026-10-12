@@ -169,10 +169,12 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
   // which makes preventDefault unreliable and is why pinch-to-zoom kept
   // appearing "fixed" in code while still failing on Android. One finger is
   // left completely alone for native document scrolling; only a genuine
-  // two-finger gesture is intercepted for PDF zoom.
+  // two-finger gesture is intercepted for PDF zoom. Re-runs when the splash
+  // screen goes away: the editor isn't on the page until then, so hooking up
+  // only on mount left pinch-to-zoom with no listeners at all.
   useEffect(()=>{
     const editor=editorRef.current;
-    if(!editor)return;
+    if(splash||!editor)return;
     let pinch:{distance:number;zoom:number}|null=null;
     const distance=(touches:TouchList)=>Math.hypot(
       touches[0].clientX-touches[1].clientX,
@@ -200,7 +202,7 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       editor.removeEventListener("touchend",end);
       editor.removeEventListener("touchcancel",end);
     };
-  },[]);
+  },[splash]);
   const lastScrollTopRef=useRef(0);
   const nextIdRef=useRef(Date.now());
   const textDraftRef=useRef(new Map<number,{value:string;w:number;h:number}>());
