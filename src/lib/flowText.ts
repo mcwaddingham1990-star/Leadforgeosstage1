@@ -28,6 +28,8 @@ export interface FlowSegment {
 
 /** Hard cap so a runaway layout can never spin forever. */
 const MAX_FLOW_BOXES = 400;
+/** First prefix length tried when fitting a box (well under a page). */
+const FIRST_PROBE = 512;
 
 /**
  * Length of the longest prefix of `text` that fits `maxH` at `width`,
@@ -37,10 +39,22 @@ const MAX_FLOW_BOXES = 400;
  */
 export function fitFlowPrefix(text: string, width: number, maxH: number, measure: FlowMeasure, forceProgress = false): number {
   if (!text) return 0;
-  if (measure(text, width) <= maxH) return text.length;
+  // Measuring is a real browser layout, so never measure much more than one
+  // page holds: grow the probe by doubling until it overflows, then binary
+  // search inside that window. Measuring the whole remaining text (or huge
+  // prefixes of it) for every page froze the editor on big pastes.
   let n = 0;
   if (measure(text.slice(0, 1), width) <= maxH) {
-    let lo = 1, hi = text.length - 1; // lo always fits; the whole text does not
+    let lo = 1, hi = 1; // lo always fits; hi is set below the first overflowing probe
+    for (let probe = Math.min(text.length, FIRST_PROBE); ; probe = Math.min(text.length, probe * 2)) {
+      if (measure(text.slice(0, probe), width) <= maxH) {
+        lo = probe;
+        if (probe === text.length) return text.length;
+      } else {
+        hi = probe - 1;
+        break;
+      }
+    }
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
       if (measure(text.slice(0, mid), width) <= maxH) lo = mid;

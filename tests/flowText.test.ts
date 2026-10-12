@@ -96,3 +96,17 @@ describe("display filler", () => {
     expect(stripFlowFiller("a\n​")).toBe("a\n");
   });
 });
+
+describe("big pastes", () => {
+  it("only measures about a page of text per box, not the whole paste", () => {
+    let measuredChars = 0;
+    const counting: FlowMeasure = (text, width) => { measuredChars += text.length; return measure(text, width); };
+    const text = "lorem ipsum dolor sit amet ".repeat(8000); // ~216k chars
+    // 60 chars per line, 50 lines per page => ~3000 chars per page.
+    const slot = (i: number) => ({ page: i + 1, x: 0, y: 0, w: 600, maxH: 1000 });
+    const segments = layoutFlow(text, slot, counting);
+    expect(segments.map(s => s.value).join("")).toBe(text);
+    // The old whole-text search measured hundreds of millions of characters.
+    expect(measuredChars).toBeLessThan(text.length * 20);
+  });
+});
