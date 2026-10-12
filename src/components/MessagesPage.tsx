@@ -51,7 +51,7 @@ import {
 import { Customer } from "./CustomersPage";
 import { DocumentItem } from "./DocumentsPage";
 import { geocodeAddress } from "./InteractiveMapPage";
-import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { sendPushBestEffort } from "../lib/notificationsService";
 import { hasPermission } from "../types/permissions";
@@ -117,6 +117,21 @@ export interface Conversation {
   createdDate: string;
 }
 
+function normalizeConversation(stored: Conversation): Conversation {
+  return {
+    ...stored,
+    title: stored.title || "Untitled conversation",
+    lastMessage: stored.lastMessage || "",
+    lastMessageTime: stored.lastMessageTime || "",
+    lastMessageSender: stored.lastMessageSender || "",
+    participants: Array.isArray(stored.participants) ? stored.participants : [],
+    messages: Array.isArray(stored.messages) ? stored.messages : [],
+    unreadCount: Number(stored.unreadCount) || 0,
+    isArchived: Boolean(stored.isArchived),
+    isRead: stored.isRead !== false
+  } as Conversation;
+}
+
 export const MessagesPage: React.FC = () => {
   const { loggedInUser, simulatedRole } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
@@ -141,79 +156,15 @@ export const MessagesPage: React.FC = () => {
   const currentUserEmail = loggedInUser?.email || "";
   const businessId = loggedInUser?.isEmployee ? loggedInUser.businessEmail : loggedInUser?.email;
 
-  const [conversations, _setConversations] = useState<Conversation[]>([]);
-
-  // Real-time synchronization helper for conversations
-  const syncConversationsToFirestore = async (oldArray: Conversation[], newArray: Conversation[], bid: string) => {
-    const oldMap = new Map(oldArray.map(item => [item.id, item]));
-    for (const item of newArray) {
-      const oldItem = oldMap.get(item.id);
-      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
-        try {
-          await setDoc(doc(db, "conversations", item.id), {
-            ...item,
-            businessId: bid,
-            updatedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error("Error saving conversation:", err);
-          triggerRealTimeNotification(`Message failed to save: ${err instanceof Error ? err.message : "unknown error"}. It will disappear on reload.`);
-        }
-      }
-    }
-    const newSet = new Set(newArray.map(item => item.id));
-    for (const item of oldArray) {
-      if (!newSet.has(item.id)) {
-        try {
-          await deleteDoc(doc(db, "conversations", item.id));
-        } catch (err) {
-          console.error("Error deleting conversation:", err);
-          triggerRealTimeNotification(`Failed to delete conversation: ${err instanceof Error ? err.message : "unknown error"}`);
-        }
-      }
-    }
-  };
-
-  const setConversations = (value: React.SetStateAction<Conversation[]>) => {
-    _setConversations((prev) => {
-      const nextList = typeof value === "function" ? (value as Function)(prev) : value;
-      if (businessId) {
-        syncConversationsToFirestore(prev, nextList, businessId);
-      }
-      return nextList;
-    });
-  };
-
-  // Subscribe and seed conversations from Firestore based on multi-tenant businessId
-  useEffect(() => {
-    if (!businessId) return;
-
-    const q = query(collection(db, "conversations"), where("businessId", "==", businessId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items: Conversation[] = [];
-      snapshot.forEach((docSnap) => {
-        const { businessId: _, updatedAt: __, ...convData } = docSnap.data();
-        const stored = convData as Partial<Conversation>;
-        items.push({
-          ...stored,
-          id: stored.id || docSnap.id,
-          title: stored.title || "Untitled conversation",
-          lastMessage: stored.lastMessage || "",
-          lastMessageTime: stored.lastMessageTime || "",
-          lastMessageSender: stored.lastMessageSender || "",
-          participants: Array.isArray(stored.participants) ? stored.participants : [],
-          messages: Array.isArray(stored.messages) ? stored.messages : [],
-          unreadCount: Number(stored.unreadCount) || 0,
-          isArchived: Boolean(stored.isArchived),
-          isRead: stored.isRead !== false
-        } as Conversation);
-      });
-      _setConversations(items);
-    });
-
-    return () => unsubscribe();
-  }, [businessId]);
-
+  // Conversations go through the same save path as every other collection
+  // (useFirestoreCollection): saves are serialized and retried, failures get
+  // a Retry instead of silently disappearing on reload, and a new message is
+  // appended to the conversation server-side instead of rewriting the whole
+  // message list -- two people sending in the same thread from different
+  // devices used to overwrite each other's messages.
+  const [conversations, setConversations] = useFirestoreCollection<Conversation>("conversations", businessId || undefined, {
+    normalize: normalizeConversation
+  });
 
   // Selected active conversation logic
   const [selectedConvId, setSelectedConvId] = useState<string>("conv_1");

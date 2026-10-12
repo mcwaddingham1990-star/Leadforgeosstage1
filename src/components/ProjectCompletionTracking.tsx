@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { confirmJobCompletion } from "../lib/completionGuard";
 import { CheckCircle2, ChevronDown, ChevronRight, FileUp, Plus, Save, Trash2, X } from "lucide-react";
 import { doc, setDoc, waitForPendingWrites } from "firebase/firestore";
+import { waitForSavesToReachServer } from "../lib/syncStatus";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import type { InventoryItem, DocumentItem, SchedulingEvent } from "../types/domain";
@@ -119,7 +120,7 @@ export function ProjectCompletionTracking(props: {
     persist({ ...draft, goals }, label, savedGoal?.title);
     if (!savedGoal) return;
     try {
-      await waitForPendingWrites(db);
+      await waitForSavesToReachServer(() => waitForPendingWrites(db));
       await notifyEmployerOfResponse(savedGoal, finished);
       notify(finished ? "Employee update saved. Employer notified that this goal is complete." : "Employee update saved. Employer notified that this goal is still in progress.");
     } catch (error) {

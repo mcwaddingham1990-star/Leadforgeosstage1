@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
@@ -15,7 +15,19 @@ const app = initializeApp(firebaseConfig);
 // writes, and every one of those throws was being caught and silently
 // swallowed (console.error only) by each save path's try/catch -- so the
 // write never reached Firestore even though the UI showed it as sent.
-const db = initializeFirestore(app, { ignoreUndefinedProperties: true }, firebaseConfig.firestoreDatabaseId || "(default)");
+//
+// persistentLocalCache: saves made while offline (or still on their way when
+// the page is refreshed / the app is backgrounded) are queued in IndexedDB
+// and sent on the next load, instead of living only in memory and being lost
+// on refresh. Shared across tabs so two open tabs don't fight over the cache.
+// Falls back to the in-memory cache where IndexedDB isn't available.
+const canUsePersistentCache = typeof window !== "undefined" && typeof indexedDB !== "undefined";
+const db = initializeFirestore(app, {
+  ignoreUndefinedProperties: true,
+  localCache: canUsePersistentCache
+    ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    : memoryLocalCache()
+}, firebaseConfig.firestoreDatabaseId || "(default)");
 
 const auth = getAuth(app);
 

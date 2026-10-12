@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
+import { trackSave } from "../lib/syncStatus";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -546,8 +547,8 @@ export default function SettingsPage({
       // field was also saved is exactly what made picking a theme here
       // look like it "didn't stick" on refresh.
       if (businessId) {
-        setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: value } } }, { merge: true })
-          .catch(err => console.error("Couldn't save workspace theme:", err));
+        void trackSave("workspace theme", () => setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: value } } }, { merge: true }), { key: `theme:${businessId}` })
+          .catch(() => undefined);
       }
     }
   };
