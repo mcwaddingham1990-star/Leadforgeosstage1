@@ -945,7 +945,10 @@ describe("Employee invite credential security", () => {
     }));
   });
 
-  test("an employee explicitly granted Roster edit CAN create a non-owner invite", async () => {
+  // Delegated roster admins now create invites through /api/roster/invites
+  // (server/rosterAdmin.ts), which refuses to grant more than they have.
+  // A direct write would let them invite a second account with full access.
+  test("an employee granted Roster edit can NOT write an invite directly (must use the server)", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
         granularPermissions: {
@@ -954,7 +957,7 @@ describe("Employee invite credential security", () => {
       });
     });
     const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
-    await assertSucceeds(setDoc(doc(db, "employee_invites", "ROSTER_OK"), {
+    await assertFails(setDoc(doc(db, "employee_invites", "ROSTER_OK"), {
       code: "ROSTER_OK",
       businessEmail: BIZ_A,
       role: "Technician",

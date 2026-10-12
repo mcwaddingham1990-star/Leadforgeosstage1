@@ -5,7 +5,7 @@ import { useDomainData } from "../context/DomainDataContext";
 import { useNavTelemetry } from "../context/NavTelemetryContext";
 import { useAuth } from "../context/AuthContext";
 import { MODULE_CATALOG } from "./RolePermissionEditorModal";
-import { defaultGranularFromModuleList, GranularPermissions, getPermissionFlags, PermissionAction } from "../types/permissions";
+import { defaultGranularFromModuleList, GranularPermissions, getPermissionFlags, hasEffectivePermission, PermissionAction } from "../types/permissions";
 import { Search, UserPlus, Edit3, X, Copy, Shield, Phone, Mail, MapPin } from "lucide-react";
 import type { EmployeeRecord } from "../types/domain";
 import { composeEmail, composeSms, callNumber } from "../lib/deviceHandoff";
@@ -15,6 +15,7 @@ import { RecentRoutesSection } from "./RecentRoutesSection";
 import { CreateWorkOrderPicker } from "./CreateWorkOrderPicker";
 import { BulkImportModal } from "./BulkImportModal";
 import { normalizeEmailForMatch, type ImportFieldSpec, type DuplicateCheckResult } from "../lib/spreadsheetImport";
+import { createEmployeeInvites, isBusinessOwner, saveEmployeeAccess, type InviteDraft } from "../lib/rosterAdminClient";
 
 type EmployeeImportKey = "name" | "email" | "phone" | "role";
 const EMPLOYEE_IMPORT_FIELDS: ImportFieldSpec<EmployeeImportKey>[] = [
@@ -68,7 +69,7 @@ import { StructuredAddressFields } from "./StructuredAddressFields";
 export const RosterPage: React.FC = () => {
   const { employees, refreshEmployees, timeClockLogs } = useDomainData();
   const { triggerNotification, logOperationalEvent, navigateToScreen } = useNavTelemetry();
-  const { loggedInUser, businessId } = useAuth();
+  const { loggedInUser, businessId, simulatedRole } = useAuth();
 
   const [search, setSearch] = useState("");
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
@@ -100,8 +101,14 @@ export const RosterPage: React.FC = () => {
     if (match) return { isDuplicate: true, reason: `Matches existing employee "${match.firstName} ${match.lastName}"` };
     return { isDuplicate: false };
   };
-  const managerRole = (loggedInUser?.role || "").toLowerCase();
-  const canManageRoles = !loggedInUser?.isEmployee || managerRole.includes("owner") || managerRole.includes("manager") || managerRole.includes("admin");
+  const callerIsOwner = isBusinessOwner(loggedInUser?.email, businessId);
+  const managerRole = (simulatedRole || loggedInUser?.role || "").toLowerCase();
+  // Real sessions follow what the Owner granted (Roster "Add or Edit"); the
+  // server and rules enforce the same. A role NAME alone grants nothing. The
+  // Workspace Simulator keeps its role-template preview.
+  const canManageRoles = simulatedRole
+    ? managerRole.includes("owner") || managerRole.includes("manager") || managerRole.includes("admin")
+    : callerIsOwner || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "roster", "edit");
 
   useEffect(() => {
     if (!businessId) return;
@@ -186,28 +193,7 @@ export const RosterPage: React.FC = () => {
     const savedEmployee = { ...editingEmployee, permissions };
 
     try {
-      // Role/permission edits must be one atomic server operation. The roster
-      // record is what the Owner sees; user_profiles is what the employee
-      // actually receives on their next login. Saving them separately can
-      // leave those two sources disagreeing after a network failure.
-      const batch = writeBatch(db);
-      batch.set(doc(db, "employees", savedEmployee.email), {
-        ...savedEmployee,
-        businessEmail: businessId,
-        businessId,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
-      if (savedEmployee.userUid) {
-        batch.set(doc(db, "user_profiles", savedEmployee.userUid), {
-          role: savedEmployee.role,
-          permissions,
-          granularPermissions: savedEmployee.granularPermissions,
-          requireTimeClockVerification: !!savedEmployee.requireTimeClockVerification
-        }, { merge: true });
-      }
-
-      await batch.commit();
+      await saveEmployeeAccess({ isOwner: callerIsOwner, businessId, employee: savedEmployee });
       await refreshEmployees();
 
       triggerNotification(`Updated ${editingEmployee.firstName} ${editingEmployee.lastName}.`);
@@ -215,7 +201,11 @@ export const RosterPage: React.FC = () => {
       setEditingEmployee(null);
     } catch (err) {
       console.error("Employee role/permission save failed:", err);
-      triggerNotification("Couldn't save that employee update. Nothing was partially changed.");
+      // The server explains a refused grant (e.g. "You can only grant access
+      // you have yourself"); show that instead of a generic failure.
+      triggerNotification(err instanceof Error && err.message && !/network|fetch/i.test(err.message)
+        ? err.message
+        : "Couldn't save that employee update. Nothing was partially changed.");
     }
   };
 
@@ -265,22 +255,25 @@ export const RosterPage: React.FC = () => {
         setAvailableRoles(nextRoles);
         await setDoc(doc(db, "business_profiles", businessId), { selectedRoles: nextRoles }, { merge: true });
       }
-      await setDoc(doc(db, "employee_invites", code), {
-        code,
-        role: roleName,
-        businessEmail: businessId,
-        permissions,
-        granularPermissions: invitePermissions,
-        requireTimeClockVerification,
-        gpsTrackingEnabled: inviteGpsTrackingEnabled,
-        status: "pending",
-        createdAt: new Date().toISOString()
+      const [created] = await createEmployeeInvites({
+        isOwner: callerIsOwner,
+        businessId,
+        invites: [{
+          code,
+          role: roleName,
+          permissions,
+          granularPermissions: invitePermissions,
+          requireTimeClockVerification,
+          gpsTrackingEnabled: inviteGpsTrackingEnabled
+        }]
       });
-      setGeneratedInviteCode(code);
+      setGeneratedInviteCode(created.code);
       triggerNotification(`Invite code generated for ${roleName}.`);
     } catch (err) {
       console.error("Error generating invite:", err);
-      triggerNotification("Couldn't generate an invite code — check your connection and try again.");
+      triggerNotification(err instanceof Error && /grant|Owner|permission/i.test(err.message)
+        ? err.message
+        : "Couldn't generate an invite code — check your connection and try again.");
     }
   };
 
@@ -300,7 +293,7 @@ export const RosterPage: React.FC = () => {
       return;
     }
     const fallbackRole = availableRoles.find(r => r.id === "technician") || availableRoles[0];
-    const results: Array<{ name: string; role: string; code: string }> = [];
+    const drafts: Array<{ name: string; draft: InviteDraft }> = [];
     for (const row of rows) {
       const name = row.name?.trim();
       if (!name) continue;
@@ -311,18 +304,15 @@ export const RosterPage: React.FC = () => {
         const flags = getPermissionFlags(role.modulePermissions, m.id);
         return flags.view || flags.edit || flags.delete;
       }).map(m => m.id);
-      const code = genInviteCode(role.name);
-      try {
-        await setDoc(doc(db, "employee_invites", code), {
-          code,
+      drafts.push({
+        name,
+        draft: {
+          code: genInviteCode(role.name),
           role: role.name,
-          businessEmail: businessId,
           permissions,
           granularPermissions: role.modulePermissions,
           requireTimeClockVerification: false,
           gpsTrackingEnabled: false,
-          status: "pending",
-          createdAt: new Date().toISOString(),
           // Display-only convenience so the owner can match a code back to
           // the row it came from -- redemption itself still only trusts the
           // account that actually signs up with this code (App.tsx's
@@ -330,10 +320,20 @@ export const RosterPage: React.FC = () => {
           prefilledName: name,
           prefilledEmail: row.email?.trim() || "",
           prefilledPhone: row.phone?.trim() || ""
-        });
-        results.push({ name, role: role.name, code });
+        }
+      });
+    }
+    const results: Array<{ name: string; role: string; code: string }> = [];
+    if (drafts.length) {
+      try {
+        const created = await createEmployeeInvites({ isOwner: callerIsOwner, businessId, invites: drafts.map(d => d.draft) });
+        created.forEach((invite, index) => results.push({ name: drafts[index].name, role: invite.role, code: invite.code }));
       } catch (err) {
-        console.error("Error generating bulk invite for", name, err);
+        console.error("Error generating bulk invites:", err);
+        if (err instanceof Error && /grant|Owner|permission/i.test(err.message)) {
+          triggerNotification(err.message);
+          return;
+        }
       }
     }
     if (!results.length) {
