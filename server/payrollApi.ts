@@ -4,6 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
+import { callerCan, getAuthzDb, loadCaller } from "./authz";
 
 // SECURITY: this handler is not currently wired to any route in server.ts
 // (grep server.ts for "payroll" -- there's nothing), so it isn't reachable
@@ -110,6 +111,14 @@ export async function submitPayrollBatch(req: Request, res: Response) {
   const callerBusinessId = await resolveCallerBusinessId(caller.uid);
   if (!callerBusinessId || callerBusinessId !== body.businessId) {
     res.status(403).json({ status: "rejected", errors: ["You are not authorized to submit payroll for this business."] });
+    return;
+  }
+  // Being in the business isn't enough to move money: only the Owner, or a
+  // role the Owner explicitly gave Payroll "Add or Edit".
+  const authzDb = getAuthzDb();
+  const callerContext = authzDb ? await loadCaller(authzDb, caller.uid, caller.email) : null;
+  if (!callerContext || !callerCan(callerContext, "payroll", "edit")) {
+    res.status(403).json({ status: "rejected", errors: ["Your role doesn't have permission to submit payroll."] });
     return;
   }
 

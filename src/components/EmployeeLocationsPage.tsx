@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from "react";
+import { isBusinessOwner } from "../lib/rosterAdminClient";
+import { hasEffectivePermission } from "../types/permissions";
 import { MapPin, Navigation, Search, Gauge, ShieldCheck, ShieldOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -28,9 +30,13 @@ type StatusFilter = "All" | "Live" | "Tracking On" | "Tracking Off";
  * "View Employee Locations" button on the Map and Dispatch pages opens.
  */
 export const EmployeeLocationsPage: React.FC = () => {
-  const { loggedInUser, simulatedRole } = useAuth();
+  const { loggedInUser, simulatedRole, businessId } = useAuth();
   const activeRole = simulatedRole || loggedInUser?.role || "Owner";
-  const canManage = activeRole === "Owner" || activeRole.toLowerCase().includes("manager") || activeRole.toLowerCase().includes("admin");
+  // Real sessions follow the Owner's Employee Locations grant; the
+  // Workspace Simulator keeps its role-name preview.
+  const canManage = simulatedRole
+    ? activeRole === "Owner" || activeRole.toLowerCase().includes("manager") || activeRole.toLowerCase().includes("admin")
+    : isBusinessOwner(loggedInUser?.email, businessId) || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "employee_locations", "edit");
   const { employees, setEmployees } = useDomainData();
   const { navigateToScreen, triggerNotification } = useNavTelemetry();
   const { activeTechnicians } = useActiveTechnicians();

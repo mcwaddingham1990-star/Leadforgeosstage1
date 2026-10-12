@@ -10,6 +10,8 @@ import { registerOnlineBookingRoutes, handleWebFormSubmission } from './server/o
 import { processDueRecurringTransactions, processDueMembershipMaintenance, processDueMembershipBilling, processDueReviewRequests, startRecurringScheduler } from './server/recurringScheduler';
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
+import { requirePermission } from './server/authz';
+import { handleUpdateEmployeeAccess, handleCreateEmployeeInvites } from './server/rosterAdmin';
 import { handlePasswordResetRequest } from './server/passwordReset';
 import { rateLimit } from './server/rateLimit';
 import { handleStripeWebhook } from './server/stripeWebhook';
@@ -145,8 +147,8 @@ app.get('/api/client-info', (req, res) => {
 // resolved server-side from their own business (see stripeConnectRoutes.ts's
 // resolveBusinessId), never a client-supplied business id, so one business's
 // member can't touch another business's Stripe account this way.
-app.post('/api/stripe/connect/account', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleGetOrCreateAccount);
-app.post('/api/stripe/connect/account-session', requireAuth, rateLimit('stripe-connect', 60_000, 20), handleCreateAccountSession);
+app.post('/api/stripe/connect/account', requireAuth, rateLimit('stripe-connect', 60_000, 20), requirePermission([['payments', 'edit']], "Only the Owner, or someone they gave Payments 'Add or Edit', can set up or manage payments."), handleGetOrCreateAccount);
+app.post('/api/stripe/connect/account-session', requireAuth, rateLimit('stripe-connect', 60_000, 20), requirePermission([['payments', 'edit']], "Only the Owner, or someone they gave Payments 'Add or Edit', can open the payments account (it controls payouts and bank details)."), handleCreateAccountSession);
 app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 60_000, 30), handleGetAccountStatus);
 
 // OwnersLOCAL's own SaaS subscription (the owner paywall) -- billing the
@@ -155,9 +157,9 @@ app.get('/api/stripe/connect/status', requireAuth, rateLimit('stripe-connect', 6
 // own-uid pattern, so one business can never start or manage billing for a
 // different one. See server/subscriptionRoutes.ts.
 app.get('/api/subscription/status', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionStatus);
-app.get('/api/subscription/invoices', requireAuth, rateLimit('subscription', 60_000, 30), handleGetSubscriptionInvoices);
-app.post('/api/subscription/checkout', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateSubscriptionCheckout);
-app.post('/api/subscription/portal', requireAuth, rateLimit('subscription', 60_000, 10), handleCreateBillingPortalSession);
+app.get('/api/subscription/invoices', requireAuth, rateLimit('subscription', 60_000, 30), requirePermission([['billing', 'view']], 'Only the Owner, or someone they gave Billing access, can see subscription invoices.'), handleGetSubscriptionInvoices);
+app.post('/api/subscription/checkout', requireAuth, rateLimit('subscription', 60_000, 10), requirePermission([['billing', 'edit']], "Only the Owner, or someone they gave Billing 'Add or Edit', can change the subscription."), handleCreateSubscriptionCheckout);
+app.post('/api/subscription/portal', requireAuth, rateLimit('subscription', 60_000, 10), requirePermission([['billing', 'edit']], "Only the Owner, or someone they gave Billing 'Add or Edit', can manage the subscription."), handleCreateBillingPortalSession);
 app.post('/api/paywall/redeem', requireAuth, rateLimit('paywall-redeem', 60_000, 10), handleRedeemBypassCode);
 app.post('/api/paywall/set-code', requireAuth, rateLimit('paywall-set-code', 60_000, 10), handleSetBypassCode);
 
@@ -518,7 +520,7 @@ app.get('/api/customer-accounts/business/:businessId', requireAuth, rateLimit('c
 // disconnecting a customer's app access. resolveCallerBusinessId inside
 // createBusinessInviteCode/disconnectCustomer always re-derives the caller's
 // OWN businessId from their uid, never from the request body.
-app.post('/api/business/customers/:customerId/invite-code', requireAuth, rateLimit('cust-acct-write', 60_000, 20), async (req, res) => {
+app.post('/api/business/customers/:customerId/invite-code', requireAuth, rateLimit('cust-acct-write', 60_000, 20), requirePermission([['customers', 'edit']]), async (req, res) => {
   try {
     const source = req.body?.source === 'bid_accepted' || req.body?.source === 'visit_scheduled' ? req.body.source : 'invite_code';
     const result = await createBusinessInviteCode(req.firebaseUser!.uid, req.params.customerId, source);
@@ -527,7 +529,7 @@ app.post('/api/business/customers/:customerId/invite-code', requireAuth, rateLim
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not create an invite code' });
   }
 });
-app.post('/api/business/customers/:customerId/disconnect', requireAuth, rateLimit('cust-acct-write', 60_000, 20), async (req, res) => {
+app.post('/api/business/customers/:customerId/disconnect', requireAuth, rateLimit('cust-acct-write', 60_000, 20), requirePermission([['customers', 'edit']]), async (req, res) => {
   try {
     const result = await disconnectCustomer(req.firebaseUser!.uid, req.params.customerId);
     res.status(result.ok ? 200 : 400).json(result);
@@ -535,6 +537,14 @@ app.post('/api/business/customers/:customerId/disconnect', requireAuth, rateLimi
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'Could not disconnect this customer' });
   }
 });
+
+// Roster administration by a delegated roster admin (Office Manager /
+// Manager with Roster "Add or Edit"). Firestore rules only let the Owner
+// write role/permission fields directly; these endpoints let a delegate do
+// it while guaranteeing they can't grant more than they have themselves.
+// See server/rosterAdmin.ts.
+app.post('/api/roster/employee-access', requireAuth, rateLimit('roster-admin', 60_000, 30), requirePermission([['roster', 'edit']]), handleUpdateEmployeeAccess);
+app.post('/api/roster/invites', requireAuth, rateLimit('roster-admin', 60_000, 30), requirePermission([['roster', 'edit']]), handleCreateEmployeeInvites);
 
 const distDir = path.join(__dirname, 'dist');
 app.use(express.static(distDir));

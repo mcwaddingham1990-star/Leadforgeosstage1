@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { trackSave } from "../lib/syncStatus";
+import { hasEffectivePermission } from "../types/permissions";
+import { createEmployeeInvites, isBusinessOwner } from "../lib/rosterAdminClient";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -442,7 +444,12 @@ export default function SettingsPage({
 
   // Track if there are unsaved local modifications
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const canManageClockVerification = activeRole === "Owner" || activeRole.toLowerCase().includes("manager");
+  // Real sessions: the Owner, or someone the Owner gave Roster "Add or
+  // Edit" (what the rules require to change this flag). Simulator previews
+  // keep the role-name behavior.
+  const canManageClockVerification = simulatedRole
+    ? activeRole === "Owner" || activeRole.toLowerCase().includes("manager")
+    : isBusinessOwner(loggedInUser?.email, businessId) || hasEffectivePermission(loggedInUser?.granularPermissions, loggedInUser?.permissions, "roster", "edit");
 
   // Sync settings when parent changes or on initialization
   const isCompanySynced = useMemo(() => {
@@ -803,6 +810,8 @@ export default function SettingsPage({
     const cleanName = newUser.name.trim();
     const prefix = newUser.role === "Owner" ? "OWNER" : newUser.role === "Office Manager" ? "MGR" : "TECH";
     const randomCode = `${prefix}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    // The server issues its own code for a delegated roster admin.
+    let inviteCode = randomCode;
     const template = ONBOARDING_ROLE_TEMPLATES.find(([, roleName]) => roleName === newUser.role);
     const permissions = template?.[2] || ["jobs", "timeclock", "messages", "documents"];
     const granularPermissions = defaultGranularFromModuleList(permissions, newUser.role === "Owner" ? "delete" : "edit");
@@ -811,31 +820,30 @@ export default function SettingsPage({
     // invite-code login screen actually looks up. Without this write, a
     // code shown here would never be redeemable.
     try {
-      await setDoc(doc(db, "employee_invites", randomCode), {
-        code: randomCode,
-        role: newUser.role,
-        businessEmail: businessId,
-        permissions,
-        granularPermissions,
-        status: "pending",
-        createdAt: new Date().toISOString()
+      const [created] = await createEmployeeInvites({
+        isOwner: isBusinessOwner(loggedInUser?.email, businessId),
+        businessId,
+        invites: [{ code: randomCode, role: newUser.role, permissions, granularPermissions }]
       });
+      inviteCode = created.code;
     } catch (err) {
       console.error("Error generating invite:", err);
-      triggerNotification("Couldn't generate an invite code — check your connection and try again.");
+      triggerNotification(err instanceof Error && /grant|Owner|permission/i.test(err.message)
+        ? err.message
+        : "Couldn't generate an invite code — check your connection and try again.");
       return;
     }
 
     const rosterEntry = {
       name: cleanName,
       role: newUser.role,
-      code: randomCode,
+      code: inviteCode,
       status: "Pending"
     };
 
     setRecentRoster(prev => [...prev, rosterEntry]);
     setNewUser({ name: "", role: "Technician", email: "" });
-    triggerNotification(`✉️ Invite generated for ${cleanName}! Security Access Code: ${randomCode}`);
+    triggerNotification(`✉️ Invite generated for ${cleanName}! Security Access Code: ${inviteCode}`);
 
     // Audit Log Entry
     const formattedDate = new Date().toISOString().split("T")[0];
@@ -846,7 +854,7 @@ export default function SettingsPage({
       time: formattedTime,
       user: loggedInUser?.name || "Unknown User",
       module: "USERS",
-      change: `Generated invitation key ${randomCode} for ${cleanName} (${newUser.role})`,
+      change: `Generated invitation key ${inviteCode} for ${cleanName} (${newUser.role})`,
       reason: "Personnel deployment"
     }, ...prev]);
   };
