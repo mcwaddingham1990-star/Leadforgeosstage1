@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import firebaseConfig from "../firebase-applet-config.json";
 import { createInvoiceCheckoutSession, getConnectAccountStatus, retrieveCharge } from "./stripeConnect";
 import { agreementVisitStats } from "../src/lib/serviceAgreements";
+import { documentPdfBase64 } from "./documentPdfStore";
 
 // A customer opening their Portal link has no OwnersLocal login -- same
 // reasoning as server/remoteSigning.ts and server/webLeadFormHandler.ts.
@@ -252,7 +253,7 @@ export async function getPortalData(token: string): Promise<PortalDataResult> {
     })
     .map(doc => ({
       id: doc.id, name: doc.name, date: doc.date, status: doc.status, folder: doc.folder || doc.type,
-      hasPdf: !!doc.pdfBase64,
+      hasPdf: !!doc.pdfBase64 || !!doc.pdfChunked,
       canSign: doc.status === "Awaiting Signature" && !!doc.signingOptions?.remoteToken && !doc.signingOptions?.remoteTokenUsedAt,
       remoteToken: doc.status === "Awaiting Signature" ? doc.signingOptions?.remoteToken : undefined
     }));
@@ -301,8 +302,9 @@ export async function getPortalDocumentPdf(token: string, documentId: string): P
   if (INTERNAL_DOCUMENT_FOLDERS.has(data.folder || data.type)) return { ok: false, error: "Document not found." };
   const belongs = await documentBelongsToCustomer(db, businessId, customerId, customerMatchValues(customer), data);
   if (!belongs) return { ok: false, error: "Document not found." };
-  if (!data.pdfBase64) return { ok: false, error: "No PDF is available for this document yet." };
-  return { ok: true, pdfBase64: data.pdfBase64, name: data.name };
+  const pdfBase64 = await documentPdfBase64(db, snap.id, data);
+  if (!pdfBase64) return { ok: false, error: "No PDF is available for this document yet." };
+  return { ok: true, pdfBase64, name: data.name };
 }
 
 // ---------------------------------------------------------------------------

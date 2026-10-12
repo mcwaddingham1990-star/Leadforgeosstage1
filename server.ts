@@ -11,6 +11,7 @@ import { processDueRecurringTransactions, processDueMembershipMaintenance, proce
 import { getRemoteSigningInfo, submitRemoteSignature, RemoteSignSubmission } from './server/remoteSigning';
 import { requireAuth } from './server/verifyAuth';
 import { requirePermission } from './server/authz';
+import { handlePutDocumentPdf, handleGetDocumentPdf } from './server/documentPdfStore';
 import { handleUpdateEmployeeAccess, handleCreateEmployeeInvites } from './server/rosterAdmin';
 import { handlePasswordResetRequest } from './server/passwordReset';
 import { rateLimit } from './server/rateLimit';
@@ -67,6 +68,12 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// PDFs too big to save inline on a document record (see
+// server/documentPdfStore.ts). Registered before the global 10mb JSON parser
+// with its own larger limit -- a big PDF is ~40 MB of base64.
+app.post('/api/documents/:documentId/pdf', express.json({ limit: '45mb' }), requireAuth, rateLimit('document-pdf-write', 60_000, 30), requirePermission([['documents', 'edit'], ['pdf_editor', 'edit'], ['esign', 'edit'], ['collect_signatures', 'edit']], "Your role can't save documents."), handlePutDocumentPdf);
+app.get('/api/documents/:documentId/pdf', requireAuth, rateLimit('document-pdf-read', 60_000, 60), requirePermission([['documents', 'view'], ['pdf_editor', 'view'], ['esign', 'view']], "Your role can't open documents."), handleGetDocumentPdf);
 
 // 10mb limit: base64-encoded receipt/label photos for /api/ai/scan-receipt are larger than express's 100kb default.
 app.use(express.json({ limit: '10mb' }));

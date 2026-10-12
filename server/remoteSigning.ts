@@ -2,6 +2,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { randomBytes } from "crypto";
+import { documentPdfBase64, pdfFieldsForRecord } from "./documentPdfStore";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 
@@ -243,7 +244,7 @@ export async function getRemoteSigningInfo(token: string): Promise<RemoteSigning
     signerLabel: options.remoteSignerName || data.customer || "",
     signMethod: options.signMethod || "both",
     alreadySigned: !!options.remoteTokenUsedAt,
-    pdfBase64: data.pdfBase64 || undefined
+    pdfBase64: (await documentPdfBase64(db, snap.id, data)) || undefined
   };
 }
 
@@ -332,10 +333,11 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
     timestamp: new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(now)
   };
   if (method === "drawn" && body.signatureImage) remoteSignature.image = body.signatureImage;
-  let signedPdfBase64 = data.pdfBase64;
-  if (data.pdfBase64) {
+  const originalPdfBase64 = await documentPdfBase64(db, snap.id, data);
+  let signedPdfBase64 = originalPdfBase64;
+  if (originalPdfBase64) {
     try {
-      signedPdfBase64 = await appendRemoteSigningCertificate(data.pdfBase64, {
+      signedPdfBase64 = await appendRemoteSigningCertificate(originalPdfBase64, {
         signerName: name,
         timestamp: now.toISOString(),
         signatureImage: method === "drawn" ? body.signatureImage : undefined
@@ -347,7 +349,9 @@ export async function submitRemoteSignature(body: RemoteSignSubmission): Promise
   await snap.ref.update({
     status: "Signed",
     customerVisible: true,
-    ...(signedPdfBase64 ? { pdfBase64: signedPdfBase64 } : {}),
+    // The certificate page can push a PDF past the inline record limit, which
+    // used to make this whole update fail and lose the signature.
+    ...(signedPdfBase64 ? await pdfFieldsForRecord(db, snap.id, data.businessId, signedPdfBase64) : {}),
     "signingOptions.remoteTokenUsedAt": now.toISOString(),
     "signingOptions.remoteSignature": remoteSignature,
     auditTrail: [

@@ -94,7 +94,8 @@ export interface SelfieSaveEditorProps {
    * and expose one Save Signature action. */
   signatureOnlyMode?: boolean;
   onClose: () => void;
-  onSave: (docId: string, updatedName: string, metaProperties?: any) => void;
+  /** May return a promise that rejects when the PDF couldn't be saved. */
+  onSave: (docId: string, updatedName: string, metaProperties?: any) => void | Promise<void>;
 }
 
 export default function SelfieSaveEditor({accountEmail,accountName,documentId,initialFilename,initialPdfBase64,autoOpenPdfPicker,initialDraft,signerHint,customerPhone,customerEmail,businessProfile,autoCaptureSignatures,autoOpenSignSetup,signatureOnlyMode=false,onClose,onSave}:SelfieSaveEditorProps){
@@ -997,12 +998,12 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     // status change from exportPdf/finalize -- persist here too so the list
     // doesn't keep showing DRAFT once the editor itself is already locked.
     const allCommitted=updatedFields.length>0&&updatedFields.every(f=>f.committed);
-    persist(allCommitted?"Signed":"Awaiting Signature",{keepEditorOpen:true});
+    void persist(allCommitted?"Signed":"Awaiting Signature",{keepEditorOpen:true}).catch(error=>{console.error(error);notify("Could not save. Try again.")});
   }}
-  const persist=(status:"Draft"|"Signed"|"Awaiting Signature"|"Completed", extra:Record<string,unknown>={})=>{
+  const persist=async(status:"Draft"|"Signed"|"Awaiting Signature"|"Completed", extra:Record<string,unknown>={})=>{
     const docId=sessionDocumentId;
     const finalName=(filename.trim()||"Untitled document")+".pdf";
-    onSave(docId,finalName,{
+    await onSave(docId,finalName,{
       status,
       objects,
       auditTrail:fields.filter(f=>f.signed).map(f=>({id:`field_${f.id}`,signerName:f.name,role:`party_${f.party}_${f.kind}`,action:f.committed?"committed":"signed",timestamp:f.stamp,centralTime:f.centralStamp,coords:f.coords,hasSelfie:!!f.image})),
@@ -1056,10 +1057,10 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       const pdfBase64=bytesToBase64(bytes);
       const docId=sessionDocumentId;
       const finalName=(filename.trim()||"Signed document")+".pdf";
-      onSave(docId,finalName,{
+      await onSave(docId,finalName,{
         status:"Signed",
         folder:"Signed Contracts",
-        ...(pdfBase64.length<=900_000?{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"}:{}),
+        pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf",
         objects,
         auditTrail:nextFields.map(f=>({id:`field_${f.id}`,signerName:f.name,role:`party_${f.party}_${f.kind}`,action:"committed",timestamp:f.stamp,centralTime:f.centralStamp,coords:f.coords,hasSelfie:!!f.image,hasDrawnSignature:!!f.signatureImage})),
         signingOptions:{features,header,footer,clauses,fields:nextFields,placements,pageCount,hasImportedPdf:pdfPages.length>0}
@@ -1078,19 +1079,15 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       }
       const pdfBase64=bytesToBase64(bytes);
       const pdfName=(filename.trim()||"Untitled document").replace(/[\\/:*?\"<>|]+/g,"-");
-      // Firestore caps a single document at ~1 MiB, and this PDF is stored
-      // inline as a base64 field on the documents/{id} record. A signed PDF
-      // with an embedded selfie or an imported source document can cross
-      // that line -- without this check the write is silently rejected and
-      // the "saved" signature is gone on the next reload with no warning.
-      const tooLargeToSave=pdfBase64.length>900_000;
-      if(!tooLargeToSave){
-        persist(finalCertificate?"Signed":"Draft",{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"});
-      }
+      // Large PDFs are stored in pieces by the save handler; if saving fails
+      // the PDF is still downloaded and the user is told it isn't saved.
+      let saved=true;
+      try{await persist(finalCertificate?"Signed":"Draft",{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"})}
+      catch(error){console.error(error);saved=false}
       const blob=new Blob([bytes],{type:"application/pdf"});
       const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`${pdfName}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-      notify(tooLargeToSave
-        ? "This PDF is too large to save in Documents (signed size limit ~900 KB). It was downloaded to your device instead — reduce embedded photos or split the document to save it in the app."
+      notify(!saved
+        ? "Couldn't save this PDF to Documents (check your connection). It was downloaded to your device — try saving again."
         : (finalCertificate?"Final signed PDF saved to Documents and downloaded":"PDF saved to Documents and downloaded"));
     }catch(error){
       console.error(error);
@@ -1117,12 +1114,13 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     try{
       const bytes=await currentPdfBytes();
       const pdfBase64=bytesToBase64(bytes);
-      const tooLargeToSave=pdfBase64.length>900_000;
-      persist("Completed",tooLargeToSave?{}:{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"});
+      let saved=true;
+      try{await persist("Completed",{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"})}
+      catch(error){console.error(error);saved=false}
       const pdfName=(filename.trim()||"Untitled document").replace(/[\\/:*?\"<>|]+/g,"-");
       const blob=new Blob([bytes],{type:"application/pdf"});
       const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`${pdfName}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-      notify(tooLargeToSave?"Marked complete — too large to save inline, so it was downloaded to your device instead.":"Document marked complete and saved to Documents");
+      notify(saved?"Document marked complete and saved to Documents":"Couldn't save to Documents (check your connection). It was downloaded to your device — try again.");
     }catch(error){
       console.error(error);
       notify("Could not build the PDF. Try again.");
@@ -1152,15 +1150,19 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     try{
       const bytes=await currentPdfBytes();
       const pdfBase64=bytesToBase64(bytes);
-      const tooLargeToSave=pdfBase64.length>900_000;
+      // Too big to also attach to the share sheet; the link carries it.
+      const tooLargeToAttach=pdfBase64.length>900_000;
       // Cryptographically random -- this token alone (no login) is what
       // gates read/write access to this document via /api/sign/:token, so
       // Math.random()+Date.now() (guessable/narrow search space) would let
       // an attacker brute-force or predict a live signing link.
       const token=`sign_${crypto.randomUUID().replace(/-/g,"")}`;
       const remoteTokenExpiresAt=new Date(Date.now()+14*24*60*60*1000).toISOString();
-      persist("Awaiting Signature",{
-        ...(tooLargeToSave?{}:{pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf"}),
+      // Awaited: the link must never go out before the PDF it points to is
+      // saved (a large PDF used to be skipped, so customers got a link to a
+      // document that wasn't there). A failed save throws and sends nothing.
+      await persist("Awaiting Signature",{
+        pdfBase64,actualSizeBytes:bytes.length,mimeType:"application/pdf",
         keepEditorOpen:true,
         signingOptions:{features,header,footer,clauses,fields,placements,pageCount,hasImportedPdf:pdfPages.length>0,signMethod:"both",remoteToken:token,remoteTokenExpiresAt,remoteSignerName:signerHint?.customerName||""}
       });
@@ -1169,14 +1171,14 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
       const result=await shareRemoteSigningPackage({
         documentName:`${(filename.trim()||"document").replace(/\.pdf$/i,"")}.pdf`,
         signingLink:link,
-        pdfBase64:tooLargeToSave?undefined:pdfBase64,
+        pdfBase64:tooLargeToAttach?undefined:pdfBase64,
         signerName:signerHint?.customerName
       });
       if(result==="copied")notify("Native sharing is unavailable here, so the live signing link was copied.");
-      else if(result==="shared")notify(tooLargeToSave?"Live signing link opened in your device share menu.":"Signing PDF and live signing link opened in your device share menu.");
+      else if(result==="shared")notify(tooLargeToAttach?"Live signing link opened in your device share menu.":"Signing PDF and live signing link opened in your device share menu.");
     }catch(error){
       console.error(error);
-      notify("Could not prepare the signing link. Try again.");
+      notify("Could not save the PDF, so no signing link was sent. Check your connection and try again.");
     }finally{
       setPreparingRemote(false);
     }
