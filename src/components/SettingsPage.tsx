@@ -61,6 +61,7 @@ import { workspaceThemeFromSetting, workspaceThemeSettingValue } from "../App";
 
 // Types for SettingsPage
 import { StructuredAddressFields } from "./StructuredAddressFields";
+import { buildBusinessBackup, countBackupRecords, downloadBackup } from "../lib/businessBackup";
 
 export interface SettingsPageProps {
   businessNames: string[];
@@ -664,6 +665,27 @@ export default function SettingsPage({
     downloadAnchor.click();
     downloadAnchor.remove();
     triggerNotification("📥 Settings exported to JSON successfully.");
+  };
+
+  // Real backup: every record this business has, read from the server and
+  // saved to the device as one .json file.
+  const [backingUp, setBackingUp] = useState(false);
+  const handleManualBackup = async () => {
+    if (!businessId) { triggerNotification("Sign in to a business before backing up."); return; }
+    setBackingUp(true);
+    try {
+      const backup = await buildBusinessBackup(businessId);
+      const filename = downloadBackup(backup);
+      const skipped = Object.keys(backup.skipped);
+      triggerNotification(skipped.length
+        ? `Backup saved as ${filename} (${countBackupRecords(backup)} records). Couldn't read: ${skipped.join(", ")}.`
+        : `Backup saved as ${filename} (${countBackupRecords(backup)} records).`);
+    } catch (err) {
+      console.error(err);
+      triggerNotification("Backup failed. Check your connection and try again.");
+    } finally {
+      setBackingUp(false);
+    }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2467,10 +2489,11 @@ export default function SettingsPage({
                   <h3 className="text-xs font-extrabold text-[#342D7E] uppercase tracking-wider">Cloud Data Persistence & Backups</h3>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => triggerNotification("🔄 Compiling system backup archive... Created backup point LF-BACKUP-AUTO-2026.")}
-                      className="flex-1 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-all cursor-pointer uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5"
+                      onClick={handleManualBackup}
+                      disabled={backingUp}
+                      className="flex-1 disabled:opacity-60 py-2 bg-[#4A9BFF] hover:bg-[#3583E6] text-white text-xs font-bold rounded-xl transition-all cursor-pointer uppercase tracking-wider shadow-sm flex items-center justify-center gap-1.5"
                     >
-                      <Database className="w-4 h-4" /> Trigger Manual Backup Now
+                      <Database className="w-4 h-4" /> {backingUp ? "Backing up…" : "Back Up Now (download)"}
                     </button>
                   </div>
                   

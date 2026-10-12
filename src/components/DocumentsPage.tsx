@@ -73,6 +73,8 @@ import {
 
 export type { DocumentItem } from "../types/domain";
 import type { DocumentItem } from "../types/domain";
+import { hasSavedPdf, loadDocumentPdf, storeDocumentPdf } from "../lib/documentPdfStore";
+import { MAX_INLINE_BASE64_LENGTH } from "../lib/firestoreDocumentLimits";
 
 // The deliberately small filing structure selected for Owners Local OS.
 export const FOLDER_TAXONOMY: Array<{ id: string; icon: string; subfolders: string[] }> = [
@@ -293,10 +295,23 @@ export const DocumentsPage: React.FC = () => {
   // is set (the Documents Hub "Open PDF" / "Edit PDF" buttons), the editor
   // immediately triggers its own native file picker on mount -- no extra
   // click, no intermediate screen.
-  const handleOpenPDFEditor = (doc: DocumentItem | null, autoOpenPdfPicker: boolean = false) => {
+  // The saved PDF, or "" (with a notice) when it can't be loaded.
+  const savedPdfFor = async (doc: DocumentItem | null) => {
+    try {
+      return await loadDocumentPdf(doc as any);
+    } catch (error) {
+      console.error(error);
+      triggerNotification("Couldn't load this document's saved PDF. Check your connection and try again.");
+      return null;
+    }
+  };
+
+  const handleOpenPDFEditor = async (doc: DocumentItem | null, autoOpenPdfPicker: boolean = false) => {
+    const pdfBase64 = (doc as any)?.pdfChunked ? await savedPdfFor(doc) : String((doc as any)?.pdfBase64 || "");
+    if (pdfBase64 === null) return;
     setPdfEditorDocId(doc?.id || null);
     setPdfEditorDocName(doc?.name || "");
-    setPdfEditorBase64((doc as any)?.pdfBase64 || "");
+    setPdfEditorBase64(pdfBase64);
     setPdfEditorAutoOpenPicker(autoOpenPdfPicker);
     setPdfEditorSignatureOnly(false);
     setPdfEditorContact(doc ? getDocumentContact(doc) : null);
@@ -336,11 +351,13 @@ export const DocumentsPage: React.FC = () => {
     setIsMainShareModalOpen(true);
   };
 
-  const openCollectSignatures = (doc: DocumentItem) => {
+  const openCollectSignatures = async (doc: DocumentItem) => {
+    const pdfBase64 = (doc as any)?.pdfChunked ? await savedPdfFor(doc) : String((doc as any)?.pdfBase64 || "");
+    if (pdfBase64 === null) return;
     setPdfEditorDocId(doc.id);
     setPdfEditorDocName(doc.name);
-    setPdfEditorBase64((doc as any)?.pdfBase64 || "");
-    setPdfEditorAutoOpenPicker(!(doc as any)?.pdfBase64);
+    setPdfEditorBase64(pdfBase64);
+    setPdfEditorAutoOpenPicker(!pdfBase64);
     setPdfEditorSignatureOnly(true);
     setPdfEditorContact(getDocumentContact(doc));
     setActionMenuDoc(null);
@@ -367,7 +384,7 @@ export const DocumentsPage: React.FC = () => {
   const safePdfFileName = (name: string) => name.toLowerCase().endsWith(".pdf") ? name : `${name}.pdf`;
 
   const getDocumentShareFile = async (doc: DocumentItem) => {
-    const pdfBase64 = (doc as any)?.pdfBase64;
+    const pdfBase64 = await loadDocumentPdf(doc as any);
     if (pdfBase64) {
       return new File([base64ToBlob(pdfBase64)], safePdfFileName(doc.name), { type: "application/pdf" });
     }
@@ -402,14 +419,17 @@ export const DocumentsPage: React.FC = () => {
     const existingToken = existingOptions.remoteToken && !existingOptions.remoteTokenUsedAt ? String(existingOptions.remoteToken) : "";
     const token = existingToken || `sign_${crypto.randomUUID().replace(/-/g, "")}`;
     const remoteTokenExpiresAt = existingOptions.remoteTokenExpiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    let pdfBase64 = String((doc as any).pdfBase64 || "");
+    let pdfBase64 = await loadDocumentPdf(doc as any);
     let actualSizeBytes = (doc as any).actualSizeBytes;
+    let pdfFields: { pdfBase64: string; pdfChunked: boolean } | null = null;
 
     if (!pdfBase64 && doc.url) {
       const response = await fetch(doc.url);
       const blob = await response.blob();
       pdfBase64 = await blobToBase64(blob);
       actualSizeBytes = blob.size;
+      // Saved before the link exists -- a large one is uploaded in pieces.
+      pdfFields = await storeDocumentPdf(doc.id, pdfBase64);
     }
 
     if (!pdfBase64) {
@@ -429,12 +449,12 @@ export const DocumentsPage: React.FC = () => {
         remoteTokenExpiresAt,
         remoteSignerName: existingOptions.remoteSignerName || doc.customer || ""
       },
-      pdfBase64,
+      ...(pdfFields || {}),
       size: actualSizeBytes ? `${Math.max(1, Math.ceil(Number(actualSizeBytes) / 1024))} KB` : doc.size
     } as DocumentItem;
 
     setDocuments(prev => prev.map(d => d.id === doc.id ? nextDoc : d));
-    return { link: buildRemoteSigningLink(token), doc: nextDoc };
+    return { link: buildRemoteSigningLink(token), doc: nextDoc, pdfBase64 };
   };
 
   const shareDocumentSigningLink = async (doc: DocumentItem) => {
@@ -446,7 +466,7 @@ export const DocumentsPage: React.FC = () => {
       const result = await shareRemoteSigningPackage({
         documentName: prepared.doc.name,
         signingLink: prepared.link,
-        pdfBase64: String((prepared.doc as any).pdfBase64 || ""),
+        pdfBase64: prepared.pdfBase64.length <= MAX_INLINE_BASE64_LENGTH ? prepared.pdfBase64 : undefined,
         signerName: customer?.customerName
       });
 
@@ -499,8 +519,16 @@ export const DocumentsPage: React.FC = () => {
   };
 
   // Handler to save PDF Editor modifications
-  const handleSavePDFEditor = (docId: string, updatedName: string, metaProperties?: any) => {
+  const handleSavePDFEditor = async (docId: string, updatedName: string, metaProperties?: any) => {
     const linkedDocument = documents.find(d => d.id === docId);
+    const copyId = `doc_dup_${Date.now()}`;
+    // Store the PDF first (large ones are uploaded in pieces) so the record
+    // never claims a PDF that isn't saved. Throws back to the editor on failure.
+    let pdfFields: { pdfBase64: string; pdfChunked: boolean } | null = null;
+    if (typeof metaProperties?.pdfBase64 === "string" && metaProperties.pdfBase64) {
+      const targetId = linkedDocument && docId.startsWith("doc_template_") ? copyId : docId;
+      pdfFields = await storeDocumentPdf(targetId, metaProperties.pdfBase64);
+    }
     setDocuments(prev => {
       const exists = prev.some(d => d.id === docId);
       if (exists) {
@@ -509,7 +537,6 @@ export const DocumentsPage: React.FC = () => {
             // Anti-frustration: protect standard templates from being altered!
             if (d.id.startsWith("doc_template_")) {
               triggerNotification("⚠️ Standard templates are locked. Creating a custom copy with your edits!");
-              const copyId = `doc_dup_${Date.now()}`;
               return {
                 ...d,
                 id: copyId,
@@ -520,7 +547,8 @@ export const DocumentsPage: React.FC = () => {
                 lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
                 metaObjects: metaProperties?.objects || [],
                 auditTrail: metaProperties?.auditTrail || [],
-                signingOptions: metaProperties?.signingOptions || {}
+                signingOptions: metaProperties?.signingOptions || {},
+                ...(pdfFields || {})
               };
             }
             return {
@@ -531,7 +559,7 @@ export const DocumentsPage: React.FC = () => {
               metaObjects: metaProperties?.objects || [],
               auditTrail: metaProperties?.auditTrail || (d as any).auditTrail || [],
               signingOptions: metaProperties?.signingOptions || (d as any).signingOptions || {},
-              pdfBase64: metaProperties?.pdfBase64 || (d as any).pdfBase64,
+              ...(pdfFields || {}),
               folder: metaProperties?.folder || d.folder,
               size: metaProperties?.actualSizeBytes ? `${Math.max(1, Math.ceil(metaProperties.actualSizeBytes / 1024))} KB` : d.size
             };
@@ -567,7 +595,8 @@ export const DocumentsPage: React.FC = () => {
         };
         (newDoc as any).auditTrail = metaProperties?.auditTrail || [];
         (newDoc as any).signingOptions = metaProperties?.signingOptions || {};
-        (newDoc as any).pdfBase64 = metaProperties?.pdfBase64 || "";
+        (newDoc as any).pdfBase64 = pdfFields?.pdfBase64 || "";
+        (newDoc as any).pdfChunked = !!pdfFields?.pdfChunked;
         return [...prev, newDoc];
       }
     });
@@ -2138,7 +2167,7 @@ export const DocumentsPage: React.FC = () => {
                   const doc = actionMenuDoc;
                   setActionMenuDoc(null);
                   setActionMenuPosition(null);
-                  handleOpenPDFEditor(doc, !(doc as any)?.pdfBase64);
+                  handleOpenPDFEditor(doc, !hasSavedPdf(doc as any));
                 }}
                 className="w-full px-2.5 py-2 hover:bg-[#EAF5FF] rounded-lg flex items-center gap-2 text-[11px] font-black uppercase"
               >

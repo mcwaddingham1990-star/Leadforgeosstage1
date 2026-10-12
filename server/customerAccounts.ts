@@ -5,6 +5,7 @@ import type Stripe from "stripe";
 // @ts-ignore
 import firebaseConfig from "../firebase-applet-config.json";
 import { createInvoiceCheckoutSession, getConnectAccountStatus } from "./stripeConnect";
+import { documentPdfBase64 } from "./documentPdfStore";
 import { agreementVisitStats } from "../src/lib/serviceAgreements";
 
 /**
@@ -532,7 +533,7 @@ export async function getDocuments(customerAccountId: string, businessIdFilter?:
         && (ctx.names.includes(doc.customer) || doc.customerId === ctx.businessCustomerId))
       .forEach(doc => documents.push({
         id: doc.id, businessId: ctx.businessId, businessName: ctx.businessName, name: doc.name, date: doc.date, status: doc.status,
-        folder: doc.folder || doc.type, hasPdf: !!doc.pdfBase64,
+        folder: doc.folder || doc.type, hasPdf: !!doc.pdfBase64 || !!doc.pdfChunked,
         canSign: doc.status === "Awaiting Signature" && !!doc.signingOptions?.remoteToken && !doc.signingOptions?.remoteTokenUsedAt
       }));
   }
@@ -551,8 +552,9 @@ export async function getDocumentPdf(customerAccountId: string, businessId: stri
   if (doc.businessId !== businessId || doc.customerVisible !== true || INTERNAL_DOCUMENT_FOLDERS.has(doc.folder || doc.type)) return { ok: false, error: "Document not found." };
   const belongs = ctx.names.includes(doc.customer) || doc.customerId === ctx.businessCustomerId;
   if (!belongs) return { ok: false, error: "Document not found." };
-  if (!doc.pdfBase64) return { ok: false, error: "No PDF is available for this document yet." };
-  return { ok: true, pdfBase64: doc.pdfBase64, name: doc.name };
+  const pdfBase64 = await documentPdfBase64(resolved.db, snap.id, doc);
+  if (!pdfBase64) return { ok: false, error: "No PDF is available for this document yet." };
+  return { ok: true, pdfBase64, name: doc.name };
 }
 
 // ---------------------------------------------------------------------------
