@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { confirmJobCompletion } from "../lib/completionGuard";
 import { waitForPendingWrites } from "firebase/firestore";
+import { waitForSavesToReachServer } from "../lib/syncStatus";
 import { db } from "../firebase";
 import { Check, ChevronDown, ClipboardCheck, FileText, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -227,18 +228,22 @@ export function BuildJobModal({
         description: form.description, notes: form.notes, purchaseOrder: form.purchaseOrder, budget, laborRate: Number(form.laborRate) || 0
       }, "Job details edited");
       if (updated) {
+        let outcome: "saved" | "queued";
         try {
           // Do not tell the user a Job is saved until Firestore has actually
           // acknowledged the write. This prevents a fast logout/account switch
-          // from dropping an optimistic local-only Job.
-          await waitForPendingWrites(db);
+          // from dropping an optimistic local-only Job. Waits for the app's
+          // save queue first -- the write itself is issued asynchronously.
+          outcome = await waitForSavesToReachServer(() => waitForPendingWrites(db));
         } catch (error) {
           console.error("Job update was not durably saved:", error);
-          triggerNotification("Job update could not be confirmed saved. Please try Save again before leaving this account.");
+          triggerNotification("Job update could not be confirmed saved. Use Retry on the save status before leaving this account.");
           return null;
         }
         setSavedJob(updated);
-        triggerNotification(`${displayNumber(updated)} updated.`);
+        triggerNotification(outcome === "saved"
+          ? `${displayNumber(updated)} updated.`
+          : `${displayNumber(updated)} updated on this device -- it will sync when you're back online.`);
       }
       return updated;
     }
@@ -252,18 +257,23 @@ export function BuildJobModal({
       status: form.status, sourceEstimateId: form.sourceEstimateId, sourceLeadId: form.sourceLeadId, source: form.source,
       sourceMembershipId: form.sourceMembershipId
     });
+    let createOutcome: "saved" | "queued";
     try {
       // createJob updates UI state optimistically; wait for the corresponding
       // Firestore write to reach the server before the modal can close or the
       // user can move on assuming the Job is durable.
-      await waitForPendingWrites(db);
+      createOutcome = await waitForSavesToReachServer(() => waitForPendingWrites(db));
     } catch (error) {
       console.error("Job creation was not durably saved:", error);
-      triggerNotification("Job could not be confirmed saved. Please try Save again before leaving this account.");
+      // Not "Save again": the Job already exists locally and a second Save
+      // would create a duplicate. The save indicator's Retry resends it.
+      triggerNotification("Job could not be confirmed saved. Use Retry on the save status before leaving this account.");
       return null;
     }
     setSavedJob(created);
-    triggerNotification(`${displayNumber(created)} created and published to Scheduling, Dispatch, Map, Time Clock, Messages, and the Event Engine.`);
+    triggerNotification(createOutcome === "saved"
+      ? `${displayNumber(created)} created and published to Scheduling, Dispatch, Map, Time Clock, Messages, and the Event Engine.`
+      : `${displayNumber(created)} created on this device -- it will sync to everyone when you're back online.`);
     return created;
   };
 

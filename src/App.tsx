@@ -171,7 +171,9 @@ import {
 } from "./initialData";
 import { validateConnection } from "./lib/firestoreService";
 import { onSyncError } from "./lib/syncErrorBus";
-import { waitForPersistenceQueue } from "./lib/persistenceQueue";
+import { waitForPersistenceQueue, waitForPersistenceQueueWithin, hasPendingPersistenceTasks } from "./lib/persistenceQueue";
+import { trackSave, hasSaveFailures } from "./lib/syncStatus";
+import { SyncStatusIndicator } from "./components/SyncStatusIndicator";
 import { useFirestoreCollection } from "./hooks/useFirestoreCollection";
 import { AuthContext, AuthContextValue } from "./context/AuthContext";
 import { DomainDataContext, DomainDataContextValue } from "./context/DomainDataContext";
@@ -1859,6 +1861,9 @@ export default function App() {
   // collection to empty. (TrainingPage.tsx already used this exact
   // ternary, anticipating businessEmail would be populated here.)
   const businessId = normalizeBusinessEmail(loggedInUser?.businessEmail || loggedInUser?.email) || undefined;
+  // Latest businessId for async callbacks that must ignore results meant for a previous account.
+  const businessIdRef = React.useRef(businessId);
+  businessIdRef.current = businessId;
 
   // OwnersLOCAL's own SaaS paywall (see server/subscriptionRoutes.ts and
   // server/paywallBypass.ts). Called unconditionally here, alongside every
@@ -1883,8 +1888,8 @@ export default function App() {
     const settingValue = workspaceThemeSettingValue(nextTheme);
     localStorage.setItem("ownerslocal_workspace_theme", settingValue);
     if (businessId) {
-      setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: settingValue } } }, { merge: true })
-        .catch(err => console.error("Couldn't save workspace theme:", err));
+      void trackSave("workspace theme", () => setDoc(doc(db, "business_profiles", businessId), { companySettings: { appearance: { theme: settingValue } } }, { merge: true }), { key: `theme:${businessId}` })
+        .catch(() => undefined);
     }
   };
 
@@ -1904,7 +1909,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.ownerslocalTheme = workspaceTheme;
   }, [workspaceTheme]);
-  const [customers, setCustomers] = useFirestoreCollection<Customer>("customers", businessId, {
+  const [customers, setCustomers, , customersLoaded] = useFirestoreCollection<Customer>("customers", businessId, {
     normalize: (customer) => {
       const legacyName = String((customer as Customer & { name?: string }).name || "").trim();
       const contact = String(customer.contact || legacyName || customer.company || "Unnamed Customer").trim();
@@ -1949,7 +1954,7 @@ export default function App() {
   const [employees, setEmployees, refreshEmployees] = useFirestoreCollection<EmployeeRecord>("employees", businessId, { tenantField: "businessEmail" });
   const [timeClockLogs, setTimeClockLogs, refreshTimeClockLogs] = useFirestoreCollection<TimeClockLog>("time_clock_logs", businessId);
   const [transactions, setTransactions] = useFirestoreCollection<Transaction>("transactions", businessId);
-  const [accounts, setAccounts] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
+  const [accounts, setAccounts, , accountsLoaded] = useFirestoreCollection<Account>("chart_of_accounts", businessId);
   const [journalEntries, setJournalEntries] = useFirestoreCollection<JournalEntry>("journal_entries", businessId);
   const [invoices, setInvoices] = useFirestoreCollection<Invoice>("invoices", businessId);
   const [generatedPdfDraft, setGeneratedPdfDraft] = useState<GeneratedPdfDraft | null>(null);
@@ -1971,26 +1976,34 @@ export default function App() {
   // Recover customer records saved by earlier builds before Firestore became
   // the canonical store. The migration runs once per business per session and
   // preserves record IDs, making it idempotent rather than duplicate seed.
+  //
+  // Waits for the server-confirmed customer list and only ADDS cached
+  // customers whose ids aren't there. It used to run before Firestore had
+  // loaded, so every cached (old) copy was written back over the newer saved
+  // customer -- and customers deleted on another device came back -- once per
+  // session, forever. A per-business marker makes it a true one-time step.
   useEffect(() => {
-    if (!businessId || loggedInUser?.isEmployee) return;
+    if (!businessId || loggedInUser?.isEmployee || !customersLoaded) return;
     const migrationKey = businessId.toLowerCase();
     if (migratedCustomersForBusinessRef.current.has(migrationKey)) return;
     migratedCustomersForBusinessRef.current.add(migrationKey);
+    const doneMarker = `ownerslocal_customers_migrated:${migrationKey}`;
     try {
+      if (localStorage.getItem(doneMarker)) return;
       const raw = localStorage.getItem("ownerslocal_customers") || localStorage.getItem("leadforge_customers");
       const cached = raw ? JSON.parse(raw) : [];
       if (Array.isArray(cached) && cached.length > 0) {
         setCustomers(current => {
-          const merged = new Map<string, Customer>();
-          cached.forEach((customer: Customer) => customer?.id && merged.set(customer.id, customer));
-          current.forEach(customer => merged.set(customer.id, customer));
-          return [...merged.values()];
+          const existingIds = new Set(current.map(customer => customer.id));
+          const missing = cached.filter((customer: Customer) => customer?.id && !existingIds.has(customer.id));
+          return missing.length ? [...current, ...missing] : current;
         });
       }
+      localStorage.setItem(doneMarker, new Date().toISOString());
     } catch (error) {
       console.error("Couldn't migrate cached customers:", error);
     }
-  }, [businessId, loggedInUser?.isEmployee, setCustomers]);
+  }, [businessId, loggedInUser?.isEmployee, customersLoaded, setCustomers]);
 
   // Delete only the original prototype's known demo rows if they were
   // persisted by an older build. Real inventory and time entries remain.
@@ -2010,11 +2023,14 @@ export default function App() {
   // the app's own event-posting logic writes to must already exist so
   // journal entries never get silently dropped for lacking a target
   // account. Owners can still add unlimited custom accounts afterward.
+  // Waits for the first Firestore snapshot: before it, an empty list only
+  // means "not loaded yet", and seeding then overwrote every saved account
+  // (names, balances) with the defaults on each login.
   useEffect(() => {
-    if (!businessId || accounts.length > 0) return;
+    if (!businessId || !accountsLoaded || accounts.length > 0) return;
     const seeded: Account[] = DEFAULT_CHART_OF_ACCOUNTS.map(a => ({ ...a, createdAt: new Date().toISOString() }));
     setAccounts(seeded);
-  }, [businessId, accounts.length, setAccounts]);
+  }, [businessId, accountsLoaded, accounts.length, setAccounts]);
 
   // Additive backfill for businesses whose Chart of Accounts was already
   // seeded before a new system account (e.g. a dedicated Bills expense
@@ -2025,12 +2041,12 @@ export default function App() {
   // kind of transaction. Only ever adds accounts that don't already exist;
   // never edits or removes one, so no existing balance is touched.
   useEffect(() => {
-    if (!businessId || accounts.length === 0) return;
+    if (!businessId || !accountsLoaded || accounts.length === 0) return;
     const existingIds = new Set(accounts.map(a => a.id));
     const missing = DEFAULT_CHART_OF_ACCOUNTS.filter(a => !existingIds.has(a.id));
     if (missing.length === 0) return;
     setAccounts(prev => [...prev, ...missing.map(a => ({ ...a, createdAt: new Date().toISOString() }))]);
-  }, [businessId, accounts, setAccounts]);
+  }, [businessId, accountsLoaded, accounts, setAccounts]);
 
   // Derived, never a separately-tracked number — a running total kept in
   // its own useState would silently reset to 0 on every reload/re-login
@@ -2564,11 +2580,21 @@ export default function App() {
   });
   const [isRunningPayroll, setIsRunningPayroll] = useState(false);
 
+  // Which business's payroll settings have been read from Firestore. Saving
+  // waits for this: the save effect below used to fire 500ms after login with
+  // the built-in defaults, and on any device without a localStorage copy
+  // (new phone, cleared browser, second owner) that overwrote the saved
+  // payroll schedule before the real one had finished loading.
+  const payrollSettingsHydratedForRef = React.useRef<string | null>(null);
+
   useEffect(() => {
+    payrollSettingsHydratedForRef.current = null;
     if (!businessId) return;
     const key = `ownerslocal_payroll_settings:${businessId}`;
+    let localCopy: Record<string, unknown> | null = null;
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
+      localCopy = saved;
       if (saved) {
         setPayrollSchedule(saved.schedule || "biweekly");
         setPayrollWorkweekStart(Number.isInteger(saved.workweekStart) ? saved.workweekStart : 0);
@@ -2578,25 +2604,41 @@ export default function App() {
         setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
       }
     } catch { /* fall back to safe defaults */ }
+    const loadingFor = businessId;
     getDoc(doc(db, "business_profiles", businessId)).then(snapshot => {
+      if (loadingFor !== businessIdRef.current) return;
+      payrollSettingsHydratedForRef.current = loadingFor;
       const saved = snapshot.data()?.payrollSettings;
-      if (!saved) return;
+      if (!saved) {
+        // Settings that only ever lived in this browser (older builds) get
+        // uploaded once so other devices see them too.
+        if (localCopy) {
+          void trackSave("payroll settings", () => setDoc(doc(db, "business_profiles", loadingFor), { payrollSettings: localCopy }, { merge: true }), { key: `payroll_settings:${loadingFor}` })
+            .catch(() => undefined);
+        }
+        return;
+      }
       setPayrollSchedule(saved.schedule || "biweekly");
       setPayrollWorkweekStart(Number.isInteger(saved.workweekStart) ? saved.workweekStart : 0);
       setPayrollPayday(Number.isInteger(saved.payday) ? saved.payday : 5);
       setPayrollState(saved.state || "TX");
       const period = saved.schedule === "custom" && saved.start && saved.end ? { start: saved.start, end: saved.end } : scheduledPayrollPeriod(saved.schedule || "biweekly");
       setPayrollPeriodStart(period.start); setPayrollPeriodEnd(period.end);
-    }).catch(error => console.error("Couldn't load payroll settings:", error));
+    }).catch(error => {
+      console.error("Couldn't load payroll settings:", error);
+      // Allow saving the owner's own later changes, but nothing is written
+      // until they actually change something (see the effect below).
+      if (loadingFor === businessIdRef.current) payrollSettingsHydratedForRef.current = loadingFor;
+    });
   }, [businessId]);
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId || payrollSettingsHydratedForRef.current !== businessId) return;
     const payrollSettings = { schedule: payrollSchedule, start: payrollPeriodStart, end: payrollPeriodEnd, workweekStart: payrollWorkweekStart, payday: payrollPayday, state: payrollState, updatedAt: new Date().toISOString() };
     localStorage.setItem(`ownerslocal_payroll_settings:${businessId}`, JSON.stringify(payrollSettings));
     const timer = window.setTimeout(() => {
-      setDoc(doc(db, "business_profiles", businessId), { payrollSettings }, { merge: true })
-        .catch(error => console.error("Couldn't save payroll settings:", error));
+      void trackSave("payroll settings", () => setDoc(doc(db, "business_profiles", businessId), { payrollSettings }, { merge: true }), { key: `payroll_settings:${businessId}` })
+        .catch(() => undefined);
     }, 500);
     return () => window.clearTimeout(timer);
   }, [businessId, payrollSchedule, payrollPeriodStart, payrollPeriodEnd, payrollWorkweekStart, payrollPayday, payrollState]);
@@ -2662,7 +2704,7 @@ export default function App() {
   useEffect(() => {
     if (!businessId || !aiSettingsLoadedRef.current || aiSettingsHydratingRef.current) return;
     const handle = setTimeout(() => {
-      setDoc(doc(db, "business_profiles", businessId), { globalAiSetting, moduleAiSettings, aiKnowledgeBase }, { merge: true }).catch(err => console.error("Error saving AI settings:", err));
+      void trackSave("AI settings", () => setDoc(doc(db, "business_profiles", businessId), { globalAiSetting, moduleAiSettings, aiKnowledgeBase }, { merge: true }), { key: `ai_settings:${businessId}` }).catch(() => undefined);
     }, 500);
     return () => clearTimeout(handle);
   }, [businessId, globalAiSetting, moduleAiSettings, aiKnowledgeBase]);
@@ -2674,7 +2716,7 @@ export default function App() {
   useEffect(() => {
     if (!businessId || !aiSettingsLoadedRef.current || aiSettingsHydratingRef.current) return;
     const handle = setTimeout(() => {
-      setDoc(doc(db, "business_profiles", businessId), { reviewAutomationSettings }, { merge: true }).catch(err => console.error("Error saving review automation settings:", err));
+      void trackSave("review automation settings", () => setDoc(doc(db, "business_profiles", businessId), { reviewAutomationSettings }, { merge: true }), { key: `review_settings:${businessId}` }).catch(() => undefined);
     }, 500);
     return () => clearTimeout(handle);
   }, [businessId, reviewAutomationSettings]);
@@ -3000,19 +3042,13 @@ export default function App() {
   // Sync Time Clock state to Firestore
   useEffect(() => {
     if (!loggedInUser?.email || !isTimeClockLoadedRef.current) return;
-    const saveTimeClock = async () => {
-      try {
-        await setDoc(doc(db, "timeclock_states", loggedInUser.email), {
-          isClockedIn,
-          clockInTime,
-          clockInDuration,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-      } catch (err) {
-        console.error("Failed to save time clock state:", err);
-      }
-    };
-    saveTimeClock();
+    const email = loggedInUser.email;
+    void trackSave("time clock status", () => setDoc(doc(db, "timeclock_states", email), {
+      isClockedIn,
+      clockInTime,
+      clockInDuration,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }), { key: `timeclock_state:${email}` }).catch(() => undefined);
   }, [isClockedIn, clockInTime, loggedInUser]);
 
   const takeSnapshot = (pageId: string, pageName: string, metaData?: any) => {
@@ -3486,12 +3522,14 @@ Access to full financial telemetry is restricted.`;
     if (!loggedInUser) return;
     const isDemoUser = loggedInUser.email === "admin@ownerslocal.com" || loggedInUser.email === "sec_manager@ownerslocal.com";
     if (!isDemoUser) {
-      // Clear all Ironclad Plumbing & HVAC demo data for a fresh start
-      setCustomers([]);
+      // Clear the Ironclad Plumbing & HVAC demo dashboard leads (local-only
+      // state) for a fresh start. Customers, roster, documents and schedule
+      // are NOT cleared here: those setters are Firestore-backed, so calling
+      // them with [] deleted every saved record whenever loggedInUser changed
+      // after the data had loaded (e.g. a second auth callback on login).
+      // useFirestoreCollection already starts each business with an empty
+      // list and fills it from Firestore.
       setDashboardLeads([]);
-      setRecentRoster([]);
-      setDocuments([]);
-      setSchedulingEvents([]);
       
       // Load any existing profile settings if they exist in firestore
       const loadBizProfile = async () => {
@@ -3956,6 +3994,7 @@ Access to full financial telemetry is restricted.`;
   };
 
   // Logout routine
+  const LOGOUT_SAVE_WAIT_MS = 15000;
   const handleLogout = async () => {
     const clearSessionUi = () => {
       setIsLoggedIn(false);
@@ -3979,8 +4018,29 @@ Access to full financial telemetry is restricted.`;
       // sync work (including serialized saves and retry delays), then wait for
       // the Firebase SDK's own pending network writes before revoking auth.
       // This makes Save -> Logout -> Login persistence deterministic.
-      await waitForPersistenceQueue();
-      await waitForPendingWrites(db);
+      //
+      // Both waits are capped: offline, a pending write never resolves, and
+      // logout used to hang forever. If something is still unsaved (or a
+      // save already failed), ask before signing out -- once auth is revoked
+      // those writes can never be sent.
+      // Offline there's nothing to wait for -- ask right away.
+      const waitMs = typeof navigator !== "undefined" && navigator.onLine === false ? 1000 : LOGOUT_SAVE_WAIT_MS;
+      const queueDrained = await waitForPersistenceQueueWithin(waitMs);
+      const sdkDrained = queueDrained && await Promise.race([
+        waitForPendingWrites(db).then(() => true),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), waitMs))
+      ]);
+      if (!sdkDrained || hasSaveFailures() || hasPendingPersistenceTasks()) {
+        const proceed = window.confirm(
+          "Some of your changes haven't finished saving" +
+          (typeof navigator !== "undefined" && navigator.onLine === false ? " because you're offline" : "") +
+          ".\n\nStay signed in to let them finish (recommended), or press OK to log out anyway and lose them."
+        );
+        if (!proceed) {
+          triggerNotification("Still signed in -- your changes will keep trying to save.");
+          return;
+        }
+      }
       await signOut(auth);
       clearSessionUi();
       triggerNotification("Logged out of OwnersLOCAL.");
@@ -10150,6 +10210,9 @@ Access to full financial telemetry is restricted.`;
       </div>,
       document.body
       )}
+
+      {/* Save status: Saving… / All changes saved / Offline / Couldn't save + Retry */}
+      {(isLoggedIn || !!loggedInUser) && <SyncStatusIndicator />}
 
       {/* FLOATING SUCCESS/WARNING NOTIFICATIONS SYSTEM */}
       {showNotification && (

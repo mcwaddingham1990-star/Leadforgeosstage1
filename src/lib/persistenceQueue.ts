@@ -45,3 +45,30 @@ export async function waitForPersistenceQueue(): Promise<void> {
 export function hasPendingPersistenceTasks(): boolean {
   return active.size > 0;
 }
+
+/**
+ * Registers save work that runs outside enqueuePersistenceTask (direct
+ * setDoc calls, writes still waiting on a server ack) so logout and the
+ * "unsaved changes" guard wait for it too.
+ */
+export function trackPersistencePromise(work: Promise<unknown>): void {
+  const tracked = work.then(() => undefined, () => undefined);
+  active.add(tracked);
+  void tracked.finally(() => active.delete(tracked));
+}
+
+/**
+ * Like waitForPersistenceQueue, but gives up after `timeoutMs` (e.g. offline,
+ * where a write never resolves) and reports whether everything finished.
+ */
+export async function waitForPersistenceQueueWithin(timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+  try {
+    return await Promise.race([waitForPersistenceQueue().then(() => true as const), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { collection, doc, setDoc, deleteDoc, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { syncArrayToFirestore } from "../lib/firestoreService";
+import { enqueuePersistenceTask } from "../lib/persistenceQueue";
+import { trackSave } from "../lib/syncStatus";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useDomainData } from "../context/DomainDataContext";
@@ -148,34 +151,17 @@ export const TrainingPage: React.FC = () => {
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [employees, recentRoster]);
 
-  // Real-time synchronization helper for courses
-  const syncCoursesToFirestore = async (oldArray: Course[], newArray: Course[], bid: string) => {
-    const scopedId = (id: string) => `${bid.toLowerCase().replace(/[^a-z0-9]/g, "_")}__${id}`;
-    const oldMap = new Map(oldArray.map(item => [item.id, item]));
-    for (const item of newArray) {
-      const oldItem = oldMap.get(item.id);
-      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
-        try {
-          await setDoc(doc(db, "courses", scopedId(item.id)), {
-            ...item,
-            businessId: bid,
-            updatedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error("Error saving course:", err);
-        }
-      }
-    }
-    const newSet = new Set(newArray.map(item => item.id));
-    for (const item of oldArray) {
-      if (!newSet.has(item.id)) {
-        try {
-          await deleteDoc(doc(db, "courses", scopedId(item.id)));
-        } catch (err) {
-          console.error("Error deleting course:", err);
-        }
-      }
-    }
+  // Courses and training profiles are stored under business-scoped doc ids,
+  // so they use the shared diff writer directly (changed fields only, appended
+  // lists merged) through the same serialized, retried, user-visible save
+  // path as every other collection -- failures used to be console-only.
+  const scopedDocId = (bid: string) => (id: string) => `${bid.toLowerCase().replace(/[^a-z0-9]/g, "_")}__${id}`;
+  const getProfileId = (p: EmployeeTrainingProfile) => p.employeeName.replace(/\s+/g, "_").toLowerCase();
+
+  const syncCoursesToFirestore = (oldArray: Course[], newArray: Course[], bid: string) => {
+    void enqueuePersistenceTask(`${bid}:courses`, () => trackSave("training course", () =>
+      syncArrayToFirestore("courses", oldArray, newArray, bid, { docId: scopedDocId(bid) }), { key: `${bid}:courses` })
+    ).catch(() => undefined);
   };
 
   const setCourses = (value: React.SetStateAction<Course[]>) => {
@@ -189,37 +175,10 @@ export const TrainingPage: React.FC = () => {
     });
   };
 
-  // Real-time synchronization helper for training profiles
-  const syncProfilesToFirestore = async (oldArray: EmployeeTrainingProfile[], newArray: EmployeeTrainingProfile[], bid: string) => {
-    const getProfileId = (p: EmployeeTrainingProfile) => p.employeeName.replace(/\s+/g, "_").toLowerCase();
-    const scopedId = (id: string) => `${bid.toLowerCase().replace(/[^a-z0-9]/g, "_")}__${id}`;
-    const oldMap = new Map(oldArray.map(item => [getProfileId(item), item]));
-    for (const item of newArray) {
-      const itemKey = getProfileId(item);
-      const oldItem = oldMap.get(itemKey);
-      if (!oldItem || JSON.stringify(oldItem) !== JSON.stringify(item)) {
-        try {
-          await setDoc(doc(db, "training_profiles", scopedId(itemKey)), {
-            ...item,
-            businessId: bid,
-            updatedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.error("Error saving training profile:", err);
-        }
-      }
-    }
-    const newSet = new Set(newArray.map(item => getProfileId(item)));
-    for (const item of oldArray) {
-      const itemKey = getProfileId(item);
-      if (!newSet.has(itemKey)) {
-        try {
-          await deleteDoc(doc(db, "training_profiles", scopedId(itemKey)));
-        } catch (err) {
-          console.error("Error deleting training profile:", err);
-        }
-      }
-    }
+  const syncProfilesToFirestore = (oldArray: EmployeeTrainingProfile[], newArray: EmployeeTrainingProfile[], bid: string) => {
+    void enqueuePersistenceTask(`${bid}:training_profiles`, () => trackSave("training assignment", () =>
+      syncArrayToFirestore("training_profiles", oldArray, newArray, bid, { key: getProfileId, docId: scopedDocId(bid) }), { key: `${bid}:training_profiles` })
+    ).catch(() => undefined);
   };
 
   const setProfiles = (value: React.SetStateAction<EmployeeTrainingProfile[]>) => {
@@ -256,9 +215,16 @@ export const TrainingPage: React.FC = () => {
         const { businessId: _, updatedAt: __, ...courseData } = docSnap.data();
         items.push(courseData as Course);
       });
-      const merged = new Map(cachedCourses.map(item => [item.id, item]));
-      items.forEach(item => merged.set(item.id, item));
-      const next = [...merged.values()];
+      // The server is the source of truth once it has answered: merging the
+      // local cache back in every time kept courses deleted on another device
+      // (and stale copies of edited ones) alive here forever. The cache only
+      // fills in while offline.
+      let next = items;
+      if (snapshot.metadata.fromCache) {
+        const merged = new Map(cachedCourses.map(item => [item.id, item]));
+        items.forEach(item => merged.set(item.id, item));
+        next = [...merged.values()];
+      }
       _setCourses(next);
       localStorage.setItem(courseCacheKey, JSON.stringify(next));
     }, (error) => console.error("Unable to load course library:", error));
@@ -271,9 +237,12 @@ export const TrainingPage: React.FC = () => {
         const { businessId: _, updatedAt: __, ...profileData } = docSnap.data();
         items.push(profileData as EmployeeTrainingProfile);
       });
-      const byEmployee = new Map(cachedProfiles.map(item => [item.employeeName.toLowerCase(), item]));
-      items.forEach(item => byEmployee.set(item.employeeName.toLowerCase(), item));
-      const next = [...byEmployee.values()];
+      let next = items;
+      if (snapshot.metadata.fromCache) {
+        const byEmployee = new Map(cachedProfiles.map(item => [item.employeeName.toLowerCase(), item]));
+        items.forEach(item => byEmployee.set(item.employeeName.toLowerCase(), item));
+        next = [...byEmployee.values()];
+      }
       _setProfiles(next);
       localStorage.setItem(profileCacheKey, JSON.stringify(next));
       profilesLoadedFromServerRef.current = true;
