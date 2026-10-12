@@ -513,8 +513,12 @@ export default function SelfieSaveEditor({accountEmail,accountName,documentId,in
     const fontSize=first.fontSize||FLOW_DEFAULT_SIZE,fontFamily=first.fontFamily||FLOW_FONT;
     const measure=measureFlow(fontSize,fontFamily);
     const lineHeight=Math.ceil(fontSize*FLOW_LINE_HEIGHT);
+    // Page sizes are DOM reads; look each up once per re-layout.
+    const pageBoxes=new Map<number,ReturnType<typeof flowPageBox>>();
     const slotFor=(index:number):FlowSlot=>{
-      const page=first.page+index,m=flowPageBox(page);
+      const page=first.page+index;
+      let m=pageBoxes.get(page);
+      if(!m){m=flowPageBox(page);pageBoxes.set(page,m)}
       if(index===0)return {page,x:first.x,y:first.y,w:Math.max(120,m.W-m.side-first.x),maxH:m.H-m.bottom-first.y};
       const existing=chain[index];
       const x=existing?existing.x:m.side,y=existing?existing.y:m.top,w=existing?existing.w:m.W-2*m.side;
