@@ -9,6 +9,8 @@ OwnersLOCAL app (`/android` is the Capacitor wrapper for that one).
 in the main repo). The same file is in `releases/`. If version 1 is already on
 the phone, uninstall it first: this build is signed with a different key, so
 Android won't install it as an update.
+Version 3.1.1 was also built on a different machine's debug key than 3.1, so
+3.1 has to be uninstalled before installing it too (sign in again afterwards).
 
 **All setup happens in this app.** That covers sign-in with an OwnersLOCAL
 login, permissions, the message, on/off, and which other calling apps to
@@ -29,7 +31,7 @@ pulses when something arrived since you last opened the popup:
 - unread OwnersLOCAL notifications and team messages (if **Pulse for notifications in main app** is on)
 
 Those two switches sit at the very top of the app's settings. The pulse is
-eight brightness frames in a `ViewFlipper` that the launcher animates itself,
+nine neon frames (the owner's artwork, dim to bright and back) in a `ViewFlipper` that the launcher animates itself,
 so it keeps pulsing while the app is asleep.
 
 Tapping the widget opens `ui/PopupActivity`, a floating glass panel on the
