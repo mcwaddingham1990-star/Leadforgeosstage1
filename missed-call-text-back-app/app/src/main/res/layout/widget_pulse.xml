@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Brightness frames cross-faded by the launcher: one full pulse every ~1.6s. -->
+<!-- The owner's neon pulse frames, dim to bright and back (16 steps at 100ms): one full pulse every ~1.6s, cross-faded by the launcher. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widgetRoot"
     android:layout_width="match_parent"
@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:autoStart="true"
-        android:flipInterval="200"
+        android:flipInterval="100"
         android:inAnimation="@anim/pulse_in"
         android:outAnimation="@anim/pulse_out">
         <ImageView
@@ -60,5 +60,53 @@
             android:contentDescription="@string/widget_label"
             android:scaleType="fitCenter"
             android:src="@drawable/pulse_7" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_8" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_7" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_6" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_5" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_4" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_3" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_2" />
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/widget_label"
+            android:scaleType="fitCenter"
+            android:src="@drawable/pulse_1" />
     </ViewFlipper>
 </FrameLayout>
