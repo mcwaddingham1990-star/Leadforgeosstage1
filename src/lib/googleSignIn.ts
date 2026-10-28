@@ -45,6 +45,16 @@ export async function signInWithGoogle(auth: Auth, rememberMe: boolean): Promise
   await signInWithPopup(auth, provider);
 }
 
+/** Existing Google users keep their current login; only a Google-authenticated
+ * account with no Owner profile must complete legal acceptance before setup.
+ * Customer account detection occurs before this check in App.tsx. */
+export function needsGoogleOwnerLegalAcceptance(
+  user: { providerData?: ReadonlyArray<{ providerId: string }> },
+  ownerProfileExists: boolean
+): boolean {
+  return !ownerProfileExists && !!user.providerData?.some(provider => provider.providerId === "google.com");
+}
+
 /** Display actionable, non-sensitive errors instead of a generic failure. */
 export function googleSignInErrorMessage(error: unknown, hostname = ""): string | null {
   const code = String((error as { code?: string } | null)?.code || "");
