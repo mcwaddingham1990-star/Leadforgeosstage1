@@ -45,7 +45,7 @@ import {
   browserSessionPersistence
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
-import { signInWithGoogle, googleSignInErrorMessage } from "./lib/googleSignIn";
+import { signInWithGoogle, googleSignInErrorMessage, needsGoogleOwnerLegalAcceptance } from "./lib/googleSignIn";
 import { 
   Mail, 
   Lock, 
@@ -2365,6 +2365,12 @@ export default function App() {
   const [signUpInstructionsError, setSignUpInstructionsError] = useState("");
   const [signUpLegalAccepted, setSignUpLegalAccepted] = useState(false);
   const [signUpLegalDocument, setSignUpLegalDocument] = useState<"agreement" | "privacy" | null>(null);
+  // New Google identities with no owner profile must accept the current documents
+  // before the existing owner-profile recovery code creates a business account.
+  const [googleOwnerConsentRequired, setGoogleOwnerConsentRequired] = useState(false);
+  const [googleOwnerConsentChecked, setGoogleOwnerConsentChecked] = useState(false);
+  const [googleOwnerConsentSubmitting, setGoogleOwnerConsentSubmitting] = useState(false);
+  const [googleOwnerConsentError, setGoogleOwnerConsentError] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   
   // Forgot password email field
@@ -2844,7 +2850,7 @@ export default function App() {
     triggerNotification(`Snapshot captured: ${filenameStr} saved to Snapshots Folder`);
   };
 
-  const repairOwnerProfileForAuthUser = async (user: any, existingProfileData?: any) => {
+  const repairOwnerProfileForAuthUser = async (user: any, existingProfileData?: any, recordGoogleLegalAcceptance = false) => {
     const ownerEmail = user.email?.trim().toLowerCase();
     if (!ownerEmail) {
       throw new Error("Authenticated user is missing an email address.");
@@ -2864,7 +2870,16 @@ export default function App() {
       businessEmail: ownerEmail,
       isOnboarded: existingProfileData?.isOnboarded ?? false,
       createdAt: existingProfileData?.createdAt || new Date().toISOString(),
-      repairedAt: new Date().toISOString()
+      repairedAt: new Date().toISOString(),
+      ...(recordGoogleLegalAcceptance ? {
+        legalAcceptance: {
+          userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          affirmativelyAccepted: true,
+          source: "google_owner_signup_checkbox",
+          acceptedAt: serverTimestamp()
+        }
+      } : {})
     };
 
     await setDoc(doc(db, "user_profiles", user.uid), repairedProfile, { merge: true });
@@ -2930,6 +2945,18 @@ export default function App() {
           }
 
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          if (needsGoogleOwnerLegalAcceptance(user, profileSnap.exists())) {
+            // Google already authenticated this identity, but it has not joined
+            // a business yet. Do not silently auto-create the owner profile.
+            // Keep this gate after the existing Customer-account checks above.
+            setGoogleOwnerConsentRequired(true);
+            setGoogleOwnerConsentChecked(false);
+            setGoogleOwnerConsentError("");
+            setLoggedInUser(null);
+            setIsLoggedIn(false);
+            return;
+          }
+          setGoogleOwnerConsentRequired(false);
           if (profileSnap.exists()) {
             const rawProfileData = profileSnap.data();
             const needsOwnerProfileRepair = !profileLooksLikeEmployee(rawProfileData) && (!rawProfileData.businessEmail || !rawProfileData.role);
@@ -3037,6 +3064,11 @@ export default function App() {
         setLoggedInUser(null);
         setIsLoggedIn(false);
         setCustomerSession(null);
+        setGoogleOwnerConsentRequired(false);
+        setGoogleOwnerConsentChecked(false);
+        setGoogleOwnerConsentSubmitting(false);
+        setGoogleOwnerConsentError("");
+        setSignUpLegalDocument(null);
         isTimeClockLoadedRef.current = false;
         setAuthReady(true);
       }
@@ -3982,6 +4014,62 @@ Access to full financial telemetry is restricted.`;
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+
+  // Only the *new* Google owner route uses this; returning users keep their
+  // existing onAuthStateChanged path without new prompts or profile writes.
+  const handleAcceptGoogleOwnerConsent = async () => {
+    if (googleOwnerConsentSubmitting) return;
+    if (!googleOwnerConsentChecked) {
+      setGoogleOwnerConsentError("Please agree to the User Agreement and acknowledge the Privacy Policy.");
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user || !needsGoogleOwnerLegalAcceptance(user, false)) {
+      setGoogleOwnerConsentError("Your Google session is no longer available. Sign in again.");
+      return;
+    }
+    setGoogleOwnerConsentSubmitting(true);
+    setGoogleOwnerConsentError("");
+    try {
+      // Read from the server before the first write, so a returning account
+      // is never converted into a fresh signup by a cached missing document.
+      const profileSnap = await getDocFromServer(doc(db, "user_profiles", user.uid));
+      if (profileSnap.exists()) {
+        setGoogleOwnerConsentError("This account already has a profile. Sign out and sign in again to resume it.");
+        return;
+      }
+
+      // The existing recovery helper already creates the owner profile and
+      // business profile; the optional flag adds consent to that first profile
+      // write, with a Firestore server timestamp and both document versions.
+      const profile = await repairOwnerProfileForAuthUser(user, undefined, true);
+      setEmail(profile.email);
+      setBusinessNames([profile.businessName || ""]);
+      setOwnerNames([profile.name]);
+      setLoggedInUser({
+        email: profile.email,
+        role: profile.role,
+        permissions: profile.permissions,
+        granularPermissions: profile.granularPermissions,
+        isEmployee: false,
+        name: profile.name,
+        goals: profile.goals,
+        businessEmail: profile.businessEmail
+      });
+      setIsLoggedIn(false);
+      setCurrentView("placeholder_password");
+      subscription.refresh();
+      setGoogleOwnerConsentRequired(false);
+      setGoogleOwnerConsentChecked(false);
+      setSignUpLegalDocument(null);
+    } catch (error) {
+      console.error("Could not finish new Google owner legal acceptance:", error);
+      setGoogleOwnerConsentError("Could not save your acceptance. Check your connection and try again.");
+    } finally {
+      setGoogleOwnerConsentSubmitting(false);
     }
   };
 
@@ -4959,6 +5047,71 @@ Access to full financial telemetry is restricted.`;
   // state instead of a static URL param, so it can't be checked until now.
   if (customerSession) {
     return <CustomerAppShell session={customerSession} onSignOut={() => { setCustomerSession(null); auth.signOut(); }} />;
+  }
+
+
+  // A new Google sign-in must not run the normal missing-profile auto-repair
+  // until the user affirmatively accepts the same documents as email signup.
+  // All hooks above remain unconditional; existing accounts never reach here.
+  if (googleOwnerConsentRequired && auth.currentUser) {
+    const legalSections = signUpLegalDocument === "agreement"
+      ? OWNERS_LOCAL_USER_AGREEMENT
+      : OWNERS_LOCAL_PRIVACY_POLICY;
+    return (
+      <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4 text-[#1F3557]">
+        <div className="w-full max-w-md rounded-3xl border-2 border-[#9EC8EF] bg-white shadow-xl p-5 space-y-4">
+          {signUpLegalDocument ? (
+            <>
+              <h1 className="text-sm font-black text-blue-950">
+                {signUpLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}
+              </h1>
+              <p className="text-[10px] font-semibold text-slate-500">Effective Date: August 28, 2026</p>
+              <div className="max-h-[60vh] overflow-y-auto space-y-3 text-[11px] text-slate-600 pr-1">
+                {legalSections.map((section, i) => (
+                  <div key={i}>
+                    <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                    {section.paragraphs.map((paragraph, j) => (
+                      <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => setSignUpLegalDocument(null)} className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white">
+                Back to Google Signup
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-lg font-black text-blue-950">Complete Google Signup</h1>
+              <p className="text-xs font-semibold text-slate-600">
+                Review the legal documents before creating your Owner'sLOCAL business account.
+              </p>
+              <div className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                <input id="google-owner-legal-acceptance" type="checkbox" checked={googleOwnerConsentChecked}
+                  onChange={event => setGoogleOwnerConsentChecked(event.target.checked)}
+                  className="mt-0.5 shrink-0" />
+                <label htmlFor="google-owner-legal-acceptance">I agree to the User Agreement and acknowledge the Privacy Policy.</label>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs font-bold">
+                <button type="button" onClick={() => setSignUpLegalDocument("agreement")} className="text-blue-700 underline">Read User Agreement</button>
+                <button type="button" onClick={() => setSignUpLegalDocument("privacy")} className="text-blue-700 underline">Read Privacy Policy</button>
+              </div>
+              {googleOwnerConsentError && <p role="alert" className="text-xs font-semibold text-rose-600">{googleOwnerConsentError}</p>}
+              <button type="button" onClick={() => void handleAcceptGoogleOwnerConsent()}
+                disabled={!googleOwnerConsentChecked || googleOwnerConsentSubmitting}
+                className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                {googleOwnerConsentSubmitting ? "Saving acceptance..." : "Accept & Continue"}
+              </button>
+              <button type="button" disabled={googleOwnerConsentSubmitting}
+                onClick={() => { setSignUpLegalDocument(null); void signOut(auth); }}
+                className="w-full rounded-xl border border-blue-200 py-2.5 text-xs font-bold text-blue-800 disabled:opacity-50">
+                Cancel & Sign Out
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // The real paywall enforcement point -- everything above just computes
