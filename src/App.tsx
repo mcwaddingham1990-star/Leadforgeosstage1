@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
-import { doc, setDoc, getDoc, getDocFromServer, writeBatch, waitForPendingWrites, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocFromServer, writeBatch, waitForPendingWrites, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, hasEffectivePermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
 import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
@@ -45,7 +45,7 @@ import {
   browserSessionPersistence
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
-import { signInWithGoogle, googleSignInErrorMessage } from "./lib/googleSignIn";
+import { signInWithGoogle, googleSignInErrorMessage, needsGoogleOwnerLegalAcceptance } from "./lib/googleSignIn";
 import { 
   Mail, 
   Lock, 
@@ -583,6 +583,9 @@ const OWNERS_LOCAL_USER_AGREEMENT: PrivacyPolicySection[] = [
     ]
   }
 ];
+
+// Must match the effective date printed in both in-app legal documents above.
+const OWNER_SIGNUP_LEGAL_VERSION = "2026-08-28";
 
 const validPersonName = (value: unknown): string => {
   const name = typeof value === "string" ? value.trim() : "";
@@ -2360,6 +2363,14 @@ export default function App() {
   const [signUpInstructionsPassword, setSignUpInstructionsPassword] = useState("");
   const [signUpInstructionsConfirmPassword, setSignUpInstructionsConfirmPassword] = useState("");
   const [signUpInstructionsError, setSignUpInstructionsError] = useState("");
+  const [signUpLegalAccepted, setSignUpLegalAccepted] = useState(false);
+  const [signUpLegalDocument, setSignUpLegalDocument] = useState<"agreement" | "privacy" | null>(null);
+  // New Google identities with no owner profile must accept the current documents
+  // before the existing owner-profile recovery code creates a business account.
+  const [googleOwnerConsentRequired, setGoogleOwnerConsentRequired] = useState(false);
+  const [googleOwnerConsentChecked, setGoogleOwnerConsentChecked] = useState(false);
+  const [googleOwnerConsentSubmitting, setGoogleOwnerConsentSubmitting] = useState(false);
+  const [googleOwnerConsentError, setGoogleOwnerConsentError] = useState("");
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   
   // Forgot password email field
@@ -2839,7 +2850,7 @@ export default function App() {
     triggerNotification(`Snapshot captured: ${filenameStr} saved to Snapshots Folder`);
   };
 
-  const repairOwnerProfileForAuthUser = async (user: any, existingProfileData?: any) => {
+  const repairOwnerProfileForAuthUser = async (user: any, existingProfileData?: any, recordGoogleLegalAcceptance = false) => {
     const ownerEmail = user.email?.trim().toLowerCase();
     if (!ownerEmail) {
       throw new Error("Authenticated user is missing an email address.");
@@ -2859,7 +2870,16 @@ export default function App() {
       businessEmail: ownerEmail,
       isOnboarded: existingProfileData?.isOnboarded ?? false,
       createdAt: existingProfileData?.createdAt || new Date().toISOString(),
-      repairedAt: new Date().toISOString()
+      repairedAt: new Date().toISOString(),
+      ...(recordGoogleLegalAcceptance ? {
+        legalAcceptance: {
+          userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          affirmativelyAccepted: true,
+          source: "google_owner_signup_checkbox",
+          acceptedAt: serverTimestamp()
+        }
+      } : {})
     };
 
     await setDoc(doc(db, "user_profiles", user.uid), repairedProfile, { merge: true });
@@ -2925,6 +2945,18 @@ export default function App() {
           }
 
           const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
+          if (needsGoogleOwnerLegalAcceptance(user, profileSnap.exists())) {
+            // Google already authenticated this identity, but it has not joined
+            // a business yet. Do not silently auto-create the owner profile.
+            // Keep this gate after the existing Customer-account checks above.
+            setGoogleOwnerConsentRequired(true);
+            setGoogleOwnerConsentChecked(false);
+            setGoogleOwnerConsentError("");
+            setLoggedInUser(null);
+            setIsLoggedIn(false);
+            return;
+          }
+          setGoogleOwnerConsentRequired(false);
           if (profileSnap.exists()) {
             const rawProfileData = profileSnap.data();
             const needsOwnerProfileRepair = !profileLooksLikeEmployee(rawProfileData) && (!rawProfileData.businessEmail || !rawProfileData.role);
@@ -3032,6 +3064,11 @@ export default function App() {
         setLoggedInUser(null);
         setIsLoggedIn(false);
         setCustomerSession(null);
+        setGoogleOwnerConsentRequired(false);
+        setGoogleOwnerConsentChecked(false);
+        setGoogleOwnerConsentSubmitting(false);
+        setGoogleOwnerConsentError("");
+        setSignUpLegalDocument(null);
         isTimeClockLoadedRef.current = false;
         setAuthReady(true);
       }
@@ -3574,6 +3611,8 @@ Access to full financial telemetry is restricted.`;
   const [empPhoto, setEmpPhoto] = useState("");
   const [empGoals, setEmpGoals] = useState("");
   const [empHourlyRate, setEmpHourlyRate] = useState("");
+  const [employeeLegalAccepted, setEmployeeLegalAccepted] = useState(false);
+  const [employeeLegalDocument, setEmployeeLegalDocument] = useState<"agreement" | "privacy" | null>(null);
 
   // Trigger brief floating notifications
   const triggerNotification = (message: string) => {
@@ -3648,6 +3687,10 @@ Access to full financial telemetry is restricted.`;
       setSignUpInstructionsError("Create Password and Confirm Password must match.");
       return;
     }
+    if (!signUpLegalAccepted) {
+      setSignUpInstructionsError("You must agree to the User Agreement and acknowledge the Privacy Policy to create an account.");
+      return;
+    }
 
     setSignUpInstructionsError("");
     setIsSignUpSubmitting(true);
@@ -3678,7 +3721,14 @@ Access to full financial telemetry is restricted.`;
         isEmployee: false,
         businessEmail: cleanEmail,
         isOnboarded: false,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        legalAcceptance: {
+          userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          affirmativelyAccepted: true,
+          source: "owner_signup_checkbox",
+          acceptedAt: serverTimestamp()
+        }
       };
       await setDoc(doc(db, "user_profiles", user.uid), userProfile);
 
@@ -3730,6 +3780,7 @@ Access to full financial telemetry is restricted.`;
       // Directly show Step 1 of Onboarding!
       setCurrentView("placeholder_password");
       setShowSignUpInstructions(false);
+      setSignUpLegalAccepted(false);
       triggerNotification(verificationEmailSent
         ? `Verification email sent to ${cleanEmail}. Check your inbox or spam folder.`
         : "Account created, but the verification email could not be sent. Try again from Account Settings.");
@@ -3932,6 +3983,8 @@ Access to full financial telemetry is restricted.`;
         setEmpAddress("");
         setEmpPhone("");
         setEmpGoals("");
+        setEmployeeLegalAccepted(false);
+        setEmployeeLegalDocument(null);
         setCurrentView("employee_onboarding");
         triggerNotification(`Invite verified for: ${inviteData.role}! Complete setup.`);
       } else {
@@ -3965,6 +4018,62 @@ Access to full financial telemetry is restricted.`;
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+
+  // Only the *new* Google owner route uses this; returning users keep their
+  // existing onAuthStateChanged path without new prompts or profile writes.
+  const handleAcceptGoogleOwnerConsent = async () => {
+    if (googleOwnerConsentSubmitting) return;
+    if (!googleOwnerConsentChecked) {
+      setGoogleOwnerConsentError("Please agree to the User Agreement and acknowledge the Privacy Policy.");
+      return;
+    }
+    const user = auth.currentUser;
+    if (!user || !needsGoogleOwnerLegalAcceptance(user, false)) {
+      setGoogleOwnerConsentError("Your Google session is no longer available. Sign in again.");
+      return;
+    }
+    setGoogleOwnerConsentSubmitting(true);
+    setGoogleOwnerConsentError("");
+    try {
+      // Read from the server before the first write, so a returning account
+      // is never converted into a fresh signup by a cached missing document.
+      const profileSnap = await getDocFromServer(doc(db, "user_profiles", user.uid));
+      if (profileSnap.exists()) {
+        setGoogleOwnerConsentError("This account already has a profile. Sign out and sign in again to resume it.");
+        return;
+      }
+
+      // The existing recovery helper already creates the owner profile and
+      // business profile; the optional flag adds consent to that first profile
+      // write, with a Firestore server timestamp and both document versions.
+      const profile = await repairOwnerProfileForAuthUser(user, undefined, true);
+      setEmail(profile.email);
+      setBusinessNames([profile.businessName || ""]);
+      setOwnerNames([profile.name]);
+      setLoggedInUser({
+        email: profile.email,
+        role: profile.role,
+        permissions: profile.permissions,
+        granularPermissions: profile.granularPermissions,
+        isEmployee: false,
+        name: profile.name,
+        goals: profile.goals,
+        businessEmail: profile.businessEmail
+      });
+      setIsLoggedIn(false);
+      setCurrentView("placeholder_password");
+      subscription.refresh();
+      setGoogleOwnerConsentRequired(false);
+      setGoogleOwnerConsentChecked(false);
+      setSignUpLegalDocument(null);
+    } catch (error) {
+      console.error("Could not finish new Google owner legal acceptance:", error);
+      setGoogleOwnerConsentError("Could not save your acceptance. Check your connection and try again.");
+    } finally {
+      setGoogleOwnerConsentSubmitting(false);
     }
   };
 
@@ -4600,7 +4709,11 @@ Access to full financial telemetry is restricted.`;
       triggerNotification("Please fill in all required employee fields.");
       return;
     }
-    
+    if (!employeeLegalAccepted) {
+      triggerNotification("Read and accept the User Agreement and acknowledge the Privacy Policy to complete registration.");
+      return;
+    }
+
     setIsSubmitting(true);
     
     // Look up role & permissions from the real invite record. This must
@@ -4702,6 +4815,13 @@ Access to full financial telemetry is restricted.`;
       }
 
       const now = new Date().toISOString();
+      const employeeLegalAcceptance = {
+        userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+        privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+        affirmativelyAccepted: true,
+        source: "employee_invite_signup_checkbox",
+        acceptedAt: serverTimestamp()
+      };
       const newEmployee = {
         id: cleanEmail,
         userUid: user.uid,
@@ -4728,12 +4848,16 @@ Access to full financial telemetry is restricted.`;
       const batch = writeBatch(db);
 
       if (existingProfileSnap.exists()) {
+        // Orphaned invite repair: add acceptance once only if no prior record
+        // exists. The Firestore rule permits this narrow first-time addition.
         batch.set(profileRef, {
           isOnboarded: true,
-          goals: empGoals
+          goals: empGoals,
+          ...(!existingProfileSnap.data()?.legalAcceptance ? { legalAcceptance: employeeLegalAcceptance } : {})
         }, { merge: true });
       } else {
         batch.set(profileRef, {
+          legalAcceptance: employeeLegalAcceptance,
           role: inviteRole,
           permissions: invitePermissions,
           granularPermissions: inviteGranularPermissions,
@@ -4942,6 +5066,71 @@ Access to full financial telemetry is restricted.`;
   // state instead of a static URL param, so it can't be checked until now.
   if (customerSession) {
     return <CustomerAppShell session={customerSession} onSignOut={() => { setCustomerSession(null); auth.signOut(); }} />;
+  }
+
+
+  // A new Google sign-in must not run the normal missing-profile auto-repair
+  // until the user affirmatively accepts the same documents as email signup.
+  // All hooks above remain unconditional; existing accounts never reach here.
+  if (googleOwnerConsentRequired && auth.currentUser) {
+    const legalSections = signUpLegalDocument === "agreement"
+      ? OWNERS_LOCAL_USER_AGREEMENT
+      : OWNERS_LOCAL_PRIVACY_POLICY;
+    return (
+      <div className="min-h-screen bg-[#F5FAFF] flex items-center justify-center p-4 text-[#1F3557]">
+        <div className="w-full max-w-md rounded-3xl border-2 border-[#9EC8EF] bg-white shadow-xl p-5 space-y-4">
+          {signUpLegalDocument ? (
+            <>
+              <h1 className="text-sm font-black text-blue-950">
+                {signUpLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}
+              </h1>
+              <p className="text-[10px] font-semibold text-slate-500">Effective Date: August 28, 2026</p>
+              <div className="max-h-[60vh] overflow-y-auto space-y-3 text-[11px] text-slate-600 pr-1">
+                {legalSections.map((section, i) => (
+                  <div key={i}>
+                    <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                    {section.paragraphs.map((paragraph, j) => (
+                      <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => setSignUpLegalDocument(null)} className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white">
+                Back to Google Signup
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-lg font-black text-blue-950">Complete Google Signup</h1>
+              <p className="text-xs font-semibold text-slate-600">
+                Review the legal documents before creating your Owner'sLOCAL business account.
+              </p>
+              <div className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                <input id="google-owner-legal-acceptance" type="checkbox" checked={googleOwnerConsentChecked}
+                  onChange={event => setGoogleOwnerConsentChecked(event.target.checked)}
+                  className="mt-0.5 shrink-0" />
+                <label htmlFor="google-owner-legal-acceptance">I agree to the User Agreement and acknowledge the Privacy Policy.</label>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs font-bold">
+                <button type="button" onClick={() => setSignUpLegalDocument("agreement")} className="text-blue-700 underline">Read User Agreement</button>
+                <button type="button" onClick={() => setSignUpLegalDocument("privacy")} className="text-blue-700 underline">Read Privacy Policy</button>
+              </div>
+              {googleOwnerConsentError && <p role="alert" className="text-xs font-semibold text-rose-600">{googleOwnerConsentError}</p>}
+              <button type="button" onClick={() => void handleAcceptGoogleOwnerConsent()}
+                disabled={!googleOwnerConsentChecked || googleOwnerConsentSubmitting}
+                className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-black text-white disabled:opacity-50">
+                {googleOwnerConsentSubmitting ? "Saving acceptance..." : "Accept & Continue"}
+              </button>
+              <button type="button" disabled={googleOwnerConsentSubmitting}
+                onClick={() => { setSignUpLegalDocument(null); void signOut(auth); }}
+                className="w-full rounded-xl border border-blue-200 py-2.5 text-xs font-bold text-blue-800 disabled:opacity-50">
+                Cancel & Sign Out
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // The real paywall enforcement point -- everything above just computes
@@ -5314,7 +5503,10 @@ Access to full financial telemetry is restricted.`;
                         setSignUpInstructionsBusinessName("");
                         setSignUpInstructionsOwnerName("");
                         setSignUpInstructionsPassword("");
+                        setSignUpInstructionsConfirmPassword("");
                         setSignUpInstructionsError("");
+                        setSignUpLegalAccepted(false);
+                        setSignUpLegalDocument(null);
                         setSignUpInstructionsStep("input");
                         setShowSignUpInstructions(true);
                       }}
@@ -6104,13 +6296,31 @@ Access to full financial telemetry is restricted.`;
                             />
                           </div>
 
-                        </div>
+                                                  {/* Employee's own acceptance of platform terms, not an employer job contract. */}
+                          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-2.5 space-y-2 text-[10.5px] font-semibold text-slate-700">
+                            <div className="flex items-start gap-2">
+                              <input type="checkbox" id="employee-signup-legal-acceptance" required
+                                checked={employeeLegalAccepted} onChange={e => setEmployeeLegalAccepted(e.target.checked)}
+                                className="mt-0.5 shrink-0" />
+                              <label htmlFor="employee-signup-legal-acceptance">
+                                I agree to the Owner'sLOCAL User Agreement and acknowledge the Privacy Policy.
+                              </label>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              <button type="button" onClick={() => setEmployeeLegalDocument("agreement")}
+                                className="text-indigo-700 font-bold underline">Read User Agreement</button>
+                              <button type="button" onClick={() => setEmployeeLegalDocument("privacy")}
+                                className="text-indigo-700 font-bold underline">Read Privacy Policy</button>
+                            </div>
+                          </div>
+
+</div>
 
                         {/* Actions */}
                         <div className="relative z-10 flex items-center justify-between gap-3 pt-3 mt-2 border-t border-slate-200/50 bg-white/10 shrink-0">
                           <button
                             type="button"
-                            onClick={() => setCurrentView("login")}
+                            onClick={() => { setEmployeeLegalAccepted(false); setEmployeeLegalDocument(null); setCurrentView("login"); }}
                             style={{
                               height: `${38 * scale}px`,
                               borderRadius: `${12 * scale}px`,
@@ -6125,7 +6335,7 @@ Access to full financial telemetry is restricted.`;
 
                           <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !employeeLegalAccepted}
                             style={{
                               height: `${38 * scale}px`,
                               borderRadius: `${12 * scale}px`,
@@ -6146,6 +6356,31 @@ Access to full financial telemetry is restricted.`;
                           </button>
                         </div>
                       </form>
+                      {employeeLegalDocument && (
+                        <div className="absolute inset-0 z-[80] bg-slate-950/60 flex items-center justify-center p-3">
+                          <div role="dialog" aria-modal="true" aria-label={employeeLegalDocument === "agreement" ? "User Agreement" : "Privacy Policy"}
+                            className="w-full max-w-md max-h-full flex flex-col rounded-2xl border border-indigo-200 bg-white shadow-xl overflow-hidden">
+                            <div className="shrink-0 border-b border-indigo-100 px-4 py-3">
+                              <h3 className="text-sm font-black text-blue-950">
+                                {employeeLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}
+                              </h3>
+                              <p className="text-[10px] text-slate-500">Effective Date: August 28, 2026</p>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-y-auto p-4 text-[11px] text-slate-700 space-y-3">
+                              {(employeeLegalDocument === "agreement" ? OWNERS_LOCAL_USER_AGREEMENT : OWNERS_LOCAL_PRIVACY_POLICY).map((section, i) => (
+                                <div key={i}>
+                                  <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                                  {section.paragraphs.map((paragraph, j) => <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>)}
+                                </div>
+                              ))}
+                            </div>
+                            <button type="button" onClick={() => setEmployeeLegalDocument(null)}
+                              className="shrink-0 bg-indigo-600 text-white text-xs font-bold py-3">
+                              Back to Employee Onboarding
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     /* ORIGINAL HELP / PRIVACY PLACEHOLDER VIEWS */
@@ -6678,6 +6913,22 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
+                        <label className="flex items-start gap-2 text-[10.5px] font-semibold text-slate-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            required
+                            checked={signUpLegalAccepted}
+                            onChange={e => setSignUpLegalAccepted(e.target.checked)}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span>
+                            I agree to the{" "}
+                            <button type="button" onClick={() => setSignUpLegalDocument("agreement")} className="text-blue-700 underline font-bold">User Agreement</button>
+                            {" "}and acknowledge the{" "}
+                            <button type="button" onClick={() => setSignUpLegalDocument("privacy")} className="text-blue-700 underline font-bold">Privacy Policy</button>.
+                          </span>
+                        </label>
+
                         {signUpInstructionsError && (
                           <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200/50 animate-pulse leading-snug">
                             {signUpInstructionsError}
@@ -6691,6 +6942,8 @@ Access to full financial telemetry is restricted.`;
                               setShowSignUpInstructions(false);
                               setSignUpInstructionsError("");
                               setSignUpInstructionsConfirmPassword("");
+                              setSignUpLegalAccepted(false);
+                              setSignUpLegalDocument(null);
                             }}
                             className="flex-1 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer text-center"
                           >
@@ -6698,7 +6951,7 @@ Access to full financial telemetry is restricted.`;
                           </button>
                           <button
                             type="submit"
-                            disabled={isSignUpSubmitting}
+                            disabled={isSignUpSubmitting || !signUpLegalAccepted}
                             className="flex-1 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer text-center disabled:opacity-50"
                           >
                             {isSignUpSubmitting ? "Registering..." : "Sign Up"}
@@ -6706,6 +6959,26 @@ Access to full financial telemetry is restricted.`;
                         </div>
                         <p className="text-center text-[10.5px] font-semibold text-slate-500">Includes a 7-day free trial. No card needed.</p>
                       </form>
+                        {signUpLegalDocument && (
+                          <div className="fixed inset-0 z-[9999] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div role="dialog" aria-modal="true" aria-label={signUpLegalDocument === "agreement" ? "User Agreement" : "Privacy Policy"} className="w-full max-w-md max-h-[88vh] flex flex-col rounded-2xl border border-blue-100 bg-white shadow-xl overflow-hidden">
+                              <div className="p-4 border-b border-blue-100">
+                                <h3 className="text-sm font-black text-blue-950">{signUpLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}</h3>
+                                <p className="text-[10px] text-slate-500">Effective Date: August 28, 2026</p>
+                              </div>
+                              <div className="flex-1 min-h-0 overflow-y-auto p-4 text-[11px] text-slate-600 space-y-3">
+                                {(signUpLegalDocument === "agreement" ? OWNERS_LOCAL_USER_AGREEMENT : OWNERS_LOCAL_PRIVACY_POLICY).map((section, i) => (
+                                  <div key={i}>
+                                    <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                                    {section.paragraphs.map((paragraph, j) => <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>)}
+                                  </div>
+                                ))}
+                              </div>
+                              <button type="button" onClick={() => setSignUpLegalDocument(null)} className="p-3 bg-blue-600 text-white text-xs font-bold">Back to Sign Up</button>
+                            </div>
+                          </div>
+                        )}
+
                     </div>
                   </div>
                 </div>
