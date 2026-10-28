@@ -198,6 +198,96 @@ describe("Owner signup legal acceptance", () => {
   });
 });
 
+describe("Invited employee signup legal acceptance", () => {
+  const employeeConsent = () => ({
+    userAgreementVersion: "2026-08-28",
+    privacyPolicyVersion: "2026-08-28",
+    affirmativelyAccepted: true,
+    source: "employee_invite_signup_checkbox",
+    acceptedAt: serverTimestamp()
+  });
+
+  test("fresh invite redemption can save acceptance atomically with employee profile", async () => {
+    const email = "invited-new@example.com";
+    const uid = "invited-new-uid";
+    const db = ctxFor(uid, email).firestore();
+    const permissions = ["customers", "jobs"];
+    const granularPermissions = {
+      customers: { view: true, edit: false, delete: false },
+      jobs: { view: true, edit: true, delete: false }
+    };
+    const batch = writeBatch(db);
+    batch.set(doc(db, "user_profiles", uid), {
+      email,
+      businessEmail: BIZ_A,
+      role: "Technician",
+      isEmployee: true,
+      isOnboarded: true,
+      inviteCode: "INVITE_A_TECH",
+      permissions,
+      granularPermissions,
+      legalAcceptance: employeeConsent()
+    });
+    batch.set(doc(db, "employees", email), {
+      email, businessEmail: BIZ_A, businessId: BIZ_A, userUid: uid,
+      role: "Technician", permissions, granularPermissions
+    });
+    batch.update(doc(db, "employee_invites", "INVITE_A_TECH"), {
+      status: "completed", usedBy: email
+    });
+    await assertSucceeds(batch.commit());
+    const saved = await assertSucceeds(getDoc(doc(db, "user_profiles", uid)));
+    expect(saved.data()?.legalAcceptance?.affirmativelyAccepted).toBe(true);
+    expect(saved.data()?.legalAcceptance?.source).toBe("employee_invite_signup_checkbox");
+    expect(saved.data()?.legalAcceptance?.acceptedAt).toBeDefined();
+    await assertFails(updateDoc(doc(db, "user_profiles", uid), { legalAcceptance: null }));
+  });
+
+  test("an interrupted older invite signup may append acceptance only once", async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        inviteCode: "INVITE_A_TECH",
+        isEmployee: true,
+        isOnboarded: false
+      });
+    });
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    const ref = doc(db, "user_profiles", EMP_A_UID);
+    await assertSucceeds(updateDoc(ref, {
+      isOnboarded: true,
+      goals: "Finish onboarding",
+      legalAcceptance: employeeConsent()
+    }));
+    await assertFails(updateDoc(ref, {
+      legalAcceptance: { ...employeeConsent(), affirmativelyAccepted: false }
+    }));
+    await assertFails(updateDoc(ref, {
+      legalAcceptance: null
+    }));
+    await assertSucceeds(updateDoc(ref, { goals: "Routine goal update" }));
+  });
+
+  test("a normal employee cannot forge a first-time acceptance without a matching invite", async () => {
+    const db = ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore();
+    await assertFails(updateDoc(doc(db, "user_profiles", EMP_A_UID), {
+      legalAcceptance: employeeConsent()
+    }));
+  });
+
+  test("a legacy invitee cannot append acceptance while also granting themselves access", async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), "user_profiles", EMP_A_UID), {
+        inviteCode: "INVITE_A_TECH",
+        isEmployee: true
+      });
+    });
+    await assertFails(updateDoc(doc(ctxFor(EMP_A_UID, EMP_A_EMAIL).firestore(), "user_profiles", EMP_A_UID), {
+      legalAcceptance: employeeConsent(),
+      granularPermissions: { accounting: { view: true, edit: true, delete: true } }
+    }));
+  });
+});
+
 describe("Tenant isolation: reads", () => {
   test("owner can read their own business's customer", async () => {
     const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
