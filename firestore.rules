@@ -221,7 +221,11 @@ service cloud.firestore {
           request.resource.data.isEmployee == true
         )
       );
-      allow update: if isAuthenticated() && (
+      // The original signup acceptance record is immutable, including for the Owner.
+      // Any later re-consent must be a separate, explicitly designed flow.
+      allow update: if isAuthenticated()
+        && request.resource.data.get("legalAcceptance", null) == resource.data.get("legalAcceptance", null)
+        && (
         // Normal self-service profile edits may change ordinary fields, but
         // the tenant root, role, and original invite proof stay pinned.
         (request.auth.uid == uid
