@@ -6715,7 +6715,7 @@ Access to full financial telemetry is restricted.`;
                         </label>
 
                         {signUpInstructionsError && (
-                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-blue-200/50 animate-pulse leading-snug">
+                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200/50 animate-pulse leading-snug">
                             {signUpInstructionsError}
                           </p>
                         )}
