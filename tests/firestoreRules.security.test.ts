@@ -20,7 +20,7 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
-import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, serverTimestamp } from "firebase/firestore";
 
 const PROJECT_ID = "demo-ownerslocal-security-test";
 
@@ -156,6 +156,47 @@ beforeEach(async () => {
 function ctxFor(uid: string, email: string) {
   return testEnv.authenticatedContext(uid, { email });
 }
+
+describe("Owner signup legal acceptance", () => {
+  test("a new Owner can save their accepted document versions with their profile", async () => {
+    const email = "new-legal-owner@example.com";
+    const db = ctxFor("new-legal-owner-uid", email).firestore();
+    await assertSucceeds(setDoc(doc(db, "user_profiles", "new-legal-owner-uid"), {
+      uid: "new-legal-owner-uid",
+      email,
+      businessEmail: email,
+      role: "Owner",
+      legalAcceptance: {
+        userAgreementVersion: "2026-08-28",
+        privacyPolicyVersion: "2026-08-28",
+        affirmativelyAccepted: true,
+        source: "owner_signup_checkbox",
+        acceptedAt: serverTimestamp()
+      }
+    }));
+    const snap = await assertSucceeds(getDoc(doc(db, "user_profiles", "new-legal-owner-uid")));
+    expect(snap.data()?.legalAcceptance?.affirmativelyAccepted).toBe(true);
+    expect(snap.data()?.legalAcceptance?.acceptedAt).toBeDefined();
+  });
+
+  test("an existing Owner cannot change or remove an acceptance record but can still edit other profile fields", async () => {
+    const original = {
+      userAgreementVersion: "2026-08-28",
+      privacyPolicyVersion: "2026-08-28",
+      affirmativelyAccepted: true,
+      source: "owner_signup_checkbox",
+      acceptedAt: new Date("2026-10-27T12:00:00.000Z")
+    };
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), "user_profiles", OWNER_A_UID), { legalAcceptance: original });
+    });
+    const db = ctxFor(OWNER_A_UID, BIZ_A).firestore();
+    const ref = doc(db, "user_profiles", OWNER_A_UID);
+    await assertFails(updateDoc(ref, { legalAcceptance: { ...original, affirmativelyAccepted: false } }));
+    await assertFails(updateDoc(ref, { legalAcceptance: null }));
+    await assertSucceeds(updateDoc(ref, { goals: "Keep the existing signup working." }));
+  });
+});
 
 describe("Tenant isolation: reads", () => {
   test("owner can read their own business's customer", async () => {
