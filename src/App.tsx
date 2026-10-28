@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useVisualViewportBottomRight } from "./hooks/useVisualViewportBottomRight";
 import { db, auth } from "./firebase";
-import { doc, setDoc, getDoc, getDocFromServer, writeBatch, waitForPendingWrites, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocFromServer, writeBatch, waitForPendingWrites, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { fullAccessGranular, defaultGranularFromModuleList, hasPermission, hasEffectivePermission, GranularPermissions } from "./types/permissions";
 import { RevenueEvent, EmployeeRecord, TimeClockLog, Transaction, WorkOrder } from "./types/domain";
 import { PriceBookFolder, PriceBookModel } from "./types/priceBook";
@@ -583,6 +583,9 @@ const OWNERS_LOCAL_USER_AGREEMENT: PrivacyPolicySection[] = [
     ]
   }
 ];
+
+// Must match the effective date printed in both in-app legal documents above.
+const OWNER_SIGNUP_LEGAL_VERSION = "2026-08-28";
 
 const validPersonName = (value: unknown): string => {
   const name = typeof value === "string" ? value.trim() : "";
@@ -2360,6 +2363,8 @@ export default function App() {
   const [signUpInstructionsPassword, setSignUpInstructionsPassword] = useState("");
   const [signUpInstructionsConfirmPassword, setSignUpInstructionsConfirmPassword] = useState("");
   const [signUpInstructionsError, setSignUpInstructionsError] = useState("");
+  const [signUpLegalAccepted, setSignUpLegalAccepted] = useState(false);
+  const [signUpLegalDocument, setSignUpLegalDocument] = useState<"agreement" | "privacy" | null>(null);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   
   // Forgot password email field
@@ -3648,6 +3653,10 @@ Access to full financial telemetry is restricted.`;
       setSignUpInstructionsError("Create Password and Confirm Password must match.");
       return;
     }
+    if (!signUpLegalAccepted) {
+      setSignUpInstructionsError("You must agree to the User Agreement and acknowledge the Privacy Policy to create an account.");
+      return;
+    }
 
     setSignUpInstructionsError("");
     setIsSignUpSubmitting(true);
@@ -3678,7 +3687,14 @@ Access to full financial telemetry is restricted.`;
         isEmployee: false,
         businessEmail: cleanEmail,
         isOnboarded: false,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        legalAcceptance: {
+          userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+          affirmativelyAccepted: true,
+          source: "owner_signup_checkbox",
+          acceptedAt: serverTimestamp()
+        }
       };
       await setDoc(doc(db, "user_profiles", user.uid), userProfile);
 
@@ -3730,6 +3746,7 @@ Access to full financial telemetry is restricted.`;
       // Directly show Step 1 of Onboarding!
       setCurrentView("placeholder_password");
       setShowSignUpInstructions(false);
+      setSignUpLegalAccepted(false);
       triggerNotification(verificationEmailSent
         ? `Verification email sent to ${cleanEmail}. Check your inbox or spam folder.`
         : "Account created, but the verification email could not be sent. Try again from Account Settings.");
@@ -5314,7 +5331,10 @@ Access to full financial telemetry is restricted.`;
                         setSignUpInstructionsBusinessName("");
                         setSignUpInstructionsOwnerName("");
                         setSignUpInstructionsPassword("");
+                        setSignUpInstructionsConfirmPassword("");
                         setSignUpInstructionsError("");
+                        setSignUpLegalAccepted(false);
+                        setSignUpLegalDocument(null);
                         setSignUpInstructionsStep("input");
                         setShowSignUpInstructions(true);
                       }}
@@ -6678,8 +6698,24 @@ Access to full financial telemetry is restricted.`;
                           </div>
                         </div>
 
+                        <label className="flex items-start gap-2 text-[10.5px] font-semibold text-slate-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            required
+                            checked={signUpLegalAccepted}
+                            onChange={e => setSignUpLegalAccepted(e.target.checked)}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span>
+                            I agree to the{" "}
+                            <button type="button" onClick={() => setSignUpLegalDocument("agreement")} className="text-blue-700 underline font-bold">User Agreement</button>
+                            {" "}and acknowledge the{" "}
+                            <button type="button" onClick={() => setSignUpLegalDocument("privacy")} className="text-blue-700 underline font-bold">Privacy Policy</button>.
+                          </span>
+                        </label>
+
                         {signUpInstructionsError && (
-                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200/50 animate-pulse leading-snug">
+                          <p className="text-[9px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-blue-200/50 animate-pulse leading-snug">
                             {signUpInstructionsError}
                           </p>
                         )}
@@ -6691,6 +6727,8 @@ Access to full financial telemetry is restricted.`;
                               setShowSignUpInstructions(false);
                               setSignUpInstructionsError("");
                               setSignUpInstructionsConfirmPassword("");
+                              setSignUpLegalAccepted(false);
+                              setSignUpLegalDocument(null);
                             }}
                             className="flex-1 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer text-center"
                           >
@@ -6698,7 +6736,7 @@ Access to full financial telemetry is restricted.`;
                           </button>
                           <button
                             type="submit"
-                            disabled={isSignUpSubmitting}
+                            disabled={isSignUpSubmitting || !signUpLegalAccepted}
                             className="flex-1 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer text-center disabled:opacity-50"
                           >
                             {isSignUpSubmitting ? "Registering..." : "Sign Up"}
@@ -6706,6 +6744,26 @@ Access to full financial telemetry is restricted.`;
                         </div>
                         <p className="text-center text-[10.5px] font-semibold text-slate-500">Includes a 7-day free trial. No card needed.</p>
                       </form>
+                        {signUpLegalDocument && (
+                          <div className="fixed inset-0 z-[9999] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div role="dialog" aria-modal="true" aria-label={signUpLegalDocument === "agreement" ? "User Agreement" : "Privacy Policy"} className="w-full max-w-md max-h-[88vh] flex flex-col rounded-2xl border border-blue-100 bg-white shadow-xl overflow-hidden">
+                              <div className="p-4 border-b border-blue-100">
+                                <h3 className="text-sm font-black text-blue-950">{signUpLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}</h3>
+                                <p className="text-[10px] text-slate-500">Effective Date: August 28, 2026</p>
+                              </div>
+                              <div className="flex-1 min-h-0 overflow-y-auto p-4 text-[11px] text-slate-600 space-y-3">
+                                {(signUpLegalDocument === "agreement" ? OWNERS_LOCAL_USER_AGREEMENT : OWNERS_LOCAL_PRIVACY_POLICY).map((section, i) => (
+                                  <div key={i}>
+                                    <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                                    {section.paragraphs.map((paragraph, j) => <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>)}
+                                  </div>
+                                ))}
+                              </div>
+                              <button type="button" onClick={() => setSignUpLegalDocument(null)} className="p-3 bg-blue-600 text-white text-xs font-bold">Back to Sign Up</button>
+                            </div>
+                          </div>
+                        )}
+
                     </div>
                   </div>
                 </div>
