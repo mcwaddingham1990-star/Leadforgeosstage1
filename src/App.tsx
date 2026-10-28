@@ -3611,6 +3611,8 @@ Access to full financial telemetry is restricted.`;
   const [empPhoto, setEmpPhoto] = useState("");
   const [empGoals, setEmpGoals] = useState("");
   const [empHourlyRate, setEmpHourlyRate] = useState("");
+  const [employeeLegalAccepted, setEmployeeLegalAccepted] = useState(false);
+  const [employeeLegalDocument, setEmployeeLegalDocument] = useState<"agreement" | "privacy" | null>(null);
 
   // Trigger brief floating notifications
   const triggerNotification = (message: string) => {
@@ -3981,6 +3983,8 @@ Access to full financial telemetry is restricted.`;
         setEmpAddress("");
         setEmpPhone("");
         setEmpGoals("");
+        setEmployeeLegalAccepted(false);
+        setEmployeeLegalDocument(null);
         setCurrentView("employee_onboarding");
         triggerNotification(`Invite verified for: ${inviteData.role}! Complete setup.`);
       } else {
@@ -4705,7 +4709,11 @@ Access to full financial telemetry is restricted.`;
       triggerNotification("Please fill in all required employee fields.");
       return;
     }
-    
+    if (!employeeLegalAccepted) {
+      triggerNotification("Read and accept the User Agreement and acknowledge the Privacy Policy to complete registration.");
+      return;
+    }
+
     setIsSubmitting(true);
     
     // Look up role & permissions from the real invite record. This must
@@ -4807,6 +4815,13 @@ Access to full financial telemetry is restricted.`;
       }
 
       const now = new Date().toISOString();
+      const employeeLegalAcceptance = {
+        userAgreementVersion: OWNER_SIGNUP_LEGAL_VERSION,
+        privacyPolicyVersion: OWNER_SIGNUP_LEGAL_VERSION,
+        affirmativelyAccepted: true,
+        source: "employee_invite_signup_checkbox",
+        acceptedAt: serverTimestamp()
+      };
       const newEmployee = {
         id: cleanEmail,
         userUid: user.uid,
@@ -4833,12 +4848,16 @@ Access to full financial telemetry is restricted.`;
       const batch = writeBatch(db);
 
       if (existingProfileSnap.exists()) {
+        // Orphaned invite repair: add acceptance once only if no prior record
+        // exists. The Firestore rule permits this narrow first-time addition.
         batch.set(profileRef, {
           isOnboarded: true,
-          goals: empGoals
+          goals: empGoals,
+          ...(!existingProfileSnap.data()?.legalAcceptance ? { legalAcceptance: employeeLegalAcceptance } : {})
         }, { merge: true });
       } else {
         batch.set(profileRef, {
+          legalAcceptance: employeeLegalAcceptance,
           role: inviteRole,
           permissions: invitePermissions,
           granularPermissions: inviteGranularPermissions,
@@ -6277,13 +6296,31 @@ Access to full financial telemetry is restricted.`;
                             />
                           </div>
 
-                        </div>
+                                                  {/* Employee's own acceptance of platform terms, not an employer job contract. */}
+                          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-2.5 space-y-2 text-[10.5px] font-semibold text-slate-700">
+                            <div className="flex items-start gap-2">
+                              <input type="checkbox" id="employee-signup-legal-acceptance" required
+                                checked={employeeLegalAccepted} onChange={e => setEmployeeLegalAccepted(e.target.checked)}
+                                className="mt-0.5 shrink-0" />
+                              <label htmlFor="employee-signup-legal-acceptance">
+                                I agree to the Owner'sLOCAL User Agreement and acknowledge the Privacy Policy.
+                              </label>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              <button type="button" onClick={() => setEmployeeLegalDocument("agreement")}
+                                className="text-indigo-700 font-bold underline">Read User Agreement</button>
+                              <button type="button" onClick={() => setEmployeeLegalDocument("privacy")}
+                                className="text-indigo-700 font-bold underline">Read Privacy Policy</button>
+                            </div>
+                          </div>
+
+</div>
 
                         {/* Actions */}
                         <div className="relative z-10 flex items-center justify-between gap-3 pt-3 mt-2 border-t border-slate-200/50 bg-white/10 shrink-0">
                           <button
                             type="button"
-                            onClick={() => setCurrentView("login")}
+                            onClick={() => { setEmployeeLegalAccepted(false); setEmployeeLegalDocument(null); setCurrentView("login"); }}
                             style={{
                               height: `${38 * scale}px`,
                               borderRadius: `${12 * scale}px`,
@@ -6298,7 +6335,7 @@ Access to full financial telemetry is restricted.`;
 
                           <button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !employeeLegalAccepted}
                             style={{
                               height: `${38 * scale}px`,
                               borderRadius: `${12 * scale}px`,
@@ -6319,6 +6356,31 @@ Access to full financial telemetry is restricted.`;
                           </button>
                         </div>
                       </form>
+                      {employeeLegalDocument && (
+                        <div className="absolute inset-0 z-[80] bg-slate-950/60 flex items-center justify-center p-3">
+                          <div role="dialog" aria-modal="true" aria-label={employeeLegalDocument === "agreement" ? "User Agreement" : "Privacy Policy"}
+                            className="w-full max-w-md max-h-full flex flex-col rounded-2xl border border-indigo-200 bg-white shadow-xl overflow-hidden">
+                            <div className="shrink-0 border-b border-indigo-100 px-4 py-3">
+                              <h3 className="text-sm font-black text-blue-950">
+                                {employeeLegalDocument === "agreement" ? "Owner'sLOCAL User Agreement" : "Owner'sLOCAL Privacy Policy"}
+                              </h3>
+                              <p className="text-[10px] text-slate-500">Effective Date: August 28, 2026</p>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-y-auto p-4 text-[11px] text-slate-700 space-y-3">
+                              {(employeeLegalDocument === "agreement" ? OWNERS_LOCAL_USER_AGREEMENT : OWNERS_LOCAL_PRIVACY_POLICY).map((section, i) => (
+                                <div key={i}>
+                                  <p className="font-black text-blue-950 mb-1">{section.heading}</p>
+                                  {section.paragraphs.map((paragraph, j) => <p key={j} className="mb-1 whitespace-pre-line">{paragraph}</p>)}
+                                </div>
+                              ))}
+                            </div>
+                            <button type="button" onClick={() => setEmployeeLegalDocument(null)}
+                              className="shrink-0 bg-indigo-600 text-white text-xs font-bold py-3">
+                              Back to Employee Onboarding
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     /* ORIGINAL HELP / PRIVACY PLACEHOLDER VIEWS */
