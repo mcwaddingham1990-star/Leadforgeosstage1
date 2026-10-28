@@ -221,10 +221,38 @@ service cloud.firestore {
           request.resource.data.isEmployee == true
         )
       );
-      // The original signup acceptance record is immutable, including for the Owner.
-      // Any later re-consent must be a separate, explicitly designed flow.
+      // Original signup acceptance is immutable. An older employee whose
+      // invite onboarding was interrupted may add it once while finishing
+      // only their existing onboarding fields; no identity or role changes.
       allow update: if isAuthenticated()
-        && request.resource.data.get("legalAcceptance", null) == resource.data.get("legalAcceptance", null)
+        && (
+          request.resource.data.get("legalAcceptance", null) == resource.data.get("legalAcceptance", null)
+          || (
+            request.auth.uid == uid
+            && resource.data.get("legalAcceptance", null) == null
+            && resource.data.get("isEmployee", false) == true
+            && resource.data.get("inviteCode", "") is string
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'legalAcceptance', 'isOnboarded', 'goals'
+            ])
+            && request.resource.data.legalAcceptance is map
+            && request.resource.data.legalAcceptance.keys().hasAll([
+              'userAgreementVersion', 'privacyPolicyVersion',
+              'affirmativelyAccepted', 'source', 'acceptedAt'
+            ])
+            && request.resource.data.legalAcceptance.keys().hasOnly([
+              'userAgreementVersion', 'privacyPolicyVersion',
+              'affirmativelyAccepted', 'source', 'acceptedAt'
+            ])
+            && request.resource.data.legalAcceptance.userAgreementVersion is string
+            && request.resource.data.legalAcceptance.userAgreementVersion.size() > 0
+            && request.resource.data.legalAcceptance.privacyPolicyVersion is string
+            && request.resource.data.legalAcceptance.privacyPolicyVersion.size() > 0
+            && request.resource.data.legalAcceptance.affirmativelyAccepted == true
+            && request.resource.data.legalAcceptance.source == "employee_invite_signup_checkbox"
+            && request.resource.data.legalAcceptance.acceptedAt == request.time
+          )
+        )
         && (
         // Normal self-service profile edits may change ordinary fields, but
         // the tenant root, role, and original invite proof stay pinned.
